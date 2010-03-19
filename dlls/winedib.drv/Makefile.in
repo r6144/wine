@@ -1,0 +1,41 @@
+TOPSRCDIR = @top_srcdir@
+TOPOBJDIR = ../..
+SRCDIR    = @srcdir@
+VPATH     = @srcdir@
+EXTRAINCL = @FREETYPEINCL@ @FONTCONFIGINCL@
+EXTRALIBS = @X_LIBS@ @X_PRE_LIBS@ @XLIB@ @X_EXTRA_LIBS@
+MODULE    = winedib.drv
+IMPORTS   = user32 gdi32 advapi32 kernel32 ntdll
+
+C_SRCS = \
+    bitblt.c \
+    bitmap.c \
+    bitmaplist.c \
+    clipping.c \
+    convert.c \
+    dc.c \
+    dib.c \
+    dibdrv_main.c \
+    dibdrvbitmap.c \
+    driver.c \
+    font.c \
+    freetype.c \
+    graphics.c \
+    opengl.c \
+    palette.c \
+    pen_brush.c \
+    primitives.c \
+    primitives_bitblt.c \
+    primitives_color.c \
+    primitives_convert.c \
+    primitives_font.c \
+    primitives_line.c \
+    primitives_pixel.c \
+    primitives_rop2.c \
+    primitives_rop3.c \
+    text.c \
+    video.c
+
+@MAKE_DLL_RULES@
+
+@DEPENDENCIES@  # everything below this line is overwritten by make depend
