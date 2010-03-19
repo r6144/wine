@@ -1020,6 +1020,7 @@ static DWORD WINAPI start_process( PEB *peb )
         DPRINTF( "%04x:Starting process %s (entryproc=%p)\n", GetCurrentThreadId(),
                  debugstr_w(peb->ProcessParameters->ImagePathName.Buffer), entry );
 
+    LoadLibraryA("comctl32.dll"); /* Workaround for some broken applications */
     SetLastError( 0 );  /* clear error code */
     if (peb->BeingDebugged) DbgBreakPoint();
     return entry( peb );
