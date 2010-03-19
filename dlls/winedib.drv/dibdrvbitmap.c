@@ -181,6 +181,7 @@ BOOL _DIBDRVBITMAP_InitFromBMIH(DIBDRVBITMAP *dib, const BITMAPINFOHEADER *bi, c
                      const RGBQUAD *colorTable, void *bits)
 {
     MAYBE(TRACE("dib=%p, bi=%p, bit_fields=%p, colorTable=%p, bits=%p\n", dib, bi, bit_fields, colorTable, bits));
+    MAYBE(TRACE("bit_fields=(%x,%x,%x)\n", (unsigned) bit_fields[0], (unsigned) bit_fields[1], (unsigned) bit_fields[2]));
     
     /* initializes DIB dimensions and color depth */
     dib->bitCount = bi->biBitCount;
@@ -370,11 +371,17 @@ BOOL _DIBDRVBITMAP_InitFromBitmapinfo(DIBDRVBITMAP *dib, const BITMAPINFO *bmi, 
     {
         masks = (DWORD *)ptr;
         ptr += 3 * sizeof(DWORD);
+        if (masks[0] == 0 || masks[1] == 0 || masks[2] == 0) {
+            WARN("mask is zero; assuming default\n");
+            masks = NULL;
+        }
     }
-    else if(bi->biBitCount == 32)
-        masks = bit_fields_DIB32_RGB;
-    else if(bi->biBitCount == 16)
-        masks = bit_fields_DIB16_RGB;
+    if (masks == NULL) {
+        if(bi->biBitCount == 32)
+            masks = bit_fields_DIB32_RGB;
+        else if(bi->biBitCount == 16)
+            masks = bit_fields_DIB16_RGB;
+    }
 
     if(!num_colors && bi->biBitCount <= 8)
         num_colors = 1 << bi->biBitCount;
