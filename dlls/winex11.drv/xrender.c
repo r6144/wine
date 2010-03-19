@@ -462,7 +462,7 @@ static const WineXRenderFormat *get_xrender_format_from_color_shifts(int depth, 
     }
 
     /* This should not happen because when we reach 'shifts' must have been set and we only allows shifts which are backed by X */
-    ERR("No XRender format found!\n");
+    ERR("No XRender format found for depth %d masks (%x,%x,%x)!\n", depth, (unsigned) redMask, (unsigned) greenMask, (unsigned) blueMask);
     return NULL;
 }
 
