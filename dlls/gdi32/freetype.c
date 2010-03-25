@@ -3510,6 +3510,11 @@ GdiFont *WineEngCreateFontInstance(DC *dc, HFONT hfont)
 	  debugstr_w(lf.lfFaceName), lf.lfHeight, lf.lfItalic,
 	  lf.lfWeight, lf.lfPitchAndFamily, lf.lfCharSet, lf.lfOrientation,
 	  lf.lfEscapement);
+    /* Replace bold SimSun with SimHei */
+    if (lf.lfWeight == 900 && lf.lfFaceName && lf.lfFaceName[0] == 0x5b8b && lf.lfFaceName[1] == 0x4f53 && lf.lfFaceName[2] == 0) {
+        TRACE("SimSun => SimHei");
+        lf.lfWeight = 0; lf.lfFaceName[0] = 0x9ed1;
+    }
 
     if(dc->GraphicsMode == GM_ADVANCED)
         memcpy(&dcmat, &dc->xformWorld2Vport, sizeof(FMAT2));
