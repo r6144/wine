@@ -2372,10 +2372,16 @@ DWORD WINAPI GetGlyphOutlineW( HDC hdc, UINT uChar, UINT fuFormat,
     dc = get_dc_ptr(hdc);
     if(!dc) return GDI_ERROR;
 
-    if(dc->gdiFont)
+    if(dc->gdiFont) {
       ret = WineEngGetGlyphOutline(dc->gdiFont, uChar, fuFormat, lpgm,
 				   cbBuffer, lpBuffer, lpmat2);
-    else
+      /* workaround for th123 */
+      if (lpgm && (lpgm->gmBlackBoxX == 0 || lpgm->gmBlackBoxY == 0)) {
+	lpgm->gmBlackBoxX = 1;
+	lpgm->gmBlackBoxY = 1;
+	if (lpBuffer) memset(lpBuffer, 0, cbBuffer);
+      }
+    } else
       ret = GDI_ERROR;
 
     release_dc_ptr( dc );
