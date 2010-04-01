@@ -441,8 +441,7 @@ no_compat_defines:
     {
         if (opts->use_msvcrt)
         {
-            if (gcc_defs) strarray_add(comp_args, "-isystem" INCLUDEDIR "/msvcrt");
-            else strarray_add(comp_args, "-I" INCLUDEDIR "/msvcrt");
+            strarray_add(comp_args, gcc_defs ? "-isystem" INCLUDEDIR "/msvcrt" : "-I" INCLUDEDIR "/msvcrt" );
             strarray_add(comp_args, "-D__MSVCRT__");
         }
         strarray_add(comp_args, gcc_defs ? "-isystem" INCLUDEDIR "/windows" : "-I" INCLUDEDIR "/windows" );
@@ -704,7 +703,6 @@ static void build(struct options* opts)
         {
             strarray_addall(link_args, get_translator(opts));
             strarray_add(link_args, opts->gui_app ? "-mwindows" : "-mconsole");
-            if (opts->use_msvcrt) strarray_add(link_args, "-mno-cygwin");
             if (opts->nodefaultlibs) strarray_add(link_args, "-nodefaultlibs");
         }
 
@@ -777,6 +775,7 @@ static void build(struct options* opts)
                 break;
             }
         }
+        if (!opts->shared && (opts->use_msvcrt || opts->unicode_app)) strarray_add(link_args, "-lmsvcrt");
 
         if (res_o_name) compile_resources_to_object( opts, resources, res_o_name );
 

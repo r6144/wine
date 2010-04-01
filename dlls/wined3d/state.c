@@ -1525,28 +1525,58 @@ static void state_debug_monitor(DWORD state, IWineD3DStateBlockImpl *stateblock,
 
 static void state_colorwrite(DWORD state, IWineD3DStateBlockImpl *stateblock, struct wined3d_context *context)
 {
-    DWORD Value = stateblock->renderState[WINED3DRS_COLORWRITEENABLE];
+    DWORD mask0 = stateblock->renderState[WINED3DRS_COLORWRITEENABLE];
+    DWORD mask1 = stateblock->renderState[WINED3DRS_COLORWRITEENABLE1];
+    DWORD mask2 = stateblock->renderState[WINED3DRS_COLORWRITEENABLE2];
+    DWORD mask3 = stateblock->renderState[WINED3DRS_COLORWRITEENABLE3];
 
     TRACE("Color mask: r(%d) g(%d) b(%d) a(%d)\n",
-        Value & WINED3DCOLORWRITEENABLE_RED   ? 1 : 0,
-        Value & WINED3DCOLORWRITEENABLE_GREEN ? 1 : 0,
-        Value & WINED3DCOLORWRITEENABLE_BLUE  ? 1 : 0,
-        Value & WINED3DCOLORWRITEENABLE_ALPHA ? 1 : 0);
-    glColorMask(Value & WINED3DCOLORWRITEENABLE_RED   ? GL_TRUE : GL_FALSE,
-                Value & WINED3DCOLORWRITEENABLE_GREEN ? GL_TRUE : GL_FALSE,
-                Value & WINED3DCOLORWRITEENABLE_BLUE  ? GL_TRUE : GL_FALSE,
-                Value & WINED3DCOLORWRITEENABLE_ALPHA ? GL_TRUE : GL_FALSE);
+            mask0 & WINED3DCOLORWRITEENABLE_RED ? 1 : 0,
+            mask0 & WINED3DCOLORWRITEENABLE_GREEN ? 1 : 0,
+            mask0 & WINED3DCOLORWRITEENABLE_BLUE ? 1 : 0,
+            mask0 & WINED3DCOLORWRITEENABLE_ALPHA ? 1 : 0);
+    glColorMask(mask0 & WINED3DCOLORWRITEENABLE_RED ? GL_TRUE : GL_FALSE,
+            mask0 & WINED3DCOLORWRITEENABLE_GREEN ? GL_TRUE : GL_FALSE,
+            mask0 & WINED3DCOLORWRITEENABLE_BLUE ? GL_TRUE : GL_FALSE,
+            mask0 & WINED3DCOLORWRITEENABLE_ALPHA ? GL_TRUE : GL_FALSE);
     checkGLcall("glColorMask(...)");
 
-    /* depends on WINED3DRS_COLORWRITEENABLE. */
-    if(stateblock->renderState[WINED3DRS_COLORWRITEENABLE1] != 0x0000000F ||
-       stateblock->renderState[WINED3DRS_COLORWRITEENABLE2] != 0x0000000F ||
-       stateblock->renderState[WINED3DRS_COLORWRITEENABLE3] != 0x0000000F ) {
-        ERR("(WINED3DRS_COLORWRITEENABLE1/2/3,%d,%d,%d) not yet implemented. Missing of cap D3DPMISCCAPS_INDEPENDENTWRITEMASKS wasn't honored?\n",
-            stateblock->renderState[WINED3DRS_COLORWRITEENABLE1],
-            stateblock->renderState[WINED3DRS_COLORWRITEENABLE2],
-            stateblock->renderState[WINED3DRS_COLORWRITEENABLE3]);
+    if (!((mask1 == mask0 && mask2 == mask0 && mask3 == mask0)
+        || (mask1 == 0xf && mask2 == 0xf && mask3 == 0xf)))
+    {
+        FIXME("WINED3DRS_COLORWRITEENABLE/1/2/3, %#x/%#x/%#x/%#x not yet implemented.\n",
+            mask0, mask1, mask2, mask3);
+        FIXME("Missing of cap D3DPMISCCAPS_INDEPENDENTWRITEMASKS wasn't honored?\n");
     }
+}
+
+static void set_color_mask(struct wined3d_context *context, UINT index, DWORD mask)
+{
+    GL_EXTCALL(glColorMaskIndexedEXT(index,
+            mask & WINED3DCOLORWRITEENABLE_RED ? GL_TRUE : GL_FALSE,
+            mask & WINED3DCOLORWRITEENABLE_GREEN ? GL_TRUE : GL_FALSE,
+            mask & WINED3DCOLORWRITEENABLE_BLUE ? GL_TRUE : GL_FALSE,
+            mask & WINED3DCOLORWRITEENABLE_ALPHA ? GL_TRUE : GL_FALSE));
+}
+
+static void state_colorwrite0(DWORD state, IWineD3DStateBlockImpl *stateblock, struct wined3d_context *context)
+{
+    set_color_mask(context, 0, stateblock->renderState[WINED3DRS_COLORWRITEENABLE]);
+}
+
+static void state_colorwrite1(DWORD state, IWineD3DStateBlockImpl *stateblock, struct wined3d_context *context)
+{
+    set_color_mask(context, 1, stateblock->renderState[WINED3DRS_COLORWRITEENABLE1]);
+}
+
+static void state_colorwrite2(DWORD state, IWineD3DStateBlockImpl *stateblock, struct wined3d_context *context)
+{
+    set_color_mask(context, 2, stateblock->renderState[WINED3DRS_COLORWRITEENABLE2]);
+}
+
+static void state_colorwrite3(DWORD state, IWineD3DStateBlockImpl *stateblock, struct wined3d_context *context)
+{
+    set_color_mask(context, 3, stateblock->renderState[WINED3DRS_COLORWRITEENABLE3]);
 }
 
 static void state_localviewer(DWORD state, IWineD3DStateBlockImpl *stateblock, struct wined3d_context *context)
@@ -3750,27 +3780,19 @@ static void transform_worldex(DWORD state, IWineD3DStateBlockImpl *stateblock, s
 
 static void state_vertexblend_w(DWORD state, IWineD3DStateBlockImpl *stateblock, struct wined3d_context *context)
 {
-    static BOOL once = FALSE;
+    WINED3DVERTEXBLENDFLAGS f = stateblock->renderState[WINED3DRS_VERTEXBLEND];
+    static unsigned int once;
 
-    switch(stateblock->renderState[WINED3DRS_VERTEXBLEND]) {
-        case WINED3DVBF_1WEIGHTS:
-        case WINED3DVBF_2WEIGHTS:
-        case WINED3DVBF_3WEIGHTS:
-            if(!once) {
-                once = TRUE;
-                /* TODO: Implement vertex blending in drawStridedSlow */
-                FIXME("Vertex blending enabled, but not supported by hardware\n");
-            }
-            break;
+    if (f == WINED3DVBF_DISABLE) return;
 
-        case WINED3DVBF_TWEENING:
-            WARN("Tweening not supported yet\n");
-    }
+    if (!once++) FIXME("Vertex blend flags %#x not supported.\n", f);
+    else WARN("Vertex blend flags %#x not supported.\n", f);
 }
 
 static void state_vertexblend(DWORD state, IWineD3DStateBlockImpl *stateblock, struct wined3d_context *context)
 {
     WINED3DVERTEXBLENDFLAGS val = stateblock->renderState[WINED3DRS_VERTEXBLEND];
+    static unsigned int once;
 
     switch(val) {
         case WINED3DVBF_1WEIGHTS:
@@ -3798,18 +3820,14 @@ static void state_vertexblend(DWORD state, IWineD3DStateBlockImpl *stateblock, s
             }
             break;
 
+        case WINED3DVBF_TWEENING:
+        case WINED3DVBF_0WEIGHTS: /* Indexed vertex blending, not supported. */
+            if (!once++) FIXME("Vertex blend flags %#x not supported.\n", val);
+            else WARN("Vertex blend flags %#x not supported.\n", val);
+            /* Fall through. */
         case WINED3DVBF_DISABLE:
-        case WINED3DVBF_0WEIGHTS: /* for Indexed vertex blending - not supported */
             glDisable(GL_VERTEX_BLEND_ARB);
             checkGLcall("glDisable(GL_VERTEX_BLEND_ARB)");
-            break;
-
-        case WINED3DVBF_TWEENING:
-            /* Just set the vertex weight for weight 0, enable vertex blending and hope the app doesn't have
-             * vertex weights in the vertices?
-             * For now we don't report that as supported, so a warn should suffice
-             */
-            WARN("Tweening not supported yet\n");
             break;
     }
 }
@@ -4225,11 +4243,6 @@ static void loadVertexData(const struct wined3d_context *context, IWineD3DStateB
 
             GL_EXTCALL(glVertexBlendARB(e->format_desc->component_count + 1));
 
-            VTRACE(("glWeightPointerARB(%d, GL_FLOAT, %d, %p)\n",
-                WINED3D_ATR_FORMAT(sd->u.s.blendWeights.dwType) ,
-                sd->u.s.blendWeights.dwStride,
-                sd->u.s.blendWeights.lpData + stateblock->loadBaseVertexIndex * sd->u.s.blendWeights.dwStride + offset[sd->u.s.blendWeights.streamNo]));
-
             if (curVBO != e->buffer_object)
             {
                 GL_EXTCALL(glBindBufferARB(GL_ARRAY_BUFFER_ARB, e->buffer_object));
@@ -4237,8 +4250,13 @@ static void loadVertexData(const struct wined3d_context *context, IWineD3DStateB
                 curVBO = e->buffer_object;
             }
 
-            GL_EXTCALL(glWeightPointerARB)(e->format_desc->gl_vtx_format, e->format_desc->gl_vtx_type, e->stride,
-                e->data + stateblock->loadBaseVertexIndex * e->stride + offset[e->stream_idx]);
+            TRACE("glWeightPointerARB(%#x, %#x, %#x, %p);\n",
+                    e->format_desc->gl_vtx_format,
+                    e->format_desc->gl_vtx_type,
+                    e->stride,
+                    e->data + stateblock->loadBaseVertexIndex * e->stride + offset[e->stream_idx]);
+            GL_EXTCALL(glWeightPointerARB(e->format_desc->gl_vtx_format, e->format_desc->gl_vtx_type, e->stride,
+                    e->data + stateblock->loadBaseVertexIndex * e->stride + offset[e->stream_idx]));
 
             checkGLcall("glWeightPointerARB");
 
@@ -4279,8 +4297,6 @@ static void loadVertexData(const struct wined3d_context *context, IWineD3DStateB
     /* Vertex Pointers -----------------------------------------*/
     if (si->use_map & (1 << WINED3D_FFP_POSITION))
     {
-        VTRACE(("glVertexPointer(%d, GL_FLOAT, %d, %p)\n", e->stride, e->size, e->data));
-
         e = &si->elements[WINED3D_FFP_POSITION];
         if (curVBO != e->buffer_object)
         {
@@ -4299,9 +4315,16 @@ static void loadVertexData(const struct wined3d_context *context, IWineD3DStateB
          */
         if (!e->buffer_object)
         {
+            TRACE("glVertexPointer(3, %#x, %#x, %p);\n", e->format_desc->gl_vtx_type, e->stride,
+                    e->data + stateblock->loadBaseVertexIndex * e->stride + offset[e->stream_idx]);
             glVertexPointer(3 /* min(e->format_desc->gl_vtx_format, 3) */, e->format_desc->gl_vtx_type, e->stride,
                     e->data + stateblock->loadBaseVertexIndex * e->stride + offset[e->stream_idx]);
-        } else {
+        }
+        else
+        {
+            TRACE("glVertexPointer(%#x, %#x, %#x, %p);\n",
+                    e->format_desc->gl_vtx_format, e->format_desc->gl_vtx_type, e->stride,
+                    e->data + stateblock->loadBaseVertexIndex * e->stride + offset[e->stream_idx]);
             glVertexPointer(e->format_desc->gl_vtx_format, e->format_desc->gl_vtx_type, e->stride,
                     e->data + stateblock->loadBaseVertexIndex * e->stride + offset[e->stream_idx]);
         }
@@ -4313,8 +4336,6 @@ static void loadVertexData(const struct wined3d_context *context, IWineD3DStateB
     /* Normals -------------------------------------------------*/
     if (si->use_map & (1 << WINED3D_FFP_NORMAL))
     {
-        VTRACE(("glNormalPointer(GL_FLOAT, %d, %p)\n", e->stride, e->data));
-
         e = &si->elements[WINED3D_FFP_NORMAL];
         if (curVBO != e->buffer_object)
         {
@@ -4322,6 +4343,9 @@ static void loadVertexData(const struct wined3d_context *context, IWineD3DStateB
             checkGLcall("glBindBufferARB");
             curVBO = e->buffer_object;
         }
+
+        TRACE("glNormalPointer(%#x, %#x, %p);\n", e->format_desc->gl_vtx_type, e->stride,
+                e->data + stateblock->loadBaseVertexIndex * e->stride + offset[e->stream_idx]);
         glNormalPointer(e->format_desc->gl_vtx_type, e->stride,
                 e->data + stateblock->loadBaseVertexIndex * e->stride + offset[e->stream_idx]);
         checkGLcall("glNormalPointer(...)");
@@ -4344,8 +4368,6 @@ static void loadVertexData(const struct wined3d_context *context, IWineD3DStateB
 
     if (si->use_map & (1 << WINED3D_FFP_DIFFUSE))
     {
-        VTRACE(("glColorPointer(4, GL_UNSIGNED_BYTE, %d, %p)\n", e->stride, e->data));
-
         e = &si->elements[WINED3D_FFP_DIFFUSE];
         if (curVBO != e->buffer_object)
         {
@@ -4354,6 +4376,9 @@ static void loadVertexData(const struct wined3d_context *context, IWineD3DStateB
             curVBO = e->buffer_object;
         }
 
+        TRACE("glColorPointer(%#x, %#x %#x, %p);\n",
+                e->format_desc->gl_vtx_format, e->format_desc->gl_vtx_type, e->stride,
+                e->data + stateblock->loadBaseVertexIndex * e->stride + offset[e->stream_idx]);
         glColorPointer(e->format_desc->gl_vtx_format, e->format_desc->gl_vtx_type, e->stride,
                 e->data + stateblock->loadBaseVertexIndex * e->stride + offset[e->stream_idx]);
         checkGLcall("glColorPointer(4, GL_UNSIGNED_BYTE, ...)");
@@ -4369,7 +4394,6 @@ static void loadVertexData(const struct wined3d_context *context, IWineD3DStateB
     if (si->use_map & (1 << WINED3D_FFP_SPECULAR))
     {
         TRACE("setting specular colour\n");
-        VTRACE(("glSecondaryColorPointer(4, GL_UNSIGNED_BYTE, %d, %p)\n", e->stride, e->data));
 
         e = &si->elements[WINED3D_FFP_SPECULAR];
         if (gl_info->supported[EXT_SECONDARY_COLOR])
@@ -4391,8 +4415,10 @@ static void loadVertexData(const struct wined3d_context *context, IWineD3DStateB
                  * vertex pipeline can pass the specular alpha through, and pixel shaders can read it. So it GL accepts
                  * 4 component secondary colors use it
                  */
-                GL_EXTCALL(glSecondaryColorPointerEXT)(format, type,
-                        e->stride, e->data + stateblock->loadBaseVertexIndex * e->stride + offset[e->stream_idx]);
+                TRACE("glSecondaryColorPointer(%#x, %#x, %#x, %p);\n", format, type, e->stride,
+                        e->data + stateblock->loadBaseVertexIndex * e->stride + offset[e->stream_idx]);
+                GL_EXTCALL(glSecondaryColorPointerEXT(format, type, e->stride,
+                        e->data + stateblock->loadBaseVertexIndex * e->stride + offset[e->stream_idx]));
                 checkGLcall("glSecondaryColorPointerEXT(format, type, ...)");
             }
             else
@@ -4400,25 +4426,29 @@ static void loadVertexData(const struct wined3d_context *context, IWineD3DStateB
                 switch(type)
                 {
                     case GL_UNSIGNED_BYTE:
-                        GL_EXTCALL(glSecondaryColorPointerEXT)(3, GL_UNSIGNED_BYTE,
-                                e->stride, e->data + stateblock->loadBaseVertexIndex * e->stride + offset[e->stream_idx]);
+                        TRACE("glSecondaryColorPointer(3, GL_UNSIGNED_BYTE, %#x, %p);\n", e->stride,
+                                e->data + stateblock->loadBaseVertexIndex * e->stride + offset[e->stream_idx]);
+                        GL_EXTCALL(glSecondaryColorPointerEXT(3, GL_UNSIGNED_BYTE, e->stride,
+                                e->data + stateblock->loadBaseVertexIndex * e->stride + offset[e->stream_idx]));
                         checkGLcall("glSecondaryColorPointerEXT(3, GL_UNSIGNED_BYTE, ...)");
                         break;
 
                     default:
                         FIXME("Add 4 component specular color pointers for type %x\n", type);
                         /* Make sure that the right color component is dropped */
-                        GL_EXTCALL(glSecondaryColorPointerEXT)(3, type,
-                                e->stride, e->data + stateblock->loadBaseVertexIndex * e->stride + offset[e->stream_idx]);
+                        TRACE("glSecondaryColorPointer(3, %#x, %#x, %p);\n", type, e->stride,
+                                e->data + stateblock->loadBaseVertexIndex * e->stride + offset[e->stream_idx]);
+                        GL_EXTCALL(glSecondaryColorPointerEXT(3, type, e->stride,
+                                e->data + stateblock->loadBaseVertexIndex * e->stride + offset[e->stream_idx]));
                         checkGLcall("glSecondaryColorPointerEXT(3, type, ...)");
                 }
             }
             glEnableClientState(GL_SECONDARY_COLOR_ARRAY_EXT);
             checkGLcall("glEnableClientState(GL_SECONDARY_COLOR_ARRAY_EXT)");
-        } else {
-
-        /* Missing specular color is not critical, no warnings */
-        VTRACE(("Specular colour is not supported in this GL implementation\n"));
+        }
+        else
+        {
+            WARN("Specular colour is not supported in this GL implementation.\n");
         }
     }
     else
@@ -4427,10 +4457,10 @@ static void loadVertexData(const struct wined3d_context *context, IWineD3DStateB
         {
             GL_EXTCALL(glSecondaryColor3fEXT)(0, 0, 0);
             checkGLcall("glSecondaryColor3fEXT(0, 0, 0)");
-        } else {
-
-            /* Missing specular color is not critical, no warnings */
-            VTRACE(("Specular colour is not supported in this GL implementation\n"));
+        }
+        else
+        {
+            WARN("Specular colour is not supported in this GL implementation.\n");
         }
     }
 
@@ -4980,13 +5010,17 @@ const struct StateEntryTemplate misc_state_template[] = {
     { STATE_RENDER(WINED3DRS_MULTISAMPLEANTIALIAS),       { STATE_RENDER(WINED3DRS_MULTISAMPLEANTIALIAS),       state_msaa_w        }, WINED3D_GL_EXT_NONE             },
     { STATE_RENDER(WINED3DRS_MULTISAMPLEMASK),            { STATE_RENDER(WINED3DRS_MULTISAMPLEMASK),            state_multisampmask }, WINED3D_GL_EXT_NONE             },
     { STATE_RENDER(WINED3DRS_DEBUGMONITORTOKEN),          { STATE_RENDER(WINED3DRS_DEBUGMONITORTOKEN),          state_debug_monitor }, WINED3D_GL_EXT_NONE             },
+    { STATE_RENDER(WINED3DRS_COLORWRITEENABLE),           { STATE_RENDER(WINED3DRS_COLORWRITEENABLE),           state_colorwrite0   }, EXT_DRAW_BUFFERS2               },
     { STATE_RENDER(WINED3DRS_COLORWRITEENABLE),           { STATE_RENDER(WINED3DRS_COLORWRITEENABLE),           state_colorwrite    }, WINED3D_GL_EXT_NONE             },
     { STATE_RENDER(WINED3DRS_BLENDOP),                    { STATE_RENDER(WINED3DRS_BLENDOP),                    state_blendop       }, EXT_BLEND_MINMAX                },
     { STATE_RENDER(WINED3DRS_BLENDOP),                    { STATE_RENDER(WINED3DRS_BLENDOP),                    state_blendop_w     }, WINED3D_GL_EXT_NONE             },
     { STATE_RENDER(WINED3DRS_SCISSORTESTENABLE),          { STATE_RENDER(WINED3DRS_SCISSORTESTENABLE),          state_scissor       }, WINED3D_GL_EXT_NONE             },
     { STATE_RENDER(WINED3DRS_SLOPESCALEDEPTHBIAS),        { STATE_RENDER(WINED3DRS_DEPTHBIAS),                  state_depthbias     }, WINED3D_GL_EXT_NONE             },
+    { STATE_RENDER(WINED3DRS_COLORWRITEENABLE1),          { STATE_RENDER(WINED3DRS_COLORWRITEENABLE1),          state_colorwrite1   }, EXT_DRAW_BUFFERS2               },
     { STATE_RENDER(WINED3DRS_COLORWRITEENABLE1),          { STATE_RENDER(WINED3DRS_COLORWRITEENABLE),           state_colorwrite    }, WINED3D_GL_EXT_NONE             },
+    { STATE_RENDER(WINED3DRS_COLORWRITEENABLE2),          { STATE_RENDER(WINED3DRS_COLORWRITEENABLE2),          state_colorwrite2   }, EXT_DRAW_BUFFERS2               },
     { STATE_RENDER(WINED3DRS_COLORWRITEENABLE2),          { STATE_RENDER(WINED3DRS_COLORWRITEENABLE),           state_colorwrite    }, WINED3D_GL_EXT_NONE             },
+    { STATE_RENDER(WINED3DRS_COLORWRITEENABLE3),          { STATE_RENDER(WINED3DRS_COLORWRITEENABLE3),          state_colorwrite3   }, EXT_DRAW_BUFFERS2               },
     { STATE_RENDER(WINED3DRS_COLORWRITEENABLE3),          { STATE_RENDER(WINED3DRS_COLORWRITEENABLE),           state_colorwrite    }, WINED3D_GL_EXT_NONE             },
     { STATE_RENDER(WINED3DRS_BLENDFACTOR),                { STATE_RENDER(WINED3DRS_BLENDFACTOR),                state_blendfactor   }, EXT_BLEND_COLOR                 },
     { STATE_RENDER(WINED3DRS_BLENDFACTOR),                { STATE_RENDER(WINED3DRS_BLENDFACTOR),                state_blendfactor_w }, WINED3D_GL_EXT_NONE             },
@@ -5379,6 +5413,8 @@ const struct StateEntryTemplate ffp_vertexstate_template[] = {
     { STATE_RENDER(WINED3DRS_POINTSIZE_MAX),              { STATE_RENDER(WINED3DRS_POINTSIZE_MIN),              state_psizemin_arb  }, ARB_POINT_PARAMETERS            },
     { STATE_RENDER(WINED3DRS_POINTSIZE_MAX),              { STATE_RENDER(WINED3DRS_POINTSIZE_MIN),              state_psizemin_ext  }, EXT_POINT_PARAMETERS            },
     { STATE_RENDER(WINED3DRS_POINTSIZE_MAX),              { STATE_RENDER(WINED3DRS_POINTSIZE_MIN),              state_psizemin_w    }, WINED3D_GL_EXT_NONE             },
+    { STATE_RENDER(WINED3DRS_TWEENFACTOR),                { STATE_RENDER(WINED3DRS_VERTEXBLEND),                state_vertexblend   }, WINED3D_GL_EXT_NONE             },
+
     /* Samplers for NP2 texture matrix adjustions. They are not needed if GL_ARB_texture_non_power_of_two is supported,
      * so register a NULL state handler in that case to get the vertex part of sampler() skipped(VTF is handled in the misc states.
      * otherwise, register sampler_texmatrix, which takes care of updating the texture matrix

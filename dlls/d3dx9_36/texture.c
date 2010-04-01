@@ -30,8 +30,30 @@ HRESULT WINAPI D3DXCreateTexture(LPDIRECT3DDEVICE9 pDevice,
                                  D3DPOOL pool,
                                  LPDIRECT3DTEXTURE9 *ppTexture)
 {
-    FIXME("(%p, %d, %d, %d, %x, %x, %x, %p): semi-stub\n", pDevice, width, height, miplevels, usage, format,
+    FIXME("(%p, %u, %u, %u, %x, %x, %x, %p): semi-stub\n", pDevice, width, height, miplevels, usage, format,
         pool, ppTexture);
 
     return IDirect3DDevice9_CreateTexture(pDevice, width, height, miplevels, usage, format, pool, ppTexture, NULL);
+}
+
+HRESULT WINAPI D3DXCreateTextureFromFileInMemoryEx(LPDIRECT3DDEVICE9 device,
+                                                   LPCVOID srcdata,
+                                                   UINT srcdatasize,
+                                                   UINT width,
+                                                   UINT height,
+                                                   UINT miplevels,
+                                                   DWORD usage,
+                                                   D3DFORMAT format,
+                                                   D3DPOOL pool,
+                                                   DWORD filter,
+                                                   DWORD mipfilter,
+                                                   D3DCOLOR colorkey,
+                                                   D3DXIMAGE_INFO* srcinfo,
+                                                   PALETTEENTRY* palette,
+                                                   LPDIRECT3DTEXTURE9* texture)
+{
+    FIXME("(%p, %p, %u, %u, %u, %u, %x, %x, %x, %u, %u, %x, %p, %p, %p): stub\n", device, srcdata, srcdatasize, width,
+        height, miplevels, usage, format, pool, filter, mipfilter, colorkey, srcinfo, palette, texture);
+
+    return E_NOTIMPL;
 }

@@ -161,6 +161,8 @@ typedef struct
 	BOOL          bDirty;
         INT           iIdOpen;  /* id of the "Open" entry in the context menu */
 	IUnknown      *site;
+
+	LPOLESTR      filepath; /* file path returned by IPersistFile::GetCurFile */
 } IShellLinkImpl;
 
 static inline IShellLinkImpl *impl_from_IShellLinkW( IShellLinkW *iface )
@@ -307,6 +309,7 @@ static ULONG ShellLink_Release( IShellLinkImpl *This )
     HeapFree(GetProcessHeap(), 0, This->sPathRel);
     HeapFree(GetProcessHeap(), 0, This->sProduct);
     HeapFree(GetProcessHeap(), 0, This->sComponent);
+    HeapFree(GetProcessHeap(), 0, This->filepath);
 
     if (This->site)
         IUnknown_Release( This->site );
@@ -392,6 +395,11 @@ static HRESULT WINAPI IPersistFile_fnLoad(IPersistFile* iface, LPCOLESTR pszFile
             r = IPersistStream_Load(StreamThis, stm);
             ShellLink_UpdatePath(This->sPathRel, pszFileName, This->sWorkDir, &This->sPath);
             IStream_Release( stm );
+
+            /* update file path */
+            HeapFree(GetProcessHeap(), 0, This->filepath);
+            This->filepath = strdupW(pszFileName);
+
             This->bDirty = FALSE;
         }
         TRACE("-- returning hr %08x\n", r);
@@ -407,6 +415,7 @@ BOOL run_winemenubuilder( const WCHAR *args )
     PROCESS_INFORMATION pi;
     BOOL ret;
     WCHAR app[MAX_PATH];
+    void *redir;
 
     GetSystemDirectoryW( app, MAX_PATH - sizeof(menubuilder)/sizeof(WCHAR) );
     strcatW( app, menubuilder );
@@ -424,7 +433,9 @@ BOOL run_winemenubuilder( const WCHAR *args )
     memset(&si, 0, sizeof(si));
     si.cb = sizeof(si);
 
+    Wow64DisableWow64FsRedirection( &redir );
     ret = CreateProcessW( app, buffer, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi );
+    Wow64RevertWow64FsRedirection( redir );
 
     HeapFree( GetProcessHeap(), 0, buffer );
 
@@ -477,6 +488,10 @@ static HRESULT WINAPI IPersistFile_fnSave(IPersistFile* iface, LPCOLESTR pszFile
 	{
             StartLinkProcessor( pszFileName );
 
+            /* update file path */
+            HeapFree(GetProcessHeap(), 0, This->filepath);
+            This->filepath = strdupW(pszFileName);
+
             This->bDirty = FALSE;
         }
 	else
@@ -496,11 +511,26 @@ static HRESULT WINAPI IPersistFile_fnSaveCompleted(IPersistFile* iface, LPCOLEST
 	return NOERROR;
 }
 
-static HRESULT WINAPI IPersistFile_fnGetCurFile(IPersistFile* iface, LPOLESTR *ppszFileName)
+static HRESULT WINAPI IPersistFile_fnGetCurFile(IPersistFile* iface, LPOLESTR *filename)
 {
-	IShellLinkImpl *This = impl_from_IPersistFile(iface);
-	FIXME("(%p)->(%p): stub\n", This, ppszFileName);
-	return NOERROR;
+    IShellLinkImpl *This = impl_from_IPersistFile(iface);
+    IMalloc *pMalloc;
+
+    TRACE("(%p)->(%p)\n", This, filename);
+
+    if (!This->filepath)
+    {
+        *filename = NULL;
+        return S_FALSE;
+    }
+
+    SHGetMalloc(&pMalloc);
+    *filename = IMalloc_Alloc(pMalloc, (strlenW(This->filepath)+1)*sizeof(WCHAR));
+    if (!*filename) return E_OUTOFMEMORY;
+
+    strcpyW(*filename, This->filepath);
+
+    return S_OK;
 }
 
 static const IPersistFileVtbl pfvt =
@@ -1239,6 +1269,7 @@ HRESULT WINAPI IShellLink_Constructor( IUnknown *pUnkOuter,
 	sl->bDirty = FALSE;
 	sl->iIdOpen = -1;
 	sl->site = NULL;
+	sl->filepath = NULL;
 
 	TRACE("(%p)->()\n",sl);
 

@@ -576,7 +576,7 @@ static inline void shader_arb_vs_local_constants(IWineD3DDeviceImpl* deviceImpl)
 /* GL locking is done by the caller (state handler) */
 static void shader_arb_load_constants(const struct wined3d_context *context, char usePixelShader, char useVertexShader)
 {
-    IWineD3DDeviceImpl *device = ((IWineD3DSurfaceImpl *)context->surface)->resource.device;
+    IWineD3DDeviceImpl *device = context->swapchain->device;
     IWineD3DStateBlockImpl* stateBlock = device->stateBlock;
     const struct wined3d_gl_info *gl_info = context->gl_info;
 
@@ -606,7 +606,7 @@ static void shader_arb_update_float_vertex_constants(IWineD3DDevice *iface, UINT
 
     /* We don't want shader constant dirtification to be an O(contexts), so just dirtify the active
      * context. On a context switch the old context will be fully dirtified */
-    if (!context || ((IWineD3DSurfaceImpl *)context->surface)->resource.device != This) return;
+    if (!context || context->swapchain->device != This) return;
 
     memset(context->vshader_const_dirty + start, 1, sizeof(*context->vshader_const_dirty) * count);
     This->highest_dirty_vs_const = max(This->highest_dirty_vs_const, start + count);
@@ -619,7 +619,7 @@ static void shader_arb_update_float_pixel_constants(IWineD3DDevice *iface, UINT 
 
     /* We don't want shader constant dirtification to be an O(contexts), so just dirtify the active
      * context. On a context switch the old context will be fully dirtified */
-    if (!context || ((IWineD3DSurfaceImpl *)context->surface)->resource.device != This) return;
+    if (!context || context->swapchain->device != This) return;
 
     memset(context->pshader_const_dirty + start, 1, sizeof(*context->pshader_const_dirty) * count);
     This->highest_dirty_ps_const = max(This->highest_dirty_ps_const, start + count);
@@ -4339,7 +4339,7 @@ static inline void find_arb_vs_compile_args(IWineD3DVertexShaderImpl *shader, IW
 /* GL locking is done by the caller */
 static void shader_arb_select(const struct wined3d_context *context, BOOL usePS, BOOL useVS)
 {
-    IWineD3DDeviceImpl *This = ((IWineD3DSurfaceImpl *)context->surface)->resource.device;
+    IWineD3DDeviceImpl *This = context->swapchain->device;
     struct shader_arb_priv *priv = This->shader_priv;
     const struct wined3d_gl_info *gl_info = context->gl_info;
     int i;
@@ -6720,7 +6720,7 @@ static GLuint gen_yuv_shader(IWineD3DDeviceImpl *device, enum complex_fixup yuv_
 }
 
 /* Context activation is done by the caller. */
-static HRESULT arbfp_blit_set(IWineD3DDevice *iface, const struct GlPixelFormatDesc *format_desc,
+static HRESULT arbfp_blit_set(IWineD3DDevice *iface, const struct wined3d_format_desc *format_desc,
         GLenum textype, UINT width, UINT height)
 {
     GLenum shader;
@@ -6808,7 +6808,7 @@ static void arbfp_blit_unset(IWineD3DDevice *iface) {
     LEAVE_GL();
 }
 
-static BOOL arbfp_blit_color_fixup_supported(struct color_fixup_desc fixup)
+static BOOL arbfp_blit_color_fixup_supported(const struct wined3d_gl_info *gl_info, struct color_fixup_desc fixup)
 {
     enum complex_fixup complex_fixup;
 
@@ -6848,12 +6848,19 @@ static BOOL arbfp_blit_color_fixup_supported(struct color_fixup_desc fixup)
     }
 }
 
+static HRESULT arbfp_blit_color_fill(IWineD3DDeviceImpl *device, IWineD3DSurfaceImpl *dst_surface, const RECT *dst_rect, DWORD fill_color)
+{
+    FIXME("Color filling not implemented by arbfp_blit\n");
+    return WINED3DERR_INVALIDCALL;
+}
+
 const struct blit_shader arbfp_blit = {
     arbfp_blit_alloc,
     arbfp_blit_free,
     arbfp_blit_set,
     arbfp_blit_unset,
     arbfp_blit_color_fixup_supported,
+    arbfp_blit_color_fill
 };
 
 #undef GLINFO_LOCATION

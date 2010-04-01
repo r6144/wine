@@ -262,6 +262,18 @@ static INCL_FILE *find_src_file( const char *name )
 }
 
 /*******************************************************************
+ *         find_include_file
+ */
+static INCL_FILE *find_include_file( const char *name )
+{
+    INCL_FILE *file;
+
+    LIST_FOR_EACH_ENTRY( file, &includes, INCL_FILE, entry )
+        if (!strcmp( name, file->name )) return file;
+    return NULL;
+}
+
+/*******************************************************************
  *         add_include
  *
  * Add an include file if it doesn't already exists.
@@ -829,6 +841,10 @@ static int output_src( FILE *file, INCL_FILE *pFile, int *column )
         *ext++ = 0;
         if (!strcmp( ext, "y" ))  /* yacc file */
         {
+            /* add source file dependency for parallel makes */
+            char *header = strmake( "%s.tab.h", obj );
+            if (find_include_file( header )) fprintf( file, "%s.tab.c: %s\n", obj, header );
+            free( header );
             *column += fprintf( file, "%s.tab.o: %s.tab.c", obj, obj );
         }
         else if (!strcmp( ext, "l" ))  /* lex file */
@@ -929,15 +945,17 @@ static void output_dependencies(void)
     {
         char buffer[1024];
         FILE *tmp_file = create_temp_file( &tmp_name );
+        int found = 0;
 
-        while (fgets( buffer, sizeof(buffer), file ))
+        while (fgets( buffer, sizeof(buffer), file ) && !found)
         {
             if (fwrite( buffer, 1, strlen(buffer), tmp_file ) != strlen(buffer))
                 fatal_error( "error writing to %s\n", tmp_name );
-            if (!strncmp( buffer, Separator, strlen(Separator) )) break;
+            found = !strncmp( buffer, Separator, strlen(Separator) );
         }
         fclose( file );
         file = tmp_file;
+        if (!found && list_head(&sources)) fprintf( file, "\n%s\n", Separator );
     }
     else
     {

@@ -3670,9 +3670,9 @@ static void test_caborder(void)
 
     r = MsiInstallProductA(msifile, NULL);
     ok(!delete_pf("msitest\\caesar", TRUE), "File is installed\n");
+    ok(r == ERROR_INSTALL_FAILURE, "Expected ERROR_INSTALL_FAILURE, got %u\n", r);
     todo_wine
     {
-        ok(r == ERROR_INSTALL_FAILURE, "Expected ERROR_INSTALL_FAILURE, got %u\n", r);
         ok(!delete_pf("msitest\\augustus", TRUE), "File is installed\n");
         ok(!delete_pf("msitest\\maximus", TRUE), "File is installed\n");
         ok(!delete_pf("msitest", FALSE), "File is installed\n");
@@ -4572,6 +4572,7 @@ static void test_publish_publishproduct(void)
     CHAR keypath[MAX_PATH];
     CHAR temp[MAX_PATH];
     CHAR path[MAX_PATH];
+    BOOL old_installer = FALSE;
 
     static const CHAR prodpath[] = "Software\\Microsoft\\Windows\\CurrentVersion"
                                    "\\Installer\\UserData\\%s\\Products"
@@ -4609,6 +4610,22 @@ static void test_publish_publishproduct(void)
 
     sprintf(keypath, prodpath, usersid);
     res = RegOpenKeyA(HKEY_LOCAL_MACHINE, keypath, &hkey);
+    if (res == ERROR_FILE_NOT_FOUND)
+    {
+        res = RegOpenKeyA(HKEY_CURRENT_USER, cuprodpath, &hkey);
+        if (res == ERROR_SUCCESS)
+        {
+            win_skip("Windows Installer < 3.0 detected\n");
+            RegCloseKey(hkey);
+            old_installer = TRUE;
+            goto currentuser;
+        }
+        else
+        {
+            win_skip("Install failed, no need to continue\n");
+            return;
+        }
+    }
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     res = RegOpenKeyA(hkey, "InstallProperties", &props);
@@ -4627,6 +4644,7 @@ static void test_publish_publishproduct(void)
     RegDeleteKeyA(hkey, "");
     RegCloseKey(hkey);
 
+currentuser:
     res = RegOpenKeyA(HKEY_CURRENT_USER, cuprodpath, &hkey);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
@@ -4634,7 +4652,8 @@ static void test_publish_publishproduct(void)
     CHECK_DEL_REG_STR(hkey, "PackageCode", "AC75740029052c94DA02821EECD05F2F");
     CHECK_DEL_REG_DWORD(hkey, "Language", 1033);
     CHECK_DEL_REG_DWORD(hkey, "Version", 0x1010001);
-    CHECK_DEL_REG_DWORD(hkey, "AuthorizedLUAApp", 0);
+    if (!old_installer)
+        CHECK_DEL_REG_DWORD(hkey, "AuthorizedLUAApp", 0);
     CHECK_DEL_REG_DWORD(hkey, "Assignment", 0);
     CHECK_DEL_REG_DWORD(hkey, "AdvertiseFlags", 0x184);
     CHECK_DEL_REG_DWORD(hkey, "InstanceType", 0);
@@ -4678,6 +4697,8 @@ static void test_publish_publishproduct(void)
 
     /* PublishProduct, machine */
     r = MsiInstallProductA(msifile, "PUBLISH_PRODUCT=1 ALLUSERS=1");
+    if (old_installer)
+        goto machprod;
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
     ok(delete_pf("msitest\\maximus", TRUE), "File not installed\n");
     ok(delete_pf("msitest", FALSE), "File not installed\n");
@@ -4705,6 +4726,7 @@ static void test_publish_publishproduct(void)
     RegDeleteKeyA(hkey, "");
     RegCloseKey(hkey);
 
+machprod:
     res = RegOpenKeyA(HKEY_CLASSES_ROOT, machprod, &hkey);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
@@ -4712,7 +4734,8 @@ static void test_publish_publishproduct(void)
     CHECK_DEL_REG_STR(hkey, "PackageCode", "AC75740029052c94DA02821EECD05F2F");
     CHECK_DEL_REG_DWORD(hkey, "Language", 1033);
     CHECK_DEL_REG_DWORD(hkey, "Version", 0x1010001);
-    CHECK_DEL_REG_DWORD(hkey, "AuthorizedLUAApp", 0);
+    if (!old_installer)
+        CHECK_DEL_REG_DWORD(hkey, "AuthorizedLUAApp", 0);
     todo_wine CHECK_DEL_REG_DWORD(hkey, "Assignment", 1);
     CHECK_DEL_REG_DWORD(hkey, "AdvertiseFlags", 0x184);
     CHECK_DEL_REG_DWORD(hkey, "InstanceType", 0);
@@ -8015,6 +8038,7 @@ static void test_file_in_use(void)
     r = MsiInstallProductA(msifile, "REMOVE=ALL");
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %u\n", r);
 
+    DeleteFileA("msitest\\maximus");
     delete_test_files();
 }
 
@@ -8171,6 +8195,8 @@ static void test_feature_override(void)
     ok(delete_pf("msitest", FALSE), "File not installed\n");
 
     delete_test_files();
+
+    RegDeleteKeyA(HKEY_LOCAL_MACHINE, "Software\\Wine\\msitest");
 }
 
 static void test_create_folder(void)
@@ -8430,6 +8456,7 @@ static void test_register_font(void)
 
     RegDeleteValueA(key, "msi test font");
     RegCloseKey(key);
+    DeleteFileA("msitest\\font.ttf");
     delete_test_files();
 }
 
@@ -8494,6 +8521,11 @@ static void test_install_remove_odbc(void)
     ok(delete_pf("msitest\\ODBCsetup.dll", TRUE), "file not created\n");
     ok(delete_pf("msitest", FALSE), "directory not created\n");
 
+    DeleteFileA("msitest\\ODBCdriver.dll");
+    DeleteFileA("msitest\\ODBCdriver2.dll");
+    DeleteFileA("msitest\\ODBCtranslator.dll");
+    DeleteFileA("msitest\\ODBCtranslator2.dll");
+    DeleteFileA("msitest\\ODBCsetup.dll");
     delete_test_files();
 }
 
@@ -8519,6 +8551,7 @@ static void test_register_typelib(void)
     ok(!delete_pf("msitest\\typelib.dll", TRUE), "file not removed\n");
     ok(!delete_pf("msitest", FALSE), "directory not removed\n");
 
+    DeleteFileA("msitest\\typelib.dll");
     delete_test_files();
 }
 
@@ -8545,6 +8578,7 @@ static void test_create_remove_shortcut(void)
     ok(!delete_pf("msitest\\target.txt", TRUE), "file not removed\n");
     todo_wine ok(!delete_pf("msitest", FALSE), "directory not removed\n");
 
+    DeleteFileA("msitest\\target.txt");
     delete_test_files();
 }
 
@@ -8581,6 +8615,8 @@ static void test_publish_components(void)
 
     ok(!delete_pf("msitest\\english.txt", TRUE), "file not removed\n");
     ok(!delete_pf("msitest", FALSE), "directory not removed\n");
+
+    DeleteFileA("msitest\\english.txt");
     delete_test_files();
 }
 
@@ -8614,6 +8650,10 @@ static void test_remove_duplicate_files(void)
     ok(!delete_pf("msitest\\duplicate.txt", TRUE), "file not removed\n");
     ok(!delete_pf("msitest\\duplicate2.txt", TRUE), "file not removed\n");
     ok(delete_pf("msitest", FALSE), "directory removed\n");
+
+    DeleteFileA("msitest\\original.txt");
+    DeleteFileA("msitest\\original2.txt");
+    DeleteFileA("msitest\\original3.txt");
     delete_test_files();
 }
 
@@ -8685,6 +8725,8 @@ static void test_remove_registry_values(void)
 
     ok(!delete_pf("msitest\\registry.txt", TRUE), "file not removed\n");
     ok(!delete_pf("msitest", FALSE), "directory not removed\n");
+
+    DeleteFileA("msitest\\registry.txt");
     delete_test_files();
 }
 
@@ -8710,6 +8752,8 @@ static void test_find_related_products(void)
 
     ok(!delete_pf("msitest\\product.txt", TRUE), "file not removed\n");
     ok(!delete_pf("msitest", FALSE), "directory not removed\n");
+
+    DeleteFileA("msitest\\product.txt");
     delete_test_files();
 }
 
@@ -8761,6 +8805,8 @@ static void test_remove_ini_values(void)
     todo_wine ok(!delete_pf("msitest\\test.ini", TRUE), "file removed\n");
     ok(!delete_pf("msitest\\inifile.txt", TRUE), "file not removed\n");
     ok(delete_pf("msitest", FALSE), "directory removed\n");
+
+    DeleteFileA("msitest\\inifile.txt");
     delete_test_files();
 }
 
@@ -8880,6 +8926,8 @@ static void test_remove_env_strings(void)
 
     ok(!delete_pf("msitest\\envvar.txt", TRUE), "file not removed\n");
     ok(!delete_pf("msitest", FALSE), "directory not removed\n");
+
+    DeleteFileA("msitest\\envvar.txt");
     delete_test_files();
 }
 

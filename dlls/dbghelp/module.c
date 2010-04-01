@@ -126,6 +126,7 @@ struct module* module_new(struct process* pcs, const WCHAR* name,
                           unsigned long stamp, unsigned long checksum)
 {
     struct module*      module;
+    unsigned            i;
 
     assert(type == DMT_ELF || type == DMT_PE || type == DMT_MACHO);
     if (!(module = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*module))))
@@ -168,6 +169,7 @@ struct module* module_new(struct process* pcs, const WCHAR* name,
 
     module->type              = type;
     module->is_virtual        = virtual ? TRUE : FALSE;
+    for (i = 0; i < DFI_LAST; i++) module->format_info[i] = NULL;
     module->sortlist_valid    = FALSE;
     module->sorttab_size      = 0;
     module->addr_sorttab      = NULL;
@@ -621,14 +623,21 @@ DWORD64 WINAPI SymLoadModule64(HANDLE hProcess, HANDLE hFile, PCSTR ImageName,
  */
 BOOL module_remove(struct process* pcs, struct module* module)
 {
+    struct module_format*modfmt;
     struct module**     p;
+    unsigned            i;
 
     TRACE("%s (%p)\n", debugstr_w(module->module.ModuleName), module);
+
+    for (i = 0; i < DFI_LAST; i++)
+    {
+        if ((modfmt = module->format_info[i]) && modfmt->remove)
+            modfmt->remove(pcs, module->format_info[i]);
+    }
     hash_table_destroy(&module->ht_symbols);
     hash_table_destroy(&module->ht_types);
     HeapFree(GetProcessHeap(), 0, module->sources);
     HeapFree(GetProcessHeap(), 0, module->addr_sorttab);
-    HeapFree(GetProcessHeap(), 0, module->dwarf2_info);
     pool_destroy(&module->pool);
     /* native dbghelp doesn't invoke registered callback(,CBA_SYMBOLS_UNLOADED,) here
      * so do we
@@ -1025,13 +1034,10 @@ BOOL  WINAPI SymGetModuleInfoW64(HANDLE hProcess, DWORD64 dwAddr,
  */
 DWORD WINAPI SymGetModuleBase(HANDLE hProcess, DWORD dwAddr)
 {
-    struct process*     pcs = process_find_by_handle(hProcess);
-    struct module*      module;
+    DWORD64     ret;
 
-    if (!pcs) return 0;
-    module = module_find_by_addr(pcs, dwAddr, DMT_UNKNOWN);
-    if (!module) return 0;
-    return module->module.BaseOfImage;
+    ret = SymGetModuleBase64(hProcess, dwAddr);
+    return validate_addr64(ret) ? ret : 0;
 }
 
 /***********************************************************************
@@ -1039,8 +1045,13 @@ DWORD WINAPI SymGetModuleBase(HANDLE hProcess, DWORD dwAddr)
  */
 DWORD64 WINAPI SymGetModuleBase64(HANDLE hProcess, DWORD64 dwAddr)
 {
-    if (!validate_addr64(dwAddr)) return 0;
-    return SymGetModuleBase(hProcess, (DWORD)dwAddr);
+    struct process*     pcs = process_find_by_handle(hProcess);
+    struct module*      module;
+
+    if (!pcs) return 0;
+    module = module_find_by_addr(pcs, dwAddr, DMT_UNKNOWN);
+    if (!module) return 0;
+    return module->module.BaseOfImage;
 }
 
 /******************************************************************
@@ -1077,4 +1088,27 @@ BOOL WINAPI SymRefreshModuleList(HANDLE hProcess)
     if (!(pcs = process_find_by_handle(hProcess))) return FALSE;
 
     return refresh_module_list(pcs);
+}
+
+/***********************************************************************
+ *		SymFunctionTableAccess (DBGHELP.@)
+ */
+PVOID WINAPI SymFunctionTableAccess(HANDLE hProcess, DWORD AddrBase)
+{
+    return SymFunctionTableAccess64(hProcess, AddrBase);
+}
+
+/***********************************************************************
+ *		SymFunctionTableAccess64 (DBGHELP.@)
+ */
+PVOID WINAPI SymFunctionTableAccess64(HANDLE hProcess, DWORD64 AddrBase)
+{
+    struct process*     pcs = process_find_by_handle(hProcess);
+    struct module*      module;
+
+    if (!pcs || !dbghelp_current_cpu->find_runtime_function) return NULL;
+    module = module_find_by_addr(pcs, AddrBase, DMT_UNKNOWN);
+    if (!module) return NULL;
+
+    return dbghelp_current_cpu->find_runtime_function(module, AddrBase);
 }

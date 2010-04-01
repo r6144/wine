@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 Maarten Lankhorst for Codeweavers
+ * Copyright 2010 Maarten Lankhorst for CodeWeavers
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -177,7 +177,7 @@ static void test_audioclient(IAudioClient *ac)
     ok(hr == E_INVALIDARG, "Initialize with invalid flags returns %08x\n", hr);
 
     /* It seems that if length > 2s or periodicity != 0 the length is ignored and call succeeds
-     * Since we can only initialize succesfully once skip those tests
+     * Since we can only initialize successfully once, skip those tests.
      */
     hr = IAudioClient_Initialize(ac, AUDCLNT_SHAREMODE_SHARED, 0, 5000000, 0, NULL, NULL);
     ok(hr == E_POINTER, "Initialize with null format returns %08x\n", hr);
@@ -192,6 +192,14 @@ static void test_audioclient(IAudioClient *ac)
         return;
     }
 
+    hr = IAudioClient_GetStreamLatency(ac, NULL);
+    ok(hr == E_POINTER, "GetStreamLatency(NULL) call returns %08x\n", hr);
+
+    hr = IAudioClient_GetStreamLatency(ac, &t1);
+    ok(hr == S_OK, "Valid GetStreamLatency call returns %08x\n", hr);
+    trace("Returned latency: %u.%05u ms\n",
+          (UINT)(t1/10000), (UINT)(t1 % 10000));
+
     hr = IAudioClient_Initialize(ac, AUDCLNT_SHAREMODE_SHARED, 0, 5000000, 0, pwfx, NULL);
     ok(hr == AUDCLNT_E_ALREADY_INITIALIZED, "Calling Initialize twice returns %08x\n", hr);
 
@@ -200,8 +208,18 @@ static void test_audioclient(IAudioClient *ac)
 
     hr = IAudioClient_SetEventHandle(ac, handle);
     ok(hr == AUDCLNT_E_EVENTHANDLE_NOT_EXPECTED ||
-       hr == HRESULT_FROM_WIN32(ERROR_INVALID_NAME)
+       hr == HRESULT_FROM_WIN32(ERROR_INVALID_NAME) ||
+       hr == HRESULT_FROM_WIN32(ERROR_BAD_PATHNAME) /* Some Vista */
        , "SetEventHandle returns %08x\n", hr);
+
+    hr = IAudioClient_Reset(ac);
+    ok(hr == S_OK, "Reset on a resetted stream returns %08x\n", hr);
+
+    hr = IAudioClient_Stop(ac);
+    ok(hr == S_FALSE, "Stop on a stopped stream returns %08x\n", hr);
+
+    hr = IAudioClient_Start(ac);
+    ok(hr == S_OK, "Start on a stopped stream returns %08x\n", hr);
 
     CloseHandle(handle);
     CoTaskMemFree(pwfx);

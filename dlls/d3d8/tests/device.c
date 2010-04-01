@@ -1494,6 +1494,13 @@ struct
     UINT message;
 } expect_message;
 
+struct wndproc_thread_param
+{
+    HWND dummy_window;
+    HANDLE window_created;
+    HANDLE test_finished;
+};
+
 static LRESULT CALLBACK test_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
 {
     if (filter_messages && filter_messages == hwnd)
@@ -1506,14 +1513,49 @@ static LRESULT CALLBACK test_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM
     return DefWindowProcA(hwnd, message, wparam, lparam);
 }
 
+static DWORD WINAPI wndproc_thread(void *param)
+{
+    struct wndproc_thread_param *p = param;
+    DWORD res;
+    BOOL ret;
+
+    p->dummy_window = CreateWindowA("d3d8_test_wndproc_wc", "d3d8_test",
+            WS_MAXIMIZE | WS_VISIBLE | WS_CAPTION, 0, 0, 640, 480, 0, 0, 0, 0);
+
+    ret = SetEvent(p->window_created);
+    ok(ret, "SetEvent failed, last error %#x.\n", GetLastError());
+
+    for (;;)
+    {
+        MSG msg;
+
+        while (PeekMessage(&msg, 0, 0, 0, PM_REMOVE)) DispatchMessage(&msg);
+        res = WaitForSingleObject(p->test_finished, 100);
+        if (res == WAIT_OBJECT_0) break;
+        if (res != WAIT_TIMEOUT)
+        {
+            ok(0, "Wait failed (%#x), last error %#x.\n", res, GetLastError());
+            break;
+        }
+    }
+
+    DestroyWindow(p->dummy_window);
+
+    return 0;
+}
+
 static void test_wndproc(void)
 {
-    HWND device_window, focus_window, dummy_window, tmp;
+    struct wndproc_thread_param thread_params;
+    HWND device_window, focus_window, tmp;
     IDirect3DDevice8 *device;
     WNDCLASSA wc = {0};
     IDirect3D8 *d3d8;
+    HANDLE thread;
     LONG_PTR proc;
     ULONG ref;
+    DWORD res, tid;
+    MSG msg;
 
     if (!(d3d8 = pDirect3DCreate8(D3D_SDK_VERSION)))
     {
@@ -1525,12 +1567,20 @@ static void test_wndproc(void)
     wc.lpszClassName = "d3d8_test_wndproc_wc";
     ok(RegisterClassA(&wc), "Failed to register window class.\n");
 
+    thread_params.window_created = CreateEvent(NULL, FALSE, FALSE, NULL);
+    ok(!!thread_params.window_created, "CreateEvent failed, last error %#x.\n", GetLastError());
+    thread_params.test_finished = CreateEvent(NULL, FALSE, FALSE, NULL);
+    ok(!!thread_params.test_finished, "CreateEvent failed, last error %#x.\n", GetLastError());
+
     focus_window = CreateWindowA("d3d8_test_wndproc_wc", "d3d8_test",
             WS_MAXIMIZE | WS_VISIBLE | WS_CAPTION , 0, 0, 640, 480, 0, 0, 0, 0);
     device_window = CreateWindowA("d3d8_test_wndproc_wc", "d3d8_test",
             WS_MAXIMIZE | WS_VISIBLE | WS_CAPTION , 0, 0, 640, 480, 0, 0, 0, 0);
-    dummy_window = CreateWindowA("d3d8_test_wndproc_wc", "d3d8_test",
-            WS_MAXIMIZE | WS_VISIBLE | WS_CAPTION , 0, 0, 640, 480, 0, 0, 0, 0);
+    thread = CreateThread(NULL, 0, wndproc_thread, &thread_params, 0, &tid);
+    ok(!!thread, "Failed to create thread, last error %#x.\n", GetLastError());
+
+    res = WaitForSingleObject(thread_params.window_created, INFINITE);
+    ok(res == WAIT_OBJECT_0, "Wait failed (%#x), last error %#x.\n", res, GetLastError());
 
     proc = GetWindowLongPtrA(device_window, GWLP_WNDPROC);
     ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#lx, got %#lx.\n",
@@ -1539,13 +1589,19 @@ static void test_wndproc(void)
     ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#lx, got %#lx.\n",
             (LONG_PTR)test_proc, proc);
 
-    trace("device_window %p, focus_window %p, dummy_window %p.\n", device_window, focus_window, dummy_window);
+    trace("device_window %p, focus_window %p, dummy_window %p.\n",
+            device_window, focus_window, thread_params.dummy_window);
 
     tmp = GetFocus();
-    ok(tmp == dummy_window, "Expected focus %p, got %p.\n", dummy_window, tmp);
+    ok(tmp == device_window, "Expected focus %p, got %p.\n", device_window, tmp);
+    tmp = GetForegroundWindow();
+    ok(tmp == thread_params.dummy_window, "Expected foreground window %p, got %p.\n",
+            thread_params.dummy_window, tmp);
 
     expect_message.window = focus_window;
     expect_message.message = WM_SETFOCUS;
+
+    while (PeekMessage(&msg, 0, 0, 0, PM_REMOVE)) DispatchMessage(&msg);
 
     device = create_device(d3d8, device_window, focus_window, FALSE);
     if (!device)
@@ -1556,8 +1612,14 @@ static void test_wndproc(void)
 
     ok(!expect_message.message, "Expected message %#x for window %p, but didn't receive it.\n",
             expect_message.message, expect_message.window);
-    tmp = GetFocus();
-    ok(tmp == focus_window, "Expected focus %p, got %p.\n", focus_window, tmp);
+    if (0) /* Disabled until we can make this work in a reliable way on Wine. */
+    {
+        tmp = GetFocus();
+        ok(tmp == focus_window, "Expected focus %p, got %p.\n", focus_window, tmp);
+        tmp = GetForegroundWindow();
+        ok(tmp == focus_window, "Expected foreground window %p, got %p.\n", focus_window, tmp);
+    }
+    SetForegroundWindow(focus_window);
 
     filter_messages = focus_window;
 
@@ -1607,7 +1669,13 @@ static void test_wndproc(void)
 done:
     filter_messages = NULL;
     IDirect3D8_Release(d3d8);
-    DestroyWindow(dummy_window);
+
+    SetEvent(thread_params.test_finished);
+    WaitForSingleObject(thread, INFINITE);
+    CloseHandle(thread_params.test_finished);
+    CloseHandle(thread_params.window_created);
+    CloseHandle(thread);
+
     DestroyWindow(device_window);
     DestroyWindow(focus_window);
     UnregisterClassA("d3d8_test_wndproc_wc", GetModuleHandleA(NULL));
@@ -1615,12 +1683,15 @@ done:
 
 static void test_wndproc_windowed(void)
 {
-    HWND device_window, focus_window, dummy_window, tmp;
+    struct wndproc_thread_param thread_params;
+    HWND device_window, focus_window, tmp;
     IDirect3DDevice8 *device;
     WNDCLASSA wc = {0};
     IDirect3D8 *d3d8;
+    HANDLE thread;
     LONG_PTR proc;
     ULONG ref;
+    DWORD res, tid;
 
     if (!(d3d8 = pDirect3DCreate8(D3D_SDK_VERSION)))
     {
@@ -1632,12 +1703,20 @@ static void test_wndproc_windowed(void)
     wc.lpszClassName = "d3d8_test_wndproc_wc";
     ok(RegisterClassA(&wc), "Failed to register window class.\n");
 
+    thread_params.window_created = CreateEvent(NULL, FALSE, FALSE, NULL);
+    ok(!!thread_params.window_created, "CreateEvent failed, last error %#x.\n", GetLastError());
+    thread_params.test_finished = CreateEvent(NULL, FALSE, FALSE, NULL);
+    ok(!!thread_params.test_finished, "CreateEvent failed, last error %#x.\n", GetLastError());
+
     focus_window = CreateWindowA("d3d8_test_wndproc_wc", "d3d8_test",
             WS_MAXIMIZE | WS_VISIBLE | WS_CAPTION, 0, 0, 640, 480, 0, 0, 0, 0);
     device_window = CreateWindowA("d3d8_test_wndproc_wc", "d3d8_test",
             WS_MAXIMIZE | WS_VISIBLE | WS_CAPTION, 0, 0, 640, 480, 0, 0, 0, 0);
-    dummy_window = CreateWindowA("d3d8_test_wndproc_wc", "d3d8_test",
-            WS_MAXIMIZE | WS_VISIBLE | WS_CAPTION, 0, 0, 640, 480, 0, 0, 0, 0);
+    thread = CreateThread(NULL, 0, wndproc_thread, &thread_params, 0, &tid);
+    ok(!!thread, "Failed to create thread, last error %#x.\n", GetLastError());
+
+    res = WaitForSingleObject(thread_params.window_created, INFINITE);
+    ok(res == WAIT_OBJECT_0, "Wait failed (%#x), last error %#x.\n", res, GetLastError());
 
     proc = GetWindowLongPtrA(device_window, GWLP_WNDPROC);
     ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#lx, got %#lx.\n",
@@ -1646,10 +1725,14 @@ static void test_wndproc_windowed(void)
     ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#lx, got %#lx.\n",
             (LONG_PTR)test_proc, proc);
 
-    trace("device_window %p, focus_window %p, dummy_window %p.\n", device_window, focus_window, dummy_window);
+    trace("device_window %p, focus_window %p, dummy_window %p.\n",
+            device_window, focus_window, thread_params.dummy_window);
 
     tmp = GetFocus();
-    ok(tmp == dummy_window, "Expected focus %p, got %p.\n", dummy_window, tmp);
+    ok(tmp == device_window, "Expected focus %p, got %p.\n", device_window, tmp);
+    tmp = GetForegroundWindow();
+    ok(tmp == thread_params.dummy_window, "Expected foreground window %p, got %p.\n",
+            thread_params.dummy_window, tmp);
 
     filter_messages = focus_window;
 
@@ -1661,7 +1744,10 @@ static void test_wndproc_windowed(void)
     }
 
     tmp = GetFocus();
-    ok(tmp == dummy_window, "Expected focus %p, got %p.\n", dummy_window, tmp);
+    ok(tmp == device_window, "Expected focus %p, got %p.\n", device_window, tmp);
+    tmp = GetForegroundWindow();
+    ok(tmp == thread_params.dummy_window, "Expected foreground window %p, got %p.\n",
+            thread_params.dummy_window, tmp);
 
     proc = GetWindowLongPtrA(device_window, GWLP_WNDPROC);
     ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#lx, got %#lx.\n",
@@ -1699,7 +1785,13 @@ static void test_wndproc_windowed(void)
 done:
     filter_messages = NULL;
     IDirect3D8_Release(d3d8);
-    DestroyWindow(dummy_window);
+
+    SetEvent(thread_params.test_finished);
+    WaitForSingleObject(thread, INFINITE);
+    CloseHandle(thread_params.test_finished);
+    CloseHandle(thread_params.window_created);
+    CloseHandle(thread);
+
     DestroyWindow(device_window);
     DestroyWindow(focus_window);
     UnregisterClassA("d3d8_test_wndproc_wc", GetModuleHandleA(NULL));

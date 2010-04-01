@@ -75,6 +75,7 @@ static UINT process_error_mode;
 static DWORD shutdown_flags = 0;
 static DWORD shutdown_priority = 0x280;
 static BOOL is_wow64;
+static const int is_win64 = (sizeof(void *) > sizeof(int));
 
 HMODULE kernel32_handle = 0;
 
@@ -90,6 +91,7 @@ const WCHAR *DIR_SysWow64 = NULL;
 #define PDB32_FILE_APIS_OEM 0x0040  /* File APIs are OEM */
 #define PDB32_WIN32S_PROC   0x8000  /* Win32s process */
 
+static const WCHAR exeW[] = {'.','e','x','e',0};
 static const WCHAR comW[] = {'.','c','o','m',0};
 static const WCHAR batW[] = {'.','b','a','t',0};
 static const WCHAR cmdW[] = {'.','c','m','d',0};
@@ -152,6 +154,9 @@ static BOOL get_builtin_path( const WCHAR *libname, const WCHAR *ext, WCHAR *fil
     void *redir_disabled = 0;
     unsigned int flags = (sizeof(void*) > sizeof(int) ? BINARY_FLAG_64BIT : 0);
 
+    /* builtin names cannot be empty or contain spaces */
+    if (!libname[0] || strchrW( libname, ' ' ) || strchrW( libname, '\t' )) return FALSE;
+
     if (is_wow64 && Wow64DisableWow64FsRedirection( &redir_disabled ))
         Wow64RevertWow64FsRedirection( redir_disabled );
 
@@ -198,35 +203,6 @@ static BOOL get_builtin_path( const WCHAR *libname, const WCHAR *ext, WCHAR *fil
 
 
 /***********************************************************************
- *           open_builtin_exe_file
- *
- * Open an exe file for a builtin exe.
- */
-static void *open_builtin_exe_file( const WCHAR *name, char *error, int error_size,
-                                    int test_only, int *file_exists )
-{
-    char exename[MAX_PATH];
-    WCHAR *p;
-    UINT i, len;
-
-    *file_exists = 0;
-    if ((p = strrchrW( name, '/' ))) name = p + 1;
-    if ((p = strrchrW( name, '\\' ))) name = p + 1;
-
-    /* we don't want to depend on the current codepage here */
-    len = strlenW( name ) + 1;
-    if (len >= sizeof(exename)) return NULL;
-    for (i = 0; i < len; i++)
-    {
-        if (name[i] > 127) return NULL;
-        exename[i] = (char)name[i];
-        if (exename[i] >= 'A' && exename[i] <= 'Z') exename[i] += 'a' - 'A';
-    }
-    return wine_dll_load_main_exe( exename, error, error_size, test_only, file_exists );
-}
-
-
-/***********************************************************************
  *           open_exe_file
  *
  * Open a specific exe file, taking load order into account.
@@ -263,27 +239,16 @@ static HANDLE open_exe_file( const WCHAR *name, struct binary_info *binary_info 
 static BOOL find_exe_file( const WCHAR *name, WCHAR *buffer, int buflen,
                            HANDLE *handle, struct binary_info *binary_info )
 {
-    static const WCHAR exeW[] = {'.','e','x','e',0};
-    int file_exists;
-
     TRACE("looking for %s\n", debugstr_w(name) );
 
     if (!SearchPathW( NULL, name, exeW, buflen, buffer, NULL ))
     {
-        if (get_builtin_path( name, exeW, buffer, buflen, binary_info ))
+        if (contains_path( name ) && get_builtin_path( name, exeW, buffer, buflen, binary_info ))
         {
-            TRACE( "Trying built-in exe %s\n", debugstr_w(buffer) );
-            open_builtin_exe_file( buffer, NULL, 0, 1, &file_exists );
-            if (file_exists)
-            {
-                *handle = 0;
-                return TRUE;
-            }
-            return FALSE;
+            *handle = 0;
+            return TRUE;
         }
-
         /* no builtin found, try native without extension in case it is a Unix app */
-
         if (!SearchPathW( NULL, name, NULL, buflen, buffer, NULL )) return FALSE;
     }
 
@@ -904,9 +869,7 @@ static void init_windows_dirs(void)
         ERR( "directory %s could not be created, error %u\n",
              debugstr_w(DIR_System), GetLastError() );
 
-#ifndef _WIN64  /* SysWow64 is always defined on 64-bit */
-    if (is_wow64)
-#endif
+    if (is_win64 || is_wow64)   /* SysWow64 is always defined on 64-bit */
     {
         len = strlenW( DIR_Windows );
         buffer = HeapAlloc( GetProcessHeap(), 0, len * sizeof(WCHAR) + sizeof(default_syswow64W) );
@@ -1076,7 +1039,6 @@ void CDECL __wine_kernel_init(void)
 {
     static const WCHAR kernel32W[] = {'k','e','r','n','e','l','3','2',0};
     static const WCHAR dotW[] = {'.',0};
-    static const WCHAR exeW[] = {'.','e','x','e',0};
 
     WCHAR *p, main_exe_name[MAX_PATH+1];
     PEB *peb = NtCurrentTeb()->Peb;
@@ -1143,10 +1105,10 @@ void CDECL __wine_kernel_init(void)
 
     if (boot_events[0])
     {
-        DWORD timeout = 30000, count = 1;
+        DWORD timeout = 2 * 60 * 1000, count = 1;
 
         if (boot_events[1]) count++;
-        if (!got_environment) timeout = 300000;  /* initial prefix creation can take longer */
+        if (!got_environment) timeout = 5 * 60 * 1000;  /* initial prefix creation can take longer */
         if (WaitForMultipleObjects( count, boot_events, FALSE, timeout ) == WAIT_TIMEOUT)
             ERR( "boot event wait timed out\n" );
         CloseHandle( boot_events[0] );
@@ -1182,6 +1144,8 @@ void CDECL __wine_kernel_init(void)
                          debugstr_w(__wine_main_wargv[3]) );
                 ExitProcess( ERROR_BAD_EXE_FORMAT );
             }
+            MESSAGE( "wine: cannot find %s\n", debugstr_w(main_exe_name) );
+            ExitProcess( ERROR_FILE_NOT_FOUND );
         }
         args[0] = (DWORD_PTR)main_exe_name;
         FormatMessageW( FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_ARGUMENT_ARRAY,
@@ -1617,6 +1581,49 @@ done:
     return info;
 }
 
+/***********************************************************************
+ *           get_alternate_loader
+ *
+ * Get the name of the alternate (32 or 64 bit) Wine loader.
+ */
+static const char *get_alternate_loader( char **ret_env )
+{
+    char *env;
+    const char *loader = NULL;
+    const char *loader_env = getenv( "WINELOADER" );
+
+    *ret_env = NULL;
+
+    if (wine_get_build_dir()) loader = is_win64 ? "loader/wine32" : "server/../loader/wine";
+
+    if (loader_env)
+    {
+        int len = strlen( loader_env );
+        if (is_win64)
+        {
+            if (!(env = HeapAlloc( GetProcessHeap(), 0, sizeof("WINELOADER=") + len + 2 ))) return NULL;
+            strcpy( env, "WINELOADER=" );
+            strcat( env, loader_env );
+            strcat( env, "32" );
+        }
+        else
+        {
+            if (!(env = HeapAlloc( GetProcessHeap(), 0, sizeof("WINELOADER=") + len ))) return NULL;
+            strcpy( env, "WINELOADER=" );
+            strcat( env, loader_env );
+            len += sizeof("WINELOADER=") - 1;
+            if (!strcmp( env + len - 2, "32" )) env[len - 2] = 0;
+        }
+        if (!loader)
+        {
+            if ((loader = strrchr( env, '/' ))) loader++;
+            else loader = env;
+        }
+        *ret_env = env;
+    }
+    if (!loader) loader = is_win64 ? "wine32" : "wine";
+    return loader;
+}
 
 /***********************************************************************
  *           create_process
@@ -1634,6 +1641,8 @@ static BOOL create_process( HANDLE hFile, LPCWSTR filename, LPWSTR cmd_line, LPW
     HANDLE process_info;
     WCHAR *env_end;
     char *winedebug = NULL;
+    char *wineloader = NULL;
+    const char *loader = NULL;
     char **argv;
     startup_info_t *startup_info;
     DWORD startup_info_size;
@@ -1641,7 +1650,7 @@ static BOOL create_process( HANDLE hFile, LPCWSTR filename, LPWSTR cmd_line, LPW
     pid_t pid;
     int err;
 
-    if (sizeof(void *) == sizeof(int) && !is_wow64 && (binary_info->flags & BINARY_FLAG_64BIT))
+    if (!is_win64 && !is_wow64 && (binary_info->flags & BINARY_FLAG_64BIT))
     {
         ERR( "starting 64-bit process %s not supported on this platform\n", debugstr_w(filename) );
         SetLastError( ERROR_BAD_EXE_FORMAT );
@@ -1734,6 +1743,9 @@ static BOOL create_process( HANDLE hFile, LPCWSTR filename, LPWSTR cmd_line, LPW
     /* create the child process */
     argv = build_argv( cmd_line, 1 );
 
+    if (!is_win64 ^ !(binary_info->flags & BINARY_FLAG_64BIT))
+        loader = get_alternate_loader( &wineloader );
+
     if (exec_only || !(pid = fork()))  /* child */
     {
         char preloader_reserve[64], socket_env[64];
@@ -1774,9 +1786,10 @@ static BOOL create_process( HANDLE hFile, LPCWSTR filename, LPWSTR cmd_line, LPW
         putenv( preloader_reserve );
         putenv( socket_env );
         if (winedebug) putenv( winedebug );
+        if (wineloader) putenv( wineloader );
         if (unixdir) chdir(unixdir);
 
-        if (argv) wine_exec_wine_binary( NULL, argv, getenv("WINELOADER") );
+        if (argv) wine_exec_wine_binary( loader, argv, getenv("WINELOADER") );
         _exit(1);
     }
 
@@ -1787,6 +1800,7 @@ static BOOL create_process( HANDLE hFile, LPCWSTR filename, LPWSTR cmd_line, LPW
     close( socketfd[0] );
     HeapFree( GetProcessHeap(), 0, argv );
     HeapFree( GetProcessHeap(), 0, winedebug );
+    HeapFree( GetProcessHeap(), 0, wineloader );
     if (pid == -1)
     {
         FILE_SetDosError();
@@ -1899,9 +1913,8 @@ static LPWSTR get_file_name( LPCWSTR appname, LPWSTR cmdline, LPWSTR buffer,
 {
     static const WCHAR quotesW[] = {'"','%','s','"',0};
 
-    WCHAR *name, *pos, *ret = NULL;
+    WCHAR *name, *pos, *first_space, *ret = NULL;
     const WCHAR *p;
-    BOOL got_space;
 
     /* if we have an app name, everything is easy */
 
@@ -1929,8 +1942,12 @@ static LPWSTR get_file_name( LPCWSTR appname, LPWSTR cmdline, LPWSTR buffer,
         memcpy( name, cmdline + 1, len * sizeof(WCHAR) );
         name[len] = 0;
 
-        if (find_exe_file( name, buffer, buflen, handle, binary_info ))
-            ret = cmdline;  /* no change necessary */
+        if (!find_exe_file( name, buffer, buflen, handle, binary_info ))
+        {
+            if (!get_builtin_path( name, exeW, buffer, buflen, binary_info )) goto done;
+            *handle = 0;
+        }
+        ret = cmdline;  /* no change necessary */
         goto done;
     }
 
@@ -1940,28 +1957,38 @@ static LPWSTR get_file_name( LPCWSTR appname, LPWSTR cmdline, LPWSTR buffer,
         return NULL;
     pos = name;
     p = cmdline;
-    got_space = FALSE;
+    first_space = NULL;
 
-    while (*p)
+    for (;;)
     {
-        do *pos++ = *p++; while (*p && *p != ' ' && *p != '\t');
+        while (*p && *p != ' ' && *p != '\t') *pos++ = *p++;
         *pos = 0;
         if (find_exe_file( name, buffer, buflen, handle, binary_info ))
         {
             ret = cmdline;
             break;
         }
-        if (*p) got_space = TRUE;
+        if (!first_space) first_space = pos;
+        if (!(*pos++ = *p++)) break;
     }
 
-    if (ret && got_space)  /* now build a new command-line with quotes */
+    if (!ret)
+    {
+        if (first_space) *first_space = 0;  /* try only the first word as a builtin */
+        if (get_builtin_path( name, exeW, buffer, buflen, binary_info ))
+        {
+            *handle = 0;
+            ret = cmdline;
+        }
+        else SetLastError( ERROR_FILE_NOT_FOUND );
+    }
+    else if (first_space)  /* build a new command-line with quotes */
     {
         if (!(ret = HeapAlloc( GetProcessHeap(), 0, (strlenW(cmdline) + 3) * sizeof(WCHAR) )))
             goto done;
         sprintfW( ret, quotesW, name );
         strcatW( ret, p );
     }
-    else if (!ret) SetLastError( ERROR_FILE_NOT_FOUND );
 
  done:
     HeapFree( GetProcessHeap(), 0, name );
@@ -2081,8 +2108,9 @@ BOOL WINAPI DECLSPEC_HOTPATCH CreateProcessW( LPCWSTR app_name, LPWSTR cmd_line,
     else switch (binary_info.type)
     {
     case BINARY_PE:
-        TRACE( "starting %s as Win32 binary (%p-%p)\n",
-               debugstr_w(name), binary_info.res_start, binary_info.res_end );
+        TRACE( "starting %s as Win%d binary (%p-%p)\n",
+               debugstr_w(name), (binary_info.flags & BINARY_FLAG_64BIT) ? 64 : 32,
+               binary_info.res_start, binary_info.res_end );
         retv = create_process( hFile, name, tidy_cmdline, envW, cur_dir, process_attr, thread_attr,
                                inherit, flags, startup_info, info, unixdir, &binary_info, FALSE );
         break;
@@ -2094,7 +2122,8 @@ BOOL WINAPI DECLSPEC_HOTPATCH CreateProcessW( LPCWSTR app_name, LPWSTR cmd_line,
                                    inherit, flags, startup_info, info, unixdir, &binary_info, FALSE );
         break;
     case BINARY_UNIX_LIB:
-        TRACE( "starting %s as Winelib app\n", debugstr_w(name) );
+        TRACE( "starting %s as %d-bit Winelib app\n",
+               debugstr_w(name), (binary_info.flags & BINARY_FLAG_64BIT) ? 64 : 32 );
         retv = create_process( hFile, name, tidy_cmdline, envW, cur_dir, process_attr, thread_attr,
                                inherit, flags, startup_info, info, unixdir, &binary_info, FALSE );
         break;
@@ -2169,8 +2198,9 @@ static void exec_process( LPCWSTR name )
     switch (binary_info.type)
     {
     case BINARY_PE:
-        TRACE( "starting %s as Win32 binary (%p-%p)\n",
-               debugstr_w(name), binary_info.res_start, binary_info.res_end );
+        TRACE( "starting %s as Win%d binary (%p-%p)\n",
+               debugstr_w(name), (binary_info.flags & BINARY_FLAG_64BIT) ? 64 : 32,
+               binary_info.res_start, binary_info.res_end );
         create_process( hFile, name, GetCommandLineW(), NULL, NULL, NULL, NULL,
                         FALSE, 0, &startup_info, &info, NULL, &binary_info, TRUE );
         break;

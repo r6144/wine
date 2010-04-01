@@ -88,28 +88,27 @@ static HRESULT WINAPI IDxDiagContainerImpl_EnumChildContainerNames(PDXDIAGCONTAI
   IDxDiagContainerImpl *This = (IDxDiagContainerImpl *)iface;
   IDxDiagContainerImpl_SubContainer* p = NULL;
   DWORD i = 0;
-  
-  TRACE("(%p, %u, %s, %u)\n", iface, dwIndex, debugstr_w(pwszContainer), cchContainer);
 
-  if (NULL == pwszContainer) {
+  TRACE("(%p, %u, %p, %u)\n", iface, dwIndex, pwszContainer, cchContainer);
+
+  if (NULL == pwszContainer || 0 == cchContainer) {
     return E_INVALIDARG;
   }
-  if (256 > cchContainer) {
-    return DXDIAG_E_INSUFFICIENT_BUFFER;
-  }
-  
+
   p = This->subContainers;
   while (NULL != p) {
-    if (dwIndex == i) {  
-      if (cchContainer <= strlenW(p->contName)) {
-	return DXDIAG_E_INSUFFICIENT_BUFFER;
-      }
+    if (dwIndex == i) {
+      TRACE("Found container name %s, copying string\n", debugstr_w(p->contName));
       lstrcpynW(pwszContainer, p->contName, cchContainer);
-      return S_OK;
+      return (cchContainer <= strlenW(p->contName)) ?
+              DXDIAG_E_INSUFFICIENT_BUFFER : S_OK;
     }
     p = p->next;
     ++i;
-  }  
+  }
+
+  TRACE("Failed to find container name at specified index\n");
+  *pwszContainer = '\0';
   return E_INVALIDARG;
 }
 
@@ -130,7 +129,7 @@ static HRESULT IDxDiagContainerImpl_GetChildContainerInternal(PDXDIAGCONTAINER i
 
 static HRESULT WINAPI IDxDiagContainerImpl_GetChildContainer(PDXDIAGCONTAINER iface, LPCWSTR pwszContainer, IDxDiagContainer** ppInstance) {
   IDxDiagContainerImpl *This = (IDxDiagContainerImpl *)iface;
-  IDxDiagContainer* pContainer = NULL;
+  IDxDiagContainer* pContainer = (PDXDIAGCONTAINER)This;
   LPWSTR tmp, orig_tmp;
   INT tmp_len;
   WCHAR* cur;
@@ -142,7 +141,7 @@ static HRESULT WINAPI IDxDiagContainerImpl_GetChildContainer(PDXDIAGCONTAINER if
     return E_INVALIDARG;
   }
 
-  pContainer = (PDXDIAGCONTAINER) This;
+  *ppInstance = NULL;
 
   tmp_len = strlenW(pwszContainer) + 1;
   orig_tmp = tmp = HeapAlloc(GetProcessHeap(), 0, tmp_len * sizeof(WCHAR));
@@ -152,6 +151,8 @@ static HRESULT WINAPI IDxDiagContainerImpl_GetChildContainer(PDXDIAGCONTAINER if
   cur = strchrW(tmp, '.');
   while (NULL != cur) {
     *cur = '\0'; /* cut tmp string to '.' */
+    if (!*(cur + 1)) break; /* Account for a lone terminating period, as in "cont1.cont2.". */
+    TRACE("Trying to get parent container %s\n", debugstr_w(tmp));
     hr = IDxDiagContainerImpl_GetChildContainerInternal(pContainer, tmp, &pContainer);
     if (FAILED(hr) || NULL == pContainer)
       goto on_error;
@@ -160,8 +161,10 @@ static HRESULT WINAPI IDxDiagContainerImpl_GetChildContainer(PDXDIAGCONTAINER if
     cur = strchrW(tmp, '.');
   }
 
+  TRACE("Trying to get container %s\n", debugstr_w(tmp));
   hr = IDxDiagContainerImpl_GetChildContainerInternal(pContainer, tmp, ppInstance);
   if (SUCCEEDED(hr)) {
+    TRACE("Succeeded in getting the container instance\n");
     IDxDiagContainerImpl_AddRef(*ppInstance);
   }
 
@@ -184,28 +187,25 @@ static HRESULT WINAPI IDxDiagContainerImpl_EnumPropNames(PDXDIAGCONTAINER iface,
   IDxDiagContainerImpl *This = (IDxDiagContainerImpl *)iface;
   IDxDiagContainerImpl_Property* p = NULL;
   DWORD i = 0;
-  
-  TRACE("(%p, %u, %s, %u)\n", iface, dwIndex, debugstr_w(pwszPropName), cchPropName);
 
-  if (NULL == pwszPropName) {
+  TRACE("(%p, %u, %p, %u)\n", iface, dwIndex, pwszPropName, cchPropName);
+
+  if (NULL == pwszPropName || 0 == cchPropName) {
     return E_INVALIDARG;
   }
-  if (256 > cchPropName) {
-    return DXDIAG_E_INSUFFICIENT_BUFFER;
-  }
-  
+
   p = This->properties;
   while (NULL != p) {
-    if (dwIndex == i) {  
-      if (cchPropName <= strlenW(p->vName)) {
-        return DXDIAG_E_INSUFFICIENT_BUFFER;
-      }
+    if (dwIndex == i) {
+      TRACE("Found property name %s, copying string\n", debugstr_w(p->vName));
       lstrcpynW(pwszPropName, p->vName, cchPropName);
-      return S_OK;
+      return (cchPropName <= strlenW(p->vName)) ?
+              DXDIAG_E_INSUFFICIENT_BUFFER : S_OK;
     }
     p = p->next;
     ++i;
-  }  
+  }
+  TRACE("Failed to find property name at specified index\n");
   return E_INVALIDARG;
 }
 
@@ -221,13 +221,16 @@ static HRESULT WINAPI IDxDiagContainerImpl_GetProp(PDXDIAGCONTAINER iface, LPCWS
 
   p = This->properties;
   while (NULL != p) {
-    if (0 == lstrcmpW(p->vName, pwszPropName)) {      
-      VariantCopy(pvarProp, &p->v);
-      return S_OK;
+    if (0 == lstrcmpW(p->vName, pwszPropName)) {
+      HRESULT hr = VariantClear(pvarProp);
+      if (hr == DISP_E_ARRAYISLOCKED || hr == DISP_E_BADVARTYPE)
+        VariantInit(pvarProp);
+
+      return VariantCopy(pvarProp, &p->v);
     }
     p = p->next;
   }
-  return S_OK;
+  return E_INVALIDARG;
 }
 
 HRESULT WINAPI IDxDiagContainerImpl_AddProp(PDXDIAGCONTAINER iface, LPCWSTR pwszPropName, VARIANT* pVarProp) {

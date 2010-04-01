@@ -87,7 +87,3 @@ RC_SRCS = \
 	version.rc
 
 @MAKE_DLL_RULES@
-
-sql.tab.c: sql.tab.h   # for parallel makes
-
-@DEPENDENCIES@  # everything below this line is overwritten by make depend

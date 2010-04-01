@@ -83,7 +83,17 @@ static BOOL stack_get_frame(int nf, IMAGEHLP_STACK_FRAME* ihsf)
 {
     memset(ihsf, 0, sizeof(*ihsf));
     ihsf->InstructionOffset = dbg_curr_thread->frames[nf].linear_pc;
+    /* if we're not the first frame, InstructionOffset is the return address
+     * after the call instruction (at least on most processors I know of).
+     * However, there are cases where this address is outside of the current function.
+     * This happens when the called function is marked <NO RETURN>, in which
+     * case the compiler can omit the epilog (gcc 4 does it)
+     * Therefore, we decrement InstructionOffset in order to ensure that
+     * the considered address is really inside the current function.
+     */
+    if (nf) ihsf->InstructionOffset--;
     ihsf->FrameOffset = dbg_curr_thread->frames[nf].linear_frame;
+    ihsf->StackOffset = dbg_curr_thread->frames[nf].linear_stack;
     return TRUE;
 }
 
@@ -115,6 +125,35 @@ BOOL stack_get_register_current_frame(unsigned regno, DWORD_PTR** pval)
     case be_cpu_addr_frame:
         *pval = &dbg_curr_thread->frames[dbg_curr_thread->curr_frame].linear_frame;
         break;
+    }
+    return TRUE;
+}
+
+BOOL stack_get_register_frame(const struct dbg_internal_var* div, DWORD_PTR** pval)
+{
+    if (dbg_curr_thread->frames == NULL) return FALSE;
+    if (dbg_curr_thread->frames[dbg_curr_thread->curr_frame].is_ctx_valid)
+        *pval = (DWORD_PTR*)((char*)&dbg_curr_thread->frames[dbg_curr_thread->curr_frame].context +
+                             (DWORD_PTR)div->pval);
+    else
+    {
+        enum be_cpu_addr        kind;
+
+        if (!be_cpu->get_register_info(div->val, &kind)) return FALSE;
+
+        /* reuse some known registers directly out of stackwalk details */
+        switch (kind)
+        {
+        case be_cpu_addr_pc:
+            *pval = &dbg_curr_thread->frames[dbg_curr_thread->curr_frame].linear_pc;
+            break;
+        case be_cpu_addr_stack:
+            *pval = &dbg_curr_thread->frames[dbg_curr_thread->curr_frame].linear_stack;
+            break;
+        case be_cpu_addr_frame:
+            *pval = &dbg_curr_thread->frames[dbg_curr_thread->curr_frame].linear_frame;
+            break;
+        }
     }
     return TRUE;
 }
@@ -163,14 +202,14 @@ static BOOL CALLBACK stack_read_mem(HANDLE hProc, DWORD64 addr,
  *
  * Do a backtrace on the current thread
  */
-unsigned stack_fetch_frames(void)
+unsigned stack_fetch_frames(const CONTEXT* _ctx)
 {
     STACKFRAME64 sf;
     unsigned     nf = 0;
     /* as native stackwalk can modify the context passed to it, simply copy
      * it to avoid any damage
      */
-    CONTEXT      ctx = dbg_context;
+    CONTEXT      ctx = *_ctx, prevctx = ctx;
 
     HeapFree(GetProcessHeap(), 0, dbg_curr_thread->frames);
     dbg_curr_thread->frames = NULL;
@@ -200,6 +239,15 @@ unsigned stack_fetch_frames(void)
         dbg_curr_thread->frames[nf].linear_frame = (DWORD_PTR)memory_to_linear_addr(&sf.AddrFrame);
         dbg_curr_thread->frames[nf].addr_stack   = sf.AddrStack;
         dbg_curr_thread->frames[nf].linear_stack = (DWORD_PTR)memory_to_linear_addr(&sf.AddrStack);
+        dbg_curr_thread->frames[nf].context      = prevctx;
+        /* FIXME: can this heuristic be improved: we declare first context always valid, and next ones
+         * if it has been modified by the call to StackWalk...
+         */
+        dbg_curr_thread->frames[nf].is_ctx_valid =
+            (nf == 0 ||
+             (dbg_curr_thread->frames[nf - 1].is_ctx_valid &&
+              memcmp(&dbg_curr_thread->frames[nf - 1].context, &ctx, sizeof(ctx))));
+        prevctx = ctx;
         nf++;
         /* we've probably gotten ourselves into an infinite loop so bail */
         if (nf > 200) break;
@@ -317,27 +365,26 @@ static void backtrace_tid(struct dbg_process* pcs, DWORD tid)
         dbg_printf("Unknown thread id (%04x) in process (%04x)\n", tid, pcs->pid);
     else
     {
-        CONTEXT saved_ctx = dbg_context;
+        CONTEXT context;
 
         dbg_curr_tid = dbg_curr_thread->tid;
-        memset(&dbg_context, 0, sizeof(dbg_context));
-        dbg_context.ContextFlags = CONTEXT_FULL;
+        memset(&context, 0, sizeof(context));
+        context.ContextFlags = CONTEXT_FULL;
         if (SuspendThread(dbg_curr_thread->handle) != -1)
         {
-            if (!GetThreadContext(dbg_curr_thread->handle, &dbg_context))
+            if (!GetThreadContext(dbg_curr_thread->handle, &context))
             {
                 dbg_printf("Can't get context for thread %04x in current process\n",
                            tid);
             }
             else
             {
-                stack_fetch_frames();
+                stack_fetch_frames(&context);
                 backtrace();
             }
             ResumeThread(dbg_curr_thread->handle);
         }
         else dbg_printf("Can't suspend thread %04x in current process\n", tid);
-        dbg_context = saved_ctx;
     }
     dbg_curr_thread = thread;
     dbg_curr_tid = thread ? thread->tid : 0;

@@ -283,9 +283,26 @@ s_sum_var_array(int x[20], int n)
 }
 
 int
+s_sum_complex_array(int n, refpint_t pi[])
+{
+  int total = 0;
+  for (; n > 0; n--)
+    total += *pi[n - 1];
+  return total;
+}
+
+int
 s_dot_two_vectors(vector_t vs[2])
 {
   return vs[0].x * vs[1].x + vs[0].y * vs[1].y + vs[0].z * vs[1].z;
+}
+
+void
+s_get_number_array(int x[20], int *n)
+{
+  int c[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+  memcpy(x, c, sizeof(c));
+  *n = sizeof(c)/sizeof(c[0]);
 }
 
 int
@@ -1203,6 +1220,7 @@ array_tests(void)
   };
   int c[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
   int c2[] = {10, 100, 200};
+  int c3[20];
   vector_t vs[2] = {{1, -2, 3}, {4, -5, -6}};
   cps_t cps;
   cpsc_t cpsc;
@@ -1213,6 +1231,7 @@ array_tests(void)
   int *pi;
   pints_t api[5];
   numbers_struct_t *ns;
+  refpint_t rpi[5];
 
   if (!old_windows_version)
   {
@@ -1236,6 +1255,11 @@ array_tests(void)
   ok(sum_unique_conf_ptr(ca, 5) == 3, "RPC sum_unique_conf_array\n");
   ok(sum_unique_conf_ptr(NULL, 10) == 0, "RPC sum_unique_conf_array\n");
 
+  get_number_array(c3, &n);
+  ok(n == 10, "RPC get_num_array\n");
+  for (; n > 0; n--)
+    ok(c3[n-1] == c[n-1], "get_num_array returned wrong value %d @ %d\n",
+       c3[n-1], n);
   ok(sum_var_array(c, 10) == 45, "RPC sum_conf_array\n");
   ok(sum_var_array(&c[5], 2) == 11, "RPC sum_conf_array\n");
   ok(sum_var_array(&c[7], 1) == 7, "RPC sum_conf_array\n");
@@ -1316,6 +1340,15 @@ array_tests(void)
       ok(*ns->numbers[0].pi == 5, "pi unmarshalled incorrectly %d\n", *ns->numbers[0].pi);
       HeapFree(GetProcessHeap(), 0, ns);
   }
+  HeapFree(GetProcessHeap(), 0, pi);
+
+  pi = HeapAlloc(GetProcessHeap(), 0, 5 * sizeof(*pi));
+  pi[0] = 3;  rpi[0] = &pi[0];
+  pi[1] = 5;  rpi[1] = &pi[1];
+  pi[2] = -2; rpi[2] = &pi[2];
+  pi[3] = -1; rpi[3] = &pi[3];
+  pi[4] = -4; rpi[4] = &pi[4];
+  ok(sum_complex_array(5, rpi) == 1, "RPC sum_complex_array\n");
   HeapFree(GetProcessHeap(), 0, pi);
 }
 

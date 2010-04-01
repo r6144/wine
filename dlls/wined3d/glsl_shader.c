@@ -719,8 +719,8 @@ static void shader_glsl_load_np2fixup_constants(
 static void shader_glsl_load_constants(const struct wined3d_context *context,
         char usePixelShader, char useVertexShader)
 {
-    IWineD3DDeviceImpl *device = ((IWineD3DSurfaceImpl *)context->surface)->resource.device;
     const struct wined3d_gl_info *gl_info = context->gl_info;
+    IWineD3DDeviceImpl *device = context->swapchain->device;
     IWineD3DStateBlockImpl* stateBlock = device->stateBlock;
     struct shader_glsl_priv *priv = device->shader_priv;
 
@@ -2164,16 +2164,26 @@ static void shader_glsl_nrm(const struct wined3d_shader_instruction *ins)
 {
     struct wined3d_shader_buffer *buffer = ins->ctx->buffer;
     glsl_src_param_t src_param;
+    unsigned int mask_size;
     DWORD write_mask;
     char dst_mask[6];
 
     write_mask = shader_glsl_get_write_mask(ins->dst, dst_mask);
+    mask_size = shader_glsl_get_write_mask_size(write_mask);
     shader_glsl_add_src_param(ins, &ins->src[0], write_mask, &src_param);
 
     shader_addline(buffer, "tmp0.x = length(%s);\n", src_param.param_str);
     shader_glsl_append_dst(buffer, ins);
-    shader_addline(buffer, "tmp0.x == 0.0 ? (%s * FLT_MAX) : (%s / tmp0.x));",
-            src_param.param_str, src_param.param_str);
+    if (mask_size > 1)
+    {
+        shader_addline(buffer, "tmp0.x == 0.0 ? vec%u(0.0) : (%s / tmp0.x));\n",
+                mask_size, src_param.param_str);
+    }
+    else
+    {
+        shader_addline(buffer, "tmp0.x == 0.0 ? 0.0 : (%s / tmp0.x));\n",
+                src_param.param_str);
+    }
 }
 
 /** Process the WINED3DSIO_EXPP instruction in GLSL:
@@ -4530,8 +4540,8 @@ static GLhandleARB create_glsl_blt_shader(const struct wined3d_gl_info *gl_info,
 /* GL locking is done by the caller */
 static void shader_glsl_select(const struct wined3d_context *context, BOOL usePS, BOOL useVS)
 {
-    IWineD3DDeviceImpl *device = ((IWineD3DSurfaceImpl *)context->surface)->resource.device;
     const struct wined3d_gl_info *gl_info = context->gl_info;
+    IWineD3DDeviceImpl *device = context->swapchain->device;
     struct shader_glsl_priv *priv = device->shader_priv;
     GLhandleARB program_id = 0;
     GLenum old_vertex_color_clamp, current_vertex_color_clamp;

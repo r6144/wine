@@ -15,6 +15,7 @@ C_SRCS = \
 	query.c \
 	record.c
 
-@MAKE_DLL_RULES@
+RC_SRCS = \
+	version.rc
 
-@DEPENDENCIES@  # everything below this line is overwritten by make depend
+@MAKE_DLL_RULES@

@@ -252,7 +252,7 @@ DWORD WINAPI SHCLSIDFromStringA (LPCSTR clsid, CLSID *id)
 DWORD WINAPI SHCLSIDFromStringW (LPCWSTR clsid, CLSID *id)
 {
 	TRACE("(%p(%s) %p)\n", clsid, debugstr_w(clsid), id);
-	return CLSIDFromString((LPWSTR)clsid, id);
+	return CLSIDFromString(clsid, id);
 }
 DWORD WINAPI SHCLSIDFromStringAW (LPCVOID clsid, CLSID *id)
 {
@@ -330,14 +330,16 @@ void WINAPI SHFree(LPVOID pv)
  */
 HRESULT WINAPI SHGetDesktopFolder(IShellFolder **psf)
 {
-	HRESULT	hres = S_OK;
-	TRACE("\n");
+	HRESULT	hres;
+
+	TRACE("(%p)\n", psf);
 
 	if(!psf) return E_INVALIDARG;
-	*psf = NULL;
-	hres = ISF_Desktop_Constructor(NULL, &IID_IShellFolder,(LPVOID*)psf);
 
-	TRACE("-- %p->(%p)\n",psf, *psf);
+	*psf = NULL;
+	hres = ISF_Desktop_Constructor(NULL, &IID_IShellFolder, (LPVOID*)psf);
+
+	TRACE("-- %p->(%p) 0x%08x\n", psf, *psf, hres);
 	return hres;
 }
 /**************************************************************************

@@ -51,6 +51,7 @@
 #define WIN32_NO_STATUS
 #include "windef.h"
 #include "winternl.h"
+#include "winerror.h"
 
 #include "process.h"
 #include "file.h"
@@ -59,11 +60,34 @@
 #include "request.h"
 #include "user.h"
 
-/* To avoid conflicts with the Unix socket headers. Plus we only need a few
- * macros anyway.
+/* From winsock.h */
+#define FD_MAX_EVENTS              10
+#define FD_READ_BIT                0
+#define FD_WRITE_BIT               1
+#define FD_OOB_BIT                 2
+#define FD_ACCEPT_BIT              3
+#define FD_CONNECT_BIT             4
+#define FD_CLOSE_BIT               5
+
+/*
+ * Define flags to be used with the WSAAsyncSelect() call.
  */
-#define USE_WS_PREFIX
-#include "winsock2.h"
+#define FD_READ                    0x00000001
+#define FD_WRITE                   0x00000002
+#define FD_OOB                     0x00000004
+#define FD_ACCEPT                  0x00000008
+#define FD_CONNECT                 0x00000010
+#define FD_CLOSE                   0x00000020
+
+/* internal per-socket flags */
+#define FD_WINE_LISTENING          0x10000000
+#define FD_WINE_NONBLOCKING        0x20000000
+#define FD_WINE_CONNECTED          0x40000000
+#define FD_WINE_RAW                0x80000000
+#define FD_WINE_INTERNAL           0xFFFF0000
+
+/* Constants for WSAIoctl() */
+#define WSA_FLAG_OVERLAPPED        0x01
 
 struct sock
 {
@@ -99,6 +123,7 @@ static void sock_queue_async( struct fd *fd, const async_data_t *data, int type,
 static void sock_reselect_async( struct fd *fd, struct async_queue *queue );
 static void sock_cancel_async( struct fd *fd, struct process *process, struct thread *thread, client_ptr_t iosb );
 
+static int sock_get_ntstatus( int err );
 static int sock_get_error( int err );
 static void sock_set_error(void);
 
@@ -278,7 +303,7 @@ static void sock_wake_up( struct sock *sock, int pollev )
             int event = event_bitorder[i];
             if (sock->pmask & (1 << event))
             {
-                lparam_t lparam = (1 << event) | (sock->errors[event] << 16);
+                lparam_t lparam = (1 << event) | (sock_get_error(sock->errors[event]) << 16);
                 post_message( sock->window, sock->message, sock->wparam, lparam );
             }
         }
@@ -293,7 +318,7 @@ static inline int sock_error( struct fd *fd )
 
     optlen = sizeof(optval);
     getsockopt( get_unix_fd(fd), SOL_SOCKET, SO_ERROR, (void *) &optval, &optlen);
-    return optval ? sock_get_error(optval) : 0;
+    return optval;
 }
 
 static void sock_poll_event( struct fd *fd, int event )
@@ -612,6 +637,7 @@ static struct object *create_socket( int family, int type, int protocol, unsigne
     sock->deferred = NULL;
     sock->read_q  = NULL;
     sock->write_q = NULL;
+    memset( sock->errors, 0, sizeof(sock->errors) );
     if (!(sock->fd = create_anonymous_fd( &sock_fd_ops, sockfd, &sock->obj,
                             (flags & WSA_FLAG_OVERLAPPED) ? 0 : FILE_SYNCHRONOUS_IO_NONALERT )))
     {
@@ -682,6 +708,7 @@ static struct sock *accept_socket( obj_handle_t handle )
         acceptsock->deferred = NULL;
         acceptsock->read_q  = NULL;
         acceptsock->write_q = NULL;
+        memset( acceptsock->errors, 0, sizeof(acceptsock->errors) );
         if (!(acceptsock->fd = create_anonymous_fd( &sock_fd_ops, acceptfd, &acceptsock->obj,
                                                     get_fd_options( sock->fd ) )))
         {
@@ -758,6 +785,8 @@ static int sock_get_error( int err )
 #ifdef EREMOTE
         case EREMOTE:           return WSAEREMOTE;
 #endif
+
+        case 0:                 return 0;
         default:
             errno = err;
             perror("wineserver: sock_get_error() can't map error");
@@ -765,10 +794,55 @@ static int sock_get_error( int err )
     }
 }
 
+static int sock_get_ntstatus( int err )
+{
+    switch ( err )
+    {
+        case EBADF:             return STATUS_INVALID_HANDLE;
+        case EBUSY:             return STATUS_DEVICE_BUSY;
+        case EPERM:
+        case EACCES:            return STATUS_ACCESS_DENIED;
+        case EFAULT:            return STATUS_NO_MEMORY;
+        case EINVAL:            return STATUS_INVALID_PARAMETER;
+        case ENFILE:
+        case EMFILE:            return STATUS_TOO_MANY_OPENED_FILES;
+        case EWOULDBLOCK:       return STATUS_CANT_WAIT;
+        case EINPROGRESS:       return STATUS_PENDING;
+        case EALREADY:          return STATUS_NETWORK_BUSY;
+        case ENOTSOCK:          return STATUS_OBJECT_TYPE_MISMATCH;
+        case EDESTADDRREQ:      return STATUS_INVALID_PARAMETER;
+        case EMSGSIZE:          return STATUS_BUFFER_OVERFLOW;
+        case EPROTONOSUPPORT:
+        case ESOCKTNOSUPPORT:
+        case EPFNOSUPPORT:
+        case EAFNOSUPPORT:
+        case EPROTOTYPE:        return STATUS_NOT_SUPPORTED;
+        case ENOPROTOOPT:       return STATUS_INVALID_PARAMETER;
+        case EOPNOTSUPP:        return STATUS_NOT_SUPPORTED;
+        case EADDRINUSE:        return STATUS_ADDRESS_ALREADY_ASSOCIATED;
+        case EADDRNOTAVAIL:     return STATUS_INVALID_PARAMETER;
+        case ECONNREFUSED:      return STATUS_CONNECTION_REFUSED;
+        case ESHUTDOWN:         return STATUS_PIPE_DISCONNECTED;
+        case ENOTCONN:          return STATUS_CONNECTION_DISCONNECTED;
+        case ETIMEDOUT:         return STATUS_IO_TIMEOUT;
+        case ENETUNREACH:       return STATUS_NETWORK_UNREACHABLE;
+        case ENETDOWN:          return STATUS_NETWORK_BUSY;
+        case EPIPE:
+        case ECONNRESET:        return STATUS_CONNECTION_RESET;
+        case ECONNABORTED:      return STATUS_CONNECTION_ABORTED;
+
+        case 0:                 return STATUS_SUCCESS;
+        default:
+            errno = err;
+            perror("wineserver: sock_get_ntstatus() can't map error");
+            return STATUS_UNSUCCESSFUL;
+    }
+}
+
 /* set the last error depending on errno */
 static void sock_set_error(void)
 {
-    set_error( sock_get_error( errno ) );
+    set_error( sock_get_ntstatus( errno ) );
 }
 
 /* create a socket */
@@ -839,6 +913,8 @@ DECL_HANDLER(set_socket_event)
 DECL_HANDLER(get_socket_event)
 {
     struct sock *sock;
+    int i;
+    int errors[FD_MAX_EVENTS];
 
     sock = (struct sock *)get_handle_obj( current->process, req->handle, FILE_READ_ATTRIBUTES, &sock_ops );
     if (!sock)
@@ -846,13 +922,15 @@ DECL_HANDLER(get_socket_event)
         reply->mask  = 0;
         reply->pmask = 0;
         reply->state = 0;
-        set_error( WSAENOTSOCK );
         return;
     }
     reply->mask  = sock->mask;
     reply->pmask = sock->pmask;
     reply->state = sock->state;
-    set_reply_data( sock->errors, min( get_reply_max_size(), sizeof(sock->errors) ));
+    for (i = 0; i < FD_MAX_EVENTS; i++)
+        errors[i] = sock_get_ntstatus(sock->errors[i]);
+
+    set_reply_data( errors, min( get_reply_max_size(), sizeof(errors) ));
 
     if (req->service)
     {
@@ -902,15 +980,12 @@ DECL_HANDLER(set_socket_deferred)
 
     sock=(struct sock *)get_handle_obj( current->process, req->handle, FILE_WRITE_ATTRIBUTES, &sock_ops );
     if ( !sock )
-    {
-        set_error( WSAENOTSOCK );
         return;
-    }
+
     acceptsock = (struct sock *)get_handle_obj( current->process, req->deferred, 0, &sock_ops );
     if ( !acceptsock )
     {
         release_object( sock );
-        set_error( WSAENOTSOCK );
         return;
     }
     sock->deferred = acceptsock;

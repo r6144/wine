@@ -16,6 +16,22 @@ bar
 ~dp0 should be directory containing batch file
 @pwd@\
 @pwd@\
+CD value @pwd@@or_broken@CD value
+%
+P
+P
+S
+P
+PS
+ERRORLEVEL
+0
+00
+0ERRORLEVEL
+0
+0%
+P0
+0S
+P0S
 ------------ Testing if/else --------------
 if/else should work with blocks
 if seems to work
@@ -24,3 +40,7 @@ Testing case sensitivity with and without /i option
 if seems to default to case sensitivity
 if /i seems to work
 if /I seems to work
+-----------Testing GOTO-----------
+goto with no leading space worked
+goto with a leading space worked
+goto with a leading tab worked

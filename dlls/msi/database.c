@@ -164,64 +164,6 @@ UINT db_get_raw_stream( MSIDATABASE *db, LPCWSTR stname, IStream **stm )
     return SUCCEEDED(r) ? ERROR_SUCCESS : ERROR_FUNCTION_FAILED;
 }
 
-UINT read_raw_stream_data( MSIDATABASE *db, LPCWSTR stname,
-                              USHORT **pdata, UINT *psz )
-{
-    HRESULT r;
-    UINT ret = ERROR_FUNCTION_FAILED;
-    VOID *data;
-    ULONG sz, count;
-    IStream *stm = NULL;
-    STATSTG stat;
-    LPWSTR encname;
-
-    encname = encode_streamname( FALSE, stname );
-    r = db_get_raw_stream( db, encname, &stm );
-    msi_free( encname );
-
-    if( r != ERROR_SUCCESS)
-        return ret;
-
-    r = IStream_Stat(stm, &stat, STATFLAG_NONAME );
-    if( FAILED( r ) )
-    {
-        WARN("open stream failed r = %08x!\n", r);
-        goto end;
-    }
-
-    if( stat.cbSize.QuadPart >> 32 )
-    {
-        WARN("Too big!\n");
-        goto end;
-    }
-
-    sz = stat.cbSize.QuadPart;
-    data = msi_alloc( sz );
-    if( !data )
-    {
-        WARN("couldn't allocate memory r=%08x!\n", r);
-        ret = ERROR_NOT_ENOUGH_MEMORY;
-        goto end;
-    }
-
-    r = IStream_Read(stm, data, sz, &count );
-    if( FAILED( r ) || ( count != sz ) )
-    {
-        msi_free( data );
-        WARN("read stream failed r = %08x!\n", r);
-        goto end;
-    }
-
-    *pdata = data;
-    *psz = sz;
-    ret = ERROR_SUCCESS;
-
-end:
-    IStream_Release( stm );
-
-    return ret;
-}
-
 static void free_transforms( MSIDATABASE *db )
 {
     while( !list_empty( &db->transforms ) )
@@ -231,6 +173,37 @@ static void free_transforms( MSIDATABASE *db )
         list_remove( &t->entry );
         IStorage_Release( t->stg );
         msi_free( t );
+    }
+}
+
+void db_destroy_stream( MSIDATABASE *db, LPCWSTR stname )
+{
+    MSISTREAM *stream, *stream2;
+
+    LIST_FOR_EACH_ENTRY_SAFE( stream, stream2, &db->streams, MSISTREAM, entry )
+    {
+        HRESULT r;
+        STATSTG stat;
+
+        r = IStream_Stat( stream->stm, &stat, 0 );
+        if (FAILED(r))
+        {
+            WARN("failed to stat stream r = %08x\n", r);
+            continue;
+        }
+
+        if (!strcmpW( stname, stat.pwcsName ))
+        {
+            TRACE("destroying %s\n", debugstr_w(stname));
+
+            list_remove( &stream->entry );
+            IStream_Release( stream->stm );
+            msi_free( stream );
+            IStorage_DestroyElement( db->storage, stname );
+            CoTaskMemFree( stat.pwcsName );
+            break;
+        }
+        CoTaskMemFree( stat.pwcsName );
     }
 }
 
@@ -2057,7 +2030,7 @@ static ULONG WINAPI mrd_Release( IWineMsiRemoteDatabase *iface )
 }
 
 static HRESULT WINAPI mrd_IsTablePersistent( IWineMsiRemoteDatabase *iface,
-                                             BSTR table, MSICONDITION *persistent )
+                                             LPCWSTR table, MSICONDITION *persistent )
 {
     msi_remote_database_impl *This = mrd_from_IWineMsiRemoteDatabase( iface );
     *persistent = MsiDatabaseIsTablePersistentW(This->database, table);
@@ -2065,7 +2038,7 @@ static HRESULT WINAPI mrd_IsTablePersistent( IWineMsiRemoteDatabase *iface,
 }
 
 static HRESULT WINAPI mrd_GetPrimaryKeys( IWineMsiRemoteDatabase *iface,
-                                          BSTR table, MSIHANDLE *keys )
+                                          LPCWSTR table, MSIHANDLE *keys )
 {
     msi_remote_database_impl *This = mrd_from_IWineMsiRemoteDatabase( iface );
     UINT r = MsiDatabaseGetPrimaryKeysW(This->database, table, keys);
@@ -2081,7 +2054,7 @@ static HRESULT WINAPI mrd_GetSummaryInformation( IWineMsiRemoteDatabase *iface,
 }
 
 static HRESULT WINAPI mrd_OpenView( IWineMsiRemoteDatabase *iface,
-                                    BSTR query, MSIHANDLE *view )
+                                    LPCWSTR query, MSIHANDLE *view )
 {
     msi_remote_database_impl *This = mrd_from_IWineMsiRemoteDatabase( iface );
     UINT r = MsiDatabaseOpenViewW(This->database, query, view);

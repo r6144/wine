@@ -77,6 +77,7 @@ PUBLIC_IDL_H_SRCS = \
 	richole.idl \
 	sensevts.idl \
 	servprov.idl \
+	shdeprecated.idl \
 	shldisp.idl \
 	shobjidl.idl \
 	shtypes.idl \
@@ -167,6 +168,7 @@ SRCDIR_INCLUDES = \
 	d3dvec.inl \
 	d3dx9.h \
 	d3dx9core.h \
+	d3dx9effect.h \
 	d3dx9math.h \
 	d3dx9math.inl \
 	d3dx9mesh.h \
@@ -571,5 +573,3 @@ uninstall::
 	  *)        $(RM) $(DESTDIR)$(includedir)/windows/$$f ;; \
 	esac; done
 	-rmdir $(INSTALLDIRS)
-
-@DEPENDENCIES@  # everything below this line is overwritten by make depend

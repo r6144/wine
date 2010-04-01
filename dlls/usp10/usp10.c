@@ -686,7 +686,7 @@ HRESULT WINAPI ScriptStringAnalyse(HDC hdc, const void *pString, int cString,
         int numGlyphsReturned;
 
         /* FIXME: non unicode strings */
-        WCHAR* pStr = (WCHAR*)pString;
+        const WCHAR* pStr = (const WCHAR*)pString;
         hr = ScriptShape(hdc, sc, &pStr[analysis->pItem[i].iCharPos],
                          cChar, numGlyphs, &analysis->pItem[i].a,
                          glyphs, pwLogClust, psva, &numGlyphsReturned);
@@ -1308,7 +1308,7 @@ HRESULT WINAPI ScriptShape(HDC hdc, SCRIPT_CACHE *psc, const WCHAR *pwcChars,
             {
                 WORD glyph;
                 if (!hdc) return E_PENDING;
-                if (GetGlyphIndicesW(hdc, &pwcChars[i], 1, &glyph, GGI_MARK_NONEXISTING_GLYPHS) == GDI_ERROR) return S_FALSE;
+                if (GetGlyphIndicesW(hdc, &pwcChars[i], 1, &glyph, 0) == GDI_ERROR) return S_FALSE;
                 pwOutGlyphs[i] = set_cache_glyph(psc, pwcChars[i], glyph);
             }
         }

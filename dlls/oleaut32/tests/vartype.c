@@ -3514,7 +3514,7 @@ static void test_VarDateChangeTypeEx(void)
 
 #define EXPECTCY64(x,y) \
   ok(hres == S_OK && S(out).Hi == (LONG)x && S(out).Lo == y, \
-     "expected " #x #y "(%u,%u), got (%u,%u); hres=0x%08x\n", \
+     "expected " #x " " #y " (%u,%u), got (%u,%u); hres=0x%08x\n", \
       (ULONG)(x), (ULONG)(y), S(out).Hi, S(out).Lo, hres)
 
 static void test_VarCyFromI1(void)
@@ -5238,9 +5238,7 @@ static void test_SysAllocStringLen(void)
   if (0)
   {
   str = SysAllocStringLen(szTest, 0x80000000);
-  todo_wine {
   ok (str == NULL, "Expected NULL, got %p\n", str);
-  }
   }
   
   str = SysAllocStringLen(NULL, 0);

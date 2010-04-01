@@ -157,7 +157,7 @@ static unsigned dbg_exception_prolog(BOOL is_debug, BOOL first_chance, const EXC
      * Do a quiet backtrace so that we have an idea of what the situation
      * is WRT the source files.
      */
-    stack_fetch_frames();
+    stack_fetch_frames(&dbg_context);
 
     if (is_debug && !is_break && break_should_continue(&addr, rec->ExceptionCode))
 	return FALSE;
@@ -245,7 +245,7 @@ static void dbg_exception_epilog(void)
 static DWORD dbg_handle_exception(const EXCEPTION_RECORD* rec, BOOL first_chance)
 {
     BOOL                is_debug = FALSE;
-    THREADNAME_INFO*    pThreadName;
+    const THREADNAME_INFO*    pThreadName;
     struct dbg_thread*  pThread;
 
     assert(dbg_curr_thread);
@@ -260,7 +260,7 @@ static DWORD dbg_handle_exception(const EXCEPTION_RECORD* rec, BOOL first_chance
         is_debug = TRUE;
         break;
     case EXCEPTION_NAME_THREAD:
-        pThreadName = (THREADNAME_INFO*)(rec->ExceptionInformation);
+        pThreadName = (const THREADNAME_INFO*)(rec->ExceptionInformation);
         if (pThreadName->dwThreadID == -1)
             pThread = dbg_curr_thread;
         else

@@ -997,7 +997,7 @@ static void set_initial_wm_hints( Display *display, struct x11drv_win_data *data
  *
  * Retrieve an owner's window, creating it if necessary.
  */
-static Window get_owner_whole_window( HWND owner )
+static Window get_owner_whole_window( HWND owner, BOOL force_managed )
 {
     struct x11drv_win_data *data;
 
@@ -1009,7 +1009,7 @@ static Window get_owner_whole_window( HWND owner )
             !(data = X11DRV_create_win_data( owner )))
             return (Window)GetPropA( owner, whole_window_prop );
     }
-    else if (!data->managed)  /* make it managed */
+    else if (!data->managed && force_managed)  /* make it managed */
     {
         SetWindowPos( owner, 0, 0, 0, 0, 0,
                       SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOSIZE | SWP_NOMOVE |
@@ -1045,7 +1045,7 @@ static void set_wm_hints( Display *display, struct x11drv_win_data *data )
         style = GetWindowLongW( data->hwnd, GWL_STYLE );
         ex_style = GetWindowLongW( data->hwnd, GWL_EXSTYLE );
         owner = get_window_owner( data->hwnd );
-        if ((owner_win = get_owner_whole_window( owner ))) group_leader = owner_win;
+        if ((owner_win = get_owner_whole_window( owner, data->managed ))) group_leader = owner_win;
     }
 
     wine_tsx11_lock();
@@ -2089,20 +2089,24 @@ void CDECL X11DRV_SetFocus( HWND hwnd )
     Display *display = thread_display();
     struct x11drv_win_data *data;
     XWindowChanges changes;
+    DWORD timestamp;
 
     if (!(hwnd = GetAncestor( hwnd, GA_ROOT ))) return;
     if (!(data = X11DRV_get_win_data( hwnd ))) return;
     if (data->managed || !data->whole_window) return;
 
+    if (EVENT_x11_time_to_win32_time(0))
+        /* ICCCM says don't use CurrentTime, so try to use last message time if possible */
+        /* FIXME: this is not entirely correct */
+        timestamp = GetMessageTime() - EVENT_x11_time_to_win32_time(0);
+    else
+        timestamp = CurrentTime;
+
     /* Set X focus and install colormap */
     wine_tsx11_lock();
     changes.stack_mode = Above;
     XConfigureWindow( display, data->whole_window, CWStackMode, &changes );
-    /* we must not use CurrentTime (ICCCM), so try to use last message time instead */
-    /* FIXME: this is not entirely correct */
-    XSetInputFocus( display, data->whole_window, RevertToParent,
-                    /* CurrentTime */
-                    GetMessageTime() - EVENT_x11_time_to_win32_time(0));
+    XSetInputFocus( display, data->whole_window, RevertToParent, timestamp );
     wine_tsx11_unlock();
 }
 

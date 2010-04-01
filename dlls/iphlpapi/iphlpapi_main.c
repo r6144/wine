@@ -49,6 +49,7 @@
 #include "winreg.h"
 #define USE_WS_PREFIX
 #include "winsock2.h"
+#include "ws2ipdef.h"
 #include "iphlpapi.h"
 #include "ifenum.h"
 #include "ipstats.h"
@@ -68,7 +69,6 @@ WINE_DEFAULT_DEBUG_CHANNEL(iphlpapi);
 
 /* call res_init() just once because of a bug in Mac OS X 10.4 */
 /* Call once per thread on systems that have per-thread _res. */
-/* FIXME: should do same fix in dnsapi (or use dnsapi here?) */
 static void initialise_resolver(void)
 {
     if ((_res.options & RES_INIT) == 0)
@@ -608,7 +608,7 @@ static DWORD typeFromMibType(DWORD mib_type)
     }
 }
 
-static ULONG addressesFromIndex(DWORD index, DWORD **addrs, ULONG *num_addrs)
+static ULONG v4addressesFromIndex(DWORD index, DWORD **addrs, ULONG *num_addrs)
 {
     ULONG ret, i, j;
     MIB_IPADDRTABLE *at;
@@ -632,18 +632,38 @@ static ULONG addressesFromIndex(DWORD index, DWORD **addrs, ULONG *num_addrs)
     return ERROR_SUCCESS;
 }
 
-static ULONG adapterAddressesFromIndex(DWORD index, IP_ADAPTER_ADDRESSES *aa, ULONG *size)
+static ULONG adapterAddressesFromIndex(ULONG family, DWORD index, IP_ADAPTER_ADDRESSES *aa, ULONG *size)
 {
-    ULONG ret, i, num_addrs, total_size;
-    DWORD *addrs;
+    ULONG ret, i, num_v4addrs = 0, num_v6addrs = 0, total_size;
+    DWORD *v4addrs = NULL;
+    SOCKET_ADDRESS *v6addrs = NULL;
 
-    if ((ret = addressesFromIndex(index, &addrs, &num_addrs))) return ret;
+    if (family == AF_INET)
+        ret = v4addressesFromIndex(index, &v4addrs, &num_v4addrs);
+    else if (family == AF_INET6)
+        ret = v6addressesFromIndex(index, &v6addrs, &num_v6addrs);
+    else if (family == AF_UNSPEC)
+    {
+        ret = v4addressesFromIndex(index, &v4addrs, &num_v4addrs);
+        if (!ret)
+            ret = v6addressesFromIndex(index, &v6addrs, &num_v6addrs);
+    }
+    else
+    {
+        FIXME("address family %u unsupported\n", family);
+        ret = ERROR_NO_DATA;
+    }
+    if (ret) return ret;
 
     total_size = sizeof(IP_ADAPTER_ADDRESSES);
     total_size += IF_NAMESIZE;
     total_size += IF_NAMESIZE * sizeof(WCHAR);
-    total_size += sizeof(IP_ADAPTER_UNICAST_ADDRESS) * num_addrs;
-    total_size += sizeof(struct sockaddr_in) * num_addrs;
+    total_size += sizeof(IP_ADAPTER_UNICAST_ADDRESS) * num_v4addrs;
+    total_size += sizeof(struct sockaddr_in) * num_v4addrs;
+    total_size += sizeof(IP_ADAPTER_UNICAST_ADDRESS) * num_v6addrs;
+    total_size += sizeof(SOCKET_ADDRESS) * num_v6addrs;
+    for (i = 0; i < num_v6addrs; i++)
+        total_size += v6addrs[i].iSockaddrLength;
 
     if (aa && *size >= total_size)
     {
@@ -665,13 +685,13 @@ static ULONG adapterAddressesFromIndex(DWORD index, IP_ADAPTER_ADDRESSES *aa, UL
         *dst++ = 0;
         ptr = (char *)dst;
 
-        if (num_addrs)
+        if (num_v4addrs)
         {
             IP_ADAPTER_UNICAST_ADDRESS *ua;
             struct sockaddr_in *sa;
 
             ua = aa->FirstUnicastAddress = (IP_ADAPTER_UNICAST_ADDRESS *)ptr;
-            for (i = 0; i < num_addrs; i++)
+            for (i = 0; i < num_v4addrs; i++)
             {
                 memset(ua, 0, sizeof(IP_ADAPTER_UNICAST_ADDRESS));
                 ua->u.s.Length              = sizeof(IP_ADAPTER_UNICAST_ADDRESS);
@@ -680,11 +700,42 @@ static ULONG adapterAddressesFromIndex(DWORD index, IP_ADAPTER_ADDRESSES *aa, UL
 
                 sa = (struct sockaddr_in *)ua->Address.lpSockaddr;
                 sa->sin_family      = AF_INET;
-                sa->sin_addr.s_addr = addrs[i];
+                sa->sin_addr.s_addr = v4addrs[i];
                 sa->sin_port        = 0;
 
                 ptr += ua->u.s.Length + ua->Address.iSockaddrLength;
-                if (i < num_addrs - 1)
+                if (i < num_v4addrs - 1)
+                {
+                    ua->Next = (IP_ADAPTER_UNICAST_ADDRESS *)ptr;
+                    ua = ua->Next;
+                }
+            }
+        }
+        if (num_v6addrs)
+        {
+            IP_ADAPTER_UNICAST_ADDRESS *ua;
+            struct WS_sockaddr_in6 *sa;
+
+            if (aa->FirstUnicastAddress)
+            {
+                for (ua = aa->FirstUnicastAddress; ua->Next; ua = ua->Next)
+                    ;
+                ua->Next = (IP_ADAPTER_UNICAST_ADDRESS *)ptr;
+            }
+            else
+                ua = aa->FirstUnicastAddress = (IP_ADAPTER_UNICAST_ADDRESS *)ptr;
+            for (i = 0; i < num_v6addrs; i++)
+            {
+                memset(ua, 0, sizeof(IP_ADAPTER_UNICAST_ADDRESS));
+                ua->u.s.Length              = sizeof(IP_ADAPTER_UNICAST_ADDRESS);
+                ua->Address.iSockaddrLength = v6addrs[i].iSockaddrLength;
+                ua->Address.lpSockaddr      = (SOCKADDR *)((char *)ua + ua->u.s.Length);
+
+                sa = (struct WS_sockaddr_in6 *)ua->Address.lpSockaddr;
+                memcpy(sa, v6addrs[i].lpSockaddr, sizeof(*sa));
+
+                ptr += ua->u.s.Length + ua->Address.iSockaddrLength;
+                if (i < num_v6addrs - 1)
                 {
                     ua->Next = (IP_ADAPTER_UNICAST_ADDRESS *)ptr;
                     ua = ua->Next;
@@ -705,7 +756,8 @@ static ULONG adapterAddressesFromIndex(DWORD index, IP_ADAPTER_ADDRESSES *aa, UL
         else aa->OperStatus = IfOperStatusUnknown;
     }
     *size = total_size;
-    HeapFree(GetProcessHeap(), 0, addrs);
+    HeapFree(GetProcessHeap(), 0, v6addrs);
+    HeapFree(GetProcessHeap(), 0, v4addrs);
     return ERROR_SUCCESS;
 }
 
@@ -717,11 +769,6 @@ ULONG WINAPI GetAdaptersAddresses(ULONG family, ULONG flags, PVOID reserved,
 
     if (!buflen) return ERROR_INVALID_PARAMETER;
 
-    if (family == AF_INET6 || family == AF_UNSPEC)
-        FIXME("no support for IPv6 addresses\n");
-
-    if (family != AF_INET && family != AF_UNSPEC) return ERROR_NO_DATA;
-
     table = getInterfaceIndexTable();
     if (!table || !table->numIndexes)
     {
@@ -732,7 +779,7 @@ ULONG WINAPI GetAdaptersAddresses(ULONG family, ULONG flags, PVOID reserved,
     for (i = 0; i < table->numIndexes; i++)
     {
         size = 0;
-        if ((ret = adapterAddressesFromIndex(table->indexes[i], NULL, &size)))
+        if ((ret = adapterAddressesFromIndex(family, table->indexes[i], NULL, &size)))
         {
             HeapFree(GetProcessHeap(), 0, table);
             return ret;
@@ -744,7 +791,7 @@ ULONG WINAPI GetAdaptersAddresses(ULONG family, ULONG flags, PVOID reserved,
         ULONG bytes_left = size = total_size;
         for (i = 0; i < table->numIndexes; i++)
         {
-            if ((ret = adapterAddressesFromIndex(table->indexes[i], aa, &size)))
+            if ((ret = adapterAddressesFromIndex(family, table->indexes[i], aa, &size)))
             {
                 HeapFree(GetProcessHeap(), 0, table);
                 return ret;

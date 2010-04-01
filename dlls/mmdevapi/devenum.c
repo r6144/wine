@@ -62,6 +62,14 @@ static const WCHAR reg_properties[] =
 static HKEY key_render;
 static HKEY key_capture;
 
+typedef struct MMDevPropStoreImpl
+{
+    const IPropertyStoreVtbl *lpVtbl;
+    LONG ref;
+    MMDevice *parent;
+    DWORD access;
+} MMDevPropStore;
+
 typedef struct MMDevEnumImpl
 {
     const IMMDeviceEnumeratorVtbl *lpVtbl;
@@ -75,6 +83,8 @@ static DWORD MMDevice_count;
 static const IMMDeviceEnumeratorVtbl MMDevEnumVtbl;
 static const IMMDeviceCollectionVtbl MMDevColVtbl;
 static const IMMDeviceVtbl MMDeviceVtbl;
+static const IPropertyStoreVtbl MMDevPropVtbl;
+static const IMMEndpointVtbl MMEndpointVtbl;
 
 typedef struct MMDevColImpl
 {
@@ -83,6 +93,14 @@ typedef struct MMDevColImpl
     EDataFlow flow;
     DWORD state;
 } MMDevColImpl;
+
+typedef struct IPropertyBagImpl {
+    const IPropertyBagVtbl *lpVtbl;
+    GUID devguid;
+} IPropertyBagImpl;
+static const IPropertyBagVtbl PB_Vtbl;
+
+static HRESULT MMDevPropStore_Create(MMDevice *This, DWORD access, IPropertyStore **ppv);
 
 /* Creates or updates the state of a device
  * If GUID is null, a random guid will be assigned
@@ -126,6 +144,7 @@ static void MMDevice_Create(WCHAR *name, GUID *id, EDataFlow flow, DWORD state, 
     }
     lstrcpyW(cur->alname, name);
     cur->lpVtbl = &MMDeviceVtbl;
+    cur->lpEndpointVtbl = &MMEndpointVtbl;
     cur->ref = 0;
     InitializeCriticalSection(&cur->crst);
     cur->crst.DebugInfo->Spare[0] = (DWORD_PTR)(__FILE__ ": MMDevice.crst");
@@ -148,6 +167,11 @@ static void MMDevice_Create(WCHAR *name, GUID *id, EDataFlow flow, DWORD state, 
         RegSetValueExW(key, reg_devicestate, 0, REG_DWORD, (const BYTE*)&state, sizeof(DWORD));
         if (!RegCreateKeyExW(key, reg_properties, 0, NULL, 0, KEY_WRITE|KEY_READ, NULL, &keyprop, NULL))
         {
+            PROPVARIANT pv;
+            pv.vt = VT_LPWSTR;
+            pv.u.pwszVal = name;
+            MMDevice_SetPropValue(id, flow, (const PROPERTYKEY*)&DEVPKEY_Device_FriendlyName, &pv);
+            MMDevice_SetPropValue(id, flow, (const PROPERTYKEY*)&DEVPKEY_Device_DeviceDesc, &pv);
             RegCloseKey(keyprop);
         }
         RegCloseKey(key);
@@ -198,6 +222,8 @@ static HRESULT WINAPI MMDevice_QueryInterface(IMMDevice *iface, REFIID riid, voi
     if (IsEqualIID(riid, &IID_IUnknown)
         || IsEqualIID(riid, &IID_IMMDevice))
         *ppv = This;
+    else if (IsEqualIID(riid, &IID_IMMEndpoint))
+        *ppv = &This->lpEndpointVtbl;
     if (*ppv)
     {
         IUnknown_AddRef((IUnknown*)*ppv);
@@ -236,8 +262,80 @@ static HRESULT WINAPI MMDevice_Activate(IMMDevice *iface, REFIID riid, DWORD cls
     if (!ppv)
         return E_POINTER;
 
-    FIXME("stub\n");
-    hr = E_NOTIMPL;
+    if (IsEqualIID(riid, &IID_IAudioClient))
+    {
+        FIXME("IID_IAudioClient unsupported\n");
+    }
+    else if (IsEqualIID(riid, &IID_IAudioEndpointVolume))
+    {
+        FIXME("IID_IAudioEndpointVolume unsupported\n");
+    }
+    else if (IsEqualIID(riid, &IID_IAudioSessionManager)
+             || IsEqualIID(riid, &IID_IAudioSessionManager2))
+    {
+        FIXME("IID_IAudioSessionManager unsupported\n");
+    }
+    else if (IsEqualIID(riid, &IID_IBaseFilter))
+    {
+        if (This->flow == eRender)
+            hr = CoCreateInstance(&CLSID_DSoundRender, NULL, clsctx, riid, ppv);
+        else
+            ERR("Not supported for recording?\n");
+        if (SUCCEEDED(hr))
+        {
+            IPersistPropertyBag *ppb;
+            hr = IUnknown_QueryInterface((IUnknown*)*ppv, &IID_IPersistPropertyBag, (void*)&ppb);
+            if (SUCCEEDED(hr))
+            {
+                /* ::Load cannot assume the interface stays alive after the function returns,
+                 * so just create the interface on the stack, saves a lot of complicated code */
+                IPropertyBagImpl bag = { &PB_Vtbl, This->devguid };
+                hr = IPersistPropertyBag_Load(ppb, (IPropertyBag*)&bag, NULL);
+                IPersistPropertyBag_Release(ppb);
+                if (FAILED(hr))
+                    IBaseFilter_Release((IBaseFilter*)*ppv);
+            }
+            else
+            {
+                FIXME("Wine doesn't support IPersistPropertyBag on DSoundRender yet, ignoring..\n");
+                hr = S_OK;
+            }
+        }
+    }
+    else if (IsEqualIID(riid, &IID_IDeviceTopology))
+    {
+        FIXME("IID_IDeviceTopology unsupported\n");
+    }
+    else if (IsEqualIID(riid, &IID_IDirectSound)
+             || IsEqualIID(riid, &IID_IDirectSound8))
+    {
+        if (This->flow == eRender)
+            hr = CoCreateInstance(&CLSID_DirectSound8, NULL, clsctx, riid, ppv);
+        if (SUCCEEDED(hr))
+        {
+            hr = IDirectSound_Initialize((IDirectSound*)*ppv, &This->devguid);
+            if (FAILED(hr))
+                IDirectSound_Release((IDirectSound*)*ppv);
+        }
+    }
+    else if (IsEqualIID(riid, &IID_IDirectSoundCapture)
+             || IsEqualIID(riid, &IID_IDirectSoundCapture8))
+    {
+        if (This->flow == eCapture)
+            hr = CoCreateInstance(&CLSID_DirectSoundCapture8, NULL, clsctx, riid, ppv);
+        if (SUCCEEDED(hr))
+        {
+            hr = IDirectSoundCapture_Initialize((IDirectSoundCapture*)*ppv, &This->devguid);
+            if (FAILED(hr))
+                IDirectSoundCapture_Release((IDirectSoundCapture*)*ppv);
+        }
+    }
+    else
+        ERR("Invalid/unknown iid %s\n", debugstr_guid(riid));
+
+    if (FAILED(hr))
+        *ppv = NULL;
+
     TRACE("Returning %08x\n", hr);
     return hr;
 }
@@ -249,20 +347,30 @@ static HRESULT WINAPI MMDevice_OpenPropertyStore(IMMDevice *iface, DWORD access,
 
     if (!ppv)
         return E_POINTER;
-    FIXME("stub\n");
-    return E_NOTIMPL;
+    return MMDevPropStore_Create(This, access, ppv);
 }
 
 static HRESULT WINAPI MMDevice_GetId(IMMDevice *iface, WCHAR **itemid)
 {
     MMDevice *This = (MMDevice *)iface;
+    WCHAR *str;
+    GUID *id = &This->devguid;
+    static const WCHAR formatW[] = { '{','0','.','0','.','0','.','0','0','0','0','0','0','0','0','}','.',
+                                     '{','%','0','8','X','-','%','0','4','X','-',
+                                     '%','0','4','X','-','%','0','2','X','%','0','2','X','-',
+                                     '%','0','2','X','%','0','2','X','%','0','2','X','%','0','2','X',
+                                     '%','0','2','X','%','0','2','X','}',0 };
 
     TRACE("(%p)->(%p)\n", This, itemid);
     if (!itemid)
         return E_POINTER;
-    *itemid = NULL;
-    FIXME("stub\n");
-    return E_NOTIMPL;
+    *itemid = str = CoTaskMemAlloc(56 * sizeof(WCHAR));
+    if (!str)
+        return E_OUTOFMEMORY;
+    wsprintfW( str, formatW, id->Data1, id->Data2, id->Data3,
+               id->Data4[0], id->Data4[1], id->Data4[2], id->Data4[3],
+               id->Data4[4], id->Data4[5], id->Data4[6], id->Data4[7] );
+    return S_OK;
 }
 
 static HRESULT WINAPI MMDevice_GetState(IMMDevice *iface, DWORD *state)
@@ -285,6 +393,46 @@ static const IMMDeviceVtbl MMDeviceVtbl =
     MMDevice_OpenPropertyStore,
     MMDevice_GetId,
     MMDevice_GetState
+};
+
+static MMDevice *get_this_from_endpoint(IMMEndpoint *iface)
+{
+    return (MMDevice*)((char*)iface - offsetof(MMDevice,lpEndpointVtbl));
+}
+
+static HRESULT WINAPI MMEndpoint_QueryInterface(IMMEndpoint *iface, REFIID riid, void **ppv)
+{
+    MMDevice *This = get_this_from_endpoint(iface);
+    return IMMDevice_QueryInterface((IMMDevice*)This, riid, ppv);
+}
+
+static ULONG WINAPI MMEndpoint_AddRef(IMMEndpoint *iface)
+{
+    MMDevice *This = get_this_from_endpoint(iface);
+    return IMMDevice_AddRef((IMMDevice*)This);
+}
+
+static ULONG WINAPI MMEndpoint_Release(IMMEndpoint *iface)
+{
+    MMDevice *This = get_this_from_endpoint(iface);
+    return IMMDevice_Release((IMMDevice*)This);
+}
+
+static HRESULT WINAPI MMEndpoint_GetDataFlow(IMMEndpoint *iface, EDataFlow *flow)
+{
+    MMDevice *This = get_this_from_endpoint(iface);
+    if (!flow)
+        return E_POINTER;
+    *flow = This->flow;
+    return S_OK;
+}
+
+static const IMMEndpointVtbl MMEndpointVtbl =
+{
+    MMEndpoint_QueryInterface,
+    MMEndpoint_AddRef,
+    MMEndpoint_Release,
+    MMEndpoint_GetDataFlow
 };
 
 static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD state)
@@ -346,20 +494,45 @@ static ULONG WINAPI MMDevCol_Release(IMMDeviceCollection *iface)
 static HRESULT WINAPI MMDevCol_GetCount(IMMDeviceCollection *iface, UINT *numdevs)
 {
     MMDevColImpl *This = (MMDevColImpl*)iface;
+    DWORD i;
 
     TRACE("(%p)->(%p)\n", This, numdevs);
     if (!numdevs)
         return E_POINTER;
+
     *numdevs = 0;
+    for (i = 0; i < MMDevice_count; ++i)
+    {
+        MMDevice *cur = MMDevice_head[i];
+        if ((cur->flow == This->flow || This->flow == eAll)
+            && (cur->state & This->state))
+            ++(*numdevs);
+    }
     return S_OK;
 }
 
-static HRESULT WINAPI MMDevCol_Item(IMMDeviceCollection *iface, UINT i, IMMDevice **dev)
+static HRESULT WINAPI MMDevCol_Item(IMMDeviceCollection *iface, UINT n, IMMDevice **dev)
 {
     MMDevColImpl *This = (MMDevColImpl*)iface;
-    TRACE("(%p)->(%u, %p)\n", This, i, dev);
+    DWORD i = 0, j = 0;
+
+    TRACE("(%p)->(%u, %p)\n", This, n, dev);
     if (!dev)
         return E_POINTER;
+
+    for (j = 0; j < MMDevice_count; ++j)
+    {
+        MMDevice *cur = MMDevice_head[j];
+        if ((cur->flow == This->flow || This->flow == eAll)
+            && (cur->state & This->state)
+            && i++ == n)
+        {
+            *dev = (IMMDevice *)cur;
+            IMMDevice_AddRef(*dev);
+            return S_OK;
+        }
+    }
+    WARN("Could not obtain item %u\n", n);
     *dev = NULL;
     return E_INVALIDARG;
 }
@@ -372,6 +545,139 @@ static const IMMDeviceCollectionVtbl MMDevColVtbl =
     MMDevCol_GetCount,
     MMDevCol_Item
 };
+
+static const WCHAR propkey_formatW[] = {
+    '{','%','0','8','X','-','%','0','4','X','-',
+    '%','0','4','X','-','%','0','2','X','%','0','2','X','-',
+    '%','0','2','X','%','0','2','X','%','0','2','X','%','0','2','X',
+    '%','0','2','X','%','0','2','X','}',',','%','d',0 };
+
+static HRESULT MMDevPropStore_OpenPropKey(const GUID *guid, DWORD flow, HKEY *propkey)
+{
+    WCHAR buffer[39];
+    LONG ret;
+    HKEY key;
+    StringFromGUID2(guid, buffer, 39);
+    if ((ret = RegOpenKeyExW(flow == eRender ? key_render : key_capture, buffer, 0, KEY_READ|KEY_WRITE, &key)) != ERROR_SUCCESS)
+    {
+        WARN("Opening key %s failed with %u\n", debugstr_w(buffer), ret);
+        return E_FAIL;
+    }
+    ret = RegOpenKeyExW(key, reg_properties, 0, KEY_READ|KEY_WRITE, propkey);
+    RegCloseKey(key);
+    if (ret != ERROR_SUCCESS)
+    {
+        WARN("Opening key %s failed with %u\n", debugstr_w(reg_properties), ret);
+        return E_FAIL;
+    }
+    return S_OK;
+}
+
+HRESULT MMDevice_GetPropValue(const GUID *devguid, DWORD flow, REFPROPERTYKEY key, PROPVARIANT *pv)
+{
+    WCHAR buffer[80];
+    const GUID *id = &key->fmtid;
+    DWORD type, size;
+    HRESULT hr = S_OK;
+    HKEY regkey;
+    LONG ret;
+
+    hr = MMDevPropStore_OpenPropKey(devguid, flow, &regkey);
+    if (FAILED(hr))
+        return hr;
+    wsprintfW( buffer, propkey_formatW, id->Data1, id->Data2, id->Data3,
+               id->Data4[0], id->Data4[1], id->Data4[2], id->Data4[3],
+               id->Data4[4], id->Data4[5], id->Data4[6], id->Data4[7], key->pid );
+    ret = RegGetValueW(regkey, NULL, buffer, RRF_RT_ANY, &type, NULL, &size);
+    if (ret != ERROR_SUCCESS)
+    {
+        WARN("Reading %s returned %d\n", debugstr_w(buffer), ret);
+        RegCloseKey(regkey);
+        PropVariantClear(pv);
+        return S_OK;
+    }
+
+    switch (type)
+    {
+        case REG_SZ:
+        {
+            pv->vt = VT_LPWSTR;
+            pv->u.pwszVal = CoTaskMemAlloc(size);
+            if (!pv->u.pwszVal)
+                hr = E_OUTOFMEMORY;
+            else
+                RegGetValueW(regkey, NULL, buffer, RRF_RT_REG_SZ, NULL, (BYTE*)pv->u.pwszVal, &size);
+            break;
+        }
+        case REG_DWORD:
+        {
+            pv->vt = VT_UI4;
+            RegGetValueW(regkey, NULL, buffer, RRF_RT_REG_DWORD, NULL, (BYTE*)&pv->u.ulVal, &size);
+            break;
+        }
+        case REG_BINARY:
+        {
+            pv->vt = VT_BLOB;
+            pv->u.blob.cbSize = size;
+            pv->u.blob.pBlobData = CoTaskMemAlloc(size);
+            if (!pv->u.blob.pBlobData)
+                hr = E_OUTOFMEMORY;
+            else
+                RegGetValueW(regkey, NULL, buffer, RRF_RT_REG_BINARY, NULL, (BYTE*)pv->u.blob.pBlobData, &size);
+            break;
+        }
+        default:
+            ERR("Unknown/unhandled type: %u\n", type);
+            PropVariantClear(pv);
+            break;
+    }
+    RegCloseKey(regkey);
+    return hr;
+}
+
+HRESULT MMDevice_SetPropValue(const GUID *devguid, DWORD flow, REFPROPERTYKEY key, REFPROPVARIANT pv)
+{
+    WCHAR buffer[80];
+    const GUID *id = &key->fmtid;
+    HRESULT hr;
+    HKEY regkey;
+    LONG ret;
+
+    hr = MMDevPropStore_OpenPropKey(devguid, flow, &regkey);
+    if (FAILED(hr))
+        return hr;
+    wsprintfW( buffer, propkey_formatW, id->Data1, id->Data2, id->Data3,
+               id->Data4[0], id->Data4[1], id->Data4[2], id->Data4[3],
+               id->Data4[4], id->Data4[5], id->Data4[6], id->Data4[7], key->pid );
+    switch (pv->vt)
+    {
+        case VT_UI4:
+        {
+            ret = RegSetValueExW(regkey, buffer, 0, REG_DWORD, (const BYTE*)&pv->u.ulVal, sizeof(DWORD));
+            break;
+        }
+        case VT_BLOB:
+        {
+            ret = RegSetValueExW(regkey, buffer, 0, REG_BINARY, pv->u.blob.pBlobData, pv->u.blob.cbSize);
+            TRACE("Blob %p %u\n", pv->u.blob.pBlobData, pv->u.blob.cbSize);
+
+            break;
+        }
+        case VT_LPWSTR:
+        {
+            ret = RegSetValueExW(regkey, buffer, 0, REG_SZ, (const BYTE*)pv->u.pwszVal, sizeof(WCHAR)*(1+lstrlenW(pv->u.pwszVal)));
+            break;
+        }
+        default:
+            ret = 0;
+            FIXME("Unhandled type %u\n", pv->vt);
+            hr = E_INVALIDARG;
+            break;
+    }
+    RegCloseKey(regkey);
+    TRACE("Writing %s returned %u\n", debugstr_w(buffer), ret);
+    return hr;
+}
 
 HRESULT MMDevEnum_Create(REFIID riid, void **ppv)
 {
@@ -411,6 +717,7 @@ HRESULT MMDevEnum_Create(REFIID riid, void **ppv)
             WCHAR guidvalue[39];
             GUID guid;
             DWORD len;
+            PROPVARIANT pv = { VT_EMPTY };
 
             len = sizeof(guidvalue);
             ret = RegEnumKeyExW(cur, i++, guidvalue, &len, NULL, NULL, NULL, NULL);
@@ -427,10 +734,14 @@ HRESULT MMDevEnum_Create(REFIID riid, void **ppv)
             }
             if (ret != ERROR_SUCCESS)
                 continue;
-            if (SUCCEEDED(CLSIDFromString(guidvalue, &guid)))
-                /* Using guid as friendly name till property store works */
-                MMDevice_Create(guidvalue, &guid, curflow,
+            if (SUCCEEDED(CLSIDFromString(guidvalue, &guid))
+                && SUCCEEDED(MMDevice_GetPropValue(&guid, curflow, (const PROPERTYKEY*)&DEVPKEY_Device_FriendlyName, &pv))
+                && pv.vt == VT_LPWSTR)
+            {
+                MMDevice_Create(pv.u.pwszVal, &guid, curflow,
                                 DEVICE_STATE_NOTPRESENT, FALSE);
+                CoTaskMemFree(pv.u.pwszVal);
+            }
         } while (1);
     }
     return IUnknown_QueryInterface((IUnknown*)This, riid, ppv);
@@ -524,9 +835,31 @@ static HRESULT WINAPI MMDevEnum_GetDefaultAudioEndpoint(IMMDeviceEnumerator *ifa
 static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHAR *name, IMMDevice **device)
 {
     MMDevEnumImpl *This = (MMDevEnumImpl*)iface;
+    DWORD i=0;
+    IMMDevice *dev = NULL;
+
     TRACE("(%p)->(%s,%p)\n", This, debugstr_w(name), device);
-    FIXME("stub\n");
-    return E_NOTIMPL;
+    for (i = 0; i < MMDevice_count; ++i)
+    {
+        WCHAR *str;
+        dev = (IMMDevice*)MMDevice_head[i];
+        IMMDevice_GetId(dev, &str);
+
+        if (str && !lstrcmpW(str, name))
+        {
+            CoTaskMemFree(str);
+            break;
+        }
+        CoTaskMemFree(str);
+    }
+    if (dev)
+    {
+        IUnknown_AddRef(dev);
+        *device = dev;
+        return S_OK;
+    }
+    WARN("Could not find device %s\n", debugstr_w(name));
+    return E_NOTFOUND;
 }
 
 static HRESULT WINAPI MMDevEnum_RegisterEndpointNotificationCallback(IMMDeviceEnumerator *iface, IMMNotificationClient *client)
@@ -555,4 +888,229 @@ static const IMMDeviceEnumeratorVtbl MMDevEnumVtbl =
     MMDevEnum_GetDevice,
     MMDevEnum_RegisterEndpointNotificationCallback,
     MMDevEnum_UnregisterEndpointNotificationCallback
+};
+
+static HRESULT MMDevPropStore_Create(MMDevice *parent, DWORD access, IPropertyStore **ppv)
+{
+    MMDevPropStore *This;
+    if (access != STGM_READ
+        && access != STGM_WRITE
+        && access != STGM_READWRITE)
+    {
+        WARN("Invalid access %08x\n", access);
+        return E_INVALIDARG;
+    }
+    This = HeapAlloc(GetProcessHeap(), 0, sizeof(*This));
+    *ppv = (IPropertyStore*)This;
+    if (!This)
+        return E_OUTOFMEMORY;
+    This->lpVtbl = &MMDevPropVtbl;
+    This->ref = 1;
+    This->parent = parent;
+    This->access = access;
+    return S_OK;
+}
+
+static void MMDevPropStore_Destroy(MMDevPropStore *This)
+{
+    HeapFree(GetProcessHeap(), 0, This);
+}
+
+static HRESULT WINAPI MMDevPropStore_QueryInterface(IPropertyStore *iface, REFIID riid, void **ppv)
+{
+    MMDevPropStore *This = (MMDevPropStore*)iface;
+
+    if (!ppv)
+        return E_POINTER;
+    if (IsEqualIID(riid, &IID_IUnknown)
+        || IsEqualIID(riid, &IID_IPropertyStore))
+        *ppv = This;
+    else
+        *ppv = NULL;
+    if (!*ppv)
+        return E_NOINTERFACE;
+    IUnknown_AddRef((IUnknown*)*ppv);
+    return S_OK;
+}
+
+static ULONG WINAPI MMDevPropStore_AddRef(IPropertyStore *iface)
+{
+    MMDevPropStore *This = (MMDevPropStore*)iface;
+    LONG ref = InterlockedIncrement(&This->ref);
+    TRACE("Refcount now %i\n", ref);
+    return ref;
+}
+
+static ULONG WINAPI MMDevPropStore_Release(IPropertyStore *iface)
+{
+    MMDevPropStore *This = (MMDevPropStore*)iface;
+    LONG ref = InterlockedDecrement(&This->ref);
+    TRACE("Refcount now %i\n", ref);
+    if (!ref)
+        MMDevPropStore_Destroy(This);
+    return ref;
+}
+
+static HRESULT WINAPI MMDevPropStore_GetCount(IPropertyStore *iface, DWORD *nprops)
+{
+    MMDevPropStore *This = (MMDevPropStore*)iface;
+    WCHAR buffer[50];
+    DWORD i = 0;
+    HKEY propkey;
+    HRESULT hr;
+
+    TRACE("(%p)->(%p)\n", iface, nprops);
+    if (!nprops)
+        return E_POINTER;
+    hr = MMDevPropStore_OpenPropKey(&This->parent->devguid, This->parent->flow, &propkey);
+    if (FAILED(hr))
+        return hr;
+    *nprops = 0;
+    do {
+        DWORD len = sizeof(buffer)/sizeof(*buffer);
+        if (RegEnumKeyExW(propkey, i, buffer, &len, NULL, NULL, NULL, NULL) != ERROR_SUCCESS)
+            break;
+        i++;
+    } while (0);
+    RegCloseKey(propkey);
+    TRACE("Returning %i\n", i);
+    *nprops = i;
+    return S_OK;
+}
+
+static HRESULT WINAPI MMDevPropStore_GetAt(IPropertyStore *iface, DWORD prop, PROPERTYKEY *key)
+{
+    MMDevPropStore *This = (MMDevPropStore*)iface;
+    WCHAR buffer[50];
+    DWORD len = sizeof(buffer)/sizeof(*buffer);
+    HRESULT hr;
+    HKEY propkey;
+
+    TRACE("(%p)->(%u,%p)\n", iface, prop, key);
+    if (!key)
+        return E_POINTER;
+
+    hr = MMDevPropStore_OpenPropKey(&This->parent->devguid, This->parent->flow, &propkey);
+    if (FAILED(hr))
+        return hr;
+
+    if (RegEnumKeyExW(propkey, prop, buffer, &len, NULL, NULL, NULL, NULL) != ERROR_SUCCESS
+        || len <= 40)
+    {
+        WARN("GetAt %u failed\n", prop);
+        return E_INVALIDARG;
+    }
+    RegCloseKey(propkey);
+    buffer[39] = 0;
+    CLSIDFromString(buffer, &key->fmtid);
+    key->pid = atoiW(&buffer[40]);
+    return S_OK;
+}
+
+static HRESULT WINAPI MMDevPropStore_GetValue(IPropertyStore *iface, REFPROPERTYKEY key, PROPVARIANT *pv)
+{
+    MMDevPropStore *This = (MMDevPropStore*)iface;
+    TRACE("(%p)->(\"%s,%u\", %p\n", This, debugstr_guid(&key->fmtid), key ? key->pid : 0, pv);
+
+    if (!key || !pv)
+        return E_POINTER;
+    if (This->access != STGM_READ
+        && This->access != STGM_READWRITE)
+        return STG_E_ACCESSDENIED;
+
+    /* Special case */
+    if (IsEqualPropertyKey(*key, PKEY_AudioEndpoint_GUID))
+    {
+        pv->u.pwszVal = CoTaskMemAlloc(39 * sizeof(WCHAR));
+        if (!pv->u.pwszVal)
+            return E_OUTOFMEMORY;
+        StringFromGUID2(&This->parent->devguid, pv->u.pwszVal, 39);
+        return S_OK;
+    }
+
+    return MMDevice_GetPropValue(&This->parent->devguid, This->parent->flow, key, pv);
+}
+
+static HRESULT WINAPI MMDevPropStore_SetValue(IPropertyStore *iface, REFPROPERTYKEY key, REFPROPVARIANT pv)
+{
+    MMDevPropStore *This = (MMDevPropStore*)iface;
+
+    if (!key || !pv)
+        return E_POINTER;
+
+    if (This->access != STGM_WRITE
+        && This->access != STGM_READWRITE)
+        return STG_E_ACCESSDENIED;
+    return MMDevice_SetPropValue(&This->parent->devguid, This->parent->flow, key, pv);
+}
+
+static HRESULT WINAPI MMDevPropStore_Commit(IPropertyStore *iface)
+{
+    FIXME("stub\n");
+    return E_NOTIMPL;
+}
+
+static const IPropertyStoreVtbl MMDevPropVtbl =
+{
+    MMDevPropStore_QueryInterface,
+    MMDevPropStore_AddRef,
+    MMDevPropStore_Release,
+    MMDevPropStore_GetCount,
+    MMDevPropStore_GetAt,
+    MMDevPropStore_GetValue,
+    MMDevPropStore_SetValue,
+    MMDevPropStore_Commit
+};
+
+
+/* Property bag for IBaseFilter activation */
+static HRESULT WINAPI PB_QueryInterface(IPropertyBag *iface, REFIID riid, void **ppv)
+{
+    ERR("Should not be called\n");
+    *ppv = NULL;
+    return E_NOINTERFACE;
+}
+
+static ULONG WINAPI PB_AddRef(IPropertyBag *iface)
+{
+    ERR("Should not be called\n");
+    return 2;
+}
+
+static ULONG WINAPI PB_Release(IPropertyBag *iface)
+{
+    ERR("Should not be called\n");
+    return 1;
+}
+
+static HRESULT WINAPI PB_Read(IPropertyBag *iface, LPCOLESTR name, VARIANT *var, IErrorLog *log)
+{
+    static const WCHAR dsguid[] = { 'D','S','G','u','i','d', 0 };
+    IPropertyBagImpl *This = (IPropertyBagImpl*)iface;
+    TRACE("Trying to read %s, type %u\n", debugstr_w(name), var->n1.n2.vt);
+    if (!lstrcmpW(name, dsguid))
+    {
+        WCHAR guidstr[39];
+        StringFromGUID2(&This->devguid, guidstr,sizeof(guidstr)/sizeof(*guidstr));
+        var->n1.n2.vt = VT_BSTR;
+        var->n1.n2.n3.bstrVal = SysAllocString(guidstr);
+        return S_OK;
+    }
+    ERR("Unknown property '%s' queried\n", debugstr_w(name));
+    return E_FAIL;
+}
+
+static HRESULT WINAPI PB_Write(IPropertyBag *iface, LPCOLESTR name, VARIANT *var)
+{
+    ERR("Should not be called\n");
+    return E_FAIL;
+}
+
+static const IPropertyBagVtbl PB_Vtbl =
+{
+    PB_QueryInterface,
+    PB_AddRef,
+    PB_Release,
+    PB_Read,
+    PB_Write
 };

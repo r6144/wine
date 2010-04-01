@@ -32,6 +32,19 @@
 /* Define to 1 if you have the <asm/types.h> header file. */
 #undef HAVE_ASM_TYPES_H
 
+/* Define to 1 if you have the `AudioFileStreamOpen' function. */
+#undef HAVE_AUDIOFILESTREAMOPEN
+
+/* Define to 1 if you have the <AudioToolbox/AudioConverter.h> header file. */
+#undef HAVE_AUDIOTOOLBOX_AUDIOCONVERTER_H
+
+/* Define to 1 if you have the <AudioToolbox/AudioFileStream.h> header file.
+   */
+#undef HAVE_AUDIOTOOLBOX_AUDIOFILESTREAM_H
+
+/* Define to 1 if you have the <AudioToolbox/AudioFile.h> header file. */
+#undef HAVE_AUDIOTOOLBOX_AUDIOFILE_H
+
 /* Define to 1 if you have the <AudioUnit/AudioUnit.h> header file. */
 #undef HAVE_AUDIOUNIT_AUDIOUNIT_H
 
@@ -254,6 +267,9 @@
 
 /* Define to 1 if you have the <ieeefp.h> header file. */
 #undef HAVE_IEEEFP_H
+
+/* Define to 1 if you have the <ifaddrs.h> header file. */
+#undef HAVE_IFADDRS_H
 
 /* Define to 1 if you have the <inet/mib2.h> header file. */
 #undef HAVE_INET_MIB2_H
@@ -777,6 +793,9 @@
 /* Define to 1 if `icps_outhist' is member of `struct icmpstat'. */
 #undef HAVE_STRUCT_ICMPSTAT_ICPS_OUTHIST
 
+/* Define to 1 if `ifr_hwaddr' is member of `struct ifreq'. */
+#undef HAVE_STRUCT_IFREQ_IFR_HWADDR
+
 /* Define to 1 if `msg_accrights' is member of `struct msghdr'. */
 #undef HAVE_STRUCT_MSGHDR_MSG_ACCRIGHTS
 
@@ -1002,6 +1021,9 @@
 /* Define to 1 if you have the `thr_kill2' function. */
 #undef HAVE_THR_KILL2
 
+/* Define to 1 if you have the <tiffio.h> header file. */
+#undef HAVE_TIFFIO_H
+
 /* Define to 1 if you have the `timegm' function. */
 #undef HAVE_TIMEGM
 
@@ -1193,6 +1215,9 @@
 
 /* Define to the soname of the libssl library. */
 #undef SONAME_LIBSSL
+
+/* Define to the soname of the libtiff library. */
+#undef SONAME_LIBTIFF
 
 /* Define to the soname of the libv4l1 library. */
 #undef SONAME_LIBV4L1

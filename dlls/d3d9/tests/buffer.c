@@ -78,7 +78,7 @@ static void lock_flag_test(IDirect3DDevice9 *device)
     {
         DWORD flags;
         const char *debug_string;
-        HRESULT result;
+        HRESULT win7_result;
     }
     test_data[] =
     {
@@ -87,9 +87,9 @@ static void lock_flag_test(IDirect3DDevice9 *device)
         {D3DLOCK_NOOVERWRITE,                       "D3DLOCK_NOOVERWRITE",                      D3D_OK             },
         {D3DLOCK_NOOVERWRITE | D3DLOCK_DISCARD,     "D3DLOCK_NOOVERWRITE | D3DLOCK_DISCARD",    D3D_OK             },
         {D3DLOCK_NOOVERWRITE | D3DLOCK_READONLY,    "D3DLOCK_NOOVERWRITE | D3DLOCK_READONLY",   D3D_OK             },
-        {D3DLOCK_READONLY    | D3DLOCK_DISCARD,     "D3DLOCK_READONLY | D3DLOCK_DISCARD",       D3D_OK             },
+        {D3DLOCK_READONLY    | D3DLOCK_DISCARD,     "D3DLOCK_READONLY | D3DLOCK_DISCARD",       D3DERR_INVALIDCALL },
         /* Completely bogous flags aren't an error */
-        {0xdeadbeef,                                "0xdeadbeef",                               D3D_OK             },
+        {0xdeadbeef,                                "0xdeadbeef",                               D3DERR_INVALIDCALL },
     };
 
     hr = IDirect3DDevice9_CreateVertexBuffer(device, 1024, D3DUSAGE_DYNAMIC, 0, D3DPOOL_DEFAULT, &buffer, NULL);
@@ -98,8 +98,12 @@ static void lock_flag_test(IDirect3DDevice9 *device)
     for(i = 0; i < (sizeof(test_data) / sizeof(*test_data)); i++)
     {
         hr = IDirect3DVertexBuffer9_Lock(buffer, 0, 0, &data, test_data[i].flags);
-        ok(hr == test_data[i].result, "Lock flags %s returned 0x%08x, expected 0x%08x\n",
-            test_data[i].debug_string, hr, test_data[i].result);
+        /* Windows XP always returns D3D_OK even with flags that don't make sense. Windows 7 returns
+         * an error. At least one game(Shaiya) depends on the Windows XP result, so mark the Windows 7
+         * behavior as broken()
+         */
+        ok(hr == D3D_OK || broken(hr == test_data[i].win7_result), "Lock flags %s returned 0x%08x, expected D3D_OK\n",
+            test_data[i].debug_string, hr);
 
         if(SUCCEEDED(hr))
         {
@@ -133,6 +137,7 @@ static void test_vertex_buffer_alignment(IDirect3DDevice9 *device)
     DWORD sizes[] = {1, 4, 16, 17, 32, 33, 64, 65, 1024, 1025, 1048576, 1048577};
     unsigned int i, j;
     void *data;
+    unsigned int align = 16;
 
     for(i = 0; i < (sizeof(sizes) / sizeof(sizes[0])); i++)
     {
@@ -152,8 +157,8 @@ static void test_vertex_buffer_alignment(IDirect3DDevice9 *device)
 
             hr = IDirect3DVertexBuffer9_Lock(buffer, 0, 0, &data, 0);
             ok(SUCCEEDED(hr), "IDirect3DVertexBuffer9_Lock failed (0x%08x)\n", hr);
-            ok(((DWORD_PTR) data & 31) == 0, "Vertex buffer start address is not 32 byte aligned(size: %d, pool: %s, data: %p)\n",
-               sizes[i], debug_d3dpool(pools[j]), data);
+            ok(((DWORD_PTR) data & (align - 1)) == 0, "Vertex buffer start address is not %u byte aligned(size: %d, pool: %s, data: %p)\n",
+               align, sizes[i], debug_d3dpool(pools[j]), data);
             hr = IDirect3DVertexBuffer9_Unlock(buffer);
             ok(SUCCEEDED(hr), "IDirect3DVertexBuffer9_Unlock failed (0x%08x)\n", hr);
 

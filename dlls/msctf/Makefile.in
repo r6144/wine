@@ -9,6 +9,7 @@ C_SRCS = \
 	categorymgr.c \
 	compartmentmgr.c \
 	context.c \
+	displayattributemgr.c \
 	documentmgr.c \
 	inputprocessor.c \
 	langbarmgr.c \
@@ -21,5 +22,3 @@ RC_SRCS = \
 	version.rc
 
 @MAKE_DLL_RULES@
-
-@DEPENDENCIES@  # everything below this line is overwritten by make depend

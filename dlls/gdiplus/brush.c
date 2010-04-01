@@ -838,7 +838,10 @@ GpStatus WINGDIPAPI GdipCreateTextureIA(GpImage *image,
 
     (*texture)->brush.gdibrush = CreateBrushIndirect(&(*texture)->brush.lb);
     (*texture)->brush.bt = BrushTypeTextureFill;
-    (*texture)->wrap = imageattr->wrap;
+    if (imageattr)
+        (*texture)->wrap = imageattr->wrap;
+    else
+        (*texture)->wrap = WrapModeTile;
     (*texture)->image = new_image;
 
 exit:
@@ -1160,6 +1163,16 @@ GpStatus WINGDIPAPI GdipGetPathGradientSurroundColorsWithCount(GpPathGradient
 
     if(!(calls++))
         FIXME("not implemented\n");
+
+    return NotImplemented;
+}
+
+GpStatus WINGDIPAPI GdipGetPathGradientSurroundColorCount(GpPathGradient *brush, INT *count)
+{
+    TRACE("(%p, %p)\n", brush, count);
+
+    if (!brush || !count)
+       return InvalidParameter;
 
     return NotImplemented;
 }
@@ -1529,7 +1542,7 @@ GpStatus WINGDIPAPI GdipSetPathGradientSigmaBlend(GpPathGradient *grad,
 }
 
 GpStatus WINGDIPAPI GdipSetPathGradientSurroundColorsWithCount(GpPathGradient
-    *grad, ARGB *argb, INT *count)
+    *grad, GDIPCONST ARGB *argb, INT *count)
 {
     static int calls;
 

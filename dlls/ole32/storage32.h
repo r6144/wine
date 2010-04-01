@@ -46,6 +46,7 @@ static const ULONG OFFSET_BIGBLOCKSIZEBITS   = 0x0000001e;
 static const ULONG OFFSET_SMALLBLOCKSIZEBITS = 0x00000020;
 static const ULONG OFFSET_BBDEPOTCOUNT	     = 0x0000002C;
 static const ULONG OFFSET_ROOTSTARTBLOCK     = 0x00000030;
+static const ULONG OFFSET_SMALLBLOCKLIMIT    = 0x00000038;
 static const ULONG OFFSET_SBDEPOTSTART	     = 0x0000003C;
 static const ULONG OFFSET_SBDEPOTCOUNT       = 0x00000040;
 static const ULONG OFFSET_EXTBBDEPOTSTART    = 0x00000044;
@@ -79,6 +80,11 @@ static const ULONG DIRENTRY_NULL             = 0xFFFFFFFF;
 
 #define RAW_DIRENTRY_SIZE 0x00000080
 
+#define HEADER_SIZE 512
+
+#define MIN_BIG_BLOCK_SIZE 0x200
+#define MAX_BIG_BLOCK_SIZE 0x1000
+
 /*
  * Type of child entry link
  */
@@ -91,15 +97,10 @@ static const ULONG DIRENTRY_NULL             = 0xFFFFFFFF;
  */
 #define STGTY_ROOT 0x05
 
-/*
- * These defines assume a hardcoded blocksize. The code will assert
- * if the blocksize is different. Some changes will have to be done if it
- * becomes the case.
- */
-#define BIG_BLOCK_SIZE           0x200
 #define COUNT_BBDEPOTINHEADER    109
+
+/* FIXME: This value is stored in the header, but we hard-code it to 0x1000. */
 #define LIMIT_TO_USE_SMALL_BLOCK 0x1000
-#define NUM_BLOCKS_PER_DEPOT_BLOCK 128
 
 #define STGM_ACCESS_MODE(stgm)   ((stgm)&0x0000f)
 #define STGM_SHARE_MODE(stgm)    ((stgm)&0x000f0)
@@ -163,10 +164,9 @@ typedef struct BigBlockFile BigBlockFile,*LPBIGBLOCKFILE;
 BigBlockFile*  BIGBLOCKFILE_Construct(HANDLE hFile,
                                       ILockBytes* pLkByt,
                                       DWORD openFlags,
-                                      ULONG blocksize,
                                       BOOL fileBased);
 void           BIGBLOCKFILE_Destructor(LPBIGBLOCKFILE This);
-HRESULT        BIGBLOCKFILE_EnsureExists(LPBIGBLOCKFILE This, ULONG index);
+HRESULT        BIGBLOCKFILE_Expand(LPBIGBLOCKFILE This, ULARGE_INTEGER newSize);
 HRESULT        BIGBLOCKFILE_SetSize(LPBIGBLOCKFILE This, ULARGE_INTEGER newSize);
 HRESULT        BIGBLOCKFILE_ReadAt(LPBIGBLOCKFILE This, ULARGE_INTEGER offset,
            void* buffer, ULONG size, ULONG* bytesRead);
@@ -354,14 +354,18 @@ struct StorageImpl
   ULONG smallBlockSize;
   ULONG bigBlockDepotCount;
   ULONG rootStartBlock;
+  ULONG smallBlockLimit;
   ULONG smallBlockDepotStart;
   ULONG extBigBlockDepotStart;
   ULONG extBigBlockDepotCount;
   ULONG bigBlockDepotStart[COUNT_BBDEPOTINHEADER];
 
-  ULONG blockDepotCached[NUM_BLOCKS_PER_DEPOT_BLOCK];
+  ULONG blockDepotCached[MAX_BIG_BLOCK_SIZE / 4];
   ULONG indexBlockDepotCached;
   ULONG prevFreeBlock;
+
+  /* All small blocks before this one are known to be in use. */
+  ULONG firstFreeSmallBlock;
 
   /*
    * Abstraction of the big block chains for the chains of the header.

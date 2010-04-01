@@ -18,45 +18,16 @@
 # sgmlpages:       compile sgml source for the Wine API Guide
 # xmlpages:        compile xml source for the Wine API Guide
 
-# Directories
-
 TOPSRCDIR = @top_srcdir@
 TOPOBJDIR = .
 SRCDIR    = @srcdir@
 VPATH     = @srcdir@
-LIBEXT    = @LIBEXT@
-MODULE    = none
-
-ALL_DIRS           = @ALL_DIRS@
-ALL_DLL_DIRS       = @ALL_DLL_DIRS@
-ALL_INSTALL_DIRS   = @ALL_INSTALL_DIRS@
-ALL_PROGRAM_DIRS   = @ALL_PROGRAM_DIRS@
-ALL_STATICLIB_DIRS = @ALL_STATICLIB_DIRS@
-ALL_TEST_DIRS      = @ALL_TEST_DIRS@
-ALL_TOOL_DIRS      = @ALL_TOOL_DIRS@
-ALL_TOP_DIRS       = @ALL_TOP_DIRS@
-
-# Sub-directories to run make all into
-BUILDSUBDIRS = \
-	libs/wine \
-	$(ALL_TOOL_DIRS) \
-	$(ALL_TOP_DIRS) \
-	$(ALL_STATICLIB_DIRS) \
-	$(ALL_DLL_DIRS) \
-	$(ALL_PROGRAM_DIRS) \
-	$(ALL_TEST_DIRS)
-
-# Sub-directories to run make install/uninstall into
-INSTALLSUBDIRS = \
-	libs/wine \
-	$(ALL_TOOL_DIRS) \
-	$(ALL_TOP_DIRS) \
-	$(ALL_STATICLIB_DIRS) \
-	$(ALL_DLL_DIRS) \
-	$(ALL_INSTALL_DIRS)
 
 # Sub-directories that don't have a makefile
-EXTRASUBDIRS = dlls libs
+EXTRASUBDIRS = dlls libs programs
+
+# Destination directories for make install
+INSTALLDIRS = $(DESTDIR)$(bindir)
 
 all: wine
 	@echo "Wine build complete."
@@ -66,8 +37,6 @@ WINAPI_CHECK_EXTRA_FLAGS = --global
 @MAKE_RULES@
 
 # Rules for re-running configure
-
-ALL_CONFIGS = Makefile @ALL_MAKERULES@ @ALL_SYMLINKS@
 
 $(SRCDIR)/configure: @MAINTAINER_MODE@ configure.ac aclocal.m4
 	cd $(SRCDIR) && autoconf --warnings=all
@@ -84,154 +53,30 @@ include/config.h: include/stamp-h
 include/stamp-h: include/config.h.in config.status
 	@./config.status include/config.h include/stamp-h
 
-$(ALL_CONFIGS):
-	@./config.status $@
-
-# Rules for building
-
-all: $(BUILDSUBDIRS)
-
-$(ALL_DIRS): dummy
-	@cd $@ && $(MAKE)
-
-.PHONY: $(ALL_DIRS)
-
-# Rules for dependencies
-
-depend: $(ALL_DIRS:%=%/__depend__) dummy
-.PHONY: $(ALL_DIRS:%=%/__depend__)
-
 # Rules for cleaning
 
-$(ALL_DIRS:%=%/__clean__): dummy
-	@cd `dirname $@` && $(MAKE) clean
-
-clean:: $(ALL_DIRS:%=%/__clean__)
-	$(RM) $(ALL_DIRS:%=%/Makefile) tools/makedep$(EXEEXT)
+.PHONY: __clean__
+clean:: __clean__
+	$(RM) tools/makedep$(EXEEXT)
 
 distclean:: clean
-	$(RM) config.* configure.lineno TAGS tags include/config.h include/stamp-h $(ALL_CONFIGS)
+	$(RM) config.* configure.lineno TAGS tags include/config.h include/stamp-h Makefile Make.tmp
 	$(RM) -r autom4te.cache
-
-.PHONY: distclean $(ALL_DIRS:%=%/__clean__)
-
-# Rules for installing
-
-$(INSTALLSUBDIRS:%=%/__install__): dummy
-	@cd `dirname $@` && $(MAKE) install
-
-$(INSTALLSUBDIRS:%=%/__install-lib__): dummy
-	@cd `dirname $@` && $(MAKE) install-lib
-
-$(INSTALLSUBDIRS:%=%/__install-dev__): dummy
-	@cd `dirname $@` && $(MAKE) install-dev
-
-$(INSTALLSUBDIRS:%=%/__uninstall__): dummy
-	@cd `dirname $@` && $(MAKE) uninstall
-
-install:: $(INSTALLSUBDIRS:%=%/__install__) dummy
-install-lib:: $(INSTALLSUBDIRS:%=%/__install-lib__) dummy
-install-dev:: $(INSTALLSUBDIRS:%=%/__install-dev__) dummy
-uninstall:: $(INSTALLSUBDIRS:%=%/__uninstall__) dummy
-
-.PHONY: $(INSTALLSUBDIRS:%=%/__install__) $(INSTALLSUBDIRS:%=%/__uninstall__) \
-	$(INSTALLSUBDIRS:%=%/__install-lib__) $(INSTALLSUBDIRS:%=%/__install-dev__)
-
-uninstall::
-	-rmdir $(DESTDIR)$(datadir)/wine $(DESTDIR)$(fakedlldir) $(DESTDIR)$(dlldir)
-
-# Rules for testing
-
-$(ALL_TEST_DIRS:%=%/__test__): dummy
-	@cd `dirname $@` && $(MAKE) test
-
-$(ALL_TEST_DIRS:%=%/__crosstest__): dummy
-	@cd `dirname $@` && $(MAKE) crosstest
-
-$(ALL_TEST_DIRS:%=%/__testclean__): dummy
-	@cd `dirname $@` && $(MAKE) testclean
-
-check test:: $(ALL_TEST_DIRS:%=%/__test__)
-crosstest:: $(ALL_TEST_DIRS:%=%/__crosstest__)
-testclean:: $(ALL_TEST_DIRS:%=%/__testclean__)
-
-.PHONY: check test testclean crosstest $(ALL_TEST_DIRS:%=%/__test__) \
-	$(ALL_TEST_DIRS:%=%/__crosstest__) $(ALL_TEST_DIRS:%=%/__testclean__)
-
-# Rules for auto documentation
-
-DOCSUBDIRS = $(ALL_DLL_DIRS)
-
-$(DOCSUBDIRS:%=%/__man__): dummy
-	@cd `dirname $@` && $(MAKE) man
-
-$(DOCSUBDIRS:%=%/__doc_html__): dummy
-	@cd `dirname $@` && $(MAKE) doc-html
-
-$(DOCSUBDIRS:%=%/__doc_sgml__): dummy
-	@cd `dirname $@` && $(MAKE) doc-sgml
-
-$(DOCSUBDIRS:%=%/__doc_xml__): dummy
-	@cd `dirname $@` && $(MAKE) doc-xml
-
-man: $(DOCSUBDIRS:%=%/__man__)
-doc-html: $(DOCSUBDIRS:%=%/__doc_html__)
-doc-sgml: $(DOCSUBDIRS:%=%/__doc_sgml__)
-doc-xml: $(DOCSUBDIRS:%=%/__doc_xml__)
-
-manpages htmlpages sgmlpages xmlpages: dummy
-	@cd documentation && $(MAKE) $@
-
-.PHONY: man doc-html doc-sgml doc-xml manpages htmlpages sgmlpages xmlpages \
-	$(DOCSUBDIRS:%=%/__man__) $(DOCSUBDIRS:%=%/__doc_html__) $(DOCSUBDIRS:%=%/__doc_sgml__) $(DOCSUBDIRS:%=%/__doc_xml__)
-
-# Rules for import libraries
-
-STATIC_LIBS = @ALL_STATIC_LIBS@
-IMPORT_LIBS = @ALL_IMPORT_LIBS@
-
-implib: $(ALL_STATICLIB_DIRS) $(IMPORT_LIBS)
-.PHONY: implib
 
 # Dependencies between directories
 
 # dependencies needed to build any dll or program
-__tooldeps__: libs/port libs/wine libs/wpp $(ALL_TOOL_DIRS)
-__builddeps__: __tooldeps__ include $(ALL_STATICLIB_DIRS) $(IMPORT_LIBS)
-__buildcrossdeps__: __tooldeps__ include $(STATIC_LIBS:.a=.cross.a) $(IMPORT_LIBS:.def=.cross.a)
-.PHONY: __tooldeps__ __builddeps__ __buildcrossdeps__
+__tooldeps__: libs/port libs/wine libs/wpp
+__builddeps__ __buildcrossdeps__: __tooldeps__ include
+.PHONY: test crosstest __tooldeps__ __builddeps__ __buildcrossdeps__
 
 loader server: libs/port libs/wine tools
 fonts: tools
 include: tools/widl
-programs/winetest: $(ALL_TEST_DIRS)
-libs/wine $(ALL_TOOL_DIRS): libs/port
+libs/wine: libs/port
 tools/wmc tools/wrc: tools
 tools tools/wmc tools/wrc: libs/wine
 tools/widl tools/wmc tools/wrc: libs/wpp
-
-fonts/__install__ fonts/__install-lib__: tools
-include/__install__ include/__install-dev__: include
-libs/wine/__install__ libs/wine/__install-lib__ libs/wine/__install-dev__: libs/wine
-loader/__install__ loader/__install-lib__: libs/port libs/wine tools
-server/__install__ server/__install-lib__: libs/port libs/wine tools
-tools/__install__ tools/__install-lib__ tools/__install-dev__: tools
-tools/widl/__install__ tools/widl/__install-dev__: tools/widl
-tools/winebuild/__install__ tools/winebuild/__install-dev__: tools/winebuild
-tools/winedump/__install__ tools/winedump/__install-dev__: tools/winedump
-tools/winegcc/__install__ tools/winegcc/__install-dev__: tools/winegcc
-tools/wmc/__install__ tools/wmc/__install-dev__: tools/wmc
-tools/wrc/__install__ tools/wrc/__install-dev__: tools/wrc
-tools/__depend__: $(MAKEDEP)
-
-RECURSE_TARGETS = \
-	__clean__ \
-	__install__ \
-	__instal-dev__ \
-	__install-lib__ \
-	__uninstall__ \
-	__testclean__ \
-	__crosstest__
 
 $(MAKEDEP): include/config.h tools/Makefile
 	@cd $(TOOLSDIR)/tools && $(MAKE) makedep$(TOOLSEXT)
@@ -245,11 +90,3 @@ TAGS etags:
 tags ctags:
 	$(RM) tags
 	(test -d .git && git ls-files '*.[chly]' '*.idl' || find -L $(TOPSRCDIR) -name '*.[ch]' -print) | xargs ctags -a
-
-# Makefile rules
-
-.INIT: Makefile
-.BEGIN: Makefile
-.MAKEFILEDEPS:
-
-@ALL_MAKEFILE_DEPENDS@

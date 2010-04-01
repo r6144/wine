@@ -81,7 +81,7 @@
 #include <shobjidl.h>
 #include <shlwapi.h>
 #include <shellapi.h>
-#include <setupapi.h>
+#include "resource.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(wineboot);
 
@@ -161,7 +161,7 @@ done:
 /* wrapper for RegSetValueExW */
 static DWORD set_reg_value( HKEY hkey, const WCHAR *name, const WCHAR *value )
 {
-    return RegSetValueExW( hkey, name, 0, REG_SZ, (BYTE *)value, (strlenW(value) + 1) * sizeof(WCHAR) );
+    return RegSetValueExW( hkey, name, 0, REG_SZ, (const BYTE *)value, (strlenW(value) + 1) * sizeof(WCHAR) );
 }
 
 /* create the volatile hardware registry keys */
@@ -860,12 +860,93 @@ static BOOL start_services_process(void)
     return TRUE;
 }
 
+static INT_PTR CALLBACK wait_dlgproc( HWND hwnd, UINT msg, WPARAM wp, LPARAM lp )
+{
+    switch (msg)
+    {
+    case WM_INITDIALOG:
+        {
+            WCHAR *buffer, text[1024];
+            const WCHAR *name = (WCHAR *)lp;
+            HICON icon = LoadImageW( 0, (LPCWSTR)IDI_WINLOGO, IMAGE_ICON, 48, 48, LR_SHARED );
+            SendDlgItemMessageW( hwnd, IDC_WAITICON, STM_SETICON, (WPARAM)icon, 0 );
+            SendDlgItemMessageW( hwnd, IDC_WAITTEXT, WM_GETTEXT, 1024, (LPARAM)text );
+            buffer = HeapAlloc( GetProcessHeap(), 0, (strlenW(text) + strlenW(name) + 1) * sizeof(WCHAR) );
+            sprintfW( buffer, text, name );
+            SendDlgItemMessageW( hwnd, IDC_WAITTEXT, WM_SETTEXT, 0, (LPARAM)buffer );
+            HeapFree( GetProcessHeap(), 0, buffer );
+        }
+        break;
+    }
+    return 0;
+}
+
+static HWND show_wait_window(void)
+{
+    const char *config_dir = wine_get_config_dir();
+    WCHAR *name;
+    HWND hwnd;
+    DWORD len;
+
+    len = MultiByteToWideChar( CP_UNIXCP, 0, config_dir, -1, NULL, 0 );
+    name = HeapAlloc( GetProcessHeap(), 0, len * sizeof(WCHAR) );
+    MultiByteToWideChar( CP_UNIXCP, 0, config_dir, -1, name, len );
+    hwnd = CreateDialogParamW( GetModuleHandleW(0), MAKEINTRESOURCEW(IDD_WAITDLG), 0,
+                               wait_dlgproc, (LPARAM)name );
+    ShowWindow( hwnd, SW_SHOWNORMAL );
+    HeapFree( GetProcessHeap(), 0, name );
+    return hwnd;
+}
+
+static HANDLE start_rundll32( const char *inf_path, BOOL wow64 )
+{
+    static const WCHAR rundll[] = {'\\','r','u','n','d','l','l','3','2','.','e','x','e',0};
+    static const WCHAR setupapi[] = {' ','s','e','t','u','p','a','p','i',',',
+                                     'I','n','s','t','a','l','l','H','i','n','f','S','e','c','t','i','o','n',0};
+    static const WCHAR definstall[] = {' ','D','e','f','a','u','l','t','I','n','s','t','a','l','l',0};
+    static const WCHAR wowinstall[] = {' ','W','o','w','6','4','I','n','s','t','a','l','l',0};
+    static const WCHAR inf[] = {' ','1','2','8',' ','\\','\\','?','\\','u','n','i','x',0 };
+
+    WCHAR app[MAX_PATH + sizeof(rundll)/sizeof(WCHAR)];
+    STARTUPINFOW si;
+    PROCESS_INFORMATION pi;
+    WCHAR *buffer;
+    DWORD inf_len, cmd_len;
+
+    memset( &si, 0, sizeof(si) );
+    si.cb = sizeof(si);
+
+    if (wow64)
+    {
+        if (!GetSystemWow64DirectoryW( app, MAX_PATH )) return 0;  /* not on 64-bit */
+    }
+    else GetSystemDirectoryW( app, MAX_PATH );
+
+    strcatW( app, rundll );
+
+    cmd_len = strlenW(app) * sizeof(WCHAR) + sizeof(setupapi) + sizeof(definstall) + sizeof(inf);
+    inf_len = MultiByteToWideChar( CP_UNIXCP, 0, inf_path, -1, NULL, 0 );
+
+    if (!(buffer = HeapAlloc( GetProcessHeap(), 0, cmd_len + inf_len * sizeof(WCHAR) ))) return 0;
+
+    strcpyW( buffer, app );
+    strcatW( buffer, setupapi );
+    strcatW( buffer, wow64 ? wowinstall : definstall );
+    strcatW( buffer, inf );
+    MultiByteToWideChar( CP_UNIXCP, 0, inf_path, -1, buffer + strlenW(buffer), inf_len );
+
+    if (CreateProcessW( app, buffer, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi ))
+        CloseHandle( pi.hThread );
+    else
+        pi.hProcess = 0;
+
+    HeapFree( GetProcessHeap(), 0, buffer );
+    return pi.hProcess;
+}
+
 /* execute rundll32 on the wine.inf file if necessary */
 static void update_wineprefix( int force )
 {
-    static const WCHAR cmdlineW[] = {'D','e','f','a','u','l','t','I','n','s','t','a','l','l',' ',
-                                     '1','2','8',' ','\\','\\','?','\\','u','n','i','x' };
-
     const char *config_dir = wine_get_config_dir();
     char *inf_path = get_wine_inf_path();
     int fd;
@@ -887,14 +968,25 @@ static void update_wineprefix( int force )
 
     if (update_timestamp( config_dir, st.st_mtime ) || force)
     {
-        WCHAR *buffer;
-        DWORD len = MultiByteToWideChar( CP_UNIXCP, 0, inf_path, -1, NULL, 0 );
-        if (!(buffer = HeapAlloc( GetProcessHeap(), 0, sizeof(cmdlineW) + len*sizeof(WCHAR) ))) goto done;
-        memcpy( buffer, cmdlineW, sizeof(cmdlineW) );
-        MultiByteToWideChar( CP_UNIXCP, 0, inf_path, -1, buffer + sizeof(cmdlineW)/sizeof(WCHAR), len );
+        HANDLE process;
+        DWORD count = 0;
 
-        InstallHinfSectionW( 0, 0, buffer, 0 );
-        HeapFree( GetProcessHeap(), 0, buffer );
+        if ((process = start_rundll32( inf_path, FALSE )))
+        {
+            HWND hwnd = show_wait_window();
+            for (;;)
+            {
+                MSG msg;
+                DWORD res = MsgWaitForMultipleObjects( 1, &process, FALSE, INFINITE, QS_ALLINPUT );
+                if (res == WAIT_OBJECT_0)
+                {
+                    CloseHandle( process );
+                    if (count++ || !(process = start_rundll32( inf_path, TRUE ))) break;
+                }
+                else while (PeekMessageW( &msg, 0, 0, 0, PM_REMOVE )) DispatchMessageW( &msg );
+            }
+            DestroyWindow( hwnd );
+        }
         WINE_MESSAGE( "wine: configuration in '%s' has been updated.\n", config_dir );
     }
 

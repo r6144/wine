@@ -169,8 +169,9 @@ static void test_surface_alignment(IDirect3DDevice9 *device_ptr)
             ok(SUCCEEDED(hr), "IDirect3DTexture9_LockRect: %08x\n", hr);
             hr = IDirect3DTexture9_UnlockRect(pTexture, j);
             ok(SUCCEEDED(hr), "IDirect3DTexture9_UnLockRect: %08x\n", hr);
-            hr = IDirect3DTexture9_UnlockRect(pTexture, j);
-todo_wine   ok(SUCCEEDED(hr), "Double IDirect3DTexture9_UnLockRect failed with %08x\n", hr);
+            /* Windows XP returns D3D_OK when calling UnlockRect on an unlocked surface,
+             * windows 7 returns an error.
+             */
 
             pitch = ((descr.Width + 3) >> 2) << 3;
             if (i > 0) pitch <<= 1;
@@ -187,8 +188,10 @@ todo_wine   ok(SUCCEEDED(hr), "Double IDirect3DTexture9_UnLockRect failed with %
 static void test_lockrect_offset(IDirect3DDevice9 *device)
 {
     IDirect3DSurface9 *surface = 0;
+    IDirect3D9 *d3d;
     const RECT rect = {60, 60, 68, 68};
     D3DLOCKED_RECT locked_rect;
+    int expected_pitch;
     unsigned int expected_offset;
     unsigned int offset;
     unsigned int i;
@@ -202,14 +205,24 @@ static void test_lockrect_offset(IDirect3DDevice9 *device)
         unsigned int block_height;
         unsigned int block_size;
     } dxt_formats[] = {
-        {D3DFMT_DXT1, "D3DFMT_DXT1", 4, 4, 8},
-        {D3DFMT_DXT2, "D3DFMT_DXT2", 4, 4, 16},
-        {D3DFMT_DXT3, "D3DFMT_DXT3", 4, 4, 16},
-        {D3DFMT_DXT4, "D3DFMT_DXT4", 4, 4, 16},
-        {D3DFMT_DXT5, "D3DFMT_DXT5", 4, 4, 16},
+        {D3DFMT_DXT1,                 "D3DFMT_DXT1", 4, 4, 8},
+        {D3DFMT_DXT2,                 "D3DFMT_DXT2", 4, 4, 16},
+        {D3DFMT_DXT3,                 "D3DFMT_DXT3", 4, 4, 16},
+        {D3DFMT_DXT4,                 "D3DFMT_DXT4", 4, 4, 16},
+        {D3DFMT_DXT5,                 "D3DFMT_DXT5", 4, 4, 16},
+        {MAKEFOURCC('A','T','I','2'), "ATI2N",       1, 1,  1},
     };
+    hr = IDirect3DDevice9_GetDirect3D(device, &d3d);
+    ok(SUCCEEDED(hr), "IDirect3DDevice9_GetDirect3D failed (%08x)\n", hr);
 
     for (i = 0; i < (sizeof(dxt_formats) / sizeof(*dxt_formats)); ++i) {
+        hr = IDirect3D9_CheckDeviceFormat(d3d, 0, D3DDEVTYPE_HAL, D3DFMT_X8R8G8B8, 0, D3DRTYPE_TEXTURE, dxt_formats[i].fmt);
+        if(FAILED(hr))
+        {
+            skip("Format %s not supported, skipping lockrect offset test\n", dxt_formats[i].name);
+            continue;
+        }
+
         hr = IDirect3DDevice9_CreateOffscreenPlainSurface(device, 128, 128, dxt_formats[i].fmt, D3DPOOL_SCRATCH, &surface, 0);
         ok(SUCCEEDED(hr), "CreateOffscreenPlainSurface failed (%08x)\n", hr);
 
@@ -217,6 +230,9 @@ static void test_lockrect_offset(IDirect3DDevice9 *device)
         ok(SUCCEEDED(hr), "LockRect failed (%08x)\n", hr);
 
         base = locked_rect.pBits;
+        expected_pitch = (128 + dxt_formats[i].block_height - 1) / dxt_formats[i].block_width
+                         * dxt_formats[i].block_size;
+        ok(locked_rect.Pitch == expected_pitch, "Got pitch %d, expected pitch %d for format %s\n", locked_rect.Pitch, expected_pitch, dxt_formats[i].name);
 
         hr = IDirect3DSurface9_UnlockRect(surface);
         ok(SUCCEEDED(hr), "UnlockRect failed (%08x)\n", hr);
@@ -227,7 +243,7 @@ static void test_lockrect_offset(IDirect3DDevice9 *device)
         ok(SUCCEEDED(hr), "LockRect failed (%08x)\n", hr);
 
         offset = (BYTE *)locked_rect.pBits - base;
-        expected_offset = (rect.top / dxt_formats[i].block_height) * locked_rect.Pitch
+        expected_offset = (rect.top / dxt_formats[i].block_height) * expected_pitch
                         + (rect.left / dxt_formats[i].block_width) * dxt_formats[i].block_size;
         ok(offset == expected_offset, "Got offset %u, expected offset %u for format %s\n", offset, expected_offset, dxt_formats[i].name);
 
@@ -236,7 +252,14 @@ static void test_lockrect_offset(IDirect3DDevice9 *device)
 
         IDirect3DSurface9_Release(surface);
     }
+    IDirect3D9_Release(d3d);
 }
+
+struct rect_test
+{
+    RECT rect;
+    HRESULT win7_result;
+};
 
 static void test_lockrect_invalid(IDirect3DDevice9 *device)
 {
@@ -247,20 +270,20 @@ static void test_lockrect_invalid(IDirect3DDevice9 *device)
     HRESULT hr;
 
     const RECT test_rect_2 = { 0, 0, 8, 8 };
-    const RECT test_data[] = {
-        {60, 60, 68, 68},       /* Valid */
-        {60, 60, 60, 68},       /* 0 height */
-        {60, 60, 68, 60},       /* 0 width */
-        {68, 60, 60, 68},       /* left > right */
-        {60, 68, 68, 60},       /* top > bottom */
-        {-8, 60,  0, 68},       /* left < surface */
-        {60, -8, 68,  0},       /* top < surface */
-        {-16, 60, -8, 68},      /* right < surface */
-        {60, -16, 68, -8},      /* bottom < surface */
-        {60, 60, 136, 68},      /* right > surface */
-        {60, 60, 68, 136},      /* bottom > surface */
-        {136, 60, 144, 68},     /* left > surface */
-        {60, 136, 68, 144},     /* top > surface */
+    const struct rect_test test_data[] = {
+        {{60, 60, 68, 68},      D3D_OK},                /* Valid */
+        {{60, 60, 60, 68},      D3DERR_INVALIDCALL},    /* 0 height */
+        {{60, 60, 68, 60},      D3DERR_INVALIDCALL},    /* 0 width */
+        {{68, 60, 60, 68},      D3DERR_INVALIDCALL},    /* left > right */
+        {{60, 68, 68, 60},      D3DERR_INVALIDCALL},    /* top > bottom */
+        {{-8, 60,  0, 68},      D3DERR_INVALIDCALL},    /* left < surface */
+        {{60, -8, 68,  0},      D3DERR_INVALIDCALL},    /* top < surface */
+        {{-16, 60, -8, 68},     D3DERR_INVALIDCALL},    /* right < surface */
+        {{60, -16, 68, -8},     D3DERR_INVALIDCALL},    /* bottom < surface */
+        {{60, 60, 136, 68},     D3DERR_INVALIDCALL},    /* right > surface */
+        {{60, 60, 68, 136},     D3DERR_INVALIDCALL},    /* bottom > surface */
+        {{136, 60, 144, 68},    D3DERR_INVALIDCALL},    /* left > surface */
+        {{60, 136, 68, 144},    D3DERR_INVALIDCALL},    /* top > surface */
     };
 
     hr = IDirect3DDevice9_CreateOffscreenPlainSurface(device, 128, 128, D3DFMT_A8R8G8B8, D3DPOOL_SCRATCH, &surface, 0);
@@ -277,14 +300,18 @@ static void test_lockrect_invalid(IDirect3DDevice9 *device)
     for (i = 0; i < (sizeof(test_data) / sizeof(*test_data)); ++i)
     {
         unsigned int offset, expected_offset;
-        const RECT *rect = &test_data[i];
+        const RECT *rect = &test_data[i].rect;
 
         locked_rect.pBits = (BYTE *)0xdeadbeef;
         locked_rect.Pitch = 0xdeadbeef;
 
         hr = IDirect3DSurface9_LockRect(surface, &locked_rect, rect, 0);
-        ok(SUCCEEDED(hr), "LockRect failed (0x%08x) for rect [%d, %d]->[%d, %d]\n",
+        /* Windows XP accepts invalid locking rectangles, windows 7 rejects them.
+         * Some games(C&C3) depend on the XP behavior, mark the Win7 one broken */
+        ok(SUCCEEDED(hr) || broken(hr == test_data[i].win7_result),
+                "LockRect failed (0x%08x) for rect [%d, %d]->[%d, %d]\n",
                 hr, rect->left, rect->top, rect->right, rect->bottom);
+        if(FAILED(hr)) continue;
 
         offset = (BYTE *)locked_rect.pBits - base;
         expected_offset = rect->top * locked_rect.Pitch + rect->left * 4;
@@ -302,14 +329,14 @@ static void test_lockrect_invalid(IDirect3DDevice9 *device)
     hr = IDirect3DSurface9_UnlockRect(surface);
     ok(SUCCEEDED(hr), "UnlockRect failed (0x%08x)\n", hr);
 
-    hr = IDirect3DSurface9_LockRect(surface, &locked_rect, &test_data[0], 0);
+    hr = IDirect3DSurface9_LockRect(surface, &locked_rect, &test_data[0].rect, 0);
     ok(hr == D3D_OK, "LockRect failed (0x%08x) for rect [%d, %d]->[%d, %d]"
-            ", expected D3D_OK (0x%08x)\n", hr, test_data[0].left, test_data[0].top,
-            test_data[0].right, test_data[0].bottom, D3D_OK);
-    hr = IDirect3DSurface9_LockRect(surface, &locked_rect, &test_data[0], 0);
+            ", expected D3D_OK (0x%08x)\n", hr, test_data[0].rect.left, test_data[0].rect.top,
+            test_data[0].rect.right, test_data[0].rect.bottom, D3D_OK);
+    hr = IDirect3DSurface9_LockRect(surface, &locked_rect, &test_data[0].rect, 0);
     ok(hr == D3DERR_INVALIDCALL, "Double LockRect failed (0x%08x) for rect [%d, %d]->[%d, %d]"
-            ", expected D3DERR_INVALIDCALL (0x%08x)\n", hr, test_data[0].left, test_data[0].top,
-            test_data[0].right, test_data[0].bottom, D3DERR_INVALIDCALL);
+            ", expected D3DERR_INVALIDCALL (0x%08x)\n", hr, test_data[0].rect.left, test_data[0].rect.top,
+            test_data[0].rect.right, test_data[0].rect.bottom, D3DERR_INVALIDCALL);
     hr = IDirect3DSurface9_LockRect(surface, &locked_rect, &test_rect_2, 0);
     ok(hr == D3DERR_INVALIDCALL, "Double LockRect failed (0x%08x) for rect [%d, %d]->[%d, %d]"
             ", expected D3DERR_INVALIDCALL (0x%08x)\n", hr, test_rect_2.left, test_rect_2.top,

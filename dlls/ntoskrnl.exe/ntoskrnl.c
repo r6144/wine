@@ -2,6 +2,7 @@
  * ntoskrnl.exe implementation
  *
  * Copyright (C) 2007 Alexandre Julliard
+ * Copyright (C) 2010 Damjan Jovanovic
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -678,6 +679,72 @@ PCONFIGURATION_INFORMATION WINAPI IoGetConfigurationInformation(void)
 
 
 /***********************************************************************
+ *           IoIsWdmVersionAvailable     (NTOSKRNL.EXE.@)
+ */
+NTSTATUS WINAPI IoIsWdmVersionAvailable(UCHAR MajorVersion, UCHAR MinorVersion)
+{
+    DWORD version;
+    DWORD major;
+    DWORD minor;
+
+    TRACE( "%d, 0x%X\n", MajorVersion, MinorVersion );
+
+    version = GetVersion();
+    major = LOBYTE(version);
+    minor = HIBYTE(LOWORD(version));
+
+    if (MajorVersion == 6 && MinorVersion == 0)
+    {
+        /* Windows Vista, Windows Server 2008, Windows 7 */
+    }
+    else if (MajorVersion == 1)
+    {
+        if (MinorVersion == 0x30)
+        {
+            /* Windows server 2003 */
+            MajorVersion = 6;
+            MinorVersion = 0;
+        }
+        else if (MinorVersion == 0x20)
+        {
+            /* Windows XP */
+            MajorVersion = 5;
+            MinorVersion = 1;
+        }
+        else if (MinorVersion == 0x10)
+        {
+            /* Windows 2000 */
+            MajorVersion = 5;
+            MinorVersion = 0;
+        }
+        else if (MinorVersion == 0x05)
+        {
+            /* Windows ME */
+            MajorVersion = 4;
+            MinorVersion = 0x5a;
+        }
+        else if (MinorVersion == 0x00)
+        {
+            /* Windows 98 */
+            MajorVersion = 4;
+            MinorVersion = 0x0a;
+        }
+        else
+        {
+            FIXME( "unknown major %d minor 0x%X\n", MajorVersion, MinorVersion );
+            return FALSE;
+        }
+    }
+    else
+    {
+        FIXME( "unknown major %d minor 0x%X\n", MajorVersion, MinorVersion );
+        return FALSE;
+    }
+    return major > MajorVersion || (major == MajorVersion && minor >= MinorVersion);
+}
+
+
+/***********************************************************************
  *           IoQueryDeviceDescription    (NTOSKRNL.EXE.@)
  */
 NTSTATUS WINAPI IoQueryDeviceDescription(PINTERFACE_TYPE itype, PULONG bus, PCONFIGURATION_TYPE ctype,
@@ -722,14 +789,9 @@ NTSTATUS WINAPI IoReportResourceUsage(PUNICODE_STRING name, PDRIVER_OBJECT drv_o
 
 
 /***********************************************************************
- *           IofCompleteRequest   (NTOSKRNL.EXE.@)
+ *           IoCompleteRequest   (NTOSKRNL.EXE.@)
  */
-#ifdef DEFINE_FASTCALL2_ENTRYPOINT
-DEFINE_FASTCALL2_ENTRYPOINT( IofCompleteRequest )
-void WINAPI __regs_IofCompleteRequest( IRP *irp, UCHAR priority_boost )
-#else
-void WINAPI IofCompleteRequest( IRP *irp, UCHAR priority_boost )
-#endif
+VOID WINAPI IoCompleteRequest( IRP *irp, UCHAR priority_boost )
 {
     IO_STACK_LOCATION *irpsp;
     PIO_COMPLETION_ROUTINE routine;
@@ -782,6 +844,21 @@ void WINAPI IofCompleteRequest( IRP *irp, UCHAR priority_boost )
             break;
         }
     }
+}
+
+
+/***********************************************************************
+ *           IofCompleteRequest   (NTOSKRNL.EXE.@)
+ */
+#ifdef DEFINE_FASTCALL2_ENTRYPOINT
+DEFINE_FASTCALL2_ENTRYPOINT( IofCompleteRequest )
+void WINAPI __regs_IofCompleteRequest( IRP *irp, UCHAR priority_boost )
+#else
+void WINAPI IofCompleteRequest( IRP *irp, UCHAR priority_boost )
+#endif
+{
+    TRACE( "%p %u\n", irp, priority_boost );
+    IoCompleteRequest( irp, priority_boost );
 }
 
 

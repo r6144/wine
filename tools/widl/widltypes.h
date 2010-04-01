@@ -35,18 +35,12 @@ typedef GUID UUID;
 #define TRUE 1
 #define FALSE 0
 
-#define RPC_FC_MODULE   0xfc
-#define RPC_FC_COCLASS  0xfd
-#define RPC_FC_FUNCTION 0xfe
-
 typedef struct _loc_info_t loc_info_t;
 typedef struct _attr_t attr_t;
 typedef struct _expr_t expr_t;
 typedef struct _type_t type_t;
-typedef struct _typeref_t typeref_t;
 typedef struct _var_t var_t;
 typedef struct _declarator_t declarator_t;
-typedef struct _func_t func_t;
 typedef struct _ifref_t ifref_t;
 typedef struct _typelib_entry_t typelib_entry_t;
 typedef struct _importlib_t importlib_t;
@@ -59,7 +53,6 @@ typedef struct _statement_t statement_t;
 
 typedef struct list attr_list_t;
 typedef struct list str_list_t;
-typedef struct list func_list_t;
 typedef struct list expr_list_t;
 typedef struct list var_list_t;
 typedef struct list declarator_list_t;
@@ -262,7 +255,7 @@ struct str_list_entry_t
 struct _attr_t {
   enum attr_type type;
   union {
-    unsigned long ival;
+    unsigned int ival;
     void *pval;
   } u;
   /* parser-internal */
@@ -273,7 +266,7 @@ struct _expr_t {
   enum expr_type type;
   const expr_t *ref;
   union {
-    long lval;
+    int lval;
     double dval;
     const char *sval;
     const expr_t *ext;
@@ -281,7 +274,7 @@ struct _expr_t {
   } u;
   const expr_t *ext2;
   int is_const;
-  long cval;
+  int cval;
   /* parser-internal */
   struct list entry;
 };
@@ -306,7 +299,7 @@ struct func_details
 struct iface_details
 {
   statement_list_t *stmts;
-  func_list_t *disp_methods;
+  var_list_t *disp_methods;
   var_list_t *disp_props;
   struct _type_t *inherit;
 };
@@ -314,7 +307,6 @@ struct iface_details
 struct module_details
 {
   statement_list_t *stmts;
-  func_list_t *funcs;
 };
 
 struct array_details
@@ -423,13 +415,6 @@ struct _declarator_t {
   struct list entry;
 };
 
-struct _func_t {
-  var_t *def;
-
-  /* parser-internal */
-  struct list entry;
-};
-
 struct _ifref_t {
   type_t *iface;
   attr_list_t *attrs;
@@ -520,8 +505,6 @@ int is_ptr(const type_t *t);
 int is_array(const type_t *t);
 int is_var_ptr(const var_t *v);
 int cant_be_null(const var_t *v);
-int is_struct(unsigned char tc);
-int is_union(unsigned char tc);
 
 #define tsENUM   1
 #define tsSTRUCT 2

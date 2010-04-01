@@ -141,31 +141,40 @@ struct wined3d_format_base_flags
 
 static const struct wined3d_format_base_flags format_base_flags[] =
 {
-    {WINED3DFMT_UYVY,           WINED3DFMT_FLAG_FOURCC},
-    {WINED3DFMT_YUY2,           WINED3DFMT_FLAG_FOURCC},
-    {WINED3DFMT_YV12,           WINED3DFMT_FLAG_FOURCC},
-    {WINED3DFMT_DXT1,           WINED3DFMT_FLAG_FOURCC},
-    {WINED3DFMT_DXT2,           WINED3DFMT_FLAG_FOURCC},
-    {WINED3DFMT_DXT3,           WINED3DFMT_FLAG_FOURCC},
-    {WINED3DFMT_DXT4,           WINED3DFMT_FLAG_FOURCC},
-    {WINED3DFMT_DXT5,           WINED3DFMT_FLAG_FOURCC},
-    {WINED3DFMT_MULTI2_ARGB8,   WINED3DFMT_FLAG_FOURCC},
-    {WINED3DFMT_G8R8_G8B8,      WINED3DFMT_FLAG_FOURCC},
-    {WINED3DFMT_R8G8_B8G8,      WINED3DFMT_FLAG_FOURCC},
-    {WINED3DFMT_P8_UINT,        WINED3DFMT_FLAG_GETDC},
-    {WINED3DFMT_B8G8R8_UNORM,   WINED3DFMT_FLAG_GETDC},
-    {WINED3DFMT_B8G8R8A8_UNORM, WINED3DFMT_FLAG_GETDC},
-    {WINED3DFMT_B8G8R8X8_UNORM, WINED3DFMT_FLAG_GETDC},
-    {WINED3DFMT_B5G6R5_UNORM,   WINED3DFMT_FLAG_GETDC},
-    {WINED3DFMT_B5G5R5X1_UNORM, WINED3DFMT_FLAG_GETDC},
-    {WINED3DFMT_B5G5R5A1_UNORM, WINED3DFMT_FLAG_GETDC},
-    {WINED3DFMT_B4G4R4A4_UNORM, WINED3DFMT_FLAG_GETDC},
-    {WINED3DFMT_B4G4R4X4_UNORM, WINED3DFMT_FLAG_GETDC},
-    {WINED3DFMT_R8G8B8A8_UNORM, WINED3DFMT_FLAG_GETDC},
-    {WINED3DFMT_R8G8B8X8_UNORM, WINED3DFMT_FLAG_GETDC},
-    {WINED3DFMT_ATI2N,          WINED3DFMT_FLAG_FOURCC},
-    {WINED3DFMT_NVHU,           WINED3DFMT_FLAG_FOURCC},
-    {WINED3DFMT_NVHS,           WINED3DFMT_FLAG_FOURCC},
+    {WINED3DFMT_UYVY,               WINED3DFMT_FLAG_FOURCC},
+    {WINED3DFMT_YUY2,               WINED3DFMT_FLAG_FOURCC},
+    {WINED3DFMT_YV12,               WINED3DFMT_FLAG_FOURCC},
+    {WINED3DFMT_DXT1,               WINED3DFMT_FLAG_FOURCC},
+    {WINED3DFMT_DXT2,               WINED3DFMT_FLAG_FOURCC},
+    {WINED3DFMT_DXT3,               WINED3DFMT_FLAG_FOURCC},
+    {WINED3DFMT_DXT4,               WINED3DFMT_FLAG_FOURCC},
+    {WINED3DFMT_DXT5,               WINED3DFMT_FLAG_FOURCC},
+    {WINED3DFMT_MULTI2_ARGB8,       WINED3DFMT_FLAG_FOURCC},
+    {WINED3DFMT_G8R8_G8B8,          WINED3DFMT_FLAG_FOURCC},
+    {WINED3DFMT_R8G8_B8G8,          WINED3DFMT_FLAG_FOURCC},
+    {WINED3DFMT_P8_UINT,            WINED3DFMT_FLAG_GETDC},
+    {WINED3DFMT_B8G8R8_UNORM,       WINED3DFMT_FLAG_GETDC},
+    {WINED3DFMT_B8G8R8A8_UNORM,     WINED3DFMT_FLAG_GETDC},
+    {WINED3DFMT_B8G8R8X8_UNORM,     WINED3DFMT_FLAG_GETDC},
+    {WINED3DFMT_B5G6R5_UNORM,       WINED3DFMT_FLAG_GETDC},
+    {WINED3DFMT_B5G5R5X1_UNORM,     WINED3DFMT_FLAG_GETDC},
+    {WINED3DFMT_B5G5R5A1_UNORM,     WINED3DFMT_FLAG_GETDC},
+    {WINED3DFMT_B4G4R4A4_UNORM,     WINED3DFMT_FLAG_GETDC},
+    {WINED3DFMT_B4G4R4X4_UNORM,     WINED3DFMT_FLAG_GETDC},
+    {WINED3DFMT_R8G8B8A8_UNORM,     WINED3DFMT_FLAG_GETDC},
+    {WINED3DFMT_R8G8B8X8_UNORM,     WINED3DFMT_FLAG_GETDC},
+    {WINED3DFMT_ATI2N,              WINED3DFMT_FLAG_FOURCC},
+    {WINED3DFMT_NVHU,               WINED3DFMT_FLAG_FOURCC},
+    {WINED3DFMT_NVHS,               WINED3DFMT_FLAG_FOURCC},
+    {WINED3DFMT_R32_FLOAT,          WINED3DFMT_FLAG_FLOAT},
+    {WINED3DFMT_R32G32_FLOAT,       WINED3DFMT_FLAG_FLOAT},
+    {WINED3DFMT_R32G32B32_FLOAT,    WINED3DFMT_FLAG_FLOAT},
+    {WINED3DFMT_R32G32B32A32_FLOAT, WINED3DFMT_FLAG_FLOAT},
+    {WINED3DFMT_R16_FLOAT,          WINED3DFMT_FLAG_FLOAT},
+    {WINED3DFMT_R16G16_FLOAT,       WINED3DFMT_FLAG_FLOAT},
+    {WINED3DFMT_R16G16B16A16_FLOAT, WINED3DFMT_FLAG_FLOAT},
+    {WINED3DFMT_D32_FLOAT,          WINED3DFMT_FLAG_FLOAT},
+    {WINED3DFMT_S8_UINT_D24_FLOAT,  WINED3DFMT_FLAG_FLOAT},
 };
 
 struct wined3d_format_compression_info
@@ -183,7 +192,7 @@ static const struct wined3d_format_compression_info format_compression_info[] =
     {WINED3DFMT_DXT3,   4,  4,  16},
     {WINED3DFMT_DXT4,   4,  4,  16},
     {WINED3DFMT_DXT5,   4,  4,  16},
-    {WINED3DFMT_ATI2N,  4,  4,  16},
+    {WINED3DFMT_ATI2N,  1,  1,  1},
 };
 
 struct wined3d_format_vertex_info
@@ -218,20 +227,20 @@ static const struct wined3d_format_vertex_info format_vertex_info[] =
     {WINED3DFMT_R16G16B16A16_FLOAT, WINED3D_FFP_EMIT_FLOAT16_4, 4, GL_FLOAT,          4, GL_FALSE, sizeof(GLhalfNV)}
 };
 
-typedef struct {
-    WINED3DFORMAT           fmt;
-    GLint                   glInternal, glGammaInternal, rtInternal, glFormat, glType;
-    unsigned int            Flags;
+struct wined3d_format_texture_info
+{
+    WINED3DFORMAT format;
+    GLint gl_internal;
+    GLint gl_srgb_internal;
+    GLint gl_rt_internal;
+    GLint gl_format;
+    GLint gl_type;
+    unsigned int flags;
     GL_SupportedExt extension;
-} GlPixelFormatDescTemplate;
+};
 
-/*****************************************************************************
- * OpenGL format template. Contains unexciting formats which do not need
- * extension checks. The order in this table is independent of the order in
- * the table StaticPixelFormatDesc above. Not all formats have to be in this
- * table.
- */
-static const GlPixelFormatDescTemplate gl_formats_template[] = {
+static const struct wined3d_format_texture_info format_texture_info[] =
+{
     /* WINED3DFORMAT                    internal                          srgbInternal                       rtInternal
             format                      type
             flags
@@ -560,7 +569,7 @@ static BOOL init_format_base_info(struct wined3d_gl_info *gl_info)
 
     for (i = 0; i < format_count; ++i)
     {
-        struct GlPixelFormatDesc *desc = &gl_info->gl_formats[i];
+        struct wined3d_format_desc *desc = &gl_info->gl_formats[i];
         desc->format = formats[i].format;
         desc->red_mask = formats[i].redMask;
         desc->green_mask = formats[i].greenMask;
@@ -595,7 +604,7 @@ static BOOL init_format_compression_info(struct wined3d_gl_info *gl_info)
 
     for (i = 0; i < (sizeof(format_compression_info) / sizeof(*format_compression_info)); ++i)
     {
-        struct GlPixelFormatDesc *format_desc;
+        struct wined3d_format_desc *format_desc;
         int fmt_idx = getFmtIdx(format_compression_info[i].format);
 
         if (fmt_idx == -1)
@@ -616,7 +625,7 @@ static BOOL init_format_compression_info(struct wined3d_gl_info *gl_info)
 }
 
 /* Context activation is done by the caller. */
-static void check_fbo_compat(const struct wined3d_gl_info *gl_info, struct GlPixelFormatDesc *format_desc)
+static void check_fbo_compat(const struct wined3d_gl_info *gl_info, struct wined3d_format_desc *format_desc)
 {
     /* Check if the default internal format is supported as a frame buffer
      * target, otherwise fall back to the render target internal.
@@ -755,7 +764,7 @@ static void init_format_fbo_compat_info(struct wined3d_gl_info *gl_info)
 
     for (i = 0; i < sizeof(formats) / sizeof(*formats); ++i)
     {
-        struct GlPixelFormatDesc *desc = &gl_info->gl_formats[i];
+        struct wined3d_format_desc *desc = &gl_info->gl_formats[i];
 
         if (!desc->glInternal) continue;
 
@@ -798,28 +807,28 @@ static BOOL init_format_texture_info(struct wined3d_gl_info *gl_info)
 {
     unsigned int i;
 
-    for (i = 0; i < sizeof(gl_formats_template) / sizeof(gl_formats_template[0]); ++i)
+    for (i = 0; i < sizeof(format_texture_info) / sizeof(*format_texture_info); ++i)
     {
-        int fmt_idx = getFmtIdx(gl_formats_template[i].fmt);
-        struct GlPixelFormatDesc *desc;
+        int fmt_idx = getFmtIdx(format_texture_info[i].format);
+        struct wined3d_format_desc *desc;
 
         if (fmt_idx == -1)
         {
             ERR("Format %s (%#x) not found.\n",
-                    debug_d3dformat(gl_formats_template[i].fmt), gl_formats_template[i].fmt);
+                    debug_d3dformat(format_texture_info[i].format), format_texture_info[i].format);
             return FALSE;
         }
 
-        if (!gl_info->supported[gl_formats_template[i].extension]) continue;
+        if (!gl_info->supported[format_texture_info[i].extension]) continue;
 
         desc = &gl_info->gl_formats[fmt_idx];
-        desc->glInternal = gl_formats_template[i].glInternal;
-        desc->glGammaInternal = gl_formats_template[i].glGammaInternal;
-        desc->rtInternal = gl_formats_template[i].rtInternal;
-        desc->glFormat = gl_formats_template[i].glFormat;
-        desc->glType = gl_formats_template[i].glType;
+        desc->glInternal = format_texture_info[i].gl_internal;
+        desc->glGammaInternal = format_texture_info[i].gl_srgb_internal;
+        desc->rtInternal = format_texture_info[i].gl_rt_internal;
+        desc->glFormat = format_texture_info[i].gl_format;
+        desc->glType = format_texture_info[i].gl_type;
         desc->color_fixup = COLOR_FIXUP_IDENTITY;
-        desc->Flags |= gl_formats_template[i].Flags;
+        desc->Flags |= format_texture_info[i].flags;
         desc->heightscale = 1.0f;
     }
 
@@ -938,6 +947,7 @@ static BOOL check_filter(const struct wined3d_gl_info *gl_info, GLenum internal)
 
 static void init_format_filter_info(struct wined3d_gl_info *gl_info, enum wined3d_pci_vendor vendor)
 {
+    struct wined3d_format_desc *desc;
     unsigned int fmt_idx, i;
     WINED3DFORMAT fmts16[] = {
         WINED3DFMT_R16_FLOAT,
@@ -945,7 +955,6 @@ static void init_format_filter_info(struct wined3d_gl_info *gl_info, enum wined3
         WINED3DFMT_R16G16B16A16_FLOAT,
     };
     BOOL filtered;
-    struct GlPixelFormatDesc *desc;
 
     if(wined3d_settings.offscreen_rendering_mode != ORM_FBO)
     {
@@ -1098,8 +1107,11 @@ static void apply_format_fixups(struct wined3d_gl_info *gl_info)
     gl_info->gl_formats[idx].heightscale = 1.5f;
     gl_info->gl_formats[idx].color_fixup = create_complex_fixup_desc(COMPLEX_FIXUP_YV12);
 
-    idx = getFmtIdx(WINED3DFMT_P8_UINT);
-    gl_info->gl_formats[idx].color_fixup = create_complex_fixup_desc(COMPLEX_FIXUP_P8);
+    if (gl_info->supported[EXT_PALETTED_TEXTURE] || gl_info->supported[ARB_FRAGMENT_PROGRAM])
+    {
+        idx = getFmtIdx(WINED3DFMT_P8_UINT);
+        gl_info->gl_formats[idx].color_fixup = create_complex_fixup_desc(COMPLEX_FIXUP_P8);
+    }
 
     if (gl_info->supported[ARB_VERTEX_ARRAY_BGRA])
     {
@@ -1125,7 +1137,7 @@ static BOOL init_format_vertex_info(struct wined3d_gl_info *gl_info)
 
     for (i = 0; i < (sizeof(format_vertex_info) / sizeof(*format_vertex_info)); ++i)
     {
-        struct GlPixelFormatDesc *format_desc;
+        struct wined3d_format_desc *format_desc;
         int fmt_idx = getFmtIdx(format_vertex_info[i].format);
 
         if (fmt_idx == -1)
@@ -1182,7 +1194,7 @@ fail:
     return FALSE;
 }
 
-const struct GlPixelFormatDesc *getFormatDescEntry(WINED3DFORMAT fmt, const struct wined3d_gl_info *gl_info)
+const struct wined3d_format_desc *getFormatDescEntry(WINED3DFORMAT fmt, const struct wined3d_gl_info *gl_info)
 {
     int idx = getFmtIdx(fmt);
 
@@ -2125,7 +2137,7 @@ unsigned int count_bits(unsigned int mask)
 
 /* Helper function for retrieving color info for ChoosePixelFormat and wglChoosePixelFormatARB.
  * The later function requires individual color components. */
-BOOL getColorBits(const struct GlPixelFormatDesc *format_desc,
+BOOL getColorBits(const struct wined3d_format_desc *format_desc,
         short *redSize, short *greenSize, short *blueSize, short *alphaSize, short *totalSize)
 {
     TRACE("fmt: %s\n", debug_d3dformat(format_desc->format));
@@ -2162,7 +2174,7 @@ BOOL getColorBits(const struct GlPixelFormatDesc *format_desc,
 }
 
 /* Helper function for retrieving depth/stencil info for ChoosePixelFormat and wglChoosePixelFormatARB */
-BOOL getDepthStencilBits(const struct GlPixelFormatDesc *format_desc, short *depthSize, short *stencilSize)
+BOOL getDepthStencilBits(const struct wined3d_format_desc *format_desc, short *depthSize, short *stencilSize)
 {
     TRACE("fmt: %s\n", debug_d3dformat(format_desc->format));
     switch(format_desc->format)
@@ -2188,6 +2200,115 @@ BOOL getDepthStencilBits(const struct GlPixelFormatDesc *format_desc, short *dep
     TRACE("Returning depthSize: %d and stencilSize: %d for fmt=%s\n",
             *depthSize, *stencilSize, debug_d3dformat(format_desc->format));
     return TRUE;
+}
+
+DWORD color_convert_argb_to_fmt(DWORD color, WINED3DFORMAT destfmt)
+{
+    unsigned int r, g, b, a;
+    DWORD ret;
+
+    if (destfmt == WINED3DFMT_B8G8R8A8_UNORM
+            || destfmt == WINED3DFMT_B8G8R8X8_UNORM
+            || destfmt == WINED3DFMT_B8G8R8_UNORM)
+        return color;
+
+    TRACE("Converting color %08x to format %s\n", color, debug_d3dformat(destfmt));
+
+    a = (color & 0xff000000) >> 24;
+    r = (color & 0x00ff0000) >> 16;
+    g = (color & 0x0000ff00) >>  8;
+    b = (color & 0x000000ff) >>  0;
+
+    switch(destfmt)
+    {
+        case WINED3DFMT_B5G6R5_UNORM:
+            if(r == 0xff && g == 0xff && b == 0xff) return 0xffff;
+            r = (r * 32) / 256;
+            g = (g * 64) / 256;
+            b = (b * 32) / 256;
+            ret  = r << 11;
+            ret |= g << 5;
+            ret |= b;
+            TRACE("Returning %08x\n", ret);
+            return ret;
+
+        case WINED3DFMT_B5G5R5X1_UNORM:
+        case WINED3DFMT_B5G5R5A1_UNORM:
+            a = (a *  2) / 256;
+            r = (r * 32) / 256;
+            g = (g * 32) / 256;
+            b = (b * 32) / 256;
+            ret  = a << 15;
+            ret |= r << 10;
+            ret |= g <<  5;
+            ret |= b <<  0;
+            TRACE("Returning %08x\n", ret);
+            return ret;
+
+        case WINED3DFMT_A8_UNORM:
+            TRACE("Returning %08x\n", a);
+            return a;
+
+        case WINED3DFMT_B4G4R4X4_UNORM:
+        case WINED3DFMT_B4G4R4A4_UNORM:
+            a = (a * 16) / 256;
+            r = (r * 16) / 256;
+            g = (g * 16) / 256;
+            b = (b * 16) / 256;
+            ret  = a << 12;
+            ret |= r <<  8;
+            ret |= g <<  4;
+            ret |= b <<  0;
+            TRACE("Returning %08x\n", ret);
+            return ret;
+
+        case WINED3DFMT_B2G3R3_UNORM:
+            r = (r * 8) / 256;
+            g = (g * 8) / 256;
+            b = (b * 4) / 256;
+            ret  = r <<  5;
+            ret |= g <<  2;
+            ret |= b <<  0;
+            TRACE("Returning %08x\n", ret);
+            return ret;
+
+        case WINED3DFMT_R8G8B8X8_UNORM:
+        case WINED3DFMT_R8G8B8A8_UNORM:
+            ret  = a << 24;
+            ret |= b << 16;
+            ret |= g <<  8;
+            ret |= r <<  0;
+            TRACE("Returning %08x\n", ret);
+            return ret;
+
+        case WINED3DFMT_B10G10R10A2_UNORM:
+            a = (a *    4) / 256;
+            r = (r * 1024) / 256;
+            g = (g * 1024) / 256;
+            b = (b * 1024) / 256;
+            ret  = a << 30;
+            ret |= r << 20;
+            ret |= g << 10;
+            ret |= b <<  0;
+            TRACE("Returning %08x\n", ret);
+            return ret;
+
+        case WINED3DFMT_R10G10B10A2_UNORM:
+            a = (a *    4) / 256;
+            r = (r * 1024) / 256;
+            g = (g * 1024) / 256;
+            b = (b * 1024) / 256;
+            ret  = a << 30;
+            ret |= b << 20;
+            ret |= g << 10;
+            ret |= r <<  0;
+            TRACE("Returning %08x\n", ret);
+            return ret;
+
+        default:
+            FIXME("Add a COLORFILL conversion for format %s\n", debug_d3dformat(destfmt));
+            return 0;
+    }
 }
 
 /* DirectDraw stuff */
@@ -2256,147 +2377,6 @@ DWORD get_flexible_vertex_size(DWORD d3dvtVertexType) {
     }
 
     return size;
-}
-
-/***********************************************************************
- * CalculateTexRect
- *
- * Calculates the dimensions of the opengl texture used for blits.
- * Handled oversized opengl textures and updates the source rectangle
- * accordingly
- *
- * Params:
- *  This: Surface to operate on
- *  Rect: Requested rectangle
- *
- * Returns:
- *  TRUE if the texture part can be loaded,
- *  FALSE otherwise
- *
- *********************************************************************/
-BOOL CalculateTexRect(IWineD3DSurfaceImpl *This, RECT *Rect, float glTexCoord[4])
-{
-    const struct wined3d_gl_info *gl_info = &This->resource.device->adapter->gl_info;
-    int x1 = Rect->left, x2 = Rect->right;
-    int y1 = Rect->top, y2 = Rect->bottom;
-    GLint maxSize = gl_info->limits.texture_size;
-
-    TRACE("(%p)->(%d,%d)-(%d,%d)\n", This,
-          Rect->left, Rect->top, Rect->right, Rect->bottom);
-
-    /* The sizes might be reversed */
-    if(Rect->left > Rect->right) {
-        x1 = Rect->right;
-        x2 = Rect->left;
-    }
-    if(Rect->top > Rect->bottom) {
-        y1 = Rect->bottom;
-        y2 = Rect->top;
-    }
-
-    /* No oversized texture? This is easy */
-    if(!(This->Flags & SFLAG_OVERSIZE)) {
-        /* Which rect from the texture do I need? */
-        if (This->texture_target == GL_TEXTURE_RECTANGLE_ARB)
-        {
-            glTexCoord[0] = (float) Rect->left;
-            glTexCoord[2] = (float) Rect->top;
-            glTexCoord[1] = (float) Rect->right;
-            glTexCoord[3] = (float) Rect->bottom;
-        } else {
-            glTexCoord[0] = (float) Rect->left / (float) This->pow2Width;
-            glTexCoord[2] = (float) Rect->top / (float) This->pow2Height;
-            glTexCoord[1] = (float) Rect->right / (float) This->pow2Width;
-            glTexCoord[3] = (float) Rect->bottom / (float) This->pow2Height;
-        }
-
-        return TRUE;
-    } else {
-        /* Check if we can succeed at all */
-        if( (x2 - x1) > maxSize ||
-            (y2 - y1) > maxSize ) {
-            TRACE("Requested rectangle is too large for gl\n");
-            return FALSE;
-        }
-
-        /* A part of the texture has to be picked. First, check if
-         * some texture part is loaded already, if yes try to re-use it.
-         * If the texture is dirty, or the part can't be used,
-         * re-position the part to load
-         */
-        if(This->Flags & SFLAG_INTEXTURE) {
-            if(This->glRect.left <= x1 && This->glRect.right >= x2 &&
-               This->glRect.top <= y1 && This->glRect.bottom >= x2 ) {
-                /* Ok, the rectangle is ok, re-use it */
-                TRACE("Using existing gl Texture\n");
-            } else {
-                /* Rectangle is not ok, dirtify the texture to reload it */
-                TRACE("Dirtifying texture to force reload\n");
-                This->Flags &= ~SFLAG_INTEXTURE;
-            }
-        }
-
-        /* Now if we are dirty(no else if!) */
-        if(!(This->Flags & SFLAG_INTEXTURE)) {
-            /* Set the new rectangle. Use the following strategy:
-             * 1) Use as big textures as possible.
-             * 2) Place the texture part in the way that the requested
-             *    part is in the middle of the texture(well, almost)
-             * 3) If the texture is moved over the edges of the
-             *    surface, replace it nicely
-             * 4) If the coord is not limiting the texture size,
-             *    use the whole size
-             */
-            if((This->pow2Width) > maxSize) {
-                This->glRect.left = x1 - maxSize / 2;
-                if(This->glRect.left < 0) {
-                    This->glRect.left = 0;
-                }
-                This->glRect.right = This->glRect.left + maxSize;
-                if(This->glRect.right > This->currentDesc.Width) {
-                    This->glRect.right = This->currentDesc.Width;
-                    This->glRect.left = This->glRect.right - maxSize;
-                }
-            } else {
-                This->glRect.left = 0;
-                This->glRect.right = This->pow2Width;
-            }
-
-            if (This->pow2Height > maxSize)
-            {
-                This->glRect.top = x1 - gl_info->limits.texture_size / 2;
-                if(This->glRect.top < 0) This->glRect.top = 0;
-                This->glRect.bottom = This->glRect.left + maxSize;
-                if(This->glRect.bottom > This->currentDesc.Height) {
-                    This->glRect.bottom = This->currentDesc.Height;
-                    This->glRect.top = This->glRect.bottom - maxSize;
-                }
-            } else {
-                This->glRect.top = 0;
-                This->glRect.bottom = This->pow2Height;
-            }
-            TRACE("(%p): Using rect (%d,%d)-(%d,%d)\n", This,
-                   This->glRect.left, This->glRect.top, This->glRect.right, This->glRect.bottom);
-        }
-
-        /* Re-calculate the rect to draw */
-        Rect->left -= This->glRect.left;
-        Rect->right -= This->glRect.left;
-        Rect->top -= This->glRect.top;
-        Rect->bottom -= This->glRect.top;
-
-        /* Get the gl coordinates. The gl rectangle is a power of 2, eigher the max size,
-         * or the pow2Width / pow2Height of the surface.
-         *
-         * Can never be GL_TEXTURE_RECTANGLE_ARB because oversized surfaces are always set up
-         * as regular GL_TEXTURE_2D.
-         */
-        glTexCoord[0] = (float) Rect->left / (float) (This->glRect.right - This->glRect.left);
-        glTexCoord[2] = (float) Rect->top / (float) (This->glRect.bottom - This->glRect.top);
-        glTexCoord[1] = (float) Rect->right / (float) (This->glRect.right - This->glRect.left);
-        glTexCoord[3] = (float) Rect->bottom / (float) (This->glRect.bottom - This->glRect.top);
-    }
-    return TRUE;
 }
 
 void gen_ffp_frag_op(IWineD3DStateBlockImpl *stateblock, struct ffp_frag_settings *settings, BOOL ignore_textype) {

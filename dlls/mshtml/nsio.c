@@ -307,7 +307,7 @@ static void set_uri_window(nsWineURI *This, HTMLWindow *window)
 
 static inline BOOL is_http_channel(nsChannel *This)
 {
-    return This->url_scheme == URL_SCHEME_HTTP || This->url_scheme == URL_SCHEME_HTTP;
+    return This->url_scheme == URL_SCHEME_HTTP || This->url_scheme == URL_SCHEME_HTTPS;
 }
 
 #define NSCHANNEL_THIS(iface) DEFINE_THIS(nsChannel, HttpChannel, iface)
@@ -904,7 +904,7 @@ static nsresult NSAPI nsChannel_AsyncOpen(nsIHttpChannel *iface, nsIStreamListen
 
             open = FALSE;
         }else {
-            open = before_async_open(This, window->doc_obj->nscontainer);
+            open = !before_async_open(This, window->doc_obj->nscontainer);
             if(!open) {
                 TRACE("canceled\n");
                 nsres = NS_ERROR_UNEXPECTED;

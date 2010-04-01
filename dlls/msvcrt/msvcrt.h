@@ -43,6 +43,9 @@
 
 #define MSVCRT_LONG_MAX    0x7fffffffL
 #define MSVCRT_ULONG_MAX   0xffffffffUL
+#define MSVCRT_I64_MAX    (((__int64)0x7fffffff << 32) | 0xffffffff)
+#define MSVCRT_I64_MIN    (-MSVCRT_I64_MAX-1)
+#define MSVCRT_UI64_MAX   (((unsigned __int64)0xffffffff << 32) | 0xffffffff)
 
 typedef unsigned short MSVCRT_wchar_t;
 typedef unsigned short MSVCRT_wint_t;
@@ -75,6 +78,7 @@ typedef void (*__cdecl MSVCRT__se_translator_function)(unsigned int code, struct
 typedef void (*__cdecl MSVCRT__beginthread_start_routine_t)(void *);
 typedef unsigned int (__stdcall *MSVCRT__beginthreadex_start_routine_t)(void *);
 typedef int (*__cdecl MSVCRT__onexit_t)(void);
+typedef void (__cdecl *MSVCRT_invalid_parameter_handler)(const wchar_t*, const wchar_t*, const wchar_t*, unsigned, unsigned*);
 
 typedef struct {long double x;} MSVCRT__LDOUBLE;
 
@@ -124,6 +128,7 @@ extern LCID MSVCRT_current_lc_all_lcid;
 extern WORD MSVCRT__ctype [257];
 extern WORD MSVCRT_current_ctype[257];
 extern WORD* MSVCRT__pctype;
+extern MSVCRT_invalid_parameter_handler MSVCRT_invalid_parameter;
 
 void   msvcrt_set_errno(int);
 
@@ -737,19 +742,60 @@ int            __cdecl MSVCRT_vsnwprintf(MSVCRT_wchar_t *str, unsigned int len,
                                        const MSVCRT_wchar_t *format, __ms_va_list valist );
 int            __cdecl MSVCRT_raise(int sig);
 
+typedef struct MSVCRT_tagLC_ID {
+    unsigned short wLanguage;
+    unsigned short wCountry;
+    unsigned short wCodePage;
+} MSVCRT_LC_ID, *MSVCRT_LPLC_ID;
+
+typedef struct MSVCRT_threadlocaleinfostruct {
+    int refcount;
+    unsigned int lc_codepage;
+    unsigned int lc_collate_cp;
+    unsigned long lc_handle[6];
+    MSVCRT_LC_ID lc_id[6];
+    struct {
+        char *locale;
+        wchar_t *wlocale;
+        int *refcount;
+        int *wrefcount;
+    } lc_category[6];
+    int lc_clike;
+    int mb_cur_max;
+    int *lconv_intl_refcount;
+    int *lconv_num_refcount;
+    int *lconv_mon_refcount;
+    struct lconv *lconv;
+    int *ctype1_refcount;
+    unsigned short *ctype1;
+    const unsigned short *pctype;
+    const unsigned char *pclmap;
+    const unsigned char *pcumap;
+    struct __lc_time_data *lc_time_curr;
+} MSVCRT_threadlocinfo;
+
+typedef struct MSVCRT_threadlocaleinfostruct *MSVCRT_pthreadlocinfo;
+typedef struct MSVCRT_threadmbcinfostruct *MSVCRT_pthreadmbcinfo;
+
+typedef struct MSVCRT_localeinfo_struct
+{
+    MSVCRT_pthreadlocinfo locinfo;
+    MSVCRT_pthreadmbcinfo mbcinfo;
+} MSVCRT__locale_tstruct, *MSVCRT__locale_t;
+
 #ifndef __WINE_MSVCRT_TEST
 int            __cdecl MSVCRT__write(int,const void*,unsigned int);
 int            __cdecl _getch(void);
 int            __cdecl _ismbblead(unsigned int);
 int            __cdecl _ismbstrail(const unsigned char* start, const unsigned char* str);
-MSVCRT_intptr_t __cdecl _spawnve(int,const char*,const char* const *,const char* const *);
-MSVCRT_intptr_t __cdecl _spawnvpe(int,const char*,const char* const *,const char* const *);
+MSVCRT_intptr_t __cdecl MSVCRT__spawnve(int,const char*,const char* const *,const char* const *);
+MSVCRT_intptr_t __cdecl MSVRT__spawnvpe(int,const char*,const char* const *,const char* const *);
 MSVCRT_intptr_t __cdecl _wspawnve(int,const MSVCRT_wchar_t*,const MSVCRT_wchar_t* const *,const MSVCRT_wchar_t* const *);
 MSVCRT_intptr_t __cdecl _wspawnvpe(int,const MSVCRT_wchar_t*,const MSVCRT_wchar_t* const *,const MSVCRT_wchar_t* const *);
 void __cdecl     _searchenv(const char*,const char*,char*);
 int __cdecl      _getdrive(void);
 char* __cdecl    _strdup(const char*);
-char* __cdecl    _strnset(char*,int,MSVCRT_size_t);
+char* __cdecl    MSVCRT__strnset(char*,int,MSVCRT_size_t);
 char* __cdecl    _strset(char*,int);
 int __cdecl      _ungetch(int);
 int __cdecl      _cputs(const char*);
@@ -768,6 +814,7 @@ int     __cdecl MSVCRT__dup2(int, int);
 int     __cdecl MSVCRT__pipe(int *, unsigned int, int);
 MSVCRT_wchar_t* __cdecl _wgetenv(const MSVCRT_wchar_t*);
 void __cdecl    _wsearchenv(const MSVCRT_wchar_t*, const MSVCRT_wchar_t*, MSVCRT_wchar_t*);
+MSVCRT_intptr_t __cdecl MSVCRT__spawnvpe(int, const char*, const char* const*, const char* const*);
 #endif
 
 #endif /* __WINE_MSVCRT_H */

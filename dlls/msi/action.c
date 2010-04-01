@@ -96,8 +96,6 @@ static const WCHAR szAllocateRegistrySpace[] =
     {'A','l','l','o','c','a','t','e','R','e','g','i','s','t','r','y','S','p','a','c','e',0};
 static const WCHAR szBindImage[] = 
     {'B','i','n','d','I','m','a','g','e',0};
-static const WCHAR szCCPSearch[] = 
-    {'C','C','P','S','e','a','r','c','h',0};
 static const WCHAR szDeleteServices[] = 
     {'D','e','l','e','t','e','S','e','r','v','i','c','e','s',0};
 static const WCHAR szDisableRollback[] = 
@@ -2364,12 +2362,8 @@ static UINT ITERATE_WriteRegistryValues(MSIRECORD *row, LPVOID param)
     uirow = MSI_CreateRecord(3);
     MSI_RecordSetStringW(uirow,2,deformated);
     MSI_RecordSetStringW(uirow,1,uikey);
-
-    if (type == REG_SZ)
+    if (type == REG_SZ || type == REG_EXPAND_SZ)
         MSI_RecordSetStringW(uirow,3,(LPWSTR)value_data);
-    else
-        MSI_RecordSetStringW(uirow,3,value);
-
     ui_actiondata(package,szWriteRegistryValues,uirow);
     msiobj_release( &uirow->hdr );
 
@@ -2995,6 +2989,7 @@ static UINT ACTION_ProcessComponents(MSIPACKAGE *package)
             else
                 MSIREG_DeleteUserDataComponentKey(comp->ComponentId, NULL);
         }
+        comp->Action = comp->ActionRequest;
 
         /* UI stuff */
         uirow = MSI_CreateRecord(3);
@@ -3103,7 +3098,7 @@ static UINT ITERATE_RegisterTypeLibraries(MSIRECORD *row, LPVOID param)
     {
         LPCWSTR guid;
         guid = MSI_RecordGetString(row,1);
-        CLSIDFromString((LPWSTR)guid, &tl_struct.clsid);
+        CLSIDFromString((LPCWSTR)guid, &tl_struct.clsid);
         tl_struct.source = strdupW( file->TargetPath );
         tl_struct.path = NULL;
 
@@ -3204,7 +3199,7 @@ static UINT ITERATE_UnregisterTypeLibraries( MSIRECORD *row, LPVOID param )
     ui_actiondata( package, szUnregisterTypeLibraries, row );
 
     guid = MSI_RecordGetString( row, 1 );
-    CLSIDFromString( (LPWSTR)guid, &libid );
+    CLSIDFromString( (LPCWSTR)guid, &libid );
     version = MSI_RecordGetInteger( row, 4 );
     language = MSI_RecordGetInteger( row, 2 );
 
@@ -4152,21 +4147,16 @@ static UINT ITERATE_SelfRegModules(MSIRECORD *row, LPVOID param)
         CloseHandle(info.hProcess);
     }
 
-    msi_free(FullName);
-
-    /* the UI chunk */
     uirow = MSI_CreateRecord( 2 );
+    MSI_RecordSetStringW( uirow, 1, filename );
     uipath = strdupW( file->TargetPath );
-    p = strrchrW(uipath,'\\');
-    if (p)
-        p[0]=0;
-    MSI_RecordSetStringW( uirow, 1, &p[1] );
-    MSI_RecordSetStringW( uirow, 2, uipath);
-    ui_actiondata( package, szSelfRegModules, uirow);
+    if ((p = strrchrW( uipath,'\\' ))) *p = 0;
+    MSI_RecordSetStringW( uirow, 2, uipath );
+    ui_actiondata( package, szSelfRegModules, uirow );
     msiobj_release( &uirow->hdr );
-    msi_free( uipath );
-    /* FIXME: call ui_progress? */
 
+    msi_free( FullName );
+    msi_free( uipath );
     return ERROR_SUCCESS;
 }
 
@@ -4235,21 +4225,16 @@ static UINT ITERATE_SelfUnregModules( MSIRECORD *row, LPVOID param )
         CloseHandle( pi.hProcess );
     }
 
-    msi_free( cmdline );
-
     uirow = MSI_CreateRecord( 2 );
+    MSI_RecordSetStringW( uirow, 1, filename );
     uipath = strdupW( file->TargetPath );
-    if ((p = strrchrW( uipath, '\\' )))
-    {
-        *p = 0;
-        MSI_RecordSetStringW( uirow, 1, ++p );
-    }
+    if ((p = strrchrW( uipath,'\\' ))) *p = 0;
     MSI_RecordSetStringW( uirow, 2, uipath );
     ui_actiondata( package, szSelfUnregModules, uirow );
     msiobj_release( &uirow->hdr );
-    msi_free( uipath );
-    /* FIXME call ui_progress? */
 
+    msi_free( cmdline );
+    msi_free( uipath );
     return ERROR_SUCCESS;
 }
 
@@ -4351,7 +4336,7 @@ static UINT ACTION_PublishFeatures(MSIPACKAGE *package)
         {
             size += sizeof(WCHAR);
             RegSetValueExW(hkey,feature->Feature,0,REG_SZ,
-                           (LPBYTE)(feature->Feature_Parent ? feature->Feature_Parent : szEmpty),size);
+                           (const BYTE*)(feature->Feature_Parent ? feature->Feature_Parent : szEmpty),size);
         }
         else
         {
@@ -4384,6 +4369,7 @@ static UINT msi_unpublish_feature(MSIPACKAGE *package, MSIFEATURE *feature)
 {
     UINT r;
     HKEY hkey;
+    MSIRECORD *uirow;
 
     TRACE("unpublishing feature %s\n", debugstr_w(feature->Feature));
 
@@ -4402,6 +4388,11 @@ static UINT msi_unpublish_feature(MSIPACKAGE *package, MSIFEATURE *feature)
         RegDeleteValueW(hkey, feature->Feature);
         RegCloseKey(hkey);
     }
+
+    uirow = MSI_CreateRecord( 1 );
+    MSI_RecordSetStringW( uirow, 1, feature->Feature );
+    ui_actiondata( package, szUnpublishFeatures, uirow );
+    msiobj_release( &uirow->hdr );
 
     return ERROR_SUCCESS;
 }
@@ -5162,10 +5153,11 @@ static UINT ITERATE_StartService(MSIRECORD *rec, LPVOID param)
 {
     MSIPACKAGE *package = param;
     MSICOMPONENT *comp;
+    MSIRECORD *uirow;
     SC_HANDLE scm = NULL, service = NULL;
     LPCWSTR component, *vector = NULL;
-    LPWSTR name, args;
-    DWORD event, numargs;
+    LPWSTR name, args, display_name = NULL;
+    DWORD event, numargs, len;
     UINT r = ERROR_FUNCTION_FAILED;
 
     component = MSI_RecordGetString(rec, 6);
@@ -5198,6 +5190,14 @@ static UINT ITERATE_StartService(MSIRECORD *rec, LPVOID param)
         goto done;
     }
 
+    len = 0;
+    if (!GetServiceDisplayNameW( scm, name, NULL, &len ) &&
+        GetLastError() == ERROR_INSUFFICIENT_BUFFER)
+    {
+        if ((display_name = msi_alloc( ++len * sizeof(WCHAR ))))
+            GetServiceDisplayNameW( scm, name, display_name, &len );
+    }
+
     service = OpenServiceW(scm, name, SERVICE_START);
     if (!service)
     {
@@ -5217,12 +5217,19 @@ static UINT ITERATE_StartService(MSIRECORD *rec, LPVOID param)
     r = ERROR_SUCCESS;
 
 done:
+    uirow = MSI_CreateRecord( 2 );
+    MSI_RecordSetStringW( uirow, 1, display_name );
+    MSI_RecordSetStringW( uirow, 2, name );
+    ui_actiondata( package, szStartServices, uirow );
+    msiobj_release( &uirow->hdr );
+
     CloseServiceHandle(service);
     CloseServiceHandle(scm);
 
     msi_free(name);
     msi_free(args);
     msi_free(vector);
+    msi_free(display_name);
     return r;
 }
 
@@ -5335,9 +5342,11 @@ static UINT ITERATE_StopService( MSIRECORD *rec, LPVOID param )
 {
     MSIPACKAGE *package = param;
     MSICOMPONENT *comp;
+    MSIRECORD *uirow;
     LPCWSTR component;
-    LPWSTR name;
-    DWORD event;
+    LPWSTR name = NULL, display_name = NULL;
+    DWORD event, len;
+    SC_HANDLE scm;
 
     event = MSI_RecordGetInteger( rec, 3 );
     if (!(event & msidbServiceControlEventStop))
@@ -5356,10 +5365,34 @@ static UINT ITERATE_StopService( MSIRECORD *rec, LPVOID param )
     }
     comp->Action = INSTALLSTATE_ABSENT;
 
+    scm = OpenSCManagerW( NULL, NULL, SC_MANAGER_CONNECT );
+    if (!scm)
+    {
+        ERR("Failed to open the service control manager\n");
+        goto done;
+    }
+
+    len = 0;
+    if (!GetServiceDisplayNameW( scm, name, NULL, &len ) &&
+        GetLastError() == ERROR_INSUFFICIENT_BUFFER)
+    {
+        if ((display_name = msi_alloc( ++len * sizeof(WCHAR ))))
+            GetServiceDisplayNameW( scm, name, display_name, &len );
+    }
+    CloseServiceHandle( scm );
+
     deformat_string( package, MSI_RecordGetString( rec, 2 ), &name );
     stop_service( name );
-    msi_free( name );
 
+done:
+    uirow = MSI_CreateRecord( 2 );
+    MSI_RecordSetStringW( uirow, 1, display_name );
+    MSI_RecordSetStringW( uirow, 2, name );
+    ui_actiondata( package, szStopServices, uirow );
+    msiobj_release( &uirow->hdr );
+
+    msi_free( name );
+    msi_free( display_name );
     return ERROR_SUCCESS;
 }
 
@@ -6804,6 +6837,40 @@ static UINT ACTION_InstallAdminPackage( MSIPACKAGE *package )
     return ERROR_SUCCESS;
 }
 
+static UINT ACTION_SetODBCFolders( MSIPACKAGE *package )
+{
+    UINT r, count;
+    MSIQUERY *view;
+
+    static const WCHAR driver_query[] = {
+        'S','E','L','E','C','T',' ','*',' ','F','R','O','M',' ',
+        'O','D','B','C','D','r','i','v','e','r',0 };
+
+    static const WCHAR translator_query[] = {
+        'S','E','L','E','C','T',' ','*',' ','F','R','O','M',' ',
+        'O','D','B','C','T','r','a','n','s','l','a','t','o','r',0 };
+
+    r = MSI_DatabaseOpenViewW( package->db, driver_query, &view );
+    if (r == ERROR_SUCCESS)
+    {
+        count = 0;
+        r = MSI_IterateRecords( view, &count, NULL, package );
+        msiobj_release( &view->hdr );
+        if (count) FIXME("ignored %u rows in ODBCDriver table\n", count);
+    }
+
+    r = MSI_DatabaseOpenViewW( package->db, translator_query, &view );
+    if (r == ERROR_SUCCESS)
+    {
+        count = 0;
+        r = MSI_IterateRecords( view, &count, NULL, package );
+        msiobj_release( &view->hdr );
+        if (count) FIXME("ignored %u rows in ODBCTranslator table\n", count);
+    }
+
+    return ERROR_SUCCESS;
+}
+
 static UINT msi_unimplemented_action_stub( MSIPACKAGE *package,
                                            LPCSTR action, LPCWSTR table )
 {
@@ -6888,12 +6955,6 @@ static UINT ACTION_RemoveExistingProducts( MSIPACKAGE *package )
 {
     static const WCHAR table[] = { 'U','p','g','r','a','d','e',0 };
     return msi_unimplemented_action_stub( package, "RemoveExistingProducts", table );
-}
-
-static UINT ACTION_SetODBCFolders( MSIPACKAGE *package )
-{
-    static const WCHAR table[] = { 'D','i','r','e','c','t','o','r','y',0 };
-    return msi_unimplemented_action_stub( package, "SetODBCFolders", table );
 }
 
 static UINT ACTION_UnregisterClassInfo( MSIPACKAGE *package )

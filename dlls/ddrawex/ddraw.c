@@ -1320,20 +1320,9 @@ IDirectDraw4Impl_GetSurfaceFromDC(IDirectDraw4 *iface,
                                   IDirectDrawSurface4 **Surface)
 {
     IDirectDrawImpl *This = impl_from_dd4(iface);
-    IDirectDrawSurface4 *inner;
     HRESULT hr;
     TRACE("(%p)->(%p, %p)\n", This, hdc, Surface);
-    hr = IDirectDraw4_GetSurfaceFromDC(This->parent,hdc, &inner);
-    if(SUCCEEDED(hr))
-    {
-        *Surface = dds_get_outer(inner);
-        IDirectDrawSurface4_AddRef(*Surface);
-        IDirectDrawSurface4_Release(inner);
-    }
-    else
-    {
-        *Surface = NULL;
-    }
+    hr = IDirectDraw4_GetSurfaceFromDC(This->parent,hdc, Surface);
 
     return hr;
 }
@@ -1344,17 +1333,30 @@ IDirectDraw3Impl_GetSurfaceFromDC(IDirectDraw3 *iface,
                                   IDirectDrawSurface **Surface)
 {
     IDirectDrawImpl *This = impl_from_dd3(iface);
-    IDirectDrawSurface4 *surf4;
+    IDirectDrawSurface4 *surf4, *outer;
+    IDirectDrawSurface *inner;
     HRESULT hr;
     TRACE("(%p)->(%p, %p): Thunking to IDirectDraw4\n", This, hdc, Surface);
 
-    hr = IDirectDraw4_GetSurfaceFromDC(dd4_from_impl(This), hdc, &surf4);
+    if (!Surface) return E_POINTER;
+
+    hr = IDirectDraw4_GetSurfaceFromDC(This->parent, hdc, (IDirectDrawSurface4 **)&inner);
     if(FAILED(hr))
     {
         *Surface = NULL;
         return hr;
     }
-    IDirectDrawSurface4_QueryInterface(surf4, &IID_IDirectDrawSurface, (void **) Surface);
+
+    hr = IDirectDrawSurface_QueryInterface(inner, &IID_IDirectDrawSurface4, (void **)&surf4);
+    IDirectDrawSurface_Release(inner);
+    if (FAILED(hr))
+    {
+        *Surface = NULL;
+        return hr;
+    }
+
+    outer = dds_get_outer(surf4);
+    hr = IDirectDrawSurface4_QueryInterface(outer, &IID_IDirectDrawSurface, (void **)Surface);
     IDirectDrawSurface4_Release(surf4);
     return hr;
 }

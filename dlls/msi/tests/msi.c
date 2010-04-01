@@ -467,7 +467,7 @@ static BOOL squash_guid(LPCWSTR in, LPWSTR out)
     DWORD i,n=1;
     GUID guid;
 
-    if (FAILED(CLSIDFromString((LPOLESTR)in, &guid)))
+    if (FAILED(CLSIDFromString((LPCOLESTR)in, &guid)))
         return FALSE;
 
     for(i=0; i<8; i++)
@@ -8221,7 +8221,9 @@ static void test_MsiEnumPatchesEx_userunmanaged(LPCSTR usersid, LPCSTR expecteds
     r = pMsiEnumPatchesExA(prodcode, usersid, MSIINSTALLCONTEXT_USERUNMANAGED,
                            MSIPATCHSTATE_APPLIED, 0, patchcode, targetprod,
                            &context, targetsid, &size);
-    ok(r == ERROR_NO_MORE_ITEMS, "Expected ERROR_NO_MORE_ITEMS, got %d\n", r);
+    ok(r == ERROR_NO_MORE_ITEMS ||
+       broken(r == ERROR_BAD_CONFIGURATION), /* Windows Installer 3.0 */
+       "Expected ERROR_NO_MORE_ITEMS, got %d\n", r);
     ok(!lstrcmpA(patchcode, "apple"),
        "Expected patchcode to be unchanged, got %s\n", patchcode);
     ok(!lstrcmpA(targetprod, "banana"),
@@ -8245,7 +8247,9 @@ static void test_MsiEnumPatchesEx_userunmanaged(LPCSTR usersid, LPCSTR expecteds
     r = pMsiEnumPatchesExA(prodcode, usersid, MSIINSTALLCONTEXT_USERUNMANAGED,
                            MSIPATCHSTATE_APPLIED, 0, patchcode, targetprod,
                            &context, targetsid, &size);
-    ok(r == ERROR_NO_MORE_ITEMS, "Expected ERROR_NO_MORE_ITEMS, got %d\n", r);
+    ok(r == ERROR_NO_MORE_ITEMS ||
+       broken(r == ERROR_BAD_CONFIGURATION), /* Windows Installer 3.0 */
+       "Expected ERROR_NO_MORE_ITEMS, got %d\n", r);
     ok(!lstrcmpA(patchcode, "apple"),
        "Expected patchcode to be unchanged, got %s\n", patchcode);
     ok(!lstrcmpA(targetprod, "banana"),
@@ -9352,7 +9356,9 @@ static void test_MsiEnumPatches(void)
     lstrcpyA(patch, "apple");
     lstrcpyA(transforms, "banana");
     r = MsiEnumPatchesA(prodcode, 0, patch, transforms, &size);
-    ok(r == ERROR_NO_MORE_ITEMS, "Expected ERROR_NO_MORE_ITEMS, got %d\n", r);
+    ok(r == ERROR_NO_MORE_ITEMS ||
+       broken(r == ERROR_FILE_NOT_FOUND), /* Windows Installer < 3.0 */
+       "Expected ERROR_NO_MORE_ITEMS, got %d\n", r);
     ok(!lstrcmpA(patch, "apple"),
        "Expected lpPatchBuf to be unchanged, got \"%s\"\n", patch);
     ok(!lstrcmpA(transforms, "banana"),
@@ -9369,7 +9375,8 @@ static void test_MsiEnumPatches(void)
     lstrcpyA(patch, "apple");
     lstrcpyA(transforms, "banana");
     r = MsiEnumPatchesA(prodcode, 0, patch, transforms, &size);
-    ok(r == ERROR_BAD_CONFIGURATION,
+    ok(r == ERROR_BAD_CONFIGURATION ||
+       broken(r == ERROR_SUCCESS), /* Windows Installer < 3.0 */
        "Expected ERROR_BAD_CONFIGURATION, got %d\n", r);
     ok(!lstrcmpA(patch, "apple"),
        "Expected lpPatchBuf to be unchanged, got \"%s\"\n", patch);
@@ -9405,8 +9412,11 @@ static void test_MsiEnumPatches(void)
     lstrcpyA(patch, "apple");
     lstrcpyA(transforms, "banana");
     r = MsiEnumPatchesA(prodcode, 0, patch, transforms, &size);
-    ok(r == ERROR_NO_MORE_ITEMS, "Expected ERROR_NO_MORE_ITEMS, got %d\n", r);
-    ok(!lstrcmpA(patch, "apple"),
+    ok(r == ERROR_NO_MORE_ITEMS ||
+       broken(r == ERROR_FILE_NOT_FOUND), /* Windows Installer < 3.0 */
+       "Expected ERROR_NO_MORE_ITEMS, got %d\n", r);
+    ok(!lstrcmpA(patch, "apple") ||
+       broken(!lstrcmpA(patch, patchcode)), /* Windows Installer < 3.0 */
        "Expected lpPatchBuf to be unchanged, got \"%s\"\n", patch);
     ok(!lstrcmpA(transforms, "banana"),
        "Expected lpTransformsBuf to be unchanged, got \"%s\"\n", transforms);
@@ -9467,7 +9477,8 @@ static void test_MsiEnumPatches(void)
     ok(r == ERROR_MORE_DATA, "Expected ERROR_MORE_DATA, got %d\n", r);
     ok(!lstrcmpA(patch, patchcode),
        "Expected \"%s\", got \"%s\"\n", patchcode, patch);
-    ok(!lstrcmpA(transforms, "whate"),
+    ok(!lstrcmpA(transforms, "whate") ||
+       broken(!lstrcmpA(transforms, "banana")), /* Windows Installer < 3.0 */
        "Expected \"whate\", got \"%s\"\n", transforms);
     ok(size == 8 || size == 16, "Expected 8 or 16, got %d\n", size);
 
@@ -9541,7 +9552,9 @@ static void test_MsiEnumPatches(void)
     lstrcpyA(patch, "apple");
     lstrcpyA(transforms, "banana");
     r = MsiEnumPatchesA(prodcode, 0, patch, transforms, &size);
-    ok(r == ERROR_NO_MORE_ITEMS, "Expected ERROR_NO_MORE_ITEMS, got %d\n", r);
+    ok(r == ERROR_NO_MORE_ITEMS ||
+       broken(r == ERROR_FILE_NOT_FOUND), /* Windows Installer < 3.0 */
+       "Expected ERROR_NO_MORE_ITEMS, got %d\n", r);
     ok(!lstrcmpA(patch, "apple"),
        "Expected lpPatchBuf to be unchanged, got \"%s\"\n", patch);
     ok(!lstrcmpA(transforms, "banana"),
@@ -9558,7 +9571,8 @@ static void test_MsiEnumPatches(void)
     lstrcpyA(patch, "apple");
     lstrcpyA(transforms, "banana");
     r = MsiEnumPatchesA(prodcode, 0, patch, transforms, &size);
-    ok(r == ERROR_BAD_CONFIGURATION,
+    ok(r == ERROR_BAD_CONFIGURATION ||
+       broken(r == ERROR_SUCCESS), /* Windows Installer < 3.0 */
        "Expected ERROR_BAD_CONFIGURATION, got %d\n", r);
     ok(!lstrcmpA(patch, "apple"),
        "Expected lpPatchBuf to be unchanged, got \"%s\"\n", patch);
@@ -9594,8 +9608,11 @@ static void test_MsiEnumPatches(void)
     lstrcpyA(patch, "apple");
     lstrcpyA(transforms, "banana");
     r = MsiEnumPatchesA(prodcode, 0, patch, transforms, &size);
-    ok(r == ERROR_NO_MORE_ITEMS, "Expected ERROR_NO_MORE_ITEMS, got %d\n", r);
-    ok(!lstrcmpA(patch, "apple"),
+    ok(r == ERROR_NO_MORE_ITEMS ||
+       broken(r == ERROR_FILE_NOT_FOUND), /* Windows Installer < 3.0 */
+       "Expected ERROR_NO_MORE_ITEMS, got %d\n", r);
+    ok(!lstrcmpA(patch, "apple") ||
+       broken(!lstrcmpA(patch, patchcode)), /* Windows Installer < 3.0 */
        "Expected lpPatchBuf to be unchanged, got \"%s\"\n", patch);
     ok(!lstrcmpA(transforms, "banana"),
        "Expected lpTransformsBuf to be unchanged, got \"%s\"\n", transforms);
@@ -9610,10 +9627,14 @@ static void test_MsiEnumPatches(void)
     lstrcpyA(patch, "apple");
     lstrcpyA(transforms, "banana");
     r = MsiEnumPatchesA(prodcode, 0, patch, transforms, &size);
-    ok(r == ERROR_NO_MORE_ITEMS, "Expected ERROR_NO_MORE_ITEMS, got %d\n", r);
-    ok(!lstrcmpA(patch, "apple"),
+    ok(r == ERROR_NO_MORE_ITEMS ||
+       broken(r == ERROR_SUCCESS), /* Windows Installer < 3.0 */
+       "Expected ERROR_NO_MORE_ITEMS, got %d\n", r);
+    ok(!lstrcmpA(patch, "apple") ||
+       broken(!lstrcmpA(patch, patchcode)), /* Windows Installer < 3.0 */
        "Expected lpPatchBuf to be unchanged, got \"%s\"\n", patch);
-    ok(!lstrcmpA(transforms, "banana"),
+    ok(!lstrcmpA(transforms, "banana") ||
+       broken(!lstrcmpA(transforms, "whatever")), /* Windows Installer < 3.0 */
        "Expected lpTransformsBuf to be unchanged, got \"%s\"\n", transforms);
     ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
 
@@ -9686,7 +9707,9 @@ static void test_MsiEnumPatches(void)
     lstrcpyA(patch, "apple");
     lstrcpyA(transforms, "banana");
     r = MsiEnumPatchesA(prodcode, 0, patch, transforms, &size);
-    ok(r == ERROR_NO_MORE_ITEMS, "Expected ERROR_NO_MORE_ITEMS, got %d\n", r);
+    ok(r == ERROR_NO_MORE_ITEMS ||
+       broken(r == ERROR_FILE_NOT_FOUND), /* Windows Installer < 3.0 */
+       "Expected ERROR_NO_MORE_ITEMS, got %d\n", r);
     ok(!lstrcmpA(patch, "apple"),
        "Expected lpPatchBuf to be unchanged, got \"%s\"\n", patch);
     ok(!lstrcmpA(transforms, "banana"),
@@ -9703,7 +9726,8 @@ static void test_MsiEnumPatches(void)
     lstrcpyA(patch, "apple");
     lstrcpyA(transforms, "banana");
     r = MsiEnumPatchesA(prodcode, 0, patch, transforms, &size);
-    ok(r == ERROR_BAD_CONFIGURATION,
+    ok(r == ERROR_BAD_CONFIGURATION ||
+       broken(r == ERROR_SUCCESS), /* Windows Installer < 3.0 */
        "Expected ERROR_BAD_CONFIGURATION, got %d\n", r);
     ok(!lstrcmpA(patch, "apple"),
        "Expected lpPatchBuf to be unchanged, got \"%s\"\n", patch);
@@ -9739,8 +9763,11 @@ static void test_MsiEnumPatches(void)
     lstrcpyA(patch, "apple");
     lstrcpyA(transforms, "banana");
     r = MsiEnumPatchesA(prodcode, 0, patch, transforms, &size);
-    ok(r == ERROR_NO_MORE_ITEMS, "Expected ERROR_NO_MORE_ITEMS, got %d\n", r);
-    ok(!lstrcmpA(patch, "apple"),
+    ok(r == ERROR_NO_MORE_ITEMS ||
+       broken(r == ERROR_FILE_NOT_FOUND), /* Windows Installer < 3.0 */
+       "Expected ERROR_NO_MORE_ITEMS, got %d\n", r);
+    ok(!lstrcmpA(patch, "apple") ||
+       broken(!lstrcmpA(patch, patchcode)), /* Windows Installer < 3.0 */
        "Expected lpPatchBuf to be unchanged, got \"%s\"\n", patch);
     ok(!lstrcmpA(transforms, "banana"),
        "Expected lpTransformsBuf to be unchanged, got \"%s\"\n", transforms);
@@ -9804,10 +9831,14 @@ static void test_MsiEnumPatches(void)
     lstrcpyA(patch, "apple");
     lstrcpyA(transforms, "banana");
     r = MsiEnumPatchesA(prodcode, 0, patch, transforms, &size);
-    ok(r == ERROR_NO_MORE_ITEMS, "Expected ERROR_NO_MORE_ITEMS, got %d\n", r);
-    ok(!lstrcmpA(patch, "apple"),
+    ok(r == ERROR_NO_MORE_ITEMS ||
+       broken(r == ERROR_SUCCESS), /* Windows Installer < 3.0 */
+       "Expected ERROR_NO_MORE_ITEMS, got %d\n", r);
+    ok(!lstrcmpA(patch, "apple") ||
+       broken(!lstrcmpA(patch, patchcode)), /* Windows Installer < 3.0 */
        "Expected lpPatchBuf to be unchanged, got \"%s\"\n", patch);
-    ok(!lstrcmpA(transforms, "banana"),
+    ok(!lstrcmpA(transforms, "banana") ||
+       broken(!lstrcmpA(transforms, "whatever")), /* Windows Installer < 3.0 */
        "Expected lpTransformsBuf to be unchanged, got \"%s\"\n", transforms);
     ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
 
@@ -9841,7 +9872,8 @@ static void test_MsiEnumPatches(void)
     WideCharToMultiByte( CP_ACP, 0, transformsW, -1, transforms, MAX_PATH, NULL, NULL );
     ok(!lstrcmpA(patch, patchcode),
        "Expected \"%s\", got \"%s\"\n", patchcode, patch);
-    ok(!lstrcmpA(transforms, "whate"),
+    ok(!lstrcmpA(transforms, "whate") ||
+       broken(!lstrcmpA(transforms, "banana")), /* Windows Installer < 3.0 */
        "Expected \"whate\", got \"%s\"\n", transforms);
     ok(size == 8, "Expected 8, got %d\n", size);
 

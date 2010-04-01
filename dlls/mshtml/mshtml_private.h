@@ -171,6 +171,7 @@ void release_dispex(DispatchEx*);
 BOOL dispex_query_interface(DispatchEx*,REFIID,void**);
 HRESULT dispex_get_dprop_ref(DispatchEx*,const WCHAR*,BOOL,VARIANT**);
 HRESULT get_dispids(tid_t,DWORD*,DISPID**);
+HRESULT remove_prop(DispatchEx*,BSTR,VARIANT_BOOL*);
 
 typedef struct HTMLWindow HTMLWindow;
 typedef struct HTMLDocumentNode HTMLDocumentNode;
@@ -736,7 +737,7 @@ nsresult get_nsinterface(nsISupports*,REFIID,void**);
 
 void init_nsevents(HTMLDocumentNode*);
 void release_nsevents(HTMLDocumentNode*);
-void add_nsevent_listener(HTMLDocumentNode*,LPCWSTR);
+void add_nsevent_listener(HTMLDocumentNode*,nsIDOMNode*,LPCWSTR);
 
 void set_window_bscallback(HTMLWindow*,nsChannelBSC*);
 void set_current_mon(HTMLWindow*,IMoniker*);

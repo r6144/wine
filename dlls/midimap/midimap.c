@@ -446,7 +446,6 @@ static DWORD modUnprepare(MIDIMAPDATA* mom, LPMIDIHDR lpMidiHdr, DWORD_PTR dwPar
 
 static DWORD modGetVolume(MIDIMAPDATA* mom, DWORD* lpdwVolume)
 {
-    if (MIDIMAP_IsBadData(mom)) return MMSYSERR_ERROR;
     if (!lpdwVolume) return MMSYSERR_INVALPARAM;
     *lpdwVolume = 0xFFFFFFFF; /* tests show this initial value */
     return MMSYSERR_NOERROR;
@@ -495,6 +494,9 @@ static	DWORD	modReset(MIDIMAPDATA* mom)
     return ret;
 }
 
+static LRESULT MIDIMAP_drvOpen(void);
+static LRESULT MIDIMAP_drvClose(void);
+
 /**************************************************************************
  * 				modMessage (MIDIMAP.@)
  */
@@ -507,7 +509,9 @@ DWORD WINAPI MIDIMAP_modMessage(UINT wDevID, UINT wMsg, DWORD_PTR dwUser,
     switch (wMsg)
     {
     case DRVM_INIT:
+        return MIDIMAP_drvOpen();
     case DRVM_EXIT:
+        return MIDIMAP_drvClose();
     case DRVM_ENABLE:
     case DRVM_DISABLE:
 	/* FIXME: Pretend this is supported */
@@ -539,7 +543,7 @@ DWORD WINAPI MIDIMAP_modMessage(UINT wDevID, UINT wMsg, DWORD_PTR dwUser,
 /**************************************************************************
  * 				MIDIMAP_drvOpen			[internal]
  */
-static LRESULT MIDIMAP_drvOpen(LPSTR str)
+static LRESULT MIDIMAP_drvOpen(void)
 {
     MIDIOUTCAPSW	moc;
     unsigned		dev, i;
@@ -574,7 +578,7 @@ static LRESULT MIDIMAP_drvOpen(LPSTR str)
 /**************************************************************************
  * 				MIDIMAP_drvClose		[internal]
  */
-static LRESULT MIDIMAP_drvClose(DWORD_PTR dwDevID)
+static LRESULT MIDIMAP_drvClose(void)
 {
     if (midiOutPorts)
     {
@@ -598,8 +602,8 @@ LRESULT CALLBACK MIDIMAP_DriverProc(DWORD_PTR dwDevID, HDRVR hDriv, UINT wMsg,
     {
     case DRV_LOAD:		return 1;
     case DRV_FREE:		return 1;
-    case DRV_OPEN:		return MIDIMAP_drvOpen((LPSTR)dwParam1);
-    case DRV_CLOSE:		return MIDIMAP_drvClose(dwDevID);
+    case DRV_OPEN:		return 1;
+    case DRV_CLOSE:		return 1;
     case DRV_ENABLE:		return 1;
     case DRV_DISABLE:		return 1;
     case DRV_QUERYCONFIGURE:	return 1;

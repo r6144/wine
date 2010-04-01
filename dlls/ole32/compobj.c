@@ -1506,7 +1506,7 @@ HRESULT WINAPI CoCreateGuid(GUID *pguid)
  * SEE ALSO
  *  StringFromCLSID
  */
-static HRESULT __CLSIDFromString(LPCWSTR s, CLSID *id)
+static HRESULT __CLSIDFromString(LPCWSTR s, LPCLSID id)
 {
   int	i;
   BYTE table[256];
@@ -1566,7 +1566,7 @@ static HRESULT __CLSIDFromString(LPCWSTR s, CLSID *id)
 
 /*****************************************************************************/
 
-HRESULT WINAPI CLSIDFromString(LPOLESTR idstr, CLSID *id )
+HRESULT WINAPI CLSIDFromString(LPCOLESTR idstr, LPCLSID id )
 {
     HRESULT ret;
 
@@ -2956,7 +2956,7 @@ HRESULT WINAPI CoGetTreatAsClass(REFCLSID clsidOld, LPCLSID clsidNew)
     HRESULT res = S_OK;
     LONG len = sizeof(szClsidNew);
 
-    FIXME("(%s,%p)\n", debugstr_guid(clsidOld), clsidNew);
+    TRACE("(%s,%p)\n", debugstr_guid(clsidOld), clsidNew);
     *clsidNew = *clsidOld; /* copy over old value */
 
     res = COM_OpenKeyForCLSID(clsidOld, wszTreatAs, KEY_READ, &hkey);
@@ -4153,11 +4153,9 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID fImpLoad)
     case DLL_PROCESS_ATTACH:
         hProxyDll = hinstDLL;
         COMPOBJ_InitProcess();
-	if (TRACE_ON(ole)) CoRegisterMallocSpy((LPVOID)-1);
 	break;
 
     case DLL_PROCESS_DETACH:
-        if (TRACE_ON(ole)) CoRevokeMallocSpy();
         OLEDD_UnInitialize();
         COMPOBJ_UninitProcess();
         RPC_UnregisterAllChannelHooks();

@@ -421,6 +421,7 @@ void generate_debug_event( struct thread *thread, int code, const void *arg )
 static int debugger_attach( struct process *process, struct thread *debugger )
 {
     if (process->debugger) goto error;  /* already being debugged */
+    if (debugger->process == process) goto error;
     if (!is_process_init_done( process )) goto error;  /* still starting up */
     if (list_empty( &process->thread_list )) goto error;  /* no thread running in the process */
 
@@ -646,7 +647,7 @@ DECL_HANDLER(queue_exception_event)
 
         if ((event = alloc_debug_event( current, EXCEPTION_DEBUG_EVENT, &data )))
         {
-            const context_t *context = (const context_t *)((char *)get_req_data() + req->len);
+            const context_t *context = (const context_t *)((const char *)get_req_data() + req->len);
             data_size_t size = get_req_data_size() - req->len;
 
             memset( &event->context, 0, sizeof(event->context) );

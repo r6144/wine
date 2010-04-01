@@ -143,7 +143,7 @@ typedef struct tagMSIMEDIAINFO
     LPWSTR volume_label;
     BOOL is_continuous;
     BOOL is_extracted;
-    WCHAR source[MAX_PATH];
+    WCHAR sourcedir[MAX_PATH];
 } MSIMEDIAINFO;
 
 typedef struct tagMSIPATCHINFO
@@ -672,8 +672,6 @@ extern UINT msi_save_string_table( const string_table *st, IStorage *storage );
 extern BOOL TABLE_Exists( MSIDATABASE *db, LPCWSTR name );
 extern MSICONDITION MSI_DatabaseIsTablePersistent( MSIDATABASE *db, LPCWSTR table );
 
-extern UINT read_raw_stream_data( MSIDATABASE *db, LPCWSTR stname,
-                                  USHORT **pdata, UINT *psz );
 extern UINT read_stream_data( IStorage *stg, LPCWSTR stname, BOOL table,
                               BYTE **pdata, UINT *psz );
 extern UINT write_stream_data( IStorage *stg, LPCWSTR stname,
@@ -724,6 +722,7 @@ extern BOOL decode_streamname(LPCWSTR in, LPWSTR out);
 
 /* database internals */
 extern UINT db_get_raw_stream( MSIDATABASE *, LPCWSTR, IStream ** );
+void db_destroy_stream( MSIDATABASE *, LPCWSTR );
 extern UINT MSI_OpenDatabaseW( LPCWSTR, LPCWSTR, MSIDATABASE ** );
 extern UINT MSI_DatabaseOpenViewW(MSIDATABASE *, LPCWSTR, MSIQUERY ** );
 extern UINT MSI_OpenQuery( MSIDATABASE *, MSIQUERY **, LPCWSTR, ... );
@@ -1084,6 +1083,7 @@ static const WCHAR szHU[] = {'H','K','E','Y','_','U','S','E','R','S','\\',0};
 static const WCHAR szWindowsFolder[] = {'W','i','n','d','o','w','s','F','o','l','d','e','r',0};
 static const WCHAR szAppSearch[] = {'A','p','p','S','e','a','r','c','h',0};
 static const WCHAR szMoveFiles[] = {'M','o','v','e','F','i','l','e','s',0};
+static const WCHAR szCCPSearch[] = {'C','C','P','S','e','a','r','c','h',0};
 
 /* memory allocation macro functions */
 static void *msi_alloc( size_t len ) __WINE_ALLOC_SIZE(1);
