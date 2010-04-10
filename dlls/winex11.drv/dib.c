@@ -2081,6 +2081,14 @@ static void X11DRV_DIB_SetImageBits_16( int lines, const BYTE *srcbits,
                          srcbits,linebytes,
                          dstbits,-bmpImage->bytes_per_line);
                 }
+            } else if ((rSrc==0xf && bmpImage->red_mask==0xff) ||
+                       (bSrc==0xf && bmpImage->blue_mask==0xff)) {
+                /* ==== rgb 444 dib -> rgb 888 bmp ==== */
+                /* ==== bgr 444 dib -> bgr 888 bmp ==== */
+                convs->Convert_444_to_888_asis
+                    (width,lines,
+                     srcbits,linebytes,
+                     dstbits,-bmpImage->bytes_per_line);
             } else goto notsupported;
             break;
         }
@@ -2146,6 +2154,7 @@ static void X11DRV_DIB_SetImageBits_16( int lines, const BYTE *srcbits,
     case 8:
         {
             /* ==== rgb or bgr 555 or 565 dib -> pal 1, 4 or 8 ==== */
+            /* FIXME: Does not work for e.g. RGB444 DIBs */
             const WORD* srcpixel;
             int rShift1,gShift1,bShift1;
             int rShift2,gShift2,bShift2;
