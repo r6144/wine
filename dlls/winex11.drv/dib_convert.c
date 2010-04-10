@@ -1427,7 +1427,9 @@ static void convert_444_to_0888_asis(int width, int height,
         for (x=0; x<width; x++) {
             WORD srcval;
             srcval=*srcpixel++;
-            *dstpixel++=((srcval << 12) & 0xf00000) | /* h */
+            *dstpixel++=((srcval << 16) & 0xf0000000) | /* H */
+                        ((srcval << 12) & 0x0f000000) | /* H - 4 bits */
+	                ((srcval << 12) & 0xf00000) | /* h */
                         ((srcval << 8) & 0x0f0000) | /* h - 4 bits */
                         ((srcval << 8) & 0x00f000) | /* g */
                         ((srcval << 4) & 0x000f00) | /* g - 4 bits */
