@@ -2329,7 +2329,8 @@ static void X11DRV_DIB_GetImageBits_16( X11DRV_PDEVICE *physDev, int lines, BYTE
                          srcbits,-bmpImage->bytes_per_line,
                          dstbits,linebytes);
                 }
-            } else {
+            } else if ((rDst == 0x1f && bmpImage->blue_mask==0xff) ||
+                       (bDst == 0x1f && bmpImage->red_mask==0xff)) {
                 if (gDst==0x03e0) {
                     /* ==== rgb 888 bmp -> bgr 555 dib ==== */
                     /* ==== bgr 888 bmp -> rgb 555 dib ==== */
@@ -2345,7 +2346,7 @@ static void X11DRV_DIB_GetImageBits_16( X11DRV_PDEVICE *physDev, int lines, BYTE
                          srcbits,-bmpImage->bytes_per_line,
                          dstbits,linebytes);
                 }
-            }
+            } else goto notsupported;
             break;
         }
         /* Fall through */
@@ -2376,7 +2377,8 @@ static void X11DRV_DIB_GetImageBits_16( X11DRV_PDEVICE *physDev, int lines, BYTE
                          srcbits,-bmpImage->bytes_per_line,
                          dstbits,linebytes);
                 }
-            } else {
+            } else if ((rDst == 0x1f && bmpImage->blue_mask==0xff) ||
+                       (bDst == 0x1f && bmpImage->red_mask==0xff)) {
                 if (gDst==0x03e0) {
                     /* ==== rgb 0888 bmp -> bgr 555 dib ==== */
                     /* ==== bgr 0888 bmp -> rgb 555 dib ==== */
@@ -2392,7 +2394,7 @@ static void X11DRV_DIB_GetImageBits_16( X11DRV_PDEVICE *physDev, int lines, BYTE
                          srcbits,-bmpImage->bytes_per_line,
                          dstbits,linebytes);
                 }
-            }
+            } else goto notsupported;
         }
         break;
 
