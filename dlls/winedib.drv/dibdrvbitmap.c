@@ -369,8 +369,8 @@ BOOL _DIBDRVBITMAP_InitFromBitmapinfo(DIBDRVBITMAP *dib, const BITMAPINFO *bmi, 
 
     if(bi->biCompression == BI_BITFIELDS)
     {
-        masks = (DWORD *)ptr;
-        ptr += 3 * sizeof(DWORD);
+	/* See the comments at the beginning of gdi32/dib.c */
+        masks = (DWORD *)bmi->bmiColors;
         if (masks[0] == 0 || masks[1] == 0 || masks[2] == 0) {
             WARN("mask is zero; assuming default\n");
             masks = NULL;
