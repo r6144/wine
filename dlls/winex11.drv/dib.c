@@ -2138,6 +2138,14 @@ static void X11DRV_DIB_SetImageBits_16( int lines, const BYTE *srcbits,
                          srcbits,linebytes,
                          dstbits,-bmpImage->bytes_per_line);
                 }
+            } else if ((rSrc==0xf && bmpImage->red_mask==0xff) ||
+                       (bSrc==0xf && bmpImage->blue_mask==0xff)) {
+                /* ==== rgb 444 dib -> rgb 0888 bmp ==== */
+                /* ==== bgr 444 dib -> bgr 0888 bmp ==== */
+                convs->Convert_444_to_0888_asis
+                    (width,lines,
+                     srcbits,linebytes,
+                     dstbits,-bmpImage->bytes_per_line);
             } else goto notsupported;
         }
         break;
@@ -3567,9 +3575,10 @@ static int X11DRV_DIB_SetImageBits( const X11DRV_DIB_IMAGEBITS_DESCR *descr )
 
     TRACE("Dib: depth=%d r=%x g=%x b=%x\n",
           descr->infoBpp,descr->rMask,descr->gMask,descr->bMask);
-    TRACE("Bmp: depth=%d/%d r=%lx g=%lx b=%lx\n",
+    TRACE("Bmp: depth=%d/%d r=%lx g=%lx b=%lx byteOrder=%s\n",
           bmpImage->depth,bmpImage->bits_per_pixel,
-          bmpImage->red_mask,bmpImage->green_mask,bmpImage->blue_mask);
+          bmpImage->red_mask,bmpImage->green_mask,bmpImage->blue_mask,
+          (bmpImage->byte_order==LSBFirst) ? "LSBFirst" : "MSBFirst");
 
 #ifdef HAVE_LIBXXSHM
     if (descr->shm_mode == X11DRV_SHM_PIXMAP

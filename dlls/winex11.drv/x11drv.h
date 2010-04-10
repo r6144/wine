@@ -450,6 +450,9 @@ typedef struct {
     void (*Convert_444_to_888_asis)(int width, int height,
                                     const void* srcbits, int srclinebytes,
                                     void* dstbits, int dstlinebytes);
+    void (*Convert_444_to_0888_asis)(int width, int height,
+				     const void* srcbits, int srclinebytes,
+				     void* dstbits, int dstlinebytes);
 } dib_conversions;
 
 extern const dib_conversions dib_normal, dib_src_byteswap, dib_dst_byteswap;
