@@ -2139,6 +2139,7 @@ static void X11DRV_DIB_SetImageBits_16( int lines, const BYTE *srcbits,
         WARN("from 16 bit DIB (%x,%x,%x) to unknown %d bit bitmap (%lx,%lx,%lx)\n",
               rSrc, gSrc, bSrc, bmpImage->bits_per_pixel, bmpImage->red_mask,
               bmpImage->green_mask, bmpImage->blue_mask );
+        break;
         /* fall through */
     case 1:
     case 4:
@@ -2493,6 +2494,7 @@ static void X11DRV_DIB_GetImageBits_16( X11DRV_PDEVICE *physDev, int lines, BYTE
                   bmpImage->depth, bmpImage->red_mask,
                   bmpImage->green_mask, bmpImage->blue_mask,
                   rDst, gDst, bDst);
+            break;
 
             /* Shift everything 16 bits left so that all shifts are >0,
              * even for BGR DIBs. Then a single >> 16 will bring everything
