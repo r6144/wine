@@ -2412,6 +2412,14 @@ static void X11DRV_DIB_GetImageBits_16( X11DRV_PDEVICE *physDev, int lines, BYTE
                          srcbits,-bmpImage->bytes_per_line,
                          dstbits,linebytes);
                 }
+            } else if ((rDst==0xf && bmpImage->red_mask==0xff) ||
+                       (bDst==0xf && bmpImage->blue_mask==0xff)) {
+                /* ==== rgb 0888 bmp -> rgb 444 dib ==== */
+                /* ==== bgr 0888 bmp -> bgr 444 dib ==== */
+                convs->Convert_0888_to_444_asis
+                    (width,lines,
+                     srcbits,-bmpImage->bytes_per_line,
+                     dstbits,linebytes);
             } else goto notsupported;
         }
         break;
@@ -2507,10 +2515,10 @@ static void X11DRV_DIB_GetImageBits_16( X11DRV_PDEVICE *physDev, int lines, BYTE
             int rShift,gShift,bShift;
             WORD* dstpixel;
 
-            WARN("from unknown %d bit bitmap (%lx,%lx,%lx) to 16 bit DIB (%x,%x,%x)\n",
-                  bmpImage->depth, bmpImage->red_mask,
-                  bmpImage->green_mask, bmpImage->blue_mask,
-                  rDst, gDst, bDst);
+            WARN("from unknown %d/%d bit bitmap (%lx,%lx,%lx) to 16 bit DIB (%x,%x,%x)\n",
+                 bmpImage->depth, bmpImage->bits_per_pixel, bmpImage->red_mask,
+                 bmpImage->green_mask, bmpImage->blue_mask,
+                 rDst, gDst, bDst);
             break;
 
             /* Shift everything 16 bits left so that all shifts are >0,
@@ -3785,9 +3793,10 @@ static int X11DRV_DIB_GetImageBits( const X11DRV_DIB_IMAGEBITS_DESCR *descr )
 
     TRACE("Dib: depth=%2d r=%x g=%x b=%x\n",
           descr->infoBpp,descr->rMask,descr->gMask,descr->bMask);
-    TRACE("Bmp: depth=%2d/%2d r=%lx g=%lx b=%lx\n",
+    TRACE("Bmp: depth=%2d/%2d r=%lx g=%lx b=%lx byteOrder=%s\n",
           bmpImage->depth,bmpImage->bits_per_pixel,
-          bmpImage->red_mask,bmpImage->green_mask,bmpImage->blue_mask);
+          bmpImage->red_mask,bmpImage->green_mask,bmpImage->blue_mask,
+          (bmpImage->byte_order==LSBFirst) ? "LSBFirst" : "MSBFirst");
       /* Transfer the pixels */
     switch(descr->infoBpp)
     {

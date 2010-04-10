@@ -1441,6 +1441,29 @@ static void convert_444_to_0888_asis(int width, int height,
     }
 }
 
+static void convert_0888_to_444_asis(int width, int height,
+                                     const void* srcbits, int srclinebytes,
+                                     void* dstbits, int dstlinebytes)
+{
+    const DWORD* srcpixel;
+    WORD* dstpixel;
+    int x,y;
+
+    for (y=0; y<height; y++) {
+        srcpixel=srcbits;
+        dstpixel=dstbits;
+        for (x=0; x<width; x++) {
+            DWORD srcval;
+            srcval=*srcpixel++;
+            *dstpixel++=((srcval >> 12) & 0xf00) | /* h */
+                        ((srcval >> 8) & 0x0f0) | /* g */
+                        ((srcval >> 4) & 0x00f);  /* l */
+        }
+        srcbits = (const char*)srcbits + srclinebytes;
+        dstbits = (char*)dstbits + dstlinebytes;
+    }
+}
+
 const dib_conversions dib_normal = {
     convert_5x5_asis,
     convert_555_reverse,
@@ -1481,5 +1504,6 @@ const dib_conversions dib_normal = {
     convert_any0888_to_rgb888,
     convert_any0888_to_bgr888,
     convert_444_to_888_asis,
-    convert_444_to_0888_asis
+    convert_444_to_0888_asis,
+    convert_0888_to_444_asis
 };

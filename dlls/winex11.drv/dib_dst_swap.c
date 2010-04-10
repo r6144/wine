@@ -1541,6 +1541,13 @@ static void convert_444_to_0888_asis_dst_byteswap(int width, int height,
     /* FIXME */
 }
 
+static void convert_0888_to_444_asis_dst_byteswap(int width, int height,
+						  const void* srcbits, int srclinebytes,
+						  void* dstbits, int dstlinebytes)
+{
+    /* FIXME */
+}
+
 const dib_conversions dib_dst_byteswap = {
     convert_5x5_asis_dst_byteswap,
     convert_555_reverse_dst_byteswap,
@@ -1581,5 +1588,6 @@ const dib_conversions dib_dst_byteswap = {
     convert_any0888_to_rgb888_dst_byteswap,
     convert_any0888_to_bgr888_dst_byteswap,
     convert_444_to_888_asis_dst_byteswap,
-    convert_444_to_0888_asis_dst_byteswap
+    convert_444_to_0888_asis_dst_byteswap,
+    convert_0888_to_444_asis_dst_byteswap
 };
