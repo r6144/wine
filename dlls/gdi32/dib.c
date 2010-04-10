@@ -1297,6 +1297,8 @@ HBITMAP WINAPI CreateDIBSection(HDC hdc, CONST BITMAPINFO *bmi, UINT usage,
         dib->dsBitfields[2] = (compression == BI_BITFIELDS) ? *((const DWORD *)bmi->bmiColors + 2) : 0x0000ff;
         break;
     }
+    if (bpp >= 15 && (dib->dsBitfields[0] == 0 || dib->dsBitfields[1] == 0 || dib->dsBitfields[2] == 0))
+	ERR("mask is zero\n");
 
     /* get storage location for DIB bits */
 

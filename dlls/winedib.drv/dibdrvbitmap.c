@@ -365,7 +365,7 @@ BOOL _DIBDRVBITMAP_InitFromBitmapinfo(DIBDRVBITMAP *dib, const BITMAPINFO *bmi, 
     ptr = (BYTE*)bmi + bmi->bmiHeader.biSize;
     num_colors = bi->biClrUsed;
     
-    MAYBE(TRACE("dib=%p, bmi=%p\n", dib, bmi));
+    MAYBE(TRACE("dib=%p, bmi=%p, ptr=%p, bmiColors=%p\n", dib, bmi, ptr, &bmi->bmiColors));
 
     if(bi->biCompression == BI_BITFIELDS)
     {
