@@ -2064,7 +2064,8 @@ static void X11DRV_DIB_SetImageBits_16( int lines, const BYTE *srcbits,
                          srcbits,linebytes,
                          dstbits,-bmpImage->bytes_per_line);
                 }
-            } else {
+            } else if ((rSrc == 0x1f && bmpImage->blue_mask==0xff) ||
+                       (bSrc == 0x1f && bmpImage->red_mask==0xff)) {
                 if (gSrc==0x03e0) {
                     /* ==== rgb 555 dib -> bgr 888 bmp ==== */
                     /* ==== bgr 555 dib -> rgb 888 bmp ==== */
@@ -2080,7 +2081,7 @@ static void X11DRV_DIB_SetImageBits_16( int lines, const BYTE *srcbits,
                          srcbits,linebytes,
                          dstbits,-bmpImage->bytes_per_line);
                 }
-            }
+            } else goto notsupported;
             break;
         }
         /* Fall through */
@@ -2112,7 +2113,8 @@ static void X11DRV_DIB_SetImageBits_16( int lines, const BYTE *srcbits,
                          srcbits,linebytes,
                          dstbits,-bmpImage->bytes_per_line);
                 }
-            } else {
+            } else if ((rSrc == 0x1f && bmpImage->blue_mask==0xff) ||
+                       (bSrc == 0x1f && bmpImage->red_mask==0xff)) {
                 if (gSrc==0x03e0) {
                     /* ==== rgb 555 dib -> bgr 0888 bmp ==== */
                     /* ==== bgr 555 dib -> rgb 0888 bmp ==== */
@@ -2128,7 +2130,7 @@ static void X11DRV_DIB_SetImageBits_16( int lines, const BYTE *srcbits,
                          srcbits,linebytes,
                          dstbits,-bmpImage->bytes_per_line);
                 }
-            }
+            } else goto notsupported;
         }
         break;
 
