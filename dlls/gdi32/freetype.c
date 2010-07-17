@@ -3510,9 +3510,24 @@ GdiFont *WineEngCreateFontInstance(DC *dc, HFONT hfont)
 	  debugstr_w(lf.lfFaceName), lf.lfHeight, lf.lfItalic,
 	  lf.lfWeight, lf.lfPitchAndFamily, lf.lfCharSet, lf.lfOrientation,
 	  lf.lfEscapement);
+    /* Replace some Japanese fonts when using a Chinese charset, since they are likely not intended */
+    if (lf.lfCharSet == 134) { /* FIXME: what about DEFAULT_CHARSET? */
+	/* MS Gothic */
+	static const WCHAR gothicW[] = { 0xff2d, 0xff33, ' ', 0x30b4, 0x30b7, 0x30c3, 0x30af, 0 };
+	/* MS PGothic */
+	static const WCHAR pgothicW[] = { 0xff2d, 0xff33, ' ', 0xff30, 0x30b4, 0x30b7, 0x30c3, 0x30af, 0 };
+	/* Standard Gothic, in the Japanese ANSI codepage but erroneously converted using CP936, which occurs frequently in
+	   Chinese translations of Japanese games. */
+	static const WCHAR sgothicGW[] = { 0x6617, 0x5f28, 0x50d1, 0x50d4, 0x50e2, 0x50cb, 0 };
+	static const WCHAR simsunW[] = { 0x5b8b, 0x4f53, 0 };
+	if (strcmpiW(lf.lfFaceName, gothicW) == 0 || strcmpiW(lf.lfFaceName, pgothicW) == 0 || strcmpiW(lf.lfFaceName, sgothicGW) == 0) {
+	    TRACE("Japanese font replaced by Chinese font\n");
+	    strcpyW(lf.lfFaceName, simsunW); /* NOTE: beware of buffer overflows */
+	}
+    }
     /* Replace bold SimSun with SimHei */
     if (lf.lfWeight == 900 && lf.lfFaceName && lf.lfFaceName[0] == 0x5b8b && lf.lfFaceName[1] == 0x4f53 && lf.lfFaceName[2] == 0) {
-        TRACE("SimSun => SimHei");
+        TRACE("SimSun => SimHei\n");
         lf.lfWeight = 0; lf.lfFaceName[0] = 0x9ed1;
     }
 
