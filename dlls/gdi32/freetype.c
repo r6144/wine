@@ -3519,8 +3519,10 @@ GdiFont *WineEngCreateFontInstance(DC *dc, HFONT hfont)
 	/* Standard Gothic, in the Japanese ANSI codepage but erroneously converted using CP936, which occurs frequently in
 	   Chinese translations of Japanese games. */
 	static const WCHAR sgothicGW[] = { 0x6617, 0x5f28, 0x50d1, 0x50d4, 0x50e2, 0x50cb, 0 };
+	static const WCHAR sminchoGW[] = { 0x6617, 0x5f28, 0x67e7, 0x632c, 0 };
 	static const WCHAR simsunW[] = { 0x5b8b, 0x4f53, 0 };
-	if (strcmpiW(lf.lfFaceName, gothicW) == 0 || strcmpiW(lf.lfFaceName, pgothicW) == 0 || strcmpiW(lf.lfFaceName, sgothicGW) == 0) {
+	if (strcmpiW(lf.lfFaceName, gothicW) == 0 || strcmpiW(lf.lfFaceName, pgothicW) == 0
+	    || strcmpiW(lf.lfFaceName, sgothicGW) == 0 || strcmpiW(lf.lfFaceName, sminchoGW) == 0) {
 	    TRACE("Japanese font replaced by Chinese font\n");
 	    strcpyW(lf.lfFaceName, simsunW); /* NOTE: beware of buffer overflows */
 	}
