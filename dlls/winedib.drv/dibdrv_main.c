@@ -35,15 +35,26 @@ BOOL WINAPI DllMain( HINSTANCE hinst, DWORD reason, LPVOID reserved )
     switch(reason)
     {
     case DLL_PROCESS_ATTACH:
+
         /* Loads display driver */
         _DIBDRV_LoadDisplayDriver();
+
+        /* initializes freetype library */
+        if(!_DIBDRV_FreeType_Init())
+            ERR("Couldn't initialize freetype library.\n");
+
         break;
     case DLL_THREAD_DETACH:
         /* do thread detach */
         break;
     case DLL_PROCESS_DETACH:
+
+        /* terminates freetype library */
+        _DIBDRV_FreeType_Terminate();
+
         /* unloads display driver */
         _DIBDRV_FreeDisplayDriver();
+
         break;
     }
     return ret;

@@ -25,18 +25,18 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(dibdrv);
 
+
 /***********************************************************************
  *           DIBDRV_SetDeviceClipping
  */
 void DIBDRV_SetDeviceClipping( DIBDRVPHYSDEV *physDev, HRGN vis_rgn, HRGN clip_rgn )
 {
-    TRACE("physDev:%p, vis_rgn:%p, clip_rgn:%p\n", physDev, vis_rgn, clip_rgn);
+    MAYBE(TRACE("physDev:%p, vis_rgn:%p, clip_rgn:%p\n", physDev, vis_rgn, clip_rgn));
 
     if(physDev->hasDIB)
     {
         /* DIB section selected in, use DIB Engine */
-        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
-        _DIBDRV_GetDisplayDriver()->pSetDeviceClipping(physDev->X11PhysDev, vis_rgn, clip_rgn);
+        ONCE(FIXME("STUB\n"));
     }
     else
     {

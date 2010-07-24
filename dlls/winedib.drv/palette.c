@@ -32,7 +32,7 @@ UINT DIBDRV_RealizePalette( DIBDRVPHYSDEV *physDev, HPALETTE hpal, BOOL primary 
 {
     UINT res;
     
-    TRACE("physDev:%p, hpal:%p, primary:%s\n", physDev, hpal, (primary ? "TRUE" : "FALSE"));
+    MAYBE(TRACE("physDev:%p, hpal:%p, primary:%s\n", physDev, hpal, (primary ? "TRUE" : "FALSE")));
     
     /* we should in any case call X11 function, as UnrealizePalette() doesn't
      * take a physDev parameter */
@@ -54,7 +54,7 @@ BOOL DIBDRV_UnrealizePalette( HPALETTE hpal )
 {
     BOOL res;
     
-    TRACE("hpal:%p\n", hpal);
+    MAYBE(TRACE("hpal:%p\n", hpal));
 
     /* we should in any case call X11 function, as UnrealizePalette() doesn't
      * take a physDev parameter */
@@ -74,13 +74,13 @@ UINT DIBDRV_GetSystemPaletteEntries( DIBDRVPHYSDEV *physDev, UINT start, UINT co
 {
     UINT res;
     
-    TRACE("physDev:%p, start:%d, count:%d, entries:%p\n", physDev, start, count, entries);
+    MAYBE(TRACE("physDev:%p, start:%d, count:%d, entries:%p\n", physDev, start, count, entries));
 
     if(physDev->hasDIB)
     {
         /* DIB section selected in, use DIB Engine */
-        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
-        res = _DIBDRV_GetDisplayDriver()->pGetSystemPaletteEntries(physDev->X11PhysDev, start, count, entries);
+        ONCE(FIXME("STUB\n"));
+        res = 0;
     }
     else
     {
@@ -97,13 +97,13 @@ COLORREF DIBDRV_GetNearestColor( DIBDRVPHYSDEV *physDev, COLORREF color )
 {
     COLORREF res;
     
-    TRACE("physDev:%p, color:%x\n", physDev, color);
+    MAYBE(TRACE("physDev:%p, color:%x\n", physDev, color));
 
     if(physDev->hasDIB)
     {
         /* DIB section selected in, use DIB Engine */
-        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
-        res = _DIBDRV_GetDisplayDriver()->pGetNearestColor(physDev->X11PhysDev, color);
+        ONCE(FIXME("STUB\n"));
+        res = 0;
     }
     else
     {
@@ -119,14 +119,36 @@ COLORREF DIBDRV_GetNearestColor( DIBDRVPHYSDEV *physDev, COLORREF color )
 UINT DIBDRV_RealizeDefaultPalette( DIBDRVPHYSDEV *physDev )
 {
     UINT res;
+#ifdef DIBDRV_ENABLE_MAYBE
+    int i;
+    RGBQUAD *q;
+#endif
     
-    TRACE("physDev:%p\n", physDev);
+    MAYBE(TRACE("physDev:%p\n", physDev));
 
     if(physDev->hasDIB)
     {
         /* DIB section selected in, use DIB Engine */
-        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
-        res = _DIBDRV_GetDisplayDriver()->pRealizeDefaultPalette(physDev->X11PhysDev);
+        ONCE(FIXME("STUB\n"));
+        /* HACK - we can't get the dib color table during SelectBitmap since it hasn't
+           been initialized yet.  This is called from DC_InitDC so it's a convenient place
+           to grab the color table. */
+        MAYBE(TRACE("Color table size = %d, Color table = %p\n", physDev->physBitmap.colorTableSize, physDev->physBitmap.colorTable));
+        if(!physDev->physBitmap.colorTableGrabbed)
+        {
+            MAYBE(TRACE("Grabbing palette\n"));
+            physDev->physBitmap.colorTable = HeapAlloc(GetProcessHeap(), 0, sizeof(physDev->physBitmap.colorTable[0]) * physDev->physBitmap.colorTableSize);
+            GetDIBColorTable(physDev->hdc, 0, physDev->physBitmap.colorTableSize, physDev->physBitmap.colorTable);
+#ifdef DIBDRV_ENABLE_MAYBE 
+           for(i = 0; i < physDev->physBitmap.colorTableSize; i++)
+            {
+                q = physDev->physBitmap.colorTable + i;
+                TRACE("  %03d : R%03d G%03d B%03d\n", i, q->rgbRed, q->rgbGreen, q->rgbBlue);
+            }
+#endif
+            physDev->physBitmap.colorTableGrabbed = TRUE;
+        }
+        res = 0;
     }
     else
     {
@@ -140,13 +162,14 @@ BOOL DIBDRV_GetICMProfile(DIBDRVPHYSDEV *physDev, LPDWORD lpcbName, LPWSTR lpszF
 {
     BOOL res;
     
-    TRACE("physDev:%p, lpcpName:%p, lpszFilename:%p\n", physDev, lpcbName, lpszFilename);
+    MAYBE(TRACE("physDev:%p, lpcpName:%p, lpszFilename:%p\n", physDev, lpcbName, lpszFilename));
 
     if(physDev->hasDIB)
     {
         /* DIB section selected in, use DIB Engine */
-        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
-        res = _DIBDRV_GetDisplayDriver()->pGetICMProfile(physDev->X11PhysDev, lpcbName, lpszFilename);
+        ONCE(FIXME("STUB\n"));
+
+        res = 0;
     }
     else
     {

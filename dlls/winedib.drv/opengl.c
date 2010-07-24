@@ -32,7 +32,7 @@ int DIBDRV_ChoosePixelFormat( DIBDRVPHYSDEV *physDev,
 {
     int res;
     
-    TRACE("physDev:%p, ppfd:%p\n", physDev, ppfd);
+    MAYBE(TRACE("physDev:%p, ppfd:%p\n", physDev, ppfd));
 
     if(physDev->hasDIB)
     {
@@ -55,7 +55,7 @@ int DIBDRV_DescribePixelFormat( DIBDRVPHYSDEV *physDev,
 {
     int res;
     
-    TRACE("physDev:%p, iPixelFormat:%d, nBytes:%d, ppfd:%p\n", physDev, iPixelFormat, nBytes, ppfd);
+    MAYBE(TRACE("physDev:%p, iPixelFormat:%d, nBytes:%d, ppfd:%p\n", physDev, iPixelFormat, nBytes, ppfd));
 
     if(physDev->hasDIB)
     {
@@ -75,7 +75,7 @@ int DIBDRV_GetPixelFormat( DIBDRVPHYSDEV *physDev)
 {
     int res;
     
-    TRACE("physDev:%p\n", physDev);
+    MAYBE(TRACE("physDev:%p\n", physDev));
 
     if(physDev->hasDIB)
     {
@@ -97,7 +97,7 @@ BOOL DIBDRV_SetPixelFormat( DIBDRVPHYSDEV *physDev,
 {
     BOOL res;
     
-    TRACE("physDev:%p, iPixelFormat:%d, ppfd:%p\n", physDev, iPixelFormat, ppfd);
+    MAYBE(TRACE("physDev:%p, iPixelFormat:%d, ppfd:%p\n", physDev, iPixelFormat, ppfd));
 
     if(physDev->hasDIB)
     {
@@ -117,7 +117,7 @@ BOOL DIBDRV_SwapBuffers( DIBDRVPHYSDEV *physDev )
 {
     BOOL res;
     
-    TRACE("physDev:%p\n", physDev);
+    MAYBE(TRACE("physDev:%p\n", physDev));
 
     if(physDev->hasDIB)
     {
@@ -142,7 +142,7 @@ BOOL CDECL DIBDRV_wglCopyContext(HGLRC hglrcSrc, HGLRC hglrcDst, UINT mask)
 {
     BOOL res;
     
-    TRACE("hglrcSrc:%p, hglrcDst:%p, mask:%x\n", hglrcSrc, hglrcDst, mask);
+    MAYBE(TRACE("hglrcSrc:%p, hglrcDst:%p, mask:%x\n", hglrcSrc, hglrcDst, mask));
 
     ONCE(FIXME("stub\n"));
     res = _DIBDRV_GetDisplayDriver()->pwglCopyContext(hglrcSrc, hglrcDst, mask);
@@ -159,7 +159,7 @@ HGLRC CDECL DIBDRV_wglCreateContext(DIBDRVPHYSDEV *physDev)
 {
     HGLRC res;
     
-    TRACE("physDev:%p\n", physDev);
+    MAYBE(TRACE("physDev:%p\n", physDev));
 
     if(physDev->hasDIB)
     {
@@ -184,7 +184,7 @@ BOOL CDECL DIBDRV_wglDeleteContext(HGLRC hglrc)
 {
     BOOL res;
     
-    TRACE("hglrc:%p\n", hglrc);
+    MAYBE(TRACE("hglrc:%p\n", hglrc));
 
     ONCE(FIXME("stub\n"));
     res = _DIBDRV_GetDisplayDriver()->pwglDeleteContext(hglrc);
@@ -200,7 +200,7 @@ PROC CDECL DIBDRV_wglGetProcAddress(LPCSTR lpszProc)
 {
     PROC res;
     
-    TRACE("lpszProc:%p\n", lpszProc);
+    MAYBE(TRACE("lpszProc:%p\n", lpszProc));
 
     ONCE(FIXME("stub\n"));
     res = _DIBDRV_GetDisplayDriver()->pwglGetProcAddress(lpszProc);
@@ -220,7 +220,7 @@ HDC CDECL DIBDRV_wglGetPbufferDCARB(DIBDRVPHYSDEV *physDev, HPBUFFERARB hPbuffer
 {
     HDC res;
     
-    TRACE("physDev:%p, hPbuffer:%p\n", physDev, hPbuffer);
+    MAYBE(TRACE("physDev:%p, hPbuffer:%p\n", physDev, hPbuffer));
 
     if(physDev->hasDIB)
     {
@@ -245,7 +245,7 @@ BOOL CDECL DIBDRV_wglMakeContextCurrentARB(DIBDRVPHYSDEV* pDrawDev, DIBDRVPHYSDE
 {
     BOOL res;
     
-    TRACE("pDrawDev:%p, pReadDev:%p, hglrc:%p\n", pDrawDev, pReadDev, hglrc);
+    MAYBE(TRACE("pDrawDev:%p, pReadDev:%p, hglrc:%p\n", pDrawDev, pReadDev, hglrc));
 
     if(pDrawDev->hasDIB && pReadDev->hasDIB)
     {
@@ -282,7 +282,7 @@ BOOL CDECL DIBDRV_wglMakeCurrent(DIBDRVPHYSDEV *physDev, HGLRC hglrc)
 {
     BOOL res;
     
-    TRACE("physDev:%p, hglrc:%p\n", physDev, hglrc);
+    MAYBE(TRACE("physDev:%p, hglrc:%p\n", physDev, hglrc));
 
     if(physDev->hasDIB)
     {
@@ -308,7 +308,7 @@ BOOL CDECL DIBDRV_wglSetPixelFormatWINE(DIBDRVPHYSDEV *physDev, int iPixelFormat
 {
     BOOL res;
     
-    TRACE("physDev:%p, iPixelFormat:%d, ppfd:%p\n", physDev, iPixelFormat, ppfd);
+    MAYBE(TRACE("physDev:%p, iPixelFormat:%d, ppfd:%p\n", physDev, iPixelFormat, ppfd));
 
     if(physDev->hasDIB)
     {
@@ -333,7 +333,7 @@ BOOL CDECL DIBDRV_wglShareLists(HGLRC hglrc1, HGLRC hglrc2)
 {
     BOOL res;
     
-    TRACE("hglrc1:%p, hglrc2:%p\n", hglrc1, hglrc2);
+    MAYBE(TRACE("hglrc1:%p, hglrc2:%p\n", hglrc1, hglrc2));
 
     ONCE(FIXME("stub\n"));
     res = _DIBDRV_GetDisplayDriver()->pwglShareLists(hglrc1, hglrc2);
@@ -350,7 +350,7 @@ BOOL CDECL DIBDRV_wglUseFontBitmapsA(DIBDRVPHYSDEV *physDev, DWORD first, DWORD 
 {
     BOOL res;
     
-    TRACE("physDev:%p, first:%d, count:%d, listBase:%d\n", physDev, first, count, listBase);
+    MAYBE(TRACE("physDev:%p, first:%d, count:%d, listBase:%d\n", physDev, first, count, listBase));
 
     if(physDev->hasDIB)
     {
@@ -375,7 +375,7 @@ BOOL CDECL DIBDRV_wglUseFontBitmapsW(DIBDRVPHYSDEV *physDev, DWORD first, DWORD 
 {
     BOOL res;
     
-    TRACE("physDev:%p, first:%d, count:%d, listBase:%d\n", physDev, first, count, listBase);
+    MAYBE(TRACE("physDev:%p, first:%d, count:%d, listBase:%d\n", physDev, first, count, listBase));
 
     if(physDev->hasDIB)
     {
