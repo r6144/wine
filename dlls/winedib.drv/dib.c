@@ -306,11 +306,14 @@ INT DIBDRV_SetDIBits( DIBDRVPHYSDEV *physDev, HBITMAP hbitmap, UINT startscan,
     DIBDRVBITMAP *sBmp, *dBmp;
     DWORD *buf;
     int iLine;
-    
+
     MAYBE(TRACE("physDev:%p, hbitmap:%p, startscan:%d, lines:%d, bits:%p, bmi:%p, coloruse:%d\n",
         physDev, hbitmap, startscan, lines, bits, info, coloruse));
 
-
+    /* quick fix for wine-1.2-rc1 */
+	if((int)lines < 0)
+	    lines = -lines;
+	    
     if(GetObjectW(hbitmap, sizeof(DIBSECTION), &ds) == sizeof(DIBSECTION))
     {
         /* SetDIBits writes bits to a DIB, so we should use the engine driver */
