@@ -4360,7 +4360,6 @@ HRESULT IWineD3DDeviceImpl_ClearSurface(IWineD3DDeviceImpl *This, IWineD3DSurfac
     RECT vp_rect;
     UINT drawable_width, drawable_height;
     IWineD3DSurfaceImpl *depth_stencil = (IWineD3DSurfaceImpl *) This->stencilBufferTarget;
-    IWineD3DSwapChainImpl *swapchain = NULL;
     struct wined3d_context *context;
 
     /* When we're clearing parts of the drawable, make sure that the target surface is well up to date in the
@@ -4498,12 +4497,7 @@ HRESULT IWineD3DDeviceImpl_ClearSurface(IWineD3DDeviceImpl *This, IWineD3DSurfac
 
     LEAVE_GL();
 
-    if (SUCCEEDED(IWineD3DSurface_GetContainer((IWineD3DSurface *)target, &IID_IWineD3DSwapChain, (void **)&swapchain))) {
-        if (target == (IWineD3DSurfaceImpl*) swapchain->frontBuffer) {
-            wglFlush();
-        }
-        IWineD3DSwapChain_Release((IWineD3DSwapChain *) swapchain);
-    }
+    wglFlush(); /* Flush to ensure ordering across contexts. */
 
     context_release(context);
 
@@ -5474,6 +5468,9 @@ static void color_fill_fbo(IWineD3DDevice *iface, IWineD3DSurface *surface,
     checkGLcall("glClear");
 
     LEAVE_GL();
+
+    wglFlush(); /* Flush to ensure ordering across contexts. */
+
     context_release(context);
 }
 
@@ -5821,6 +5818,9 @@ void stretch_rect_fbo(IWineD3DDevice *iface, IWineD3DSurface *src_surface, const
     }
 
     LEAVE_GL();
+
+    wglFlush(); /* Flush to ensure ordering across contexts. */
+
     context_release(context);
 
     IWineD3DSurface_ModifyLocation(dst_surface, SFLAG_INDRAWABLE, TRUE);
