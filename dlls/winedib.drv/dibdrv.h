@@ -44,6 +44,9 @@
 /* enable this if you want debugging (i.e. TRACEs) output */
 #define DIBDRV_ENABLE_MAYBE
 
+/* enable this if you want antialiased fonts */
+#define DIBDRV_ANTIALIASED_FONTS
+
 /* provide a way to make debugging output appear
    only once. Usage example:
    ONCE(FIXME("Some message\n")); */
@@ -102,7 +105,7 @@ typedef struct _DIBDRV_PRIMITIVE_FUNCS
                                 const struct _DIBDRVPHYSDEV *physDevSrc, int xSrc, int ySrc, int widthSrc, int heightSrc, DWORD rop );
                                 
     /* font drawing helper */
-    void  (* FreetypeBlit)     (      struct _DIBDRVPHYSDEV *physDev, int x, int y, FT_Bitmap *bmp);
+    void  (* FreetypeBlit)     (      struct _DIBDRVPHYSDEV *physDev, int x, int y, RECT *clipRec, FT_Bitmap *bmp);
 
 } DIBDRV_PRIMITIVE_FUNCS;
 
@@ -225,6 +228,9 @@ typedef struct _DIBDRVPHYSDEV
     DWORD curDash, leftInDash;
     enum MARKSPACE { mark, space } markSpace;
     
+    /* pen style */
+    UINT penStyle;
+    
     /* pen drawing functions */
     void (* penHLine)  (struct _DIBDRVPHYSDEV *physDev, int x1, int x2, int y);
     void (* penVLine)  (struct _DIBDRVPHYSDEV *physDev, int x, int y1, int y2);
@@ -250,8 +256,10 @@ typedef struct _DIBDRVPHYSDEV
     COLORREF textColor;
     COLORREF textBackground;
 
+#ifdef DIBDRV_ANTIALIASED_FONTS
     /* text color table for antialiased fonts */
     COLORREF textColorTable[256];
+#endif
 
     /* freetype face associated to current DC HFONT */
     FT_Face face;
@@ -387,5 +395,22 @@ HBITMAP _DIBDRV_ConvertDevDDBtoDIB( HDC hdcSrc, HDC hdcDst, int xSrc, int ySrc, 
 /***********************************************************************
  *           DIBDRV_GetDeviceCaps */
 INT DIBDRV_GetDeviceCaps( DIBDRVPHYSDEV *physDev, INT cap );
+
+/* *********************************************************************
+ * GEOMETRIC UTILITIES
+ * ********************************************************************/
+
+/* intersect 2 rectangles (just to not use USER32 one...) */
+BOOL _DIBDRV_IntersectRect(RECT *d, const RECT *s1, const RECT *s2);
+
+/* converts positions  from Word space to Device space */
+void _DIBDRV_Position_ws2ds(DIBDRVPHYSDEV *physDev, int *x, int *y);
+void _DIBDRV_Positions_ws2ds(DIBDRVPHYSDEV *physDev, int *x1, int *y1, int *x2, int *y2);
+
+/* converts sizes from Word space to Device space */
+void _DIBDRV_Sizes_ws2ds(DIBDRVPHYSDEV *physDev, int *w, int *h);
+
+/* converts a rectangle form Word space to Device space */
+void _DIBDRV_Rect_ws2ds(DIBDRVPHYSDEV *physDev, const RECT *src, RECT *dst);
 
 #endif

@@ -261,6 +261,12 @@ BOOL _DIBDRV_InternalAlphaBlend( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst, 
     SIZE szSrc, szDst;
     int iRec;
     RECT dstClip, srcClip;
+    
+    /* converts to device spaces */
+    _DIBDRV_Position_ws2ds(physDevDst, &xDst, &yDst);
+    _DIBDRV_Sizes_ws2ds(physDevDst, &widthDst, &heightDst);
+    _DIBDRV_Position_ws2ds(physDevSrc, &xSrc, &ySrc);
+    _DIBDRV_Sizes_ws2ds(physDevSrc, &widthSrc, &heightSrc);
 
     /* first clip on physical DC sizes */
     setPoint(&pd, xDst, yDst);
@@ -320,7 +326,6 @@ BOOL DIBDRV_AlphaBlend( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst, INT width
           xDst, yDst, widthDst, heightDst,
           physDevSrc, physDevSrc->hasDIB ? "DIB-" : "DDB", physDevSrc->hasDIB ? _DIBDRVBITMAP_GetFormatName(&physDevSrc->physBitmap) : "",
           xSrc, ySrc, widthSrc, heightSrc));
-          
 
     /* if sizes are null or negative, returns false */
     if(widthSrc <= 0 || heightSrc <= 0 || widthDst <= 0 || heightDst <= 0)
@@ -421,6 +426,12 @@ BOOL _DIBDRV_InternalBitBlt( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
     SIZE sz;
     int iRec;
     RECT dstClip, srcClip;
+
+    /* converts to device spaces */
+    _DIBDRV_Position_ws2ds(physDevDst, &xDst, &yDst);
+    _DIBDRV_Sizes_ws2ds(physDevDst, &width, &height);
+    if(physDevSrc)
+        _DIBDRV_Position_ws2ds(physDevSrc, &xSrc, &ySrc);
 
     /* first clip on physical DC sizes */
     setPoint(&pd, xDst, yDst);
@@ -632,6 +643,15 @@ BOOL _DIBDRV_InternalStretchBlt( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
     SIZE szSrc, szDst;
     int iRec;
     RECT dstClip, srcClip;
+
+    /* converts to device spaces */
+    _DIBDRV_Position_ws2ds(physDevDst, &xDst, &yDst);
+    _DIBDRV_Sizes_ws2ds(physDevDst, &widthDst, &heightDst);
+    if(physDevSrc)
+    {
+        _DIBDRV_Position_ws2ds(physDevSrc, &xSrc, &ySrc);
+        _DIBDRV_Sizes_ws2ds(physDevSrc, &widthSrc, &heightSrc);
+    }
 
     /* first clip on physical DC sizes */
     setPoint(&pd, xDst, yDst);

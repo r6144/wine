@@ -43,11 +43,12 @@ static int device_init_done;
 
 /* NOTE :
     Removing TC_RA_ABLE avoids bitmapped fonts, so FT_Face is always non-NULL
+    UPDATE : remove TC_RA_ABLE seems unneeded
     Adding TC_VA_ABLE forces to use gdi fonts always, so we can get an FT_Face
 */
 unsigned int text_caps = (TC_OP_CHARACTER | TC_OP_STROKE | TC_CP_STROKE |
                           TC_CR_ANY | TC_SA_DOUBLE | TC_SA_INTEGER |
-                          TC_SA_CONTIN | TC_UA_ABLE | TC_SO_ABLE /* | TC_RA_ABLE */ | TC_VA_ABLE);
+                          TC_SA_CONTIN | TC_UA_ABLE | TC_SO_ABLE | TC_RA_ABLE | TC_VA_ABLE);
                           /* X11R6 adds TC_SF_X_YINDEP, Xrender adds TC_VA_ABLE */
 
 
@@ -119,6 +120,10 @@ static void device_init(void)
     device_init_done = TRUE;
 }
 
+/* dummy null function for pen and brush */
+static void dummy3(DIBDRVPHYSDEV *p, int a, int b, int c) {}
+static void dummy4(DIBDRVPHYSDEV *p, int a, int b, int c, int d) {}
+
 /**********************************************************************
  *           DIBDRV_CreateDC
  */
@@ -178,12 +183,19 @@ BOOL DIBDRV_CreateDC( HDC hdc, DIBDRVPHYSDEV **pdev, LPCWSTR driver, LPCWSTR dev
     physDev->penColor = 0;
     _DIBDRV_CalcAndXorMasks(physDev->rop2, 0, &physDev->penAnd, &physDev->penXor);
     
+    physDev->penStyle = PS_NULL;
+    physDev->penHLine = dummy3;
+    physDev->penVLine = dummy3;
+    physDev->penLine  = dummy4;
+    physDev->penPattern = NULL;
+    
     physDev->brushColor = 0;
     _DIBDRV_CalcAndXorMasks(physDev->rop2, 0, &physDev->brushAnd, &physDev->brushXor);
     physDev->brushAnds = NULL;
     physDev->brushXors = NULL;
     
     physDev->brushStyle = BS_NULL;
+    physDev->brushHLine = dummy3;
     
     physDev->isBrushBitmap = FALSE;
     _DIBDRVBITMAP_Clear(&physDev->brushBitmap);
@@ -193,8 +205,10 @@ BOOL DIBDRV_CreateDC( HDC hdc, DIBDRVPHYSDEV **pdev, LPCWSTR driver, LPCWSTR dev
     physDev->textColor = 0;
     physDev->textBackground = 0;
 
+#ifdef DIBDRV_ANTIALIASED_FONTS        
     /* text color table for antialiased fonts */
     memset(physDev->textColorTable, 0, 256);
+#endif
 
     /* freetype face associated to current DC HFONT */
     physDev->face = NULL;

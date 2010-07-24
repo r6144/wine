@@ -46,6 +46,9 @@ MAKE_FUNCPTR(FT_Set_Pixel_Sizes)
 MAKE_FUNCPTR(FT_Get_First_Char)
 MAKE_FUNCPTR(FT_Render_Glyph)
 MAKE_FUNCPTR(FT_Glyph_Transform)
+MAKE_FUNCPTR(FT_Bitmap_New)
+MAKE_FUNCPTR(FT_Bitmap_Done)
+MAKE_FUNCPTR(FT_Bitmap_Convert)
 #undef MAKE_FUNCPTR
 
 /* freetype initialization flag */
@@ -95,6 +98,9 @@ BOOL _DIBDRV_FreeType_Init(void)
     LOAD_FUNCPTR(FT_Get_First_Char)
     LOAD_FUNCPTR(FT_Render_Glyph)
     LOAD_FUNCPTR(FT_Glyph_Transform)
+    LOAD_FUNCPTR(FT_Bitmap_New)
+    LOAD_FUNCPTR(FT_Bitmap_Done)
+    LOAD_FUNCPTR(FT_Bitmap_Convert)
 #undef LOAD_FUNCPTR
 
     error = pFT_Init_FreeType(&DIBDRV_ftLibrary);

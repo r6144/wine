@@ -139,15 +139,15 @@ BOOL _DIBDRV_AlphaBlend_generic(DIBDRVPHYSDEV *physDevDst, int xDst, int yDst,
                     
 /* ------------------------------------------------------------*/
 /*               FREETYPE FONT BITMAP BLITTING                 */
-void _DIBDRV_freetype_blit_8888        (DIBDRVPHYSDEV *dib, int x, int y, FT_Bitmap *bmp);
-void _DIBDRV_freetype_blit_32_RGB      (DIBDRVPHYSDEV *dib, int x, int y, FT_Bitmap *bmp);
-void _DIBDRV_freetype_blit_32_BITFIELDS(DIBDRVPHYSDEV *dib, int x, int y, FT_Bitmap *bmp);
-void _DIBDRV_freetype_blit_24          (DIBDRVPHYSDEV *dib, int x, int y, FT_Bitmap *bmp);
-void _DIBDRV_freetype_blit_16_RGB      (DIBDRVPHYSDEV *dib, int x, int y, FT_Bitmap *bmp);
-void _DIBDRV_freetype_blit_16_BITFIELDS(DIBDRVPHYSDEV *dib, int x, int y, FT_Bitmap *bmp);
-void _DIBDRV_freetype_blit_8           (DIBDRVPHYSDEV *dib, int x, int y, FT_Bitmap *bmp);
-void _DIBDRV_freetype_blit_4           (DIBDRVPHYSDEV *dib, int x, int y, FT_Bitmap *bmp);
-void _DIBDRV_freetype_blit_1           (DIBDRVPHYSDEV *dib, int x, int y, FT_Bitmap *bmp);
+void _DIBDRV_freetype_blit_8888        (DIBDRVPHYSDEV *dib, int x, int y, RECT *clipRec, FT_Bitmap *bmp);
+void _DIBDRV_freetype_blit_32_RGB      (DIBDRVPHYSDEV *dib, int x, int y, RECT *clipRec, FT_Bitmap *bmp);
+void _DIBDRV_freetype_blit_32_BITFIELDS(DIBDRVPHYSDEV *dib, int x, int y, RECT *clipRec, FT_Bitmap *bmp);
+void _DIBDRV_freetype_blit_24          (DIBDRVPHYSDEV *dib, int x, int y, RECT *clipRec, FT_Bitmap *bmp);
+void _DIBDRV_freetype_blit_16_RGB      (DIBDRVPHYSDEV *dib, int x, int y, RECT *clipRec, FT_Bitmap *bmp);
+void _DIBDRV_freetype_blit_16_BITFIELDS(DIBDRVPHYSDEV *dib, int x, int y, RECT *clipRec, FT_Bitmap *bmp);
+void _DIBDRV_freetype_blit_8           (DIBDRVPHYSDEV *dib, int x, int y, RECT *clipRec, FT_Bitmap *bmp);
+void _DIBDRV_freetype_blit_4           (DIBDRVPHYSDEV *dib, int x, int y, RECT *clipRec, FT_Bitmap *bmp);
+void _DIBDRV_freetype_blit_1           (DIBDRVPHYSDEV *dib, int x, int y, RECT *clipRec, FT_Bitmap *bmp);
 
 DIBDRV_PRIMITIVE_FUNCS DIBDRV_funcs_DIB32_RGB =
 {

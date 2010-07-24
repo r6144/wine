@@ -290,6 +290,12 @@ static void PatternBrushHLine(DIBDRVPHYSDEV *physDev, int x1, int x2, int y)
     physDev->physBitmap.funcs->PatternHLine(&physDev->physBitmap, x1, x2, y, and, xor, physDev->brushBitmap.width, x1 % physDev->brushBitmap.width);
 }
 
+/* null function for PS_NULL and BS_NULL pen and brush styles */
+void NullPenHLine(DIBDRVPHYSDEV *physDev, int x1, int x2, int y) {}
+void NullPenVLine(DIBDRVPHYSDEV *physDev, int x, int y1, int y2) {}
+void NullPenLine(DIBDRVPHYSDEV *physDev, int x1, int y1, int x2, int y2) {}
+void NullBrushHLine(DIBDRVPHYSDEV *physDev, int x1, int x2, int y) {}
+
 /***********************************************************************
  *           DIBDRV_SelectPen
  */
@@ -334,6 +340,12 @@ HPEN DIBDRV_SelectPen( DIBDRVPHYSDEV *physDev, HPEN hpen )
                 physDev->penLine  = DashedPenLine;
                 physDev->penPattern = &dashPatterns[logpen.lopnStyle - PS_DASH];
                 _DIBDRV_ResetDashOrigin(physDev);
+                break;
+            case PS_NULL:
+                physDev->penHLine = NullPenHLine;
+                physDev->penVLine = NullPenVLine;
+                physDev->penLine  = NullPenLine;
+                physDev->penPattern = NULL;
                 break;
         }
         res = hpen;
@@ -484,6 +496,7 @@ HBRUSH DIBDRV_SelectBrush( DIBDRVPHYSDEV *physDev, HBRUSH hbrush )
             {
                 MAYBE(TRACE("NULL Pattern\n"));
                 physDev->brushColorref = 0;
+                physDev->brushHLine = NullBrushHLine;
                 goto solid;
             }
                 

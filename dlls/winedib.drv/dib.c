@@ -65,15 +65,46 @@ INT DIBDRV_GetDIBits( DIBDRVPHYSDEV *physDev, HBITMAP hbitmap, UINT startscan,
 UINT DIBDRV_SetDIBColorTable( DIBDRVPHYSDEV *physDev, UINT start, UINT count,
                               const RGBQUAD *colors )
 {
-    UINT res;
+    DIBDRVBITMAP *dib = &physDev->physBitmap;
     
     MAYBE(TRACE("physDev:%p, start:%d, count:%d, colors:%p\n", physDev, start, count, colors));
 
     /* SetDIBColorTable operates on a DIB, so we use the engine */
-    ONCE(FIXME("STUB\n"));
-    res = 0;
+    
+    /* if bpp > 8, some error occurred... */
+    if(dib->bitCount > 8)
+    {
+        ERR("Called for BPP > 8\n");
+        return 0;
+    }
+    
+    /* if dib hasn't a color table, or has a small one, we must before
+       create/extend it */
+    if(!(dib->colorTable))
+    {
+        dib->colorTableSize = (1 << dib->bitCount);
+        dib->colorTable = HeapAlloc(GetProcessHeap(), 0, sizeof(RGBQUAD) * dib->colorTableSize);
+    }
+    else if(dib->colorTableSize < (1 << dib->bitCount))
+    {
+        int newSize = (1 << dib->bitCount);
+        RGBQUAD *newTable = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(RGBQUAD) * newSize);
+        memcpy(newTable, dib->colorTable, sizeof(RGBQUAD) * dib->colorTableSize);
+        HeapFree(GetProcessHeap(), 0, dib->colorTable);
+        dib->colorTable = newTable;
+        dib->colorTableSize = newSize;
+    }
+    
+    /* sanity check */
+    if(start + count > dib->colorTableSize)
+    {
+        ERR("Out of range setting color table, size is %d, requested is %d\n", dib->colorTableSize, start+count);
+        return 0;
+    }
+    memcpy(dib->colorTable + start, colors, sizeof(RGBQUAD) * count);
+    dib->colorTableGrabbed = TRUE;
 
-    return res;
+    return TRUE;
 }
 
 /***********************************************************************

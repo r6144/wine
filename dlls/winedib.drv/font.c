@@ -26,14 +26,56 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(dibdrv);
 
+
+#if 0
+/* prints out some info about face */
+void PrintFaceInfo(FT_Face face)
+{
+    int i;
+    
+    fprintf(stderr, "----------------------------------------------------------\n");
+    fprintf(stderr, "Family name :%s\n", face->family_name);
+    fprintf(stderr, "Style name  :%s\n", face->style_name);
+    fprintf(stderr, "Num fixed sizes : %d\n", face->num_fixed_sizes);
+    if(face->num_fixed_sizes)
+    {
+        fprintf(stderr, "Fixed sizes :");
+        for(i = 0; i < face->num_fixed_sizes; i++)
+            fprintf(stderr, " (%d, %d)", face->available_sizes[i].width, face->available_sizes[i].height);
+        fprintf(stderr, "\n");
+    }
+    fprintf(stderr, "Face flags: ");
+    if(face->face_flags & FT_FACE_FLAG_SCALABLE          ) fprintf(stderr, "FT_FACE_FLAG_SCALABLE ");
+    if(face->face_flags & FT_FACE_FLAG_FIXED_SIZES       ) fprintf(stderr, "FT_FACE_FLAG_FIXED_SIZES ");
+    if(face->face_flags & FT_FACE_FLAG_FIXED_WIDTH       ) fprintf(stderr, "FT_FACE_FLAG_FIXED_WIDTH ");
+    if(face->face_flags & FT_FACE_FLAG_SFNT              ) fprintf(stderr, "FT_FACE_FLAG_SFNT ");
+    if(face->face_flags & FT_FACE_FLAG_HORIZONTAL        ) fprintf(stderr, "FT_FACE_FLAG_HORIZONTAL ");
+    if(face->face_flags & FT_FACE_FLAG_VERTICAL          ) fprintf(stderr, "FT_FACE_FLAG_VERTICAL ");
+    if(face->face_flags & FT_FACE_FLAG_KERNING           ) fprintf(stderr, "FT_FACE_FLAG_KERNING ");
+    if(face->face_flags & FT_FACE_FLAG_FAST_GLYPHS       ) fprintf(stderr, "FT_FACE_FLAG_FAST_GLYPHS ");
+    if(face->face_flags & FT_FACE_FLAG_MULTIPLE_MASTERS  ) fprintf(stderr, "FT_FACE_FLAG_MULTIPLE_MASTERS ");
+    if(face->face_flags & FT_FACE_FLAG_GLYPH_NAMES       ) fprintf(stderr, "FT_FACE_FLAG_GLYPH_NAMES ");
+    if(face->face_flags & FT_FACE_FLAG_EXTERNAL_STREAM   ) fprintf(stderr, "FT_FACE_FLAG_EXTERNAL_STREAM ");
+    if(face->face_flags & FT_FACE_FLAG_HINTER            ) fprintf(stderr, "FT_FACE_FLAG_HINTER ");
+    if(face->face_flags & FT_FACE_FLAG_CID_KEYED         ) fprintf(stderr, "FT_FACE_FLAG_CID_KEYED ");
+    if(face->face_flags & FT_FACE_FLAG_TRICKY            ) fprintf(stderr, "FT_FACE_FLAG_TRICKY ");
+    fprintf(stderr, "\n");
+    
+    fprintf(stderr, "Style flags: ");
+    if(face->style_flags & FT_STYLE_FLAG_ITALIC) fprintf(stderr, "FT_STYLE_FLAG_ITALIC ");
+    if(face->style_flags & FT_STYLE_FLAG_BOLD)   fprintf(stderr, "FT_STYLE_FLAG_BOLD ");
+    fprintf(stderr, "\n");
+    fprintf(stderr, "----------------------------------------------------------\n");
+}
+#endif
+
+
 /**********************************************************************
  *          DIBDRV_SetTextColor
  */
 COLORREF DIBDRV_SetTextColor( DIBDRVPHYSDEV *physDev, COLORREF color )
 {
     COLORREF res;
-    INT r, g, b;
-    INT i;
     
     MAYBE(TRACE("physDev:%p, color:%08x\n", physDev, color));
 
@@ -45,24 +87,30 @@ COLORREF DIBDRV_SetTextColor( DIBDRVPHYSDEV *physDev, COLORREF color )
         if(color == physDev->textColor)
             return color;
 
-        /* stores old color */
+        /* stores old color and sets new one */
         res = physDev->textColor;
-        
+        physDev->textColor = color;
+
+#ifdef DIBDRV_ANTIALIASED_FONTS        
         /* fills the text color table used on antialiased font display */
         if(physDev->physBitmap.funcs)
         {
+            BYTE r, g, b;
+            INT i;
+
             r = GetRValue(color);
             g = GetGValue(color);
             b = GetBValue(color);
             for(i = 0; i < 256; i++)
             {
                 physDev->textColorTable[i] = physDev->physBitmap.funcs->ColorToPixel(&physDev->physBitmap, RGB(
-                    MulDiv(r, i, 256),
-                    MulDiv(g, i, 256),
-                    MulDiv(b, i, 256)
+                    MulDiv(r, i, 255),
+                    MulDiv(g, i, 255),
+                    MulDiv(b, i, 255)
                 ));               
             }
         }
+#endif        
         
         /* returns previous text color */
         return res;
@@ -111,7 +159,11 @@ HFONT DIBDRV_SelectFont( DIBDRVPHYSDEV *physDev, HFONT hfont, GdiFont *gdiFont )
             FIXME("Error, null Ft_Face\n");
             return hfont;
         }
-
+        
+#if 0
+        /* prints out some info about face */
+        if(TRACE_ON(dibdrv)) MAYBE(PrintFaceInfo(physDev->face));
+#endif
         /* setup the correct charmap.... maybe */
         for (i = 0; i < physDev->face->num_charmaps; ++i)
         {

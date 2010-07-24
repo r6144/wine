@@ -30,18 +30,22 @@ WINE_DEFAULT_DEBUG_CHANNEL(dibdrv);
  */
 UINT DIBDRV_RealizePalette( DIBDRVPHYSDEV *physDev, HPALETTE hpal, BOOL primary )
 {
-    UINT res;
+    UINT res = 0;
     
     MAYBE(TRACE("physDev:%p, hpal:%p, primary:%s\n", physDev, hpal, (primary ? "TRUE" : "FALSE")));
     
-    /* we should in any case call X11 function, as UnrealizePalette() doesn't
-     * take a physDev parameter */
-    res = _DIBDRV_GetDisplayDriver()->pRealizePalette(physDev->X11PhysDev, hpal, primary);
-    
-    if(physDev->hasDIB)
+    if(physDev && physDev->hasDIB)
     {
         /* DIB section selected in, additional (if needed) engine code */
         ONCE(FIXME("STUB\n"));
+        res = 0;
+    }
+    else
+    {
+        /* we should in any case call X11 function, as UnrealizePalette() doesn't
+         * take a physDev parameter */
+        res = _DIBDRV_GetDisplayDriver()->pRealizePalette(physDev ? physDev->X11PhysDev : NULL, hpal, primary);
+    
     }
 
     return res;
