@@ -94,6 +94,8 @@ typedef struct _DIBDRV_PRIMITIVE_FUNCS
     BOOL  (* PutLine)          (      struct _DIBDRVBITMAP *bmp, int line, int startx, int width, void *buf);
     
     /* BitBlt primitives */
+    BOOL  (* AlphaBlend)       (      struct _DIBDRVPHYSDEV *physDevDst, int xDst, int yDst, int widthDst, int heightDst,
+                                const struct _DIBDRVPHYSDEV *physDevSrc, int xSrc, int ySrc, int widthSrc, int heightSrc, BLENDFUNCTION blendFn );
     BOOL  (* BitBlt)           (      struct _DIBDRVPHYSDEV *physDevDst, int xDst, int yDst, int width, int height,
                                 const struct _DIBDRVPHYSDEV *physDevSrc, int xSrc, int ySrc, DWORD rop );
     BOOL  (* StretchBlt)       (      struct _DIBDRVPHYSDEV *physDevDst, int xDst, int yDst, int widthDst, int heightDst,

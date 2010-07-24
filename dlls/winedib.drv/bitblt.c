@@ -150,34 +150,84 @@ BOOL DIBDRV_AlphaBlend( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst, INT width
           xDst, yDst, widthDst, heightDst,
           physDevSrc, physDevSrc->hasDIB ? "DIB-" : "DDB", physDevSrc->hasDIB ? _DIBDRVBITMAP_GetFormatName(&physDevSrc->physBitmap) : "",
           xSrc, ySrc, widthSrc, heightSrc));
+          
 
-    if(physDevDst->hasDIB && physDevSrc->hasDIB)
+    /* if sizes are null or negative, returns false */
+    if(widthSrc <= 0 || heightSrc <= 0 || widthDst <= 0 || heightDst <= 0)
     {
-        /* DIB section selected in both source and dest DC, use DIB Engine */
-        ONCE(FIXME("STUB\n"));
-        res = TRUE;
+        res = FALSE;
+        goto fin;
     }
-    else if(!physDevDst->hasDIB && !physDevSrc->hasDIB)
+          
+    /* source sould be a 32 bit DIB */
+    if(!physDevSrc)
     {
-        /* DDB selected in noth source and dest DC, use X11 driver */
-        res =  _DIBDRV_GetDisplayDriver()->pAlphaBlend(physDevDst->X11PhysDev, xDst, yDst, widthDst, heightDst,
-                                                       physDevSrc->X11PhysDev, xSrc, ySrc, widthSrc, heightSrc,
-                                                       blendfn);
+        FIXME("Null source bitmap -- shouldn't happen\n");
+        res = FALSE;
+        goto fin;
     }
-    else if(physDevSrc->hasDIB)
+    else if(!physDevSrc->hasDIB)
     {
-        /* DIB on source, DDB on dest -- must convert source DIB to DDB and use X11 driver for blit */
-        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
-        res =  _DIBDRV_GetDisplayDriver()->pAlphaBlend(physDevDst->X11PhysDev, xDst, yDst, widthDst, heightDst,
-                                                   physDevSrc->X11PhysDev, xSrc, ySrc, widthSrc, heightSrc,
-                                                   blendfn);
+        FIXME("DDB source bitmap -- shouldn't happen\n");
+        res = FALSE;
+        goto fin;
     }
-    else /* if(physDevDst->hasDIB) */
+    
+    if(physDevDst->hasDIB)
     {
-        /* DDB on source, DIB on dest -- must convert source DDB to DIB and use the engine for blit */
-        ONCE(FIXME("STUB\n"));
-        res = TRUE; 
+        /* DIB section selected in dest DC, use DIB Engine */
+        MAYBE(TRACE("Blending DIB->DIB\n"));
+        res = physDevDst->physBitmap.funcs->AlphaBlend(physDevDst, xDst, yDst, widthDst, heightDst,
+                                                       physDevSrc, xSrc, ySrc, widthSrc, heightSrc, blendfn);
     }
+    else
+    {
+        /* DDB selected on dest DC -- must double-convert */
+        HBITMAP tmpDIB, stock;
+        HDC tmpDC;
+        MAYBE(TRACE("Blending DIB->DDB\n"));
+        
+        /* converts dest DDB onto a temporary DIB -- just the needed part */
+        tmpDIB = _DIBDRV_ConvertDevDDBtoDIB(physDevDst->hdc, physDevSrc->hdc, xDst, yDst, widthDst, heightDst);
+        if(!tmpDIB)
+        {
+            ERR("Couldn't convert dest DDB to DIB\n");
+            res = FALSE;
+            goto fin;
+        }
+        
+        /* selects the temporary DIB into a temporary DC */
+        tmpDC = CreateCompatibleDC(physDevDst->hdc);
+        if(!tmpDC)
+        {
+            ERR("Couldn't create temporary DC\n");
+            DeleteObject(tmpDIB);
+            res = FALSE;
+            goto fin;
+        }
+        stock = SelectObject(tmpDC, tmpDIB);
+        if(!stock)
+        {
+            ERR("Couldn't select temporary DIB into temporary DC\n");
+            DeleteDC(tmpDC);
+            DeleteObject(tmpDIB);
+            res = FALSE;
+            goto fin;
+        }
+        
+        /* blends source DIB onto temp DIB and re-blits onto dest DC */
+        res = GdiAlphaBlend(tmpDC, 0, 0, widthDst, heightDst, physDevSrc->hdc, xSrc, ySrc, widthSrc, heightSrc, blendfn);
+        if(!res)
+            MAYBE(TRACE("AlphaBlend failed\n"));
+        else
+            res = BitBlt(physDevDst->hdc, xDst, yDst, widthDst, heightDst, tmpDC, 0, 0, SRCCOPY);
+            
+        /* frees resources */
+        SelectObject(tmpDC, stock);
+        DeleteDC(tmpDC);
+        DeleteObject(tmpDIB);        
+    }
+fin:
     return res;
 }
 
