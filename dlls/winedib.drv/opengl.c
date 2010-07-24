@@ -30,10 +30,22 @@ WINE_DEFAULT_DEBUG_CHANNEL(dibdrv);
 int DIBDRV_ChoosePixelFormat( DIBDRVPHYSDEV *physDev,
                               const PIXELFORMATDESCRIPTOR *ppfd )
 {
+    int res;
+    
     TRACE("physDev:%p, ppfd:%p\n", physDev, ppfd);
 
-    ONCE(FIXME("stub\n"));
-    return _DIBDRV_GetDisplayDriver()->pChoosePixelFormat(physDev->X11PhysDev, ppfd);
+    if(physDev->hasDIB)
+    {
+        /* DIB section selected in, use DIB Engine */
+        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
+        res = _DIBDRV_GetDisplayDriver()->pChoosePixelFormat(physDev->X11PhysDev, ppfd);
+    }
+    else
+    {
+        /* DDB selected in, use X11 driver */
+        res = _DIBDRV_GetDisplayDriver()->pChoosePixelFormat(physDev->X11PhysDev, ppfd);
+    }
+    return res;
 }
 
 int DIBDRV_DescribePixelFormat( DIBDRVPHYSDEV *physDev,
@@ -41,36 +53,84 @@ int DIBDRV_DescribePixelFormat( DIBDRVPHYSDEV *physDev,
                                 UINT nBytes,
                                 PIXELFORMATDESCRIPTOR *ppfd )
 {
+    int res;
+    
     TRACE("physDev:%p, iPixelFormat:%d, nBytes:%d, ppfd:%p\n", physDev, iPixelFormat, nBytes, ppfd);
 
-    ONCE(FIXME("stub\n"));
-    return _DIBDRV_GetDisplayDriver()->pDescribePixelFormat(physDev->X11PhysDev, iPixelFormat, nBytes, ppfd);
+    if(physDev->hasDIB)
+    {
+        /* DIB section selected in, use DIB Engine */
+        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
+        res = _DIBDRV_GetDisplayDriver()->pDescribePixelFormat(physDev->X11PhysDev, iPixelFormat, nBytes, ppfd);
+    }
+    else
+    {
+        /* DDB selected in, use X11 driver */
+        res = _DIBDRV_GetDisplayDriver()->pDescribePixelFormat(physDev->X11PhysDev, iPixelFormat, nBytes, ppfd);
+    }
+    return res;
 }
 
 int DIBDRV_GetPixelFormat( DIBDRVPHYSDEV *physDev)
 {
+    int res;
+    
     TRACE("physDev:%p\n", physDev);
 
-    ONCE(FIXME("stub\n"));
-    return _DIBDRV_GetDisplayDriver()->pGetPixelFormat(physDev->X11PhysDev);
+    if(physDev->hasDIB)
+    {
+        /* DIB section selected in, use DIB Engine */
+        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
+        res = _DIBDRV_GetDisplayDriver()->pGetPixelFormat(physDev->X11PhysDev);
+    }
+    else
+    {
+        /* DDB selected in, use X11 driver */
+        res = _DIBDRV_GetDisplayDriver()->pGetPixelFormat(physDev->X11PhysDev);
+    }
+    return res;
 }
 
 BOOL DIBDRV_SetPixelFormat( DIBDRVPHYSDEV *physDev,
                             int iPixelFormat,
                             const PIXELFORMATDESCRIPTOR *ppfd )
 {
+    BOOL res;
+    
     TRACE("physDev:%p, iPixelFormat:%d, ppfd:%p\n", physDev, iPixelFormat, ppfd);
 
-    ONCE(FIXME("stub\n"));
-    return _DIBDRV_GetDisplayDriver()->pSetPixelFormat(physDev->X11PhysDev, iPixelFormat, ppfd);
+    if(physDev->hasDIB)
+    {
+        /* DIB section selected in, use DIB Engine */
+        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
+        res = _DIBDRV_GetDisplayDriver()->pSetPixelFormat(physDev->X11PhysDev, iPixelFormat, ppfd);
+    }
+    else
+    {
+        /* DDB selected in, use X11 driver */
+        res = _DIBDRV_GetDisplayDriver()->pSetPixelFormat(physDev->X11PhysDev, iPixelFormat, ppfd);
+    }
+    return res;
 }
 
 BOOL DIBDRV_SwapBuffers( DIBDRVPHYSDEV *physDev )
 {
+    BOOL res;
+    
     TRACE("physDev:%p\n", physDev);
 
-    ONCE(FIXME("stub\n"));
-    return _DIBDRV_GetDisplayDriver()->pSwapBuffers(physDev->X11PhysDev);
+    if(physDev->hasDIB)
+    {
+        /* DIB section selected in, use DIB Engine */
+        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
+        res = _DIBDRV_GetDisplayDriver()->pSwapBuffers(physDev->X11PhysDev);
+    }
+    else
+    {
+        /* DDB selected in, use X11 driver */
+        res = _DIBDRV_GetDisplayDriver()->pSwapBuffers(physDev->X11PhysDev);
+    }
+    return res;
 }
 
 /**
@@ -80,10 +140,14 @@ BOOL DIBDRV_SwapBuffers( DIBDRVPHYSDEV *physDev )
  */
 BOOL CDECL DIBDRV_wglCopyContext(HGLRC hglrcSrc, HGLRC hglrcDst, UINT mask)
 {
+    BOOL res;
+    
     TRACE("hglrcSrc:%p, hglrcDst:%p, mask:%x\n", hglrcSrc, hglrcDst, mask);
 
     ONCE(FIXME("stub\n"));
-    return _DIBDRV_GetDisplayDriver()->pwglCopyContext(hglrcSrc, hglrcDst, mask);
+    res = _DIBDRV_GetDisplayDriver()->pwglCopyContext(hglrcSrc, hglrcDst, mask);
+
+    return res;
 }
 
 /**
@@ -93,10 +157,22 @@ BOOL CDECL DIBDRV_wglCopyContext(HGLRC hglrcSrc, HGLRC hglrcDst, UINT mask)
  */
 HGLRC CDECL DIBDRV_wglCreateContext(DIBDRVPHYSDEV *physDev)
 {
+    HGLRC res;
+    
     TRACE("physDev:%p\n", physDev);
 
-    ONCE(FIXME("stub\n"));
-    return _DIBDRV_GetDisplayDriver()->pwglCreateContext(physDev->X11PhysDev);
+    if(physDev->hasDIB)
+    {
+        /* DIB section selected in, use DIB Engine */
+        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
+        res = _DIBDRV_GetDisplayDriver()->pwglCreateContext(physDev->X11PhysDev);
+    }
+    else
+    {
+        /* DDB selected in, use X11 driver */
+        res = _DIBDRV_GetDisplayDriver()->pwglCreateContext(physDev->X11PhysDev);
+    }
+    return res;
 }
 
 /**
@@ -106,10 +182,13 @@ HGLRC CDECL DIBDRV_wglCreateContext(DIBDRVPHYSDEV *physDev)
  */
 BOOL CDECL DIBDRV_wglDeleteContext(HGLRC hglrc)
 {
+    BOOL res;
+    
     TRACE("hglrc:%p\n", hglrc);
 
     ONCE(FIXME("stub\n"));
-    return _DIBDRV_GetDisplayDriver()->pwglDeleteContext(hglrc);
+    res = _DIBDRV_GetDisplayDriver()->pwglDeleteContext(hglrc);
+    return res;
 }
 
 /**
@@ -119,10 +198,14 @@ BOOL CDECL DIBDRV_wglDeleteContext(HGLRC hglrc)
  */
 PROC CDECL DIBDRV_wglGetProcAddress(LPCSTR lpszProc)
 {
+    PROC res;
+    
     TRACE("lpszProc:%p\n", lpszProc);
 
     ONCE(FIXME("stub\n"));
-    return _DIBDRV_GetDisplayDriver()->pwglGetProcAddress(lpszProc);
+    res = _DIBDRV_GetDisplayDriver()->pwglGetProcAddress(lpszProc);
+
+    return res;
 }
 
 /**
@@ -135,10 +218,22 @@ PROC CDECL DIBDRV_wglGetProcAddress(LPCSTR lpszProc)
  */
 HDC CDECL DIBDRV_wglGetPbufferDCARB(DIBDRVPHYSDEV *physDev, HPBUFFERARB hPbuffer)
 {
+    HDC res;
+    
     TRACE("physDev:%p, hPbuffer:%p\n", physDev, hPbuffer);
 
-    ONCE(FIXME("stub\n"));
-    return _DIBDRV_GetDisplayDriver()->pwglGetPbufferDCARB(physDev->X11PhysDev, hPbuffer);
+    if(physDev->hasDIB)
+    {
+        /* DIB section selected in, use DIB Engine */
+        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
+        res = _DIBDRV_GetDisplayDriver()->pwglGetPbufferDCARB(physDev->X11PhysDev, hPbuffer);
+    }
+    else
+    {
+        /* DDB selected in, use X11 driver */
+        res = _DIBDRV_GetDisplayDriver()->pwglGetPbufferDCARB(physDev->X11PhysDev, hPbuffer);
+    }
+    return res;
 }
 
 /**
@@ -148,10 +243,34 @@ HDC CDECL DIBDRV_wglGetPbufferDCARB(DIBDRVPHYSDEV *physDev, HPBUFFERARB hPbuffer
  */
 BOOL CDECL DIBDRV_wglMakeContextCurrentARB(DIBDRVPHYSDEV* pDrawDev, DIBDRVPHYSDEV* pReadDev, HGLRC hglrc)
 {
+    BOOL res;
+    
     TRACE("pDrawDev:%p, pReadDev:%p, hglrc:%p\n", pDrawDev, pReadDev, hglrc);
 
-    ONCE(FIXME("stub\n"));
-    return _DIBDRV_GetDisplayDriver()->pwglMakeContextCurrentARB(pDrawDev->X11PhysDev, pReadDev->X11PhysDev, hglrc);
+    if(pDrawDev->hasDIB && pReadDev->hasDIB)
+    {
+        /* DIB section selected both in source and dest DCs, use DIB Engine */
+        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
+        res = _DIBDRV_GetDisplayDriver()->pwglMakeContextCurrentARB(pDrawDev->X11PhysDev, pReadDev->X11PhysDev, hglrc);
+    }
+    if(!pDrawDev->hasDIB && !pReadDev->hasDIB)
+    {
+        /* DDB selected both in source and dest DCs, use X11 Driver */
+        res = _DIBDRV_GetDisplayDriver()->pwglMakeContextCurrentARB(pDrawDev->X11PhysDev, pReadDev->X11PhysDev, hglrc);
+    }
+    else if(pDrawDev->hasDIB)
+    {
+        /* DIB selected in pDrawDev, must convert pReadDev to DIB and use DIB Engine */
+        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
+        res = _DIBDRV_GetDisplayDriver()->pwglMakeContextCurrentARB(pDrawDev->X11PhysDev, pReadDev->X11PhysDev, hglrc);
+    }
+    else /* if(pReadDev->hasDIB) */
+    {
+        /* DIB selected in pReadDev, must convert pReadDev to DDB and use X11 Driver */
+        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
+        res = _DIBDRV_GetDisplayDriver()->pwglMakeContextCurrentARB(pDrawDev->X11PhysDev, pReadDev->X11PhysDev, hglrc);
+    }
+    return res;
 }
 
 /**
@@ -161,10 +280,22 @@ BOOL CDECL DIBDRV_wglMakeContextCurrentARB(DIBDRVPHYSDEV* pDrawDev, DIBDRVPHYSDE
  */
 BOOL CDECL DIBDRV_wglMakeCurrent(DIBDRVPHYSDEV *physDev, HGLRC hglrc)
 {
+    BOOL res;
+    
     TRACE("physDev:%p, hglrc:%p\n", physDev, hglrc);
 
-    ONCE(FIXME("stub\n"));
-    return _DIBDRV_GetDisplayDriver()->pwglMakeCurrent(physDev->X11PhysDev, hglrc);
+    if(physDev->hasDIB)
+    {
+        /* DIB section selected in, use DIB Engine */
+        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
+        res = _DIBDRV_GetDisplayDriver()->pwglMakeCurrent(physDev->X11PhysDev, hglrc);
+    }
+    else
+    {
+        /* DDB selected in, use X11 driver */
+        res = _DIBDRV_GetDisplayDriver()->pwglMakeCurrent(physDev->X11PhysDev, hglrc);
+    }
+    return res;
 }
 
 /**
@@ -175,10 +306,22 @@ BOOL CDECL DIBDRV_wglMakeCurrent(DIBDRVPHYSDEV *physDev, HGLRC hglrc)
  */
 BOOL CDECL DIBDRV_wglSetPixelFormatWINE(DIBDRVPHYSDEV *physDev, int iPixelFormat, const PIXELFORMATDESCRIPTOR *ppfd)
 {
+    BOOL res;
+    
     TRACE("physDev:%p, iPixelFormat:%d, ppfd:%p\n", physDev, iPixelFormat, ppfd);
 
-    ONCE(FIXME("stub\n"));
-    return _DIBDRV_GetDisplayDriver()->pwglSetPixelFormatWINE(physDev->X11PhysDev, iPixelFormat, ppfd);
+    if(physDev->hasDIB)
+    {
+        /* DIB section selected in, use DIB Engine */
+        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
+        res = _DIBDRV_GetDisplayDriver()->pwglSetPixelFormatWINE(physDev->X11PhysDev, iPixelFormat, ppfd);
+    }
+    else
+    {
+        /* DDB selected in, use X11 driver */
+        res = _DIBDRV_GetDisplayDriver()->pwglSetPixelFormatWINE(physDev->X11PhysDev, iPixelFormat, ppfd);
+    }
+    return res;
 }
 
 /**
@@ -188,10 +331,14 @@ BOOL CDECL DIBDRV_wglSetPixelFormatWINE(DIBDRVPHYSDEV *physDev, int iPixelFormat
  */
 BOOL CDECL DIBDRV_wglShareLists(HGLRC hglrc1, HGLRC hglrc2)
 {
+    BOOL res;
+    
     TRACE("hglrc1:%p, hglrc2:%p\n", hglrc1, hglrc2);
 
     ONCE(FIXME("stub\n"));
-    return _DIBDRV_GetDisplayDriver()->pwglShareLists(hglrc1, hglrc2);
+    res = _DIBDRV_GetDisplayDriver()->pwglShareLists(hglrc1, hglrc2);
+
+    return res;
 }
 
 /**
@@ -201,10 +348,22 @@ BOOL CDECL DIBDRV_wglShareLists(HGLRC hglrc1, HGLRC hglrc2)
  */
 BOOL CDECL DIBDRV_wglUseFontBitmapsA(DIBDRVPHYSDEV *physDev, DWORD first, DWORD count, DWORD listBase)
 {
+    BOOL res;
+    
     TRACE("physDev:%p, first:%d, count:%d, listBase:%d\n", physDev, first, count, listBase);
 
-    ONCE(FIXME("stub\n"));
-    return _DIBDRV_GetDisplayDriver()->pwglUseFontBitmapsA(physDev->X11PhysDev, first, count, listBase);
+    if(physDev->hasDIB)
+    {
+        /* DIB section selected in, use DIB Engine */
+        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
+        res = _DIBDRV_GetDisplayDriver()->pwglUseFontBitmapsA(physDev->X11PhysDev, first, count, listBase);
+    }
+    else
+    {
+        /* DDB selected in, use X11 driver */
+        res = _DIBDRV_GetDisplayDriver()->pwglUseFontBitmapsA(physDev->X11PhysDev, first, count, listBase);
+    }
+    return res;
 }
 
 /**
@@ -214,8 +373,20 @@ BOOL CDECL DIBDRV_wglUseFontBitmapsA(DIBDRVPHYSDEV *physDev, DWORD first, DWORD 
  */
 BOOL CDECL DIBDRV_wglUseFontBitmapsW(DIBDRVPHYSDEV *physDev, DWORD first, DWORD count, DWORD listBase)
 {
+    BOOL res;
+    
     TRACE("physDev:%p, first:%d, count:%d, listBase:%d\n", physDev, first, count, listBase);
 
-    ONCE(FIXME("stub\n"));
-    return _DIBDRV_GetDisplayDriver()->pwglUseFontBitmapsW(physDev->X11PhysDev, first, count, listBase);
+    if(physDev->hasDIB)
+    {
+        /* DIB section selected in, use DIB Engine */
+        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
+        res = _DIBDRV_GetDisplayDriver()->pwglUseFontBitmapsW(physDev->X11PhysDev, first, count, listBase);
+    }
+    else
+    {
+        /* DDB selected in, use X11 driver */
+        res = _DIBDRV_GetDisplayDriver()->pwglUseFontBitmapsW(physDev->X11PhysDev, first, count, listBase);
+    }
+    return res;
 }

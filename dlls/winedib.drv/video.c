@@ -30,10 +30,22 @@ WINE_DEFAULT_DEBUG_CHANNEL(dibdrv);
  */
 BOOL DIBDRV_GetDeviceGammaRamp( DIBDRVPHYSDEV *physDev, LPVOID ramp )
 {
+    BOOL res;
+    
     TRACE("physDev:%p, ramp:%p\n", physDev, ramp);
 
-    ONCE(FIXME("stub\n"));
-    return _DIBDRV_GetDisplayDriver()->pGetDeviceGammaRamp(physDev->X11PhysDev, ramp);
+    if(physDev->hasDIB)
+    {
+        /* DIB section selected in, use DIB Engine */
+        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
+        res = _DIBDRV_GetDisplayDriver()->pGetDeviceGammaRamp(physDev->X11PhysDev, ramp);
+    }
+    else
+    {
+        /* DDB selected in, use X11 driver */
+        res = _DIBDRV_GetDisplayDriver()->pGetDeviceGammaRamp(physDev->X11PhysDev, ramp);
+    }
+    return res;
 }
 
 /***********************************************************************
@@ -41,8 +53,20 @@ BOOL DIBDRV_GetDeviceGammaRamp( DIBDRVPHYSDEV *physDev, LPVOID ramp )
  */
 BOOL DIBDRV_SetDeviceGammaRamp( DIBDRVPHYSDEV *physDev, LPVOID ramp )
 {
+    BOOL res;
+    
     TRACE("physDev:%p, ramp:%p\n", physDev, ramp);
 
-    ONCE(FIXME("stub\n"));
-    return _DIBDRV_GetDisplayDriver()->pSetDeviceGammaRamp(physDev->X11PhysDev, ramp);
+    if(physDev->hasDIB)
+    {
+        /* DIB section selected in, use DIB Engine */
+        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
+        res = _DIBDRV_GetDisplayDriver()->pSetDeviceGammaRamp(physDev->X11PhysDev, ramp);
+    }
+    else
+    {
+        /* DDB selected in, use X11 driver */
+        res = _DIBDRV_GetDisplayDriver()->pSetDeviceGammaRamp(physDev->X11PhysDev, ramp);
+    }
+    return res;
 }

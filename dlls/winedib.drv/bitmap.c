@@ -31,9 +31,31 @@ WINE_DEFAULT_DEBUG_CHANNEL(dibdrv);
  */
 HBITMAP DIBDRV_SelectBitmap( DIBDRVPHYSDEV *physDev, HBITMAP hbitmap )
 {
+    DIBSECTION dibSection;
+    HBITMAP res;
+    
     TRACE("physDev:%p, hbitmap:%p\n", physDev, hbitmap);
-    ONCE(FIXME("stub\n"));
-    return _DIBDRV_GetDisplayDriver()->pSelectBitmap(physDev->X11PhysDev, hbitmap);
+
+    /* try to get the DIBSECTION data from the bitmap */
+    if(GetObjectW(hbitmap, sizeof(DIBSECTION), &dibSection) == sizeof(BITMAP))
+    {
+        /* not a DIB section, sets it on physDev and use X11 behaviour */
+        physDev->hasDIB = FALSE;
+        res = _DIBDRV_GetDisplayDriver()->pSelectBitmap(physDev->X11PhysDev, hbitmap);
+        if(res)
+            physDev->hbitmap = hbitmap;
+    }
+    else
+    {
+        /* it's a DIB section, sets it on physDev and use DIB Engine behaviour */
+        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
+        physDev->hasDIB = TRUE;
+        res = _DIBDRV_GetDisplayDriver()->pSelectBitmap(physDev->X11PhysDev, hbitmap);
+        if(res)
+            physDev->hbitmap = hbitmap;
+    }
+    return res;
+    
 }
 
 /****************************************************************************
@@ -41,9 +63,24 @@ HBITMAP DIBDRV_SelectBitmap( DIBDRVPHYSDEV *physDev, HBITMAP hbitmap )
  */
 BOOL DIBDRV_CreateBitmap( DIBDRVPHYSDEV *physDev, HBITMAP hbitmap, LPVOID bmBits )
 {
+    DIBSECTION dibSection;
+    BOOL res;
+    
     TRACE("physDev:%p, hbitmap:%p, bmBits:%p\n", physDev, hbitmap, bmBits);
-    ONCE(FIXME("stub\n"));
-    return _DIBDRV_GetDisplayDriver()->pCreateBitmap(physDev->X11PhysDev, hbitmap, bmBits);
+
+    /* try to get the DIBSECTION data from the bitmap */
+    if(GetObjectW(hbitmap, sizeof(DIBSECTION), &dibSection) == sizeof(BITMAP))
+    {
+        /* not a DIB section, use X11 behaviour */
+        res = _DIBDRV_GetDisplayDriver()->pCreateBitmap(physDev->X11PhysDev, hbitmap, bmBits);
+    }
+    else
+    {
+        /* it's a DIB section, use DIB Engine behaviour */
+        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
+        res = _DIBDRV_GetDisplayDriver()->pCreateBitmap(physDev->X11PhysDev, hbitmap, bmBits);
+    }
+    return res;
 }
 
 /***********************************************************************
@@ -51,9 +88,24 @@ BOOL DIBDRV_CreateBitmap( DIBDRVPHYSDEV *physDev, HBITMAP hbitmap, LPVOID bmBits
  */
 BOOL DIBDRV_DeleteBitmap( HBITMAP hbitmap )
 {
+    DIBSECTION dibSection;
+    BOOL res;
+    
     TRACE("hbitmap:%p\n", hbitmap);
-    ONCE(FIXME("stub\n"));
-    return _DIBDRV_GetDisplayDriver()->pDeleteBitmap(hbitmap);
+
+    /* try to get the DIBSECTION data from the bitmap */
+    if(GetObjectW(hbitmap, sizeof(DIBSECTION), &dibSection) == sizeof(BITMAP))
+    {
+        /* not a DIB section, use X11 behaviour */
+        res = _DIBDRV_GetDisplayDriver()->pDeleteBitmap(hbitmap);
+    }
+    else
+    {
+        /* it's a DIB section, use DIB Engine behaviour */
+        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
+        res = _DIBDRV_GetDisplayDriver()->pDeleteBitmap(hbitmap);
+    }
+    return res;
 }
 
 /***********************************************************************
@@ -61,9 +113,14 @@ BOOL DIBDRV_DeleteBitmap( HBITMAP hbitmap )
  */
 LONG DIBDRV_GetBitmapBits( HBITMAP hbitmap, void *buffer, LONG count )
 {
+    LONG res;
+    
     TRACE("hbitmap:%p, buffer:%p, count:%d\n", hbitmap, buffer, count);
-    ONCE(FIXME("stub\n"));
-    return _DIBDRV_GetDisplayDriver()->pGetBitmapBits(hbitmap, buffer, count);
+
+    /* GetBitmapBits is only valid for DDBs, so use X11 driver */
+    res =  _DIBDRV_GetDisplayDriver()->pGetBitmapBits(hbitmap, buffer, count);
+    
+    return res;
 }
 
 /******************************************************************************
@@ -71,7 +128,12 @@ LONG DIBDRV_GetBitmapBits( HBITMAP hbitmap, void *buffer, LONG count )
  */
 LONG DIBDRV_SetBitmapBits( HBITMAP hbitmap, const void *bits, LONG count )
 {
+    LONG res;
+    
     TRACE("hbitmap:%p, bits:%p, count:%d\n", hbitmap, bits, count);
-    ONCE(FIXME("stub\n"));
-    return _DIBDRV_GetDisplayDriver()->pSetBitmapBits(hbitmap, bits, count);
+
+    /* SetBitmapBits is only valid for DDBs, so use X11 driver */
+    res = _DIBDRV_GetDisplayDriver()->pSetBitmapBits(hbitmap, bits, count);
+
+    return res;
 }

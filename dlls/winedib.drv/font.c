@@ -31,10 +31,22 @@ WINE_DEFAULT_DEBUG_CHANNEL(dibdrv);
  */
 COLORREF DIBDRV_SetTextColor( DIBDRVPHYSDEV *physDev, COLORREF color )
 {
+    COLORREF res;
+    
     TRACE("physDev:%p, color:%08x\n", physDev, color);
 
-    ONCE(FIXME("stub\n"));
-    return _DIBDRV_GetDisplayDriver()->pSetTextColor(physDev->X11PhysDev, color);
+    if(physDev->hasDIB)
+    {
+        /* DIB section selected in, use DIB Engine */
+        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
+        res = _DIBDRV_GetDisplayDriver()->pSetTextColor(physDev->X11PhysDev, color);
+    }
+    else
+    {
+        /* DDB selected in, use X11 driver */
+        res = _DIBDRV_GetDisplayDriver()->pSetTextColor(physDev->X11PhysDev, color);
+    }
+    return res;
 }
 
 /***********************************************************************
@@ -42,10 +54,22 @@ COLORREF DIBDRV_SetTextColor( DIBDRVPHYSDEV *physDev, COLORREF color )
  */
 HFONT DIBDRV_SelectFont( DIBDRVPHYSDEV *physDev, HFONT hfont, HANDLE gdiFont )
 {
+    HFONT res;
+    
     TRACE("physDev:%p, hfont:%p, gdiFont:%p\n", physDev, hfont, gdiFont);
 
-    ONCE(FIXME("stub\n"));
-    return _DIBDRV_GetDisplayDriver()->pSelectFont(physDev->X11PhysDev, hfont, gdiFont);
+    if(physDev->hasDIB)
+    {
+        /* DIB section selected in, use DIB Engine */
+        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
+        res = _DIBDRV_GetDisplayDriver()->pSelectFont(physDev->X11PhysDev, hfont, gdiFont);
+    }
+    else
+    {
+        /* DDB selected in, use X11 driver */
+        res = _DIBDRV_GetDisplayDriver()->pSelectFont(physDev->X11PhysDev, hfont, gdiFont);
+    }
+    return res;
 }
 
 /***********************************************************************
@@ -54,10 +78,22 @@ HFONT DIBDRV_SelectFont( DIBDRVPHYSDEV *physDev, HFONT hfont, HANDLE gdiFont )
 BOOL DIBDRV_EnumDeviceFonts( DIBDRVPHYSDEV *physDev, LPLOGFONTW plf,
                              FONTENUMPROCW proc, LPARAM lp )
 {
+    BOOL res;
+    
     TRACE("physDev:%p, plf:%p, proc:%p, lp:%lx\n", physDev, plf, proc, lp);
 
-    ONCE(FIXME("stub\n"));
-    return _DIBDRV_GetDisplayDriver()->pEnumDeviceFonts(physDev->X11PhysDev, plf, proc, lp);
+    if(physDev->hasDIB)
+    {
+        /* DIB section selected in, use DIB Engine */
+        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
+        res = _DIBDRV_GetDisplayDriver()->pEnumDeviceFonts(physDev->X11PhysDev, plf, proc, lp);
+    }
+    else
+    {
+        /* DDB selected in, use X11 driver */
+        res = _DIBDRV_GetDisplayDriver()->pEnumDeviceFonts(physDev->X11PhysDev, plf, proc, lp);
+    }
+    return res;
 }
 
 /***********************************************************************
@@ -65,9 +101,22 @@ BOOL DIBDRV_EnumDeviceFonts( DIBDRVPHYSDEV *physDev, LPLOGFONTW plf,
  */
 BOOL DIBDRV_GetTextMetrics( DIBDRVPHYSDEV *physDev, TEXTMETRICW *metrics )
 {
+    BOOL res;
+    
     TRACE("physDev:%p, metrics:%p\n", physDev, metrics);
-    ONCE(FIXME("stub\n"));
-    return _DIBDRV_GetDisplayDriver()->pGetTextMetrics(physDev->X11PhysDev, metrics);
+
+    if(physDev->hasDIB)
+    {
+        /* DIB section selected in, use DIB Engine */
+        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
+        res = _DIBDRV_GetDisplayDriver()->pGetTextMetrics(physDev->X11PhysDev, metrics);
+    }
+    else
+    {
+        /* DDB selected in, use X11 driver */
+        res = _DIBDRV_GetDisplayDriver()->pGetTextMetrics(physDev->X11PhysDev, metrics);
+    }
+    return res;
 }
 
 /***********************************************************************
@@ -76,8 +125,20 @@ BOOL DIBDRV_GetTextMetrics( DIBDRVPHYSDEV *physDev, TEXTMETRICW *metrics )
 BOOL DIBDRV_GetCharWidth( DIBDRVPHYSDEV *physDev, UINT firstChar, UINT lastChar,
                           LPINT buffer )
 {
+    BOOL res;
+    
     TRACE("physDev:%p, firstChar:%d, lastChar:%d, buffer:%pn", physDev, firstChar, lastChar, buffer);
 
-    ONCE(FIXME("stub\n"));
-    return _DIBDRV_GetDisplayDriver()->pGetCharWidth(physDev->X11PhysDev, firstChar, lastChar, buffer);
+    if(physDev->hasDIB)
+    {
+        /* DIB section selected in, use DIB Engine */
+        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
+        res = _DIBDRV_GetDisplayDriver()->pGetCharWidth(physDev->X11PhysDev, firstChar, lastChar, buffer);
+    }
+    else
+    {
+        /* DDB selected in, use X11 driver */
+        res = _DIBDRV_GetDisplayDriver()->pGetCharWidth(physDev->X11PhysDev, firstChar, lastChar, buffer);
+    }
+    return res;
 }
