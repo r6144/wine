@@ -51,6 +51,7 @@ HBITMAP _DIBDRV_ConvertDIBtoDDB( HDC hdc, HBITMAP srcBmp, int startScan, int sca
     HDC tmpHdc;
     HBITMAP tmpBmp;
     int res;
+    DIBDRVBITMAP *physBitmap;
 
     /* gets DIBSECTION data from source DIB */
     if(GetObjectW(srcBmp, sizeof(DIBSECTION), &ds) != sizeof(DIBSECTION))
@@ -65,19 +66,20 @@ HBITMAP _DIBDRV_ConvertDIBtoDDB( HDC hdc, HBITMAP srcBmp, int startScan, int sca
     bits = ds.dsBm.bmBits;
     stride = ((dibWidth * ds.dsBmih.biBitCount +31) &~31) / 8;
     
+    /* get physical bitmap -- needed for topdown flag */
+	if( (physBitmap = _BITMAPLIST_Get(srcBmp)) == NULL)
+    {
+        ERR("Couldn't retrieve physical bitmap\n");
+        return 0;
+    }
+    topDown = physBitmap->topdown;
+
     /* adjust bits to point at needed starting stripe */
-    if(dibHeight < 0)
-    {
+    if(topDown)
         /* top-down DIB */
-        topDown = TRUE;
-        dibHeight = -dibHeight;
         bits = (BYTE *)bits + startScan * stride;
-    }
     else
-    {
-        topDown = FALSE;
         bits = (BYTE *)bits + (dibHeight - startScan - scanLines) * stride;
-    }
     
     /* if requested part is out of source bitmap, returns 0 */
     if(startScan >= dibHeight)

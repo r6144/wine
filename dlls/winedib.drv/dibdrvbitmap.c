@@ -202,6 +202,7 @@ BOOL _DIBDRVBITMAP_InitFromBMIH(DIBDRVBITMAP *dib, const BITMAPINFOHEADER *bi, c
     {
         /* top-down dib */
         dib->height = -dib->height;
+        dib->topdown = TRUE;
     }
     else
     {
@@ -209,6 +210,7 @@ BOOL _DIBDRVBITMAP_InitFromBMIH(DIBDRVBITMAP *dib, const BITMAPINFOHEADER *bi, c
         /* data->bits always points to the top-left corner and the stride is -ve */
         dib->bits    = (BYTE*)dib->bits + (dib->height - 1) * dib->stride;
         dib->stride  = -dib->stride;
+        dib->topdown = FALSE;
     }
 
     /* gets and stores bitmap format */
@@ -427,6 +429,8 @@ BOOL _DIBDRVBITMAP_InitFromDibdrvbitmap(DIBDRVBITMAP *dib, const DIBDRVBITMAP *s
     
     dib->lightColor = src->lightColor;
     
+    dib->topdown = src->topdown;
+    
     if(copy)
     {
         int size = dib->height*abs(dib->stride);
@@ -496,6 +500,7 @@ BOOL _DIBDRVBITMAP_CreateFromDibdrvbitmap(DIBDRVBITMAP *dib, const DIBDRVBITMAP 
     dib->stride = ((width * dib->bitCount +31) &~31) / 8;
     if(src->stride < 0)
         dib->stride = -dib->stride;
+    dib->topdown = src->topdown;
     
     /* allocates bits for newly created DIB */
     if(!(dib->bits = HeapAlloc(GetProcessHeap(), 0, height*abs(dib->stride))))
