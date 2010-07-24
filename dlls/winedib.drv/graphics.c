@@ -381,6 +381,44 @@ void _DIBDRV_Sizes_ws2ds(DIBDRVPHYSDEV *physDev, int *w, int *h)
     *h = pts[1].y - pts[0].y;
 }
 
+/* converts positions  from Device space to World space */
+void _DIBDRV_Position_ds2ws(DIBDRVPHYSDEV *physDev, int *x, int *y)
+{
+    POINT p;
+    p.x = *x;
+    p.y = *y;
+    DPtoLP(physDev->hdc, &p, 1);
+    *x = p.x;
+    *y = p.y;
+}
+
+void _DIBDRV_Positions_ds2ws(DIBDRVPHYSDEV *physDev, int *x1, int *y1, int *x2, int *y2)
+{
+    POINT pts[2];
+    pts[0].x = *x1;
+    pts[0].y = *y1;
+    pts[1].x = *x2;
+    pts[1].y = *y2;
+    DPtoLP(physDev->hdc, pts, 2);
+    *x1 = pts[0].x;
+    *y1 = pts[0].y;
+    *x2 = pts[1].x;
+    *y2 = pts[1].y;
+}
+
+/* converts sizes from Device space to World space */
+void _DIBDRV_Sizes_ds2ws(DIBDRVPHYSDEV *physDev, int *w, int *h)
+{
+    POINT pts[2];
+    pts[0].x = 0;
+    pts[0].y = 0;
+    pts[1].x = *w;
+    pts[1].y = *h;
+    DPtoLP(physDev->hdc, pts, 2);
+    *w = pts[1].x - pts[0].x;
+    *h = pts[1].y - pts[0].y;
+}
+
 /***********************************************************************
  *           DIBDRV_Arc
  */

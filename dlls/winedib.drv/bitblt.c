@@ -25,6 +25,23 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(dibdrv);
 
+void CheckMapping(const char *func, const char *s, DIBDRVPHYSDEV *physDev)
+{
+    int a, b;
+    
+    if(!physDev)
+        return;
+        
+    a=10;b=20;
+    _DIBDRV_Position_ws2ds(physDev, &a, &b);
+    if(a != 10 || b != 20)
+        FIXME("%s:%s:Position(10, 20) translated to(%d, %d)\n", func, s, a, b);
+    a=10;b=20;
+    _DIBDRV_Sizes_ws2ds(physDev, &a, &b);
+    if(a != 10 || b != 20)
+        FIXME("%s:%s:sizes   (10, 20) translated to(%d, %d)\n", func, s, a, b);
+}
+
 static inline void intSwap(int *a, int *b)
 {
     int tmp;
@@ -284,13 +301,8 @@ BOOL _DIBDRV_InternalAlphaBlend( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst, 
     setSize(&szDst, widthDst, heightDst);
     setSize(&szSrc, widthSrc, heightSrc);
     setRect(&dstClip, 0, 0, physDevDst->physBitmap->width, physDevDst->physBitmap->height);
-    if(physDevSrc)
-    {
-        setRect(&srcClip, 0, 0, physDevSrc->physBitmap->width, physDevSrc->physBitmap->height);
-        res = StretchBlt_ClipAreas(&ps, &pd, &szSrc, &szDst, &srcClip, &dstClip);
-    }
-    else
-        res = StretchBlt_ClipAreas(&ps, &pd, &szSrc, &szDst, 0, &dstClip);
+    setRect(&srcClip, 0, 0, physDevSrc->physBitmap->width, physDevSrc->physBitmap->height);
+    res = StretchBlt_ClipAreas(&ps, &pd, &szSrc, &szDst, &srcClip, &dstClip);
     if(!res)
         return TRUE;
     xDst = pd.x; yDst = pd.y;
@@ -328,6 +340,9 @@ BOOL DIBDRV_AlphaBlend( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst, INT width
     
     POINT pd = {xDst, yDst};
     SIZE szDst = {widthDst, heightDst};
+
+CheckMapping(__FUNCTION__, "DEST", physDevDst);
+CheckMapping(__FUNCTION__, "SOURCE",physDevSrc);
 
     MAYBE(TRACE("physDevDst:%p(%s%s), xDst:%d, yDst:%d, widthDst:%d, heightDst:%d, physDevSrc:%p(%s%s), xSrc:%d, ySrc:%d, widthSrc:%d, heightSrc:%d\n",
           physDevDst, physDevDst->hasDIB ? "DIB-" : "DDB", physDevDst->hasDIB ? _DIBDRVBITMAP_GetFormatName(physDevDst->physBitmap) : "",
@@ -493,12 +508,12 @@ BOOL DIBDRV_BitBlt( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
                     INT xSrc, INT ySrc, DWORD rop )
 {
     BOOL res;
+    int dummy;
+    int devXSrc, devWidth;
+    int devYSrc, devHeight, zeroYSrc;
     
-    /* clip blit area */
-    POINT pd = {xDst, yDst};
-    POINT ps = {xSrc, ySrc};
-    SIZE sz = {width, height};
-
+CheckMapping(__FUNCTION__, "DEST", physDevDst);
+CheckMapping(__FUNCTION__, "SOURCE",physDevSrc);
     MAYBE(TRACE("physDevDst:%p(%s%s), xDst:%d, yDst:%d, width:%d, height:%d, physDevSrc:%p(%s%s), xSrc:%d, ySrc:%d, rop:%08x\n",
           physDevDst, physDevDst->hasDIB ? "DIB-" : "DDB", physDevDst->hasDIB ? _DIBDRVBITMAP_GetFormatName(physDevDst->physBitmap) : "",
           xDst, yDst, width, height,
@@ -508,9 +523,7 @@ BOOL DIBDRV_BitBlt( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
     if(physDevDst->hasDIB)
     {
         /* DIB section selected in dest DC, use DIB Engine */
-        /* clip blit area */
-        RECT dstClip = {0, 0, physDevDst->physBitmap->width, physDevDst->physBitmap->height};
-        
+
         if(!physDevSrc || physDevSrc->hasDIB)
         {
             /* source is null or has a DIB, no need to convert anyting */
@@ -519,12 +532,6 @@ BOOL DIBDRV_BitBlt( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
         else
         {
             /* source is a DDB, must convert it to DIB */
-
-            /* don't clip on source */            
-            res = !BitBlt_ClipAreas(&ps, &pd, &sz, 0, &dstClip);
-            if(res)
-                goto noBlt2;
-            xDst = pd.x; yDst = pd.y; width = sz.cx; height = sz.cy; xSrc = ps.x; ySrc = ps.y;
 
             /* we must differentiate from 2 cases :
                1) source DC is a memory DC
@@ -541,7 +548,15 @@ BOOL DIBDRV_BitBlt( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
                     res = 0;
                     goto noBlt1;
                 }
-                dib = _DIBDRV_ConvertDDBtoDIB(physDevSrc->hdc, ddb, ySrc, height);
+                
+                /* we need device coordinates for ySrc and height, as the conversion
+                   functions operates directly on bitmap without the hdc */
+                devYSrc = ySrc;
+                _DIBDRV_Position_ws2ds(physDevSrc, &dummy, &devYSrc);
+                devHeight = height;
+                _DIBDRV_Sizes_ws2ds(physDevSrc, &dummy, &devHeight);
+                
+                dib = _DIBDRV_ConvertDDBtoDIB(physDevSrc->hdc, ddb, devYSrc, devHeight);
                 if(!dib)
                 {
                     ERR("Failed converting source DDB to DIB\n");
@@ -550,7 +565,12 @@ BOOL DIBDRV_BitBlt( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
                     goto noBlt1;
                 }
                 SelectObject(physDevSrc->hdc, dib);
-                res = _DIBDRV_InternalBitBlt(physDevDst, xDst, yDst, width, height, physDevSrc, xSrc, 0, rop);
+                
+                /* we need to convert the '0' starting position on converted bitmap tp the world
+                   space of bitmap's hdc */
+                zeroYSrc = 0;
+                _DIBDRV_Position_ds2ws(physDevSrc, &dummy, &zeroYSrc);
+                res = _DIBDRV_InternalBitBlt(physDevDst, xDst, yDst, width, height, physDevSrc, xSrc, zeroYSrc, rop);
                 SelectObject(physDevSrc->hdc, ddb);
                 DeleteObject(dib);
     noBlt1:
@@ -562,7 +582,16 @@ BOOL DIBDRV_BitBlt( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
                 HBITMAP dib, stock;
                 HDC memHdc;
 
-                dib = _DIBDRV_ConvertDevDDBtoDIB(physDevSrc->hdc, physDevDst->hdc, xSrc, ySrc, width, height);
+                /* we need device coordinates for ySrc and height, as the conversion
+                   functions operates directly on bitmap without the hdc */
+                devXSrc = xSrc;
+                devYSrc = ySrc;
+                _DIBDRV_Position_ws2ds(physDevSrc, &devXSrc, &devYSrc);
+                devWidth = width;
+                devHeight = height;
+                _DIBDRV_Sizes_ws2ds(physDevSrc, &devWidth, &devHeight);
+                
+                dib = _DIBDRV_ConvertDevDDBtoDIB(physDevSrc->hdc, physDevDst->hdc, devXSrc, devYSrc, devWidth, devHeight);
                 if(!dib)
                 {
                     ERR("Failed converting source DDB tp DIB for device DC\n");
@@ -609,19 +638,6 @@ BOOL DIBDRV_BitBlt( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
         {
             /* DIB on source, DDB on dest -- must convert source DIB to DDB and use X11 driver for blit */
             HBITMAP dib, ddb;
-
-            /* clip blit area */
-            if(physDevSrc)
-            {
-                RECT srcClip = {0, 0, physDevSrc->physBitmap->width, physDevSrc->physBitmap->height};
-                res = !BitBlt_ClipAreas(&ps, &pd, &sz, &srcClip, 0);
-            }
-            else
-                res = FALSE;
-            if(res)
-                goto noBlt3;
-            xDst = pd.x; yDst = pd.y; width = sz.cx; height = sz.cy; xSrc = ps.x; ySrc = ps.y;
-
             dib = SelectObject(physDevSrc->hdc, GetStockObject(DEFAULT_BITMAP));
             if(!dib)
             {
@@ -629,7 +645,15 @@ BOOL DIBDRV_BitBlt( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
                 res = 0;
                 goto noBlt3;
             }
-            ddb = _DIBDRV_ConvertDIBtoDDB(physDevSrc->hdc, dib, ySrc, height);
+            
+            /* we need device coordinates for ySrc and height, as the conversion
+               functions operates directly on bitmap without the hdc */
+            devYSrc = ySrc;
+            _DIBDRV_Position_ws2ds(physDevSrc, &dummy, &devYSrc);
+            devHeight = height;
+            _DIBDRV_Sizes_ws2ds(physDevSrc, &dummy, &devHeight);
+
+            ddb = _DIBDRV_ConvertDIBtoDDB(physDevSrc->hdc, dib, devYSrc, devHeight);
             if(!ddb)
             {
                 ERR("Failed converting source DIB to DDB\n");
@@ -638,8 +662,14 @@ BOOL DIBDRV_BitBlt( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
                 goto noBlt3;
             }
             SelectObject(physDevSrc->hdc, ddb);
+
+            /* we need to convert the '0' starting position on converted bitmap tp the world
+               space of bitmap's hdc */
+            zeroYSrc = 0;
+            _DIBDRV_Position_ds2ws(physDevSrc, &dummy, &zeroYSrc);
+
             res = _DIBDRV_GetDisplayDriver()->pBitBlt(physDevDst->X11PhysDev, xDst, yDst, width, height,
-                                                      physDevSrc ? physDevSrc->X11PhysDev : 0, xSrc, 0, rop);
+                                                      physDevSrc->X11PhysDev, xSrc, zeroYSrc, rop);
             SelectObject(physDevSrc->hdc, dib);
             DeleteObject(ddb);
 noBlt3:
@@ -719,17 +749,16 @@ BOOL DIBDRV_StretchBlt( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
                         INT widthSrc, INT heightSrc, DWORD rop )
 {
     BOOL res;
+    int dummy;
+    int devXSrc, devWidthSrc;
+    int devYSrc, devHeightSrc, zeroYSrc;
     
-    /* clip blit area */
-    POINT pd = {xDst, yDst};
-    POINT ps = {xSrc, ySrc};
-    SIZE szDst = {widthDst, heightDst};
-    SIZE szSrc = {widthSrc, heightSrc};
-
     /* if source and dest sizes match, just call BitBlt(), it's faster */
     if(!physDevSrc || (widthDst == widthSrc && heightDst == heightSrc))
         return DIBDRV_BitBlt(physDevDst, xDst, yDst, widthDst, heightDst, physDevSrc, xSrc, ySrc, rop);
 
+CheckMapping(__FUNCTION__, "DEST", physDevDst);
+CheckMapping(__FUNCTION__, "SOURCE",physDevSrc);
     MAYBE(TRACE("physDevDst:%p(%s%s), xDst:%d, yDst:%d, widthDst:%d, heightDst:%d, physDevSrc:%p(%s%s), xSrc:%d, ySrc:%d, widthSrc:%d, heightSrc:%d, rop:%08x\n",
           physDevDst, physDevDst->hasDIB ? "DIB-" : "DDB", physDevDst->hasDIB ? _DIBDRVBITMAP_GetFormatName(physDevDst->physBitmap) : "",
           xDst, yDst, widthDst, heightDst,
@@ -764,7 +793,15 @@ BOOL DIBDRV_StretchBlt( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
                     res = 0;
                     goto noBlt1;
                 }
-                dib = _DIBDRV_ConvertDDBtoDIB(physDevSrc->hdc, ddb, ySrc, heightSrc);
+
+                /* we need device coordinates for ySrc and height, as the conversion
+                   functions operates directly on bitmap without the hdc */
+                devYSrc = ySrc;
+                _DIBDRV_Position_ws2ds(physDevSrc, &dummy, &devYSrc);
+                devHeightSrc = heightSrc;
+                _DIBDRV_Sizes_ws2ds(physDevSrc, &dummy, &devHeightSrc);
+                
+                dib = _DIBDRV_ConvertDDBtoDIB(physDevSrc->hdc, ddb, devYSrc, devHeightSrc);
                 if(!dib)
                 {
                     ERR("Failed converting source DDB to DIB\n");
@@ -773,8 +810,15 @@ BOOL DIBDRV_StretchBlt( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
                     goto noBlt1;
                 }
                 SelectObject(physDevSrc->hdc, dib);
+
+
+                /* we need to convert the '0' starting position on converted bitmap tp the world
+                   space of bitmap's hdc */
+                zeroYSrc = 0;
+                _DIBDRV_Position_ds2ws(physDevSrc, &dummy, &zeroYSrc);
+
                 res = _DIBDRV_InternalStretchBlt(physDevDst, xDst, yDst, widthDst, heightDst,
-                                                 physDevSrc, xSrc, 0, widthSrc, heightSrc, rop);
+                                                 physDevSrc, xSrc, zeroYSrc, widthSrc, heightSrc, rop);
                 SelectObject(physDevSrc->hdc, ddb);
                 DeleteObject(dib);
     noBlt1:
@@ -786,7 +830,16 @@ BOOL DIBDRV_StretchBlt( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
                 HBITMAP dib, stock;
                 HDC memHdc;
 
-                dib = _DIBDRV_ConvertDevDDBtoDIB(physDevSrc->hdc, physDevDst->hdc, xSrc, ySrc, widthSrc, heightSrc);
+                /* we need device coordinates for ySrc and height, as the conversion
+                   functions operates directly on bitmap without the hdc */
+                devXSrc = xSrc;
+                devYSrc = ySrc;
+                _DIBDRV_Position_ws2ds(physDevSrc, &devXSrc, &devYSrc);
+                devWidthSrc = widthSrc;
+                devHeightSrc = heightSrc;
+                _DIBDRV_Sizes_ws2ds(physDevSrc, &devWidthSrc, &devHeightSrc);
+                
+                dib = _DIBDRV_ConvertDevDDBtoDIB(physDevSrc->hdc, physDevDst->hdc, devXSrc, devYSrc, devWidthSrc, devHeightSrc);
                 if(!dib)
                 {
                     ERR("Failed converting source DDB tp DIB for device DC\n");
@@ -834,19 +887,6 @@ BOOL DIBDRV_StretchBlt( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
             /* DIB on source, DDB on dest -- must convert source DIB to DDB and use X11 driver for blit */
             HBITMAP dib, ddb;
             
-            /* clip blit area */
-            if(physDevSrc)
-            {
-                RECT srcClip = {0, 0, physDevSrc->physBitmap->width, physDevSrc->physBitmap->height};
-                res = StretchBlt_ClipAreas(&ps, &pd, &szSrc, &szDst, &srcClip, 0);
-            }
-            else
-                res = TRUE;
-            if(!res)
-                goto noBlt3;
-            xDst = pd.x; yDst = pd.y; widthDst = szDst.cx; heightDst = szDst.cy; 
-            xSrc = ps.x; ySrc = ps.y; widthSrc = szSrc.cx; heightSrc = szSrc.cy;
-
             dib = SelectObject(physDevSrc->hdc, GetStockObject(DEFAULT_BITMAP));
             if(!dib)
             {
@@ -854,7 +894,15 @@ BOOL DIBDRV_StretchBlt( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
                 res = 0;
                 goto noBlt3;
             }
-            ddb = _DIBDRV_ConvertDIBtoDDB(physDevSrc->hdc, dib, ySrc, heightSrc);
+
+            /* we need device coordinates for ySrc and height, as the conversion
+               functions operates directly on bitmap without the hdc */
+            devYSrc = ySrc;
+            _DIBDRV_Position_ws2ds(physDevSrc, &dummy, &devYSrc);
+            devHeightSrc = heightSrc;
+            _DIBDRV_Sizes_ws2ds(physDevSrc, &dummy, &devHeightSrc);
+            
+            ddb = _DIBDRV_ConvertDIBtoDDB(physDevSrc->hdc, dib, devYSrc, devHeightSrc);
             if(!ddb)
             {
                 ERR("Failed converting source DIB to DDB\n");
@@ -870,8 +918,13 @@ BOOL DIBDRV_StretchBlt( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
                 res = 0;
                 goto noBlt3;
             }
+
+            /* we need to convert the '0' starting position on converted bitmap tp the world
+               space of bitmap's hdc */
+            zeroYSrc = 0;
+            _DIBDRV_Position_ds2ws(physDevSrc, &dummy, &zeroYSrc);
             res = _DIBDRV_GetDisplayDriver()->pStretchBlt(physDevDst->X11PhysDev, xDst, yDst, widthDst, heightDst,
-                                                      physDevSrc ? physDevSrc->X11PhysDev : 0, xSrc, 0, widthSrc, heightSrc, rop);
+                                                      physDevSrc->X11PhysDev, xSrc, zeroYSrc, widthSrc, heightSrc, rop);
             SelectObject(physDevSrc->hdc, dib);
             DeleteObject(ddb);
 noBlt3:
