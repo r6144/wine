@@ -1140,18 +1140,22 @@ static char* StrDup(const char* str, const char* def)
     return dst;
 }
 
+static int WAVE_loadcount;
+
 /******************************************************************
  *		OSS_WaveInit
  *
  * Initialize internal structures from OSS information
  */
-LRESULT OSS_WaveInit(void)
+static LRESULT OSS_WaveInit(void)
 {
     char* str;
     unsigned int i;
 
     /* FIXME: Remove unneeded members of WOutDev and WInDev */
-    TRACE("()\n");
+    TRACE("(%i)\n", WAVE_loadcount);
+    if (WAVE_loadcount++)
+        return 1;
 
     str=getenv("AUDIODEV");
     if (str!=NULL)
@@ -1230,10 +1234,12 @@ LRESULT OSS_WaveInit(void)
  *
  * Delete/clear internal structures of OSS information
  */
-LRESULT OSS_WaveExit(void)
+static LRESULT OSS_WaveExit(void)
 {
     int i;
-    TRACE("()\n");
+    TRACE("(%i)\n", WAVE_loadcount);
+    if (--WAVE_loadcount)
+        return 1;
 
     for (i = 0; i < MAX_WAVEDRV; ++i)
     {
@@ -1961,7 +1967,7 @@ static DWORD wodOpen(WORD wDevID, LPWAVEOPENDESC lpDesc, DWORD dwFlags)
     audio_buf_info      info;
     DWORD               ret;
 
-    TRACE("(%u, %p[cb=%08lx], %08X);\n", wDevID, lpDesc, lpDesc->dwCallback, dwFlags);
+    TRACE("(%u, %p, %08X);\n", wDevID, lpDesc, dwFlags);
     if (lpDesc == NULL) {
 	WARN("Invalid Parameter !\n");
 	return MMSYSERR_INVALPARAM;
@@ -3136,7 +3142,9 @@ DWORD WINAPI OSS_widMessage(WORD wDevID, WORD wMsg, DWORD_PTR dwUser,
 
     switch (wMsg) {
     case DRVM_INIT:
+        return OSS_WaveInit();
     case DRVM_EXIT:
+        return OSS_WaveExit();
     case DRVM_ENABLE:
     case DRVM_DISABLE:
 	/* FIXME: Pretend this is supported */

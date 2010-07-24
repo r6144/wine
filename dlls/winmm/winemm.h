@@ -25,10 +25,6 @@
 #include "winbase.h"
 #include "mmddk.h"
 
-#define WINE_DEFAULT_WINMM_DRIVER     "alsa,oss,coreaudio,esd"
-#define WINE_DEFAULT_WINMM_MAPPER     "msacm32.drv"
-#define WINE_DEFAULT_WINMM_MIDI       "midimap.dll"
-
 /* Who said goofy boy ? */
 #define	WINE_DI_MAGIC	0x900F1B01
 
@@ -137,7 +133,6 @@ BOOL		DRIVER_GetLibName(LPCWSTR keyName, LPCWSTR sectName, LPWSTR buf, int sz);
 LPWINE_DRIVER	DRIVER_TryOpenDriver32(LPCWSTR fn, LPARAM lParam2);
 void            DRIVER_UnloadAll(void);
 
-BOOL		MMDRV_Init(void);
 void            MMDRV_Exit(void);
 UINT		MMDRV_GetNum(UINT);
 LPWINE_MLD	MMDRV_Alloc(UINT size, UINT type, LPHANDLE hndl, DWORD* dwFlags,

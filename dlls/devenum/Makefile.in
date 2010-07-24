@@ -3,7 +3,7 @@ TOPOBJDIR = ../..
 SRCDIR    = @srcdir@
 VPATH     = @srcdir@
 MODULE    = devenum.dll
-IMPORTS   = strmiids uuid ole32 oleaut32 avicap32 winmm user32 advapi32 kernel32
+IMPORTS   = strmiids uuid ole32 oleaut32 avicap32 winmm user32 advapi32
 
 C_SRCS = \
 	createdevenum.c \
@@ -12,6 +12,27 @@ C_SRCS = \
 	mediacatenum.c \
 	parsedisplayname.c
 
-RC_SRCS = devenum.rc
+RC_SRCS = \
+	Cs.rc \
+	Cy.rc \
+	Da.rc \
+	De.rc \
+	En.rc \
+	Es.rc \
+	Fr.rc \
+	Hu.rc \
+	It.rc \
+	Ja.rc \
+	Ko.rc \
+	Lt.rc \
+	Nl.rc \
+	No.rc \
+	Pl.rc \
+	Pt.rc \
+	Ro.rc \
+	Ru.rc \
+	Si.rc \
+	Uk.rc \
+	devenum.rc
 
 @MAKE_DLL_RULES@

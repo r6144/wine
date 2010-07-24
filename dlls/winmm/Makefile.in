@@ -5,7 +5,7 @@ SRCDIR    = @srcdir@
 VPATH     = @srcdir@
 MODULE    = winmm.dll
 IMPORTLIB = winmm
-IMPORTS   = user32 advapi32 kernel32 ntdll
+IMPORTS   = user32 advapi32
 
 C_SRCS = \
 	driver.c \
@@ -32,10 +32,12 @@ RC_SRCS = \
 	winmm_No.rc \
 	winmm_Pl.rc \
 	winmm_Pt.rc \
+	winmm_Ro.rc \
 	winmm_Ru.rc \
 	winmm_Si.rc \
 	winmm_Sk.rc \
 	winmm_Tr.rc \
+	winmm_Uk.rc \
 	winmm_res.rc
 
 @MAKE_DLL_RULES@

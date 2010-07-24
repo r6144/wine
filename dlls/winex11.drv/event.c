@@ -379,8 +379,8 @@ static int process_events( Display *display, Bool (*filter)(Display*, XEvent*,XP
             break;
         }
     }
-    XFlush( gdi_display );
     if (prev_event.type) call_event_handler( display, &prev_event );
+    XFlush( gdi_display );
     wine_tsx11_unlock();
     if (count) TRACE( "processed %d events\n", count );
     return count;
@@ -483,6 +483,7 @@ static void set_focus( Display *display, HWND hwnd, Time time )
 
     GetGUIThreadInfo(0, &threadinfo);
     focus = threadinfo.hwndFocus;
+    if (!focus) focus = threadinfo.hwndActive;
     if (focus) focus = GetAncestor( focus, GA_ROOT );
     win = X11DRV_get_whole_window(focus);
 
@@ -502,11 +503,14 @@ static void set_focus( Display *display, HWND hwnd, Time time )
 static void handle_wm_protocols( HWND hwnd, XClientMessageEvent *event )
 {
     Atom protocol = (Atom)event->data.l[0];
+    Time event_time = (Time)event->data.l[1];
 
     if (!protocol) return;
 
     if (protocol == x11drv_atom(WM_DELETE_WINDOW))
     {
+        update_user_time( event_time );
+
         if (hwnd == GetDesktopWindow())
         {
             /* The desktop window does not have a close button that we can
@@ -522,7 +526,6 @@ static void handle_wm_protocols( HWND hwnd, XClientMessageEvent *event )
         if (IsWindowEnabled(hwnd))
         {
             HMENU hSysMenu;
-            POINT pt;
 
             if (GetClassLongW(hwnd, GCL_STYLE) & CS_NOCLOSE) return;
             hSysMenu = GetSystemMenu(hwnd, FALSE);
@@ -553,15 +556,12 @@ static void handle_wm_protocols( HWND hwnd, XClientMessageEvent *event )
                         break;
                 }
             }
-            /* Simulate clicking the caption Close button */
-            GetCursorPos( &pt );
-            PostMessageW( hwnd, WM_NCLBUTTONDOWN, HTCLOSE, MAKELPARAM( pt.x, pt.y ) );
-            PostMessageW( hwnd, WM_LBUTTONUP, HTCLOSE, MAKELPARAM( pt.x, pt.y ) );
+
+            PostMessageW( hwnd, WM_SYSCOMMAND, SC_CLOSE, 0 );
         }
     }
     else if (protocol == x11drv_atom(WM_TAKE_FOCUS))
     {
-        Time event_time = (Time)event->data.l[1];
         HWND last_focus = x11drv_thread_data()->last_focus;
 
         TRACE( "got take focus msg for %p, enabled=%d, visible=%d (style %08x), focus=%p, active=%p, fg=%p, last=%p\n",
@@ -941,6 +941,8 @@ static int get_window_wm_state( Display *display, struct x11drv_win_data *data )
 static void handle_wm_state_notify( struct x11drv_win_data *data, XPropertyEvent *event,
                                     BOOL update_window )
 {
+    DWORD style;
+
     switch(event->state)
     {
     case PropertyDelete:
@@ -966,25 +968,37 @@ static void handle_wm_state_notify( struct x11drv_win_data *data, XPropertyEvent
 
     if (!update_window || !data->managed || !data->mapped) return;
 
+    style = GetWindowLongW( data->hwnd, GWL_STYLE );
+
     if (data->iconic && data->wm_state == NormalState)  /* restore window */
     {
         data->iconic = FALSE;
         if (is_net_wm_state_maximized( event->display, data ))
         {
-            TRACE( "restoring to max %p/%lx\n", data->hwnd, data->whole_window );
-            SendMessageW( data->hwnd, WM_SYSCOMMAND, SC_MAXIMIZE, 0 );
+            if ((style & WS_MAXIMIZEBOX) && !(style & WS_DISABLED))
+            {
+                TRACE( "restoring to max %p/%lx\n", data->hwnd, data->whole_window );
+                SendMessageW( data->hwnd, WM_SYSCOMMAND, SC_MAXIMIZE, 0 );
+            }
+            else TRACE( "not restoring to max win %p/%lx style %08x\n",
+                        data->hwnd, data->whole_window, style );
         }
-        else
+        else if (style & (WS_MINIMIZE | WS_MAXIMIZE))
         {
             TRACE( "restoring win %p/%lx\n", data->hwnd, data->whole_window );
             SendMessageW( data->hwnd, WM_SYSCOMMAND, SC_RESTORE, 0 );
         }
+        else TRACE( "not restoring win %p/%lx style %08x\n", data->hwnd, data->whole_window, style );
     }
     else if (!data->iconic && data->wm_state == IconicState)
     {
-        TRACE( "minimizing win %p/%lx\n", data->hwnd, data->whole_window );
         data->iconic = TRUE;
-        SendMessageW( data->hwnd, WM_SYSCOMMAND, SC_MINIMIZE, 0 );
+        if ((style & WS_MINIMIZEBOX) && !(style & WS_DISABLED))
+        {
+            TRACE( "minimizing win %p/%lx\n", data->hwnd, data->whole_window );
+            SendMessageW( data->hwnd, WM_SYSCOMMAND, SC_MINIMIZE, 0 );
+        }
+        else TRACE( "not minimizing win %p/%lx style %08x\n", data->hwnd, data->whole_window, style );
     }
 }
 

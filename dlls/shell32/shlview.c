@@ -312,6 +312,29 @@ static void SetStyle(IShellViewImpl * This, DWORD dwAdd, DWORD dwRemove)
 	SetWindowLongW(This->hWndList, GWL_STYLE, dwAdd | (tmpstyle & ~dwRemove));
 }
 
+static DWORD ViewModeToListStyle(UINT ViewMode)
+{
+	DWORD dwStyle;
+
+	TRACE("%d\n", ViewMode);
+
+	switch (ViewMode)
+	{
+	  case FVM_ICON:	dwStyle = LVS_ICON;		break;
+	  case FVM_DETAILS:	dwStyle = LVS_REPORT;		break;
+	  case FVM_SMALLICON:	dwStyle = LVS_SMALLICON;	break;
+	  case FVM_LIST:	dwStyle = LVS_LIST;		break;
+	  default:
+	  {
+		FIXME("ViewMode %d not implemented\n", ViewMode);
+		dwStyle = LVS_LIST;
+		break;
+	  }
+	}
+
+	return dwStyle;
+}
+
 /**********************************************************
 * ShellView_CreateList()
 *
@@ -326,19 +349,7 @@ static BOOL ShellView_CreateList (IShellViewImpl * This)
 		  LVS_SHAREIMAGELISTS | LVS_EDITLABELS | LVS_ALIGNLEFT | LVS_AUTOARRANGE;
         dwExStyle = WS_EX_CLIENTEDGE;
 
-	switch (This->FolderSettings.ViewMode)
-	{
-	  case FVM_ICON:	dwStyle |= LVS_ICON;		break;
-	  case FVM_DETAILS: 	dwStyle |= LVS_REPORT;		break;
-	  case FVM_SMALLICON: 	dwStyle |= LVS_SMALLICON;	break;
-	  case FVM_LIST: 	dwStyle |= LVS_LIST;		break;
-	  default:
-	  {
-		FIXME("ViewMode %d not implemented\n", This->FolderSettings.ViewMode);
-		dwStyle |= LVS_LIST;
-		break;
-	  }
-	}
+        dwStyle |= ViewModeToListStyle(This->FolderSettings.ViewMode);
 
 	if (This->FolderSettings.fFlags & FWF_AUTOARRANGE)	dwStyle |= LVS_AUTOARRANGE;
 	if (This->FolderSettings.fFlags & FWF_DESKTOP)
@@ -387,42 +398,51 @@ static BOOL ShellView_CreateList (IShellViewImpl * This)
 *
 * - adds all needed columns to the shellview
 */
-static BOOL ShellView_InitList(IShellViewImpl * This)
+static void ShellView_InitList(IShellViewImpl *This)
 {
-	LVCOLUMNW	lvColumn;
-	SHELLDETAILS	sd;
-	int	i;
-	WCHAR	szTemp[50];
+    IShellDetails *details = NULL;
+    LVCOLUMNW lvColumn;
+    SHELLDETAILS sd;
+    WCHAR nameW[50];
+    HRESULT hr;
+    INT i;
 
-	TRACE("%p\n",This);
+    TRACE("(%p)\n", This);
 
-	SendMessageW(This->hWndList, LVM_DELETEALLITEMS, 0, 0);
+    SendMessageW(This->hWndList, LVM_DELETEALLITEMS, 0, 0);
+    SendMessageW(This->hWndList, LVM_SETIMAGELIST, LVSIL_SMALL, (LPARAM)ShellSmallIconList);
+    SendMessageW(This->hWndList, LVM_SETIMAGELIST, LVSIL_NORMAL, (LPARAM)ShellBigIconList);
 
-	lvColumn.mask = LVCF_FMT | LVCF_WIDTH | LVCF_TEXT;
-	lvColumn.pszText = szTemp;
+    lvColumn.mask = LVCF_FMT | LVCF_WIDTH | LVCF_TEXT;
+    lvColumn.pszText = nameW;
 
-	if (This->pSF2Parent)
-	{
-	  for (i=0; 1; i++)
-	  {
-            if (FAILED(IShellFolder2_GetDetailsOf(This->pSF2Parent, NULL, i, &sd)))
-	      break;
-	    lvColumn.fmt = sd.fmt;
-	    lvColumn.cx = sd.cxChar*8; /* chars->pixel */
-	    StrRetToStrNW( szTemp, 50, &sd.str, NULL);
-	    SendMessageW(This->hWndList, LVM_INSERTCOLUMNW, i, (LPARAM) &lvColumn);
-	  }
-	}
-	else
-	{
-	  FIXME("no SF2\n");
-	}
+    if (!This->pSF2Parent)
+    {
+        hr = IShellFolder_QueryInterface(This->pSFParent, &IID_IShellDetails, (void**)&details);
+        if (hr != S_OK)
+        {
+            WARN("IShellFolder2/IShellDetails not supported\n");
+            return;
+        }
+    }
 
-	SendMessageW(This->hWndList, LVM_SETIMAGELIST, LVSIL_SMALL, (LPARAM)ShellSmallIconList);
-	SendMessageW(This->hWndList, LVM_SETIMAGELIST, LVSIL_NORMAL, (LPARAM)ShellBigIconList);
+    for (i = 0; 1; i++)
+    {
+        if (This->pSF2Parent)
+            hr = IShellFolder2_GetDetailsOf(This->pSF2Parent, NULL, i, &sd);
+        else
+            hr = IShellDetails_GetDetailsOf(details, NULL, i, &sd);
+        if (FAILED(hr)) break;
 
-	return TRUE;
+        lvColumn.fmt = sd.fmt;
+	lvColumn.cx = sd.cxChar*8; /* chars->pixel */
+	StrRetToStrNW(nameW, sizeof(nameW)/sizeof(WCHAR), &sd.str, NULL);
+	SendMessageW(This->hWndList, LVM_INSERTCOLUMNW, i, (LPARAM) &lvColumn);
+    }
+
+    if (details) IShellDetails_Release(details);
 }
+
 /**********************************************************
 * ShellView_CompareItems()
 *
@@ -688,10 +708,8 @@ static LRESULT ShellView_OnCreate(IShellViewImpl *This)
 
     if (ShellView_CreateList(This))
     {
-        if (ShellView_InitList(This))
-        {
-	    ShellView_FillList(This);
-        }
+        ShellView_InitList(This);
+        ShellView_FillList(This);
     }
 
     hr = IShellView2_QueryInterface(iface, &IID_IDropTarget, (LPVOID*)&pdt);
@@ -1380,28 +1398,49 @@ static LRESULT ShellView_OnNotify(IShellViewImpl * This, UINT CtlID, LPNMHDR lpn
 
 	    if(lpdi->item.mask & LVIF_TEXT)	/* text requested */
 	    {
+	      static WCHAR emptyW[] = { 0 };
+	      SHELLDETAILS sd;
+	      HRESULT hr;
+
 	      if (This->pSF2Parent)
 	      {
-	        SHELLDETAILS sd;
-	        IShellFolder2_GetDetailsOf(This->pSF2Parent, pidl, lpdi->item.iSubItem, &sd);
-                if (lpnmh->code == LVN_GETDISPINFOA)
-                {
-                    /* shouldn't happen */
-                    NMLVDISPINFOA *lpdiA = (NMLVDISPINFOA *)lpnmh;
-                    StrRetToStrNA( lpdiA->item.pszText, lpdiA->item.cchTextMax, &sd.str, NULL);
-                    TRACE("-- text=%s\n",lpdiA->item.pszText);
-                }
-                else /* LVN_GETDISPINFOW */
-                {
-                    StrRetToStrNW( lpdi->item.pszText, lpdi->item.cchTextMax, &sd.str, NULL);
-                    TRACE("-- text=%s\n",debugstr_w(lpdi->item.pszText));
-                }
+	        hr = IShellFolder2_GetDetailsOf(This->pSF2Parent, pidl, lpdi->item.iSubItem, &sd);
 	      }
 	      else
 	      {
-	        FIXME("no SF2\n");
+	        IShellDetails *details;
+
+	        hr = IShellFolder_QueryInterface(This->pSFParent, &IID_IShellDetails, (void**)&details);
+	        if (hr == S_OK)
+	        {
+	          hr = IShellDetails_GetDetailsOf(details, pidl, lpdi->item.iSubItem, &sd);
+	          IShellDetails_Release(details);
+	        }
+	        else
+	          WARN("IShellFolder2/IShellDetails not supported\n");
 	      }
+
+	      if (hr != S_OK)
+	      {
+	          /* set to empty on failure */
+	          sd.str.uType = STRRET_WSTR;
+	          sd.str.u.pOleStr = emptyW;
+	      }
+
+              if (lpnmh->code == LVN_GETDISPINFOW)
+              {
+                  StrRetToStrNW( lpdi->item.pszText, lpdi->item.cchTextMax, &sd.str, NULL);
+                  TRACE("-- text=%s\n", debugstr_w(lpdi->item.pszText));
+              }
+              else
+              {
+                  /* LVN_GETDISPINFOA - shouldn't happen */
+                  NMLVDISPINFOA *lpdiA = (NMLVDISPINFOA *)lpnmh;
+                  StrRetToStrNA( lpdiA->item.pszText, lpdiA->item.cchTextMax, &sd.str, NULL);
+                  TRACE("-- text=%s\n", lpdiA->item.pszText);
+              }
 	    }
+
 	    if(lpdi->item.mask & LVIF_IMAGE)	/* image requested */
 	    {
 	      lpdi->item.iImage = SHMapPIDLToSystemImageListIndex(This->pSFParent, pidl, 0);
@@ -1489,98 +1528,92 @@ static LRESULT ShellView_OnNotify(IShellViewImpl * This, UINT CtlID, LPNMHDR lpn
 
 	  case LVN_KEYDOWN:
 	    {
-	    /*  MSG msg;
-	      msg.hwnd = This->hWnd;
-	      msg.message = WM_KEYDOWN;
-	      msg.wParam = plvKeyDown->wVKey;
-	      msg.lParam = 0;
-	      msg.time = 0;
-	      msg.pt = 0;*/
-
 	      LPNMLVKEYDOWN plvKeyDown = (LPNMLVKEYDOWN) lpnmh;
 
               /* initiate a rename of the selected file or directory */
-              if(plvKeyDown->wVKey == VK_F2)
+              switch (plvKeyDown->wVKey)
               {
-                /* see how many files are selected */
-                int i = SendMessageW(This->hWndList, LVM_GETSELECTEDCOUNT, 0, 0);
-
-                /* get selected item */
-                if(i == 1)
+              case VK_F2:
                 {
-                  /* get selected item */
-                  i = SendMessageW(This->hWndList, LVM_GETNEXTITEM, -1, MAKELPARAM (LVNI_SELECTED, 0));
+                  INT i = SendMessageW(This->hWndList, LVM_GETSELECTEDCOUNT, 0, 0);
 
-                  SendMessageW(This->hWndList, LVM_ENSUREVISIBLE, i, 0);
-                  SendMessageW(This->hWndList, LVM_EDITLABELW, i, 0);
+                  if (i == 1)
+                  {
+                    /* get selected item */
+                    i = SendMessageW(This->hWndList, LVM_GETNEXTITEM, -1, MAKELPARAM (LVNI_SELECTED, 0));
+
+                    SendMessageW(This->hWndList, LVM_ENSUREVISIBLE, i, 0);
+                    SendMessageW(This->hWndList, LVM_EDITLABELW, i, 0);
+                  }
                 }
-              }
-#if 0
-	      TranslateAccelerator(This->hWnd, This->hAccel, &msg)
-#endif
-	      else if(plvKeyDown->wVKey == VK_DELETE)
-              {
-		UINT i;
-		int item_index;
-		LVITEMA item;
-		LPITEMIDLIST* pItems;
-		ISFHelper *psfhlp;
+                break;
+              case VK_DELETE:
+                {
+		  UINT i, count;
+		  int item_index;
+		  LVITEMW item;
+		  LPITEMIDLIST* pItems;
+		  ISFHelper *psfhlp;
+		  HRESULT hr;
 
-		IShellFolder_QueryInterface(This->pSFParent, &IID_ISFHelper,
-		 	(LPVOID*)&psfhlp);
+		  hr = IShellFolder_QueryInterface(This->pSFParent, &IID_ISFHelper, (void**)&psfhlp);
+		  if (hr != S_OK) return 0;
 
-		if (psfhlp == NULL)
-		  break;
+		  if(!(count = SendMessageW(This->hWndList, LVM_GETSELECTEDCOUNT, 0, 0)))
+		  {
+		    ISFHelper_Release(psfhlp);
+		    return 0;
+		  }
 
-		if(!(i = SendMessageW(This->hWndList, LVM_GETSELECTEDCOUNT, 0, 0)))
-		  break;
+		  /* allocate memory for the pidl array */
+		  pItems = HeapAlloc(GetProcessHeap(), 0, sizeof(LPITEMIDLIST) * count);
 
-		/* allocate memory for the pidl array */
-		pItems = HeapAlloc(GetProcessHeap(), 0,
-			sizeof(LPITEMIDLIST) * i);
+		  /* retrieve all selected items */
+		  i = 0;
+		  item_index = -1;
 
-		/* retrieve all selected items */
-		i = 0;
-		item_index = -1;
-		while(SendMessageW(This->hWndList, LVM_GETSELECTEDCOUNT, 0, 0) > i)
-		{
-		  /* get selected item */
-		  item_index = SendMessageW(This->hWndList, LVM_GETNEXTITEM, item_index,
-                                            MAKELPARAM (LVNI_SELECTED, 0));
-		  item.iItem = item_index;
-		  item.mask = LVIF_PARAM;
-		  SendMessageW(This->hWndList, LVM_GETITEMW, 0, (LPARAM) &item);
+		  while (count > i)
+		  {
+		    /* get selected item */
+		    item_index = SendMessageW(This->hWndList, LVM_GETNEXTITEM, item_index,
+                                              MAKELPARAM (LVNI_SELECTED, 0));
+		    item.iItem = item_index;
+		    item.mask = LVIF_PARAM;
+		    SendMessageW(This->hWndList, LVM_GETITEMW, 0, (LPARAM)&item);
 
-		  /* get item pidl */
-		  pItems[i] = (LPITEMIDLIST)item.lParam;
+		    /* get item pidl */
+		    pItems[i] = (LPITEMIDLIST)item.lParam;
 
-		  i++;
-		}
+		    i++;
+		  }
 
-		/* perform the item deletion */
-		ISFHelper_DeleteItems(psfhlp, i, (LPCITEMIDLIST*)pItems);
+		  /* perform the item deletion */
+		  ISFHelper_DeleteItems(psfhlp, i, (LPCITEMIDLIST*)pItems);
+		  ISFHelper_Release(psfhlp);
 
-		/* free pidl array memory */
-		HeapFree(GetProcessHeap(), 0, pItems);
-              }
+		  /* free pidl array memory */
+		  HeapFree(GetProcessHeap(), 0, pItems);
+                }
+		break;
 
-              /* Initiate a refresh */
-              else if(plvKeyDown->wVKey == VK_F5)
-              {
+	      case VK_F5:
+                /* Initiate a refresh */
 		IShellView_Refresh((IShellView*)This);
-              }
+		break;
 
-	      else if(plvKeyDown->wVKey == VK_BACK)
-	      {
-		LPSHELLBROWSER lpSb;
-		if((lpSb = (LPSHELLBROWSER)SendMessageW(This->hWndParent, CWM_GETISHELLBROWSER, 0, 0)))
+	      case VK_BACK:
 		{
-		  IShellBrowser_BrowseObject(lpSb, NULL, SBSP_PARENT);
-		}
-	      }
+		  LPSHELLBROWSER lpSb;
+		  if((lpSb = (LPSHELLBROWSER)SendMessageW(This->hWndParent, CWM_GETISHELLBROWSER, 0, 0)))
+		  {
+		    IShellBrowser_BrowseObject(lpSb, NULL, SBSP_PARENT);
+		  }
+	        }
+		break;
 
-              else
-		FIXME("LVN_KEYDOWN key=0x%08x\n",plvKeyDown->wVKey);
+	      default:
+		FIXME("LVN_KEYDOWN key=0x%08x\n", plvKeyDown->wVKey);
+	      }
 	    }
 	    break;
 
@@ -2710,16 +2743,38 @@ static ULONG WINAPI IFView_Release( IFolderView *iface)
 
 static HRESULT WINAPI IFView_GetCurrentViewMode(IFolderView *iface, UINT *mode)
 {
-	IShellViewImpl *This = impl_from_IFolderView(iface);
-	FIXME("(%p)->(%p), stub\n", This, mode);
-	return E_NOTIMPL;
+    IShellViewImpl *This = impl_from_IFolderView(iface);
+    TRACE("(%p)->(%p), stub\n", This, mode);
+
+    if(!mode)
+        return E_INVALIDARG;
+
+    *mode = This->FolderSettings.ViewMode;
+    return S_OK;
 }
 
 static HRESULT WINAPI IFView_SetCurrentViewMode(IFolderView *iface, UINT mode)
 {
-	IShellViewImpl *This = impl_from_IFolderView(iface);
-	FIXME("(%p)->(%u), stub\n", This, mode);
-	return E_NOTIMPL;
+    IShellViewImpl *This = impl_from_IFolderView(iface);
+    DWORD dwStyle;
+    TRACE("(%p)->(%u), stub\n", This, mode);
+
+    if((mode < FVM_FIRST || mode > FVM_LAST) &&
+       (mode != FVM_AUTO))
+        return E_INVALIDARG;
+
+    /* Windows before Vista uses LVM_SETVIEW and possibly
+       LVM_SETEXTENDEDLISTVIEWSTYLE to set the style of the listview,
+       while later versions seem to accomplish this through other
+       means. */
+    dwStyle = ViewModeToListStyle(mode);
+    SetStyle(This, dwStyle, LVS_TYPEMASK);
+
+    /* This will not necessarily be the actual mode set above.
+       This mimics the behavior of Windows XP. */
+    This->FolderSettings.ViewMode = mode;
+
+    return S_OK;
 }
 
 static HRESULT WINAPI IFView_GetFolder(IFolderView *iface, REFIID riid, void **ppv)

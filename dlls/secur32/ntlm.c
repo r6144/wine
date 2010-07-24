@@ -593,15 +593,15 @@ static SECURITY_STATUS SEC_ENTRY ntlm_InitializeSecurityContextW(
             MultiByteToWideChar(CP_ACP, 0, password ? password : ntlm_cred->password,
                                 password ? pwlen : ntlm_cred->pwlen, unicode_password, passwd_lenW);
 
-            SECUR32_CreateNTLMv1SessionKey((PBYTE)unicode_password,
-                                           passwd_lenW * sizeof(SEC_WCHAR), helper->session_key);
+            SECUR32_CreateNTLM1SessionKey((PBYTE)unicode_password,
+                                          passwd_lenW * sizeof(SEC_WCHAR), helper->session_key);
 
             HeapFree(GetProcessHeap(), 0, unicode_password);
         }
         else
             memset(helper->session_key, 0, 16);
 
-        /* Allocate space for a maximal string of 
+        /* Allocate space for a maximal string of
          * "SF NTLMSSP_FEATURE_SIGN NTLMSSP_FEATURE_SEAL
          * NTLMSSP_FEATURE_SESSION_KEY"
          */
@@ -880,8 +880,8 @@ static SECURITY_STATUS SEC_ENTRY ntlm_InitializeSecurityContextW(
         else
         {
             TRACE("Negotiated %s\n", debugstr_a(buffer));
-            sscanf(buffer + 3, "%lx", &(helper->neg_flags));
-            TRACE("Stored 0x%08lx as flags\n", helper->neg_flags);
+            sscanf(buffer + 3, "%x", &(helper->neg_flags));
+            TRACE("Stored 0x%08x as flags\n", helper->neg_flags);
         }
 
         TRACE("Getting session key\n");
@@ -913,7 +913,7 @@ static SECURITY_STATUS SEC_ENTRY ntlm_InitializeSecurityContextW(
         helper->crypt.ntlm.a4i = SECUR32_arc4Alloc();
         SECUR32_arc4Init(helper->crypt.ntlm.a4i, helper->session_key, 16);
         helper->crypt.ntlm.seq_num = 0l;
-        SECUR32_CreateNTLMv2SubKeys(helper);
+        SECUR32_CreateNTLM2SubKeys(helper);
         helper->crypt.ntlm2.send_a4i = SECUR32_arc4Alloc();
         helper->crypt.ntlm2.recv_a4i = SECUR32_arc4Alloc();
         SECUR32_arc4Init(helper->crypt.ntlm2.send_a4i,
@@ -1269,8 +1269,8 @@ static SECURITY_STATUS SEC_ENTRY ntlm_AcceptSecurityContext(
         else
         {
             TRACE("Negotiated %s\n", debugstr_a(buffer));
-            sscanf(buffer + 3, "%lx", &(helper->neg_flags));
-            TRACE("Stored 0x%08lx as flags\n", helper->neg_flags);
+            sscanf(buffer + 3, "%x", &(helper->neg_flags));
+            TRACE("Stored 0x%08x as flags\n", helper->neg_flags);
         }
 
         TRACE("Getting session key\n");
@@ -1471,7 +1471,7 @@ static SECURITY_STATUS SEC_ENTRY ntlm_RevertSecurityContext(PCtxtHandle phContex
 /***********************************************************************
  *             ntlm_CreateSignature
  * As both MakeSignature and VerifySignature need this, but different keys
- * are needed for NTLMv2, the logic goes into a helper function.
+ * are needed for NTLM2, the logic goes into a helper function.
  * To ensure maximal reusability, we can specify the direction as NTLM_SEND for
  * signing/encrypting and NTLM_RECV for verfying/decrypting. When encrypting,
  * the signature is encrypted after the message was encrypted, so
@@ -1631,7 +1631,7 @@ static SECURITY_STATUS SEC_ENTRY ntlm_MakeSignature(PCtxtHandle phContext, ULONG
         return SEC_E_BUFFER_TOO_SMALL;
 
     helper = (PNegoHelper)phContext->dwLower;
-    TRACE("Negotiated flags are: 0x%08lx\n", helper->neg_flags);
+    TRACE("Negotiated flags are: 0x%08x\n", helper->neg_flags);
 
     return ntlm_CreateSignature(helper, pMessage, token_idx, NTLM_SEND, TRUE);
 }
@@ -1668,7 +1668,7 @@ static SECURITY_STATUS SEC_ENTRY ntlm_VerifySignature(PCtxtHandle phContext,
         FIXME("Ignoring MessageSeqNo\n");
 
     helper = (PNegoHelper)phContext->dwLower;
-    TRACE("Negotiated flags: 0x%08lx\n", helper->neg_flags);
+    TRACE("Negotiated flags: 0x%08x\n", helper->neg_flags);
 
     local_buff = HeapAlloc(GetProcessHeap(), 0, pMessage->cBuffers * sizeof(SecBuffer));
 

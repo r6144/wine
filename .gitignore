@@ -53,16 +53,21 @@ dlls/dxdiagn/fil_data.h
 dlls/jscript/jsglobal.tlb
 dlls/jscript/parser.tab.c
 dlls/jscript/parser.tab.h
+dlls/kernel32/nls/winerr_dan.mc.rc
 dlls/kernel32/nls/winerr_deu.mc.rc
 dlls/kernel32/nls/winerr_enu.mc.rc
 dlls/kernel32/nls/winerr_fra.mc.rc
+dlls/kernel32/nls/winerr_ita.mc.rc
 dlls/kernel32/nls/winerr_jpn.mc.rc
 dlls/kernel32/nls/winerr_kor.mc.rc
 dlls/kernel32/nls/winerr_lth.mc.rc
 dlls/kernel32/nls/winerr_nld.mc.rc
 dlls/kernel32/nls/winerr_nor.mc.rc
 dlls/kernel32/nls/winerr_plk.mc.rc
+dlls/kernel32/nls/winerr_ptb.mc.rc
 dlls/kernel32/nls/winerr_ptg.mc.rc
+dlls/kernel32/nls/winerr_rus.mc.rc
+dlls/kernel32/nls/winerr_ukr.mc.rc
 dlls/libd3dx9.def
 dlls/libkernel.def
 dlls/libwinspool.def
@@ -99,6 +104,9 @@ dlls/oleaut32/oleaut32_oaidl.h
 dlls/oleaut32/oleaut32_oaidl_p.c
 dlls/oleaut32/oleaut32_ocidl.h
 dlls/oleaut32/oleaut32_ocidl_p.c
+dlls/oleaut32/tests/test_reg.h
+dlls/oleaut32/tests/test_reg.tlb
+dlls/oleaut32/tests/test_reg_i.c
 dlls/oleaut32/tests/test_tlb.tlb
 dlls/oleaut32/tests/tmarshal.h
 dlls/oleaut32/tests/tmarshal.tlb
@@ -132,6 +140,7 @@ include/activdbg.h
 include/activscp.h
 include/amstream.h
 include/amvideo.h
+include/asptlb.h
 include/audioclient.h
 include/audiopolicy.h
 include/austream.h
@@ -155,6 +164,7 @@ include/dxgitype.h
 include/endpointvolume.h
 include/exdisp.h
 include/fusion.h
+include/gameux.h
 include/hlink.h
 include/htiframe.h
 include/iads.h
@@ -232,7 +242,7 @@ loader/wine-preloader
 loader/wine.de.man
 loader/wine.fr.man
 loader/wine.man
-loader/wine32
+loader/wine64
 programs/Makeprog.rules
 programs/rpcss/epm.h
 programs/rpcss/epm_s.c
@@ -250,6 +260,7 @@ programs/winetest/build.rc
 programs/winhlp32/macro.lex.yy.c
 server/wineserver
 server/wineserver-installed
+server/wineserver.de.man
 server/wineserver.fr.man
 server/wineserver.man
 tools/fnt2bdf
@@ -273,9 +284,9 @@ tools/winegcc/winecpp
 tools/winegcc/wineg++
 tools/winegcc/winegcc
 tools/winegcc/winegcc.man
+tools/winemaker.de.man
+tools/winemaker.fr.man
 tools/winemaker.man
-tools/wineprefixcreate
-tools/wineprefixcreate.man
 tools/wmc/mcy.tab.c
 tools/wmc/mcy.tab.h
 tools/wmc/wmc

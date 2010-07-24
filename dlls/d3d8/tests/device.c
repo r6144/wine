@@ -46,6 +46,22 @@ static int get_refcount(IUnknown *object)
     return IUnknown_Release( object );
 }
 
+/* try to make sure pending X events have been processed before continuing */
+static void flush_events(void)
+{
+    MSG msg;
+    int diff = 200;
+    int min_timeout = 100;
+    DWORD time = GetTickCount() + diff;
+
+    while (diff > 0)
+    {
+        if (MsgWaitForMultipleObjects( 0, NULL, FALSE, min_timeout, QS_ALLINPUT ) == WAIT_TIMEOUT) break;
+        while (PeekMessage( &msg, 0, 0, 0, PM_REMOVE )) DispatchMessage( &msg );
+        diff = time - GetTickCount();
+    }
+}
+
 static IDirect3DDevice8 *create_device(IDirect3D8 *d3d8, HWND device_window, HWND focus_window, BOOL windowed)
 {
     D3DPRESENT_PARAMETERS present_parameters = {0};
@@ -1505,7 +1521,8 @@ static LRESULT CALLBACK test_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM
 {
     if (filter_messages && filter_messages == hwnd)
     {
-        ok(message == WM_DISPLAYCHANGE, "Received unexpected message %#x for window %p.\n", message, hwnd);
+        if (message != WM_DISPLAYCHANGE && message != WM_IME_NOTIFY)
+            todo_wine ok(0, "Received unexpected message %#x for window %p.\n", message, hwnd);
     }
 
     if (expect_message.window == hwnd && expect_message.message == message) expect_message.message = 0;
@@ -1555,7 +1572,6 @@ static void test_wndproc(void)
     LONG_PTR proc;
     ULONG ref;
     DWORD res, tid;
-    MSG msg;
 
     if (!(d3d8 = pDirect3DCreate8(D3D_SDK_VERSION)))
     {
@@ -1601,7 +1617,7 @@ static void test_wndproc(void)
     expect_message.window = focus_window;
     expect_message.message = WM_SETFOCUS;
 
-    while (PeekMessage(&msg, 0, 0, 0, PM_REMOVE)) DispatchMessage(&msg);
+    flush_events();
 
     device = create_device(d3d8, device_window, focus_window, FALSE);
     if (!device)
@@ -1620,6 +1636,7 @@ static void test_wndproc(void)
         ok(tmp == focus_window, "Expected foreground window %p, got %p.\n", focus_window, tmp);
     }
     SetForegroundWindow(focus_window);
+    flush_events();
 
     filter_messages = focus_window;
 
@@ -1797,6 +1814,89 @@ done:
     UnregisterClassA("d3d8_test_wndproc_wc", GetModuleHandleA(NULL));
 }
 
+static inline void set_fpu_cw(WORD cw)
+{
+#if defined(__GNUC__) && (defined(__i386__) || defined(__x86_64__))
+    __asm__ volatile ("fnclex");
+    __asm__ volatile ("fldcw %0" : : "m" (cw));
+#endif
+}
+
+static inline WORD get_fpu_cw(void)
+{
+    WORD cw = 0;
+#if defined(__GNUC__) && (defined(__i386__) || defined(__x86_64__))
+    __asm__ volatile ("fnstcw %0" : "=m" (cw));
+#endif
+    return cw;
+}
+
+static void test_fpu_setup(void)
+{
+    D3DPRESENT_PARAMETERS present_parameters;
+    IDirect3DDevice8 *device;
+    D3DDISPLAYMODE d3ddm;
+    HWND window = NULL;
+    IDirect3D8 *d3d8;
+    HRESULT hr;
+    WORD cw;
+
+    d3d8 = pDirect3DCreate8(D3D_SDK_VERSION);
+    ok(!!d3d8, "Failed to create a d3d8 object.\n");
+    if (!d3d8) return;
+
+    window = CreateWindowA("static", "d3d8_test", WS_CAPTION, 0, 0, 640, 480, 0, 0, 0, 0);
+    ok(!!window, "Failed to create a window.\n");
+    if (!window) goto done;
+
+    hr = IDirect3D8_GetAdapterDisplayMode(d3d8, D3DADAPTER_DEFAULT, &d3ddm);
+    ok(SUCCEEDED(hr), "GetAdapterDisplayMode failed, hr %#x.\n", hr);
+
+    memset(&present_parameters, 0, sizeof(present_parameters));
+    present_parameters.Windowed = TRUE;
+    present_parameters.hDeviceWindow = window;
+    present_parameters.SwapEffect = D3DSWAPEFFECT_DISCARD;
+    present_parameters.BackBufferFormat = d3ddm.Format;
+
+    set_fpu_cw(0xf60);
+    cw = get_fpu_cw();
+    ok(cw == 0xf60, "cw is %#x, expected 0xf60.\n", cw);
+
+    hr = IDirect3D8_CreateDevice(d3d8, D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, window,
+            D3DCREATE_HARDWARE_VERTEXPROCESSING, &present_parameters, &device);
+    if (FAILED(hr))
+    {
+        skip("Failed to create a device, hr %#x.\n", hr);
+        set_fpu_cw(0x37f);
+        goto done;
+    }
+
+    cw = get_fpu_cw();
+    ok(cw == 0x7f, "cw is %#x, expected 0x7f.\n", cw);
+
+    IDirect3DDevice8_Release(device);
+
+    cw = get_fpu_cw();
+    ok(cw == 0x7f, "cw is %#x, expected 0x7f.\n", cw);
+    set_fpu_cw(0xf60);
+    cw = get_fpu_cw();
+    ok(cw == 0xf60, "cw is %#x, expected 0xf60.\n", cw);
+
+    hr = IDirect3D8_CreateDevice(d3d8, D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, window,
+            D3DCREATE_HARDWARE_VERTEXPROCESSING | D3DCREATE_FPU_PRESERVE, &present_parameters, &device);
+    ok(SUCCEEDED(hr), "CreateDevice failed, hr %#x.\n", hr);
+
+    cw = get_fpu_cw();
+    ok(cw == 0xf60, "cw is %#x, expected 0xf60.\n", cw);
+    set_fpu_cw(0x37f);
+
+    IDirect3DDevice8_Release(device);
+
+done:
+    if (window) DestroyWindow(window);
+    if (d3d8) IDirect3D8_Release(d3d8);
+}
+
 START_TEST(device)
 {
     HMODULE d3d8_handle = LoadLibraryA( "d3d8.dll" );
@@ -1819,6 +1919,9 @@ START_TEST(device)
         }
         IDirect3D8_Release(d3d8);
 
+#if defined(__GNUC__) && (defined(__i386__) || defined(__x86_64__))
+        test_fpu_setup();
+#endif
         test_display_modes();
         test_shader_versions();
         test_swapchain();

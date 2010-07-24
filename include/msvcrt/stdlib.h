@@ -47,6 +47,8 @@ typedef struct
 #define _MAX_PATH           260
 #endif
 
+/* Make the secure string functions (names end in "_s") truncate their output */
+#define _TRUNCATE  ((size_t)-1)
 
 typedef struct _div_t {
     int quot;
@@ -146,6 +148,7 @@ char*         __cdecl _ltoa(__msvcrt_long,char*,int);
 __msvcrt_ulong __cdecl _lrotl(__msvcrt_ulong,int);
 __msvcrt_ulong __cdecl _lrotr(__msvcrt_ulong,int);
 void          __cdecl _makepath(char*,const char*,const char*,const char*,const char*);
+int           __cdecl _makepath_s(char*,size_t,const char*,const char*,const char*,const char*);
 size_t        __cdecl _mbstrlen(const char*);
 _onexit_t     __cdecl _onexit(_onexit_t);
 int           __cdecl _putenv(const char*);
@@ -159,6 +162,7 @@ void          __cdecl _splitpath(const char*,char*,char*,char*,char*);
 long double   __cdecl _strtold(const char*,char**);
 void          __cdecl _swab(char*,char*,int);
 char*         __cdecl _ui64toa(unsigned __int64,char*,int);
+errno_t       __cdecl _ui64toa_s(unsigned __int64,char*,size_t,int);
 char*         __cdecl _ultoa(__msvcrt_ulong,char*,int);
 
 void          __cdecl _exit(int);
@@ -181,6 +185,7 @@ void*         __cdecl malloc(size_t);
 int           __cdecl mblen(const char*,size_t);
 void          __cdecl perror(const char*);
 int           __cdecl rand(void);
+errno_t       __cdecl rand_s(unsigned int*);
 void*         __cdecl realloc(void*,size_t);
 void          __cdecl srand(unsigned int);
 double        __cdecl strtod(const char*,char**);
@@ -200,23 +205,35 @@ wchar_t*      __cdecl _ultow(__msvcrt_ulong,wchar_t*,int);
 wchar_t*      __cdecl _wfullpath(wchar_t*,const wchar_t*,size_t);
 wchar_t*      __cdecl _wgetenv(const wchar_t*);
 void          __cdecl _wmakepath(wchar_t*,const wchar_t*,const wchar_t*,const wchar_t*,const wchar_t*);
+int           __cdecl _wmakepath_s(wchar_t*,size_t,const wchar_t*,const wchar_t*,const wchar_t*,const wchar_t*);
 void          __cdecl _wperror(const wchar_t*);
 int           __cdecl _wputenv(const wchar_t*);
 void          __cdecl _wsearchenv(const wchar_t*,const wchar_t*,wchar_t*);
 void          __cdecl _wsplitpath(const wchar_t*,wchar_t*,wchar_t*,wchar_t*,wchar_t*);
+errno_t       __cdecl _wsplitpath_s(const wchar_t*,wchar_t*,size_t,wchar_t*,size_t,
+                                       wchar_t*,size_t,wchar_t*,size_t);
 int           __cdecl _wsystem(const wchar_t*);
+double        __cdecl _wtof(const wchar_t*);
 int           __cdecl _wtoi(const wchar_t*);
 __int64       __cdecl _wtoi64(const wchar_t*);
 __msvcrt_long __cdecl _wtol(const wchar_t*);
 
 size_t        __cdecl mbstowcs(wchar_t*,const char*,size_t);
+errno_t       __cdecl mbstowcs_s(size_t*,wchar_t*,size_t,const char*,size_t);
 int           __cdecl mbtowc(wchar_t*,const char*,size_t);
 double        __cdecl wcstod(const wchar_t*,wchar_t**);
 __msvcrt_long __cdecl wcstol(const wchar_t*,wchar_t**,int);
 size_t        __cdecl wcstombs(char*,const wchar_t*,size_t);
+errno_t       __cdecl wcstombs_s(size_t*,char*,size_t,const wchar_t*,size_t);
 __msvcrt_ulong __cdecl wcstoul(const wchar_t*,wchar_t**,int);
 int           __cdecl wctomb(char*,wchar_t);
 #endif /* _WSTDLIB_DEFINED */
+
+typedef void (__cdecl *_invalid_parameter_handler)(const wchar_t*, const wchar_t*, const wchar_t*, unsigned, uintptr_t);
+_invalid_parameter_handler __cdecl _set_invalid_parameter_handler(_invalid_parameter_handler);
+_invalid_parameter_handler __cdecl _get_invalid_parameter_handler(void);
+void __cdecl _invalid_parameter(const wchar_t *expr, const wchar_t *func, const wchar_t *file,
+                                unsigned int line, uintptr_t arg);
 
 #ifdef __cplusplus
 }
@@ -260,9 +277,5 @@ static inline ldiv_t __wine_msvcrt_ldiv(__msvcrt_long num, __msvcrt_long denom)
 #endif
 
 #include <poppack.h>
-
-typedef void (__cdecl *_invalid_parameter_handler)(const wchar_t*, const wchar_t*, const wchar_t*, unsigned, unsigned*);
-_invalid_parameter_handler __cdecl _set_invalid_parameter_handler(_invalid_parameter_handler);
-_invalid_parameter_handler __cdecl _get_invalid_parameter_handler(void);
 
 #endif /* __WINE_STDLIB_H */

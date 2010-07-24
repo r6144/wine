@@ -3,7 +3,7 @@ TOPOBJDIR = ../../..
 SRCDIR    = @srcdir@
 VPATH     = @srcdir@
 TESTDLL   = setupapi.dll
-IMPORTS   = setupapi user32 advapi32 kernel32
+IMPORTS   = setupapi user32 advapi32
 
 C_SRCS = \
 	devinst.c \
@@ -11,6 +11,7 @@ C_SRCS = \
 	misc.c \
 	parser.c \
 	query.c \
+	setupcab.c \
 	stringtable.c
 
 @MAKE_TEST_RULES@

@@ -908,11 +908,8 @@ static void start_wineboot( HANDLE handles[2] )
     {
         static const WCHAR wineboot[] = {'\\','w','i','n','e','b','o','o','t','.','e','x','e',0};
         static const WCHAR args[] = {' ','-','-','i','n','i','t',0};
-        const DWORD expected_type = (sizeof(void*) > sizeof(int) || is_wow64) ?
-                                     SCS_64BIT_BINARY : SCS_32BIT_BINARY;
         STARTUPINFOW si;
         PROCESS_INFORMATION pi;
-        DWORD type;
         void *redir;
         WCHAR app[MAX_PATH];
         WCHAR cmdline[MAX_PATH + (sizeof(wineboot) + sizeof(args)) / sizeof(WCHAR)];
@@ -928,17 +925,6 @@ static void start_wineboot( HANDLE handles[2] )
         lstrcatW( app, wineboot );
 
         Wow64DisableWow64FsRedirection( &redir );
-        if (GetBinaryTypeW( app, &type ) && type != expected_type)
-        {
-            if (type == SCS_64BIT_BINARY)
-                MESSAGE( "wine: '%s' is a 64-bit prefix, it cannot be used with 32-bit Wine.\n",
-                     wine_get_config_dir() );
-            else
-                MESSAGE( "wine: '%s' is a 32-bit prefix, it cannot be used with %s Wine.\n",
-                     wine_get_config_dir(), is_wow64 ? "wow64" : "64-bit" );
-            ExitProcess( 1 );
-        }
-
         strcpyW( cmdline, app );
         strcatW( cmdline, args );
         if (CreateProcessW( app, cmdline, NULL, NULL, FALSE, DETACHED_PROCESS, NULL, NULL, &si, &pi ))
@@ -957,6 +943,28 @@ static void start_wineboot( HANDLE handles[2] )
     }
 }
 
+
+#ifdef __i386__
+extern DWORD call_process_entry( PEB *peb, LPTHREAD_START_ROUTINE entry );
+__ASM_GLOBAL_FUNC( call_process_entry,
+                    "pushl %ebp\n\t"
+                    __ASM_CFI(".cfi_adjust_cfa_offset 4\n\t")
+                    __ASM_CFI(".cfi_rel_offset %ebp,0\n\t")
+                    "movl %esp,%ebp\n\t"
+                    __ASM_CFI(".cfi_def_cfa_register %ebp\n\t")
+                    "subl $12,%esp\n\t"  /* deliberately mis-align the stack by 8, Doom 3 needs this */
+                    "pushl 8(%ebp)\n\t"
+                    "call *12(%ebp)\n\t"
+                    "leave\n\t"
+                    __ASM_CFI(".cfi_def_cfa %esp,4\n\t")
+                    __ASM_CFI(".cfi_same_value %ebp\n\t")
+                    "ret" )
+#else
+static inline DWORD call_process_entry( PEB *peb, LPTHREAD_START_ROUTINE entry )
+{
+    return entry( peb );
+}
+#endif
 
 /***********************************************************************
  *           start_process
@@ -986,7 +994,7 @@ static DWORD WINAPI start_process( PEB *peb )
     LoadLibraryA("comctl32.dll"); /* Workaround for some broken applications */
     SetLastError( 0 );  /* clear error code */
     if (peb->BeingDebugged) DbgBreakPoint();
-    return entry( peb );
+    return call_process_entry( peb, entry );
 }
 
 
@@ -1474,6 +1482,7 @@ static startup_info_t *create_startup_info( LPCWSTR filename, LPCWSTR cmdline,
                                             const STARTUPINFOW *startup, DWORD *info_size )
 {
     const RTL_USER_PROCESS_PARAMETERS *cur_params;
+    const WCHAR *title;
     startup_info_t *info;
     DWORD size;
     void *ptr;
@@ -1503,13 +1512,14 @@ static startup_info_t *create_startup_info( LPCWSTR filename, LPCWSTR cmdline,
         else
             cur_dir = cur_params->CurrentDirectory.DosPath.Buffer;
     }
+    title = startup->lpTitle ? startup->lpTitle : imagepath;
 
     size = sizeof(*info);
     size += strlenW( cur_dir ) * sizeof(WCHAR);
     size += cur_params->DllPath.Length;
     size += strlenW( imagepath ) * sizeof(WCHAR);
     size += strlenW( cmdline ) * sizeof(WCHAR);
-    if (startup->lpTitle) size += strlenW( startup->lpTitle ) * sizeof(WCHAR);
+    size += strlenW( title ) * sizeof(WCHAR);
     if (startup->lpDesktop) size += strlenW( startup->lpDesktop ) * sizeof(WCHAR);
     /* FIXME: shellinfo */
     if (startup->lpReserved2 && startup->cbReserved2) size += startup->cbReserved2;
@@ -1568,7 +1578,7 @@ static startup_info_t *create_startup_info( LPCWSTR filename, LPCWSTR cmdline,
     ptr = (char *)ptr + cur_params->DllPath.Length;
     info->imagepath_len = append_string( &ptr, imagepath );
     info->cmdline_len = append_string( &ptr, cmdline );
-    if (startup->lpTitle) info->title_len = append_string( &ptr, startup->lpTitle );
+    info->title_len = append_string( &ptr, title );
     if (startup->lpDesktop) info->desktop_len = append_string( &ptr, startup->lpDesktop );
     if (startup->lpReserved2 && startup->cbReserved2)
     {
@@ -1594,17 +1604,17 @@ static const char *get_alternate_loader( char **ret_env )
 
     *ret_env = NULL;
 
-    if (wine_get_build_dir()) loader = is_win64 ? "loader/wine32" : "server/../loader/wine";
+    if (wine_get_build_dir()) loader = is_win64 ? "loader/wine" : "server/../loader/wine64";
 
     if (loader_env)
     {
         int len = strlen( loader_env );
-        if (is_win64)
+        if (!is_win64)
         {
             if (!(env = HeapAlloc( GetProcessHeap(), 0, sizeof("WINELOADER=") + len + 2 ))) return NULL;
             strcpy( env, "WINELOADER=" );
             strcat( env, loader_env );
-            strcat( env, "32" );
+            strcat( env, "64" );
         }
         else
         {
@@ -1612,7 +1622,7 @@ static const char *get_alternate_loader( char **ret_env )
             strcpy( env, "WINELOADER=" );
             strcat( env, loader_env );
             len += sizeof("WINELOADER=") - 1;
-            if (!strcmp( env + len - 2, "32" )) env[len - 2] = 0;
+            if (!strcmp( env + len - 2, "64" )) env[len - 2] = 0;
         }
         if (!loader)
         {
@@ -1621,7 +1631,7 @@ static const char *get_alternate_loader( char **ret_env )
         }
         *ret_env = env;
     }
-    if (!loader) loader = is_win64 ? "wine32" : "wine";
+    if (!loader) loader = is_win64 ? "wine" : "wine64";
     return loader;
 }
 
@@ -1652,7 +1662,7 @@ static BOOL create_process( HANDLE hFile, LPCWSTR filename, LPWSTR cmd_line, LPW
 
     if (!is_win64 && !is_wow64 && (binary_info->flags & BINARY_FLAG_64BIT))
     {
-        ERR( "starting 64-bit process %s not supported on this platform\n", debugstr_w(filename) );
+        ERR( "starting 64-bit process %s not supported on this environment\n", debugstr_w(filename) );
         SetLastError( ERROR_BAD_EXE_FORMAT );
         return FALSE;
     }
@@ -2628,16 +2638,6 @@ DWORD WINAPI GetProcessFlags( DWORD processid )
 }
 
 
-/***********************************************************************
- *           GetProcessDword    (KERNEL32.18)
- */
-DWORD WINAPI GetProcessDword( DWORD dwProcessID, INT offset )
-{
-    FIXME( "(%d, %d): not supported\n", dwProcessID, offset );
-    return 0;
-}
-
-
 /*********************************************************************
  *           OpenProcess   (KERNEL32.@)
  *
@@ -2728,10 +2728,12 @@ BOOL WINAPI CloseHandle( HANDLE handle )
     NTSTATUS status;
 
     /* stdio handles need special treatment */
-    if ((handle == (HANDLE)STD_INPUT_HANDLE) ||
-        (handle == (HANDLE)STD_OUTPUT_HANDLE) ||
-        (handle == (HANDLE)STD_ERROR_HANDLE))
-        handle = GetStdHandle( HandleToULong(handle) );
+    if (handle == (HANDLE)STD_INPUT_HANDLE)
+        handle = InterlockedExchangePointer( &NtCurrentTeb()->Peb->ProcessParameters->hStdInput, 0 );
+    else if (handle == (HANDLE)STD_OUTPUT_HANDLE)
+        handle = InterlockedExchangePointer( &NtCurrentTeb()->Peb->ProcessParameters->hStdOutput, 0 );
+    else if (handle == (HANDLE)STD_ERROR_HANDLE)
+        handle = InterlockedExchangePointer( &NtCurrentTeb()->Peb->ProcessParameters->hStdError, 0 );
 
     if (is_console_handle(handle))
         return CloseConsoleHandle(handle);
@@ -3319,6 +3321,26 @@ BOOL WINAPI IsWow64Process(HANDLE hProcess, PBOOL Wow64Process)
 HANDLE WINAPI GetCurrentProcess(void)
 {
     return (HANDLE)~(ULONG_PTR)0;
+}
+
+/***********************************************************************
+ *           GetLogicalProcessorInformation     (KERNEL32.@)
+ */
+BOOL WINAPI GetLogicalProcessorInformation(PSYSTEM_LOGICAL_PROCESSOR_INFORMATION buffer, PDWORD pBufLen)
+{
+    FIXME("(%p,%p): stub\n", buffer, pBufLen);
+    SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
+    return FALSE;
+}
+
+/***********************************************************************
+ *           GetLogicalProcessorInformationEx   (KERNEL32.@)
+ */
+BOOL WINAPI GetLogicalProcessorInformationEx(LOGICAL_PROCESSOR_RELATIONSHIP relationship, PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX buffer, PDWORD pBufLen)
+{
+    FIXME("(%u,%p,%p): stub\n", relationship, buffer, pBufLen);
+    SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
+    return FALSE;
 }
 
 /***********************************************************************

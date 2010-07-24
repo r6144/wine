@@ -178,11 +178,10 @@ static HRESULT WINAPI ShellItem_GetParent(IShellItem *iface, IShellItem **ppsi)
 static HRESULT WINAPI ShellItem_GetDisplayName(IShellItem *iface, SIGDN sigdnName,
     LPWSTR *ppszName)
 {
-    FIXME("(%p,%x,%p)\n", iface, sigdnName, ppszName);
+    ShellItem *This = (ShellItem*)iface;
+    TRACE("(%p,%x,%p)\n", iface, sigdnName, ppszName);
 
-    *ppszName = NULL;
-
-    return E_NOTIMPL;
+    return SHGetNameFromIDList(This->pidl, sigdnName, ppszName);
 }
 
 static HRESULT WINAPI ShellItem_GetAttributes(IShellItem *iface, SFGAOF sfgaoMask,
@@ -391,5 +390,148 @@ HRESULT WINAPI SHCreateShellItem(LPCITEMIDLIST pidlParent,
         *ppsi = NULL;
         ILFree(new_pidl);
     }
+    return ret;
+}
+
+HRESULT WINAPI SHCreateItemFromParsingName(PCWSTR pszPath,
+    IBindCtx *pbc, REFIID riid, void **ppv)
+{
+    LPITEMIDLIST pidl;
+    HRESULT ret;
+
+    *ppv = NULL;
+
+    ret = SHParseDisplayName(pszPath, pbc, &pidl, 0, NULL);
+    if(SUCCEEDED(ret))
+    {
+        ShellItem *This;
+        ret = IShellItem_Constructor(NULL, riid, (void**)&This);
+
+        if(SUCCEEDED(ret))
+        {
+            This->pidl = pidl;
+            *ppv = (void*)This;
+        }
+        else
+        {
+            ILFree(pidl);
+        }
+    }
+    return ret;
+}
+
+HRESULT WINAPI SHCreateItemFromIDList(PCIDLIST_ABSOLUTE pidl, REFIID riid, void **ppv)
+{
+    ShellItem *psiimpl;
+    HRESULT ret;
+
+    if(!pidl)
+        return E_INVALIDARG;
+
+    ret = IShellItem_Constructor(NULL, riid, ppv);
+    if(SUCCEEDED(ret))
+    {
+        psiimpl = (ShellItem*)*ppv;
+        psiimpl->pidl = ILClone(pidl);
+    }
+
+    return ret;
+}
+
+HRESULT WINAPI SHGetItemFromDataObject(IDataObject *pdtobj,
+    DATAOBJ_GET_ITEM_FLAGS dwFlags, REFIID riid, void **ppv)
+{
+    FORMATETC fmt;
+    STGMEDIUM medium;
+    HRESULT ret;
+
+    TRACE("%p, %x, %s, %p\n", pdtobj, dwFlags, debugstr_guid(riid), ppv);
+
+    if(!pdtobj)
+        return E_INVALIDARG;
+
+    fmt.cfFormat = RegisterClipboardFormatW(CFSTR_SHELLIDLISTW);
+    fmt.ptd = NULL;
+    fmt.dwAspect = DVASPECT_CONTENT;
+    fmt.lindex = -1;
+    fmt.tymed = TYMED_HGLOBAL;
+
+    ret = IDataObject_GetData(pdtobj, &fmt, &medium);
+    if(SUCCEEDED(ret))
+    {
+        LPIDA pida = GlobalLock(medium.u.hGlobal);
+
+        if((pida->cidl > 1 && !(dwFlags & DOGIF_ONLY_IF_ONE)) ||
+           pida->cidl == 1)
+        {
+            LPITEMIDLIST pidl;
+
+            /* Get the first pidl (parent + child1) */
+            pidl = ILCombine((LPCITEMIDLIST) ((LPBYTE)pida+pida->aoffset[0]),
+                             (LPCITEMIDLIST) ((LPBYTE)pida+pida->aoffset[1]));
+
+            ret = SHCreateItemFromIDList(pidl, riid, ppv);
+            ILFree(pidl);
+        }
+        else
+        {
+            ret = E_FAIL;
+        }
+
+        GlobalUnlock(medium.u.hGlobal);
+        GlobalFree(medium.u.hGlobal);
+    }
+
+    if(FAILED(ret) && !(dwFlags & DOGIF_NO_HDROP))
+    {
+        TRACE("Attempting to fall back on CF_HDROP.\n");
+
+        fmt.cfFormat = CF_HDROP;
+        fmt.ptd = NULL;
+        fmt.dwAspect = DVASPECT_CONTENT;
+        fmt.lindex = -1;
+        fmt.tymed = TYMED_HGLOBAL;
+
+        ret = IDataObject_GetData(pdtobj, &fmt, &medium);
+        if(SUCCEEDED(ret))
+        {
+            DROPFILES *df = GlobalLock(medium.u.hGlobal);
+            LPBYTE files = (LPBYTE)df + df->pFiles;
+            BOOL multiple_files = FALSE;
+
+            ret = E_FAIL;
+            if(!df->fWide)
+            {
+                WCHAR filename[MAX_PATH];
+                PCSTR first_file = (PCSTR)files;
+                if(*(files + lstrlenA(first_file) + 1) != 0)
+                    multiple_files = TRUE;
+
+                if( !(multiple_files && (dwFlags & DOGIF_ONLY_IF_ONE)) )
+                {
+                    MultiByteToWideChar(CP_ACP, 0, first_file, -1, filename, MAX_PATH);
+                    ret = SHCreateItemFromParsingName(filename, NULL, riid, ppv);
+                }
+            }
+            else
+            {
+                PCWSTR first_file = (PCWSTR)files;
+                if(*((PCWSTR)files + lstrlenW(first_file) + 1) != 0)
+                    multiple_files = TRUE;
+
+                if( !(multiple_files && (dwFlags & DOGIF_ONLY_IF_ONE)) )
+                    ret = SHCreateItemFromParsingName(first_file, NULL, riid, ppv);
+            }
+
+            GlobalUnlock(medium.u.hGlobal);
+            GlobalFree(medium.u.hGlobal);
+        }
+    }
+
+    if(FAILED(ret) && !(dwFlags & DOGIF_NO_URL))
+    {
+        FIXME("Failed to create item, should try CF_URL.\n");
+    }
+
     return ret;
 }

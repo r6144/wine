@@ -18,6 +18,7 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 #include "msvcrt.h"
+#include "winternl.h"
 
 #include "wine/debug.h"
 
@@ -69,6 +70,7 @@ static inline void msvcrt_free_tls_mem(void)
     HeapFree(GetProcessHeap(),0,tls->asctime_buffer);
     HeapFree(GetProcessHeap(),0,tls->wasctime_buffer);
     HeapFree(GetProcessHeap(),0,tls->strerror_buffer);
+    MSVCRT__free_locale(tls->locale);
   }
   HeapFree(GetProcessHeap(), 0, tls);
 }
@@ -89,12 +91,18 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
     if (!msvcrt_init_tls())
       return FALSE;
     msvcrt_init_mt_locks();
+    if(!MSVCRT_setlocale(0, "C")) {
+        msvcrt_free_mt_locks();
+        msvcrt_free_tls_mem();
+        return FALSE;
+    }
     msvcrt_init_io();
     msvcrt_init_console();
     msvcrt_init_args();
     msvcrt_init_signals();
-    MSVCRT_setlocale(0, "C");
     _setmbcp(_MB_CP_LOCALE);
+    /* don't allow unloading msvcrt, we can't setup file handles twice */
+    LdrAddRefDll( 0, hinstDLL );
     TRACE("finished process init\n");
     break;
   case DLL_THREAD_ATTACH:
@@ -108,6 +116,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
     msvcrt_free_tls_mem();
     if (!msvcrt_free_tls())
       return FALSE;
+    MSVCRT__free_locale(MSVCRT_locale);
     TRACE("finished process free\n");
     break;
   case DLL_THREAD_DETACH:
@@ -116,16 +125,4 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
     break;
   }
   return TRUE;
-}
-
-/*********************************************************************
- *		$I10_OUTPUT (MSVCRT.@)
- * Function not really understood but needed to make the DLL work
- */
-void CDECL MSVCRT_I10_OUTPUT(void)
-{
-  /* FIXME: This is probably data, not a function */
-  /* no it is a function. I10 is an Int of 10 bytes */
-  /* also known as 80 bit floating point (long double */
-  /* for some compilers, not MSVC) */
 }

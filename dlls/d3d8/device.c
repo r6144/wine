@@ -171,18 +171,19 @@ static DWORD d3d8_allocate_handle(struct d3d8_handle_table *t, void *object, enu
 
     if (t->free_entries)
     {
+        DWORD index = t->free_entries - t->entries;
         /* Use a free handle */
         entry = t->free_entries;
         if (entry->type != D3D8_HANDLE_FREE)
         {
-            ERR("Handle %u(%p) is in the free list, but has type %#x.\n", (entry - t->entries), entry, entry->type);
+            ERR("Handle %u(%p) is in the free list, but has type %#x.\n", index, entry, entry->type);
             return D3D8_INVALID_HANDLE;
         }
         t->free_entries = entry->object;
         entry->object = object;
         entry->type = type;
 
-        return entry - t->entries;
+        return index;
     }
 
     if (!(t->entry_count < t->table_size))
@@ -2763,6 +2764,19 @@ static const IWineD3DDeviceParentVtbl d3d8_wined3d_device_parent_vtbl =
     device_parent_CreateSwapChain,
 };
 
+static void setup_fpu(void)
+{
+    WORD cw;
+
+#if defined(__GNUC__) && (defined(__i386__) || defined(__x86_64__))
+    __asm__ volatile ("fnstcw %0" : "=m" (cw));
+    cw = (cw & ~0xf3f) | 0x3f;
+    __asm__ volatile ("fldcw %0" : : "m" (cw));
+#else
+    FIXME("FPU setup not implemented for this platform.\n");
+#endif
+}
+
 HRESULT device_init(IDirect3DDevice8Impl *device, IWineD3D *wined3d, UINT adapter,
         D3DDEVTYPE device_type, HWND focus_window, DWORD flags, D3DPRESENT_PARAMETERS *parameters)
 {
@@ -2780,6 +2794,8 @@ HRESULT device_init(IDirect3DDevice8Impl *device, IWineD3D *wined3d, UINT adapte
         return E_OUTOFMEMORY;
     }
     device->handle_table.table_size = D3D8_INITIAL_HANDLE_TABLE_SIZE;
+
+    if (!(flags & D3DCREATE_FPU_PRESERVE)) setup_fpu();
 
     wined3d_mutex_lock();
     hr = IWineD3D_CreateDevice(wined3d, adapter, device_type, focus_window, flags, (IUnknown *)device,

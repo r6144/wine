@@ -173,6 +173,74 @@ static void transform_and_round_points(GpGraphics *graphics, POINT *pti,
     }
 }
 
+/* Draw non-premultiplied ARGB data to the given graphics object */
+static GpStatus alpha_blend_pixels(GpGraphics *graphics, INT dst_x, INT dst_y,
+    const BYTE *src, INT src_width, INT src_height, INT src_stride)
+{
+    if (graphics->image && graphics->image->type == ImageTypeBitmap)
+    {
+        GpBitmap *dst_bitmap = (GpBitmap*)graphics->image;
+        INT x, y;
+
+        for (x=0; x<src_width; x++)
+        {
+            for (y=0; y<src_height; y++)
+            {
+                ARGB dst_color, src_color;
+                GdipBitmapGetPixel(dst_bitmap, x+dst_x, y+dst_y, &dst_color);
+                src_color = ((ARGB*)(src + src_stride * y))[x];
+                GdipBitmapSetPixel(dst_bitmap, x+dst_x, y+dst_y, color_over(dst_color, src_color));
+            }
+        }
+
+        return Ok;
+    }
+    else
+    {
+        HDC hdc;
+        HBITMAP hbitmap, old_hbm=NULL;
+        BITMAPINFOHEADER bih;
+        BYTE *temp_bits;
+        BLENDFUNCTION bf;
+
+        hdc = CreateCompatibleDC(0);
+
+        bih.biSize = sizeof(BITMAPINFOHEADER);
+        bih.biWidth = src_width;
+        bih.biHeight = -src_height;
+        bih.biPlanes = 1;
+        bih.biBitCount = 32;
+        bih.biCompression = BI_RGB;
+        bih.biSizeImage = 0;
+        bih.biXPelsPerMeter = 0;
+        bih.biYPelsPerMeter = 0;
+        bih.biClrUsed = 0;
+        bih.biClrImportant = 0;
+
+        hbitmap = CreateDIBSection(hdc, (BITMAPINFO*)&bih, DIB_RGB_COLORS,
+            (void**)&temp_bits, NULL, 0);
+
+        convert_32bppARGB_to_32bppPARGB(src_width, src_height, temp_bits,
+            4 * src_width, src, src_stride);
+
+        old_hbm = SelectObject(hdc, hbitmap);
+
+        bf.BlendOp = AC_SRC_OVER;
+        bf.BlendFlags = 0;
+        bf.SourceConstantAlpha = 255;
+        bf.AlphaFormat = AC_SRC_ALPHA;
+
+        GdiAlphaBlend(graphics->hdc, dst_x, dst_y, src_width, src_height,
+            hdc, 0, 0, src_width, src_height, bf);
+
+        SelectObject(hdc, old_hbm);
+        DeleteDC(hdc);
+        DeleteObject(hbitmap);
+
+        return Ok;
+    }
+}
+
 static ARGB blend_colors(ARGB start, ARGB end, REAL position)
 {
     ARGB result=0;
@@ -1273,10 +1341,10 @@ GpStatus WINGDIPAPI GdipCreateMetafileFromWmf(HMETAFILE hwmf, BOOL delete,
     (*metafile)->bounds.X = ((REAL) placeable->BoundingBox.Left) / ((REAL) placeable->Inch);
     (*metafile)->bounds.Y = ((REAL) placeable->BoundingBox.Top) / ((REAL) placeable->Inch);
     (*metafile)->bounds.Width = ((REAL) (placeable->BoundingBox.Right
-                    - placeable->BoundingBox.Left)) / ((REAL) placeable->Inch);
+                    - placeable->BoundingBox.Left));
     (*metafile)->bounds.Height = ((REAL) (placeable->BoundingBox.Bottom
-                   - placeable->BoundingBox.Top)) / ((REAL) placeable->Inch);
-    (*metafile)->unit = UnitInch;
+                   - placeable->BoundingBox.Top));
+    (*metafile)->unit = UnitPixel;
 
     if(delete)
         DeleteMetaFile(hwmf);
@@ -1866,7 +1934,6 @@ GpStatus WINGDIPAPI GdipDrawImagePointsI(GpGraphics *graphics, GpImage *image,
     return NotImplemented;
 }
 
-/* FIXME: partially implemented (only works for rectangular parallelograms) */
 GpStatus WINGDIPAPI GdipDrawImagePointsRect(GpGraphics *graphics, GpImage *image,
      GDIPCONST GpPointF *points, INT count, REAL srcx, REAL srcy, REAL srcwidth,
      REAL srcheight, GpUnit srcUnit, GDIPCONST GpImageAttributes* imageAttributes,
@@ -1894,6 +1961,7 @@ GpStatus WINGDIPAPI GdipDrawImagePointsRect(GpGraphics *graphics, GpImage *image
 
     if (image->picture)
     {
+        /* FIXME: partially implemented (only works for rectangular parallelograms) */
         if(srcUnit == UnitInch)
             dx = dy = (REAL) INCH_HIMETRIC;
         else if(srcUnit == UnitPixel){
@@ -1927,21 +1995,18 @@ GpStatus WINGDIPAPI GdipDrawImagePointsRect(GpGraphics *graphics, GpImage *image
         else
             return NotImplemented;
 
-        if (graphics->image && graphics->image->type == ImageTypeBitmap)
-        {
-            GpBitmap *dst_bitmap = (GpBitmap*)graphics->image;
-            if (!(dst_bitmap->format == PixelFormat16bppRGB555 ||
-                  dst_bitmap->format == PixelFormat24bppRGB ||
-                  dst_bitmap->format == PixelFormat32bppRGB))
-                use_software = 1;
-        }
+        if (imageAttributes ||
+            (graphics->image && graphics->image->type == ImageTypeBitmap) ||
+            ptf[1].Y != ptf[0].Y || ptf[2].X != ptf[0].X)
+            use_software = 1;
 
         if (use_software)
         {
             RECT src_area, dst_area;
-            int i, x, y;
+            int i, x, y, stride;
             GpMatrix *dst_to_src;
             REAL m11, m12, m21, m22, mdx, mdy;
+            LPBYTE data;
 
             src_area.left = srcx*dx;
             src_area.top = srcy*dy;
@@ -1959,11 +2024,11 @@ GpStatus WINGDIPAPI GdipDrawImagePointsRect(GpGraphics *graphics, GpImage *image
             }
 
             m11 = (ptf[1].X - ptf[0].X) / srcwidth;
-            m12 = (ptf[2].X - ptf[0].X) / srcheight;
-            mdx = ptf[0].X - m11 * srcx - m12 * srcy;
-            m21 = (ptf[1].Y - ptf[0].Y) / srcwidth;
+            m21 = (ptf[2].X - ptf[0].X) / srcheight;
+            mdx = ptf[0].X - m11 * srcx - m21 * srcy;
+            m12 = (ptf[1].Y - ptf[0].Y) / srcwidth;
             m22 = (ptf[2].Y - ptf[0].Y) / srcheight;
-            mdy = ptf[0].Y - m21 * srcx - m22 * srcy;
+            mdy = ptf[0].Y - m12 * srcx - m22 * srcy;
 
             stat = GdipCreateMatrix2(m11, m12, m21, m22, mdx, mdy, &dst_to_src);
             if (stat != Ok) return stat;
@@ -1975,13 +2040,32 @@ GpStatus WINGDIPAPI GdipDrawImagePointsRect(GpGraphics *graphics, GpImage *image
                 return stat;
             }
 
+            data = GdipAlloc(sizeof(ARGB) * (dst_area.right - dst_area.left) * (dst_area.bottom - dst_area.top));
+            if (!data)
+            {
+                GdipDeleteMatrix(dst_to_src);
+                return OutOfMemory;
+            }
+
+            stride = sizeof(ARGB) * (dst_area.right - dst_area.left);
+
+            if (imageAttributes &&
+                (imageAttributes->wrap != WrapModeClamp ||
+                 imageAttributes->outside_color != 0x00000000 ||
+                 imageAttributes->clamp))
+            {
+                static int fixme;
+                if (!fixme++)
+                    FIXME("Image wrap mode not implemented\n");
+            }
+
             for (x=dst_area.left; x<dst_area.right; x++)
             {
                 for (y=dst_area.top; y<dst_area.bottom; y++)
                 {
                     GpPointF src_pointf;
                     int src_x, src_y;
-                    ARGB src_color, dst_color;
+                    ARGB *src_color;
 
                     src_pointf.X = x;
                     src_pointf.Y = y;
@@ -1991,18 +2075,104 @@ GpStatus WINGDIPAPI GdipDrawImagePointsRect(GpGraphics *graphics, GpImage *image
                     src_x = roundr(src_pointf.X);
                     src_y = roundr(src_pointf.Y);
 
+                    src_color = (ARGB*)(data + stride * (y - dst_area.top) + sizeof(ARGB) * (x - dst_area.left));
+
                     if (src_x < src_area.left || src_x >= src_area.right ||
                         src_y < src_area.top || src_y >= src_area.bottom)
-                        /* FIXME: Use wrapmode */
-                        continue;
-
-                    GdipBitmapGetPixel(bitmap, src_x, src_y, &src_color);
-                    GdipBitmapGetPixel((GpBitmap*)graphics->image, x, y, &dst_color);
-                    GdipBitmapSetPixel((GpBitmap*)graphics->image, x, y, color_over(dst_color, src_color));
+                        *src_color = 0;
+                    else
+                        GdipBitmapGetPixel(bitmap, src_x, src_y, src_color);
                 }
             }
 
             GdipDeleteMatrix(dst_to_src);
+
+            if (imageAttributes)
+            {
+                if (imageAttributes->colorkeys[ColorAdjustTypeBitmap].enabled ||
+                    imageAttributes->colorkeys[ColorAdjustTypeDefault].enabled)
+                {
+                    const struct color_key *key;
+                    BYTE min_blue, min_green, min_red;
+                    BYTE max_blue, max_green, max_red;
+
+                    if (imageAttributes->colorkeys[ColorAdjustTypeBitmap].enabled)
+                        key = &imageAttributes->colorkeys[ColorAdjustTypeBitmap];
+                    else
+                        key = &imageAttributes->colorkeys[ColorAdjustTypeDefault];
+
+                    min_blue = key->low&0xff;
+                    min_green = (key->low>>8)&0xff;
+                    min_red = (key->low>>16)&0xff;
+
+                    max_blue = key->high&0xff;
+                    max_green = (key->high>>8)&0xff;
+                    max_red = (key->high>>16)&0xff;
+
+                    for (x=dst_area.left; x<dst_area.right; x++)
+                        for (y=dst_area.top; y<dst_area.bottom; y++)
+                        {
+                            ARGB *src_color;
+                            BYTE blue, green, red;
+                            src_color = (ARGB*)(data + stride * (y - dst_area.top) + sizeof(ARGB) * (x - dst_area.left));
+                            blue = *src_color&0xff;
+                            green = (*src_color>>8)&0xff;
+                            red = (*src_color>>16)&0xff;
+                            if (blue >= min_blue && green >= min_green && red >= min_red &&
+                                blue <= max_blue && green <= max_green && red <= max_red)
+                                *src_color = 0x00000000;
+                        }
+                }
+
+                if (imageAttributes->colorremaptables[ColorAdjustTypeBitmap].enabled ||
+                    imageAttributes->colorremaptables[ColorAdjustTypeDefault].enabled)
+                {
+                    const struct color_remap_table *table;
+
+                    if (imageAttributes->colorremaptables[ColorAdjustTypeBitmap].enabled)
+                        table = &imageAttributes->colorremaptables[ColorAdjustTypeBitmap];
+                    else
+                        table = &imageAttributes->colorremaptables[ColorAdjustTypeDefault];
+
+                    for (x=dst_area.left; x<dst_area.right; x++)
+                        for (y=dst_area.top; y<dst_area.bottom; y++)
+                        {
+                            ARGB *src_color;
+                            src_color = (ARGB*)(data + stride * (y - dst_area.top) + sizeof(ARGB) * (x - dst_area.left));
+                            for (i=0; i<table->mapsize; i++)
+                            {
+                                if (*src_color == table->colormap[i].oldColor.Argb)
+                                {
+                                    *src_color = table->colormap[i].newColor.Argb;
+                                    break;
+                                }
+                            }
+                        }
+                }
+
+                if (imageAttributes->colormatrices[ColorAdjustTypeBitmap].enabled ||
+                    imageAttributes->colormatrices[ColorAdjustTypeDefault].enabled)
+                {
+                    static int fixme;
+                    if (!fixme++)
+                        FIXME("Color transforms not implemented\n");
+                }
+
+                if (imageAttributes->gamma_enabled[ColorAdjustTypeBitmap] ||
+                    imageAttributes->gamma_enabled[ColorAdjustTypeDefault])
+                {
+                    static int fixme;
+                    if (!fixme++)
+                        FIXME("Gamma adjustment not implemented\n");
+                }
+            }
+
+            stat = alpha_blend_pixels(graphics, dst_area.left, dst_area.top,
+                data, dst_area.right - dst_area.left, dst_area.bottom - dst_area.top, stride);
+
+            GdipFree(data);
+
+            return stat;
         }
         else
         {
@@ -2957,8 +3127,6 @@ GpStatus WINGDIPAPI GdipFillRegion(GpGraphics* graphics, GpBrush* brush,
 
 GpStatus WINGDIPAPI GdipFlush(GpGraphics *graphics, GpFlushIntention intention)
 {
-    static int calls;
-
     TRACE("(%p,%u)\n", graphics, intention);
 
     if(!graphics)
@@ -2967,10 +3135,12 @@ GpStatus WINGDIPAPI GdipFlush(GpGraphics *graphics, GpFlushIntention intention)
     if(graphics->busy)
         return ObjectBusy;
 
-    if(!(calls++))
-        FIXME("not implemented\n");
+    /* We have no internal operation queue, so there's no need to clear it. */
 
-    return NotImplemented;
+    if (graphics->hdc)
+        GdiFlush();
+
+    return Ok;
 }
 
 /*****************************************************************************
@@ -3359,7 +3529,7 @@ static GpStatus gdip_format_string(GpGraphics *graphics,
     gdip_format_string_callback callback, void *user_data)
 {
     WCHAR* stringdup;
-    INT sum = 0, height = 0, fit, fitcpy, i, j, lret, nwidth,
+    int sum = 0, height = 0, fit, fitcpy, i, j, lret, nwidth,
         nheight, lineend, lineno = 0;
     RectF bounds;
     StringAlignment halign;
@@ -3374,8 +3544,8 @@ static GpStatus gdip_format_string(GpGraphics *graphics,
     nwidth = roundr(rect->Width);
     nheight = roundr(rect->Height);
 
-    if (nwidth == 0) nwidth = INT_MAX;
-    if (nheight == 0) nheight = INT_MAX;
+    if (rect->Width >= INT_MAX || rect->Width < 0.5) nwidth = INT_MAX;
+    if (rect->Height >= INT_MAX || rect->Width < 0.5) nheight = INT_MAX;
 
     for(i = 0, j = 0; i < length; i++){
         /* FIXME: This makes the indexes passed to callback inaccurate. */
@@ -3483,7 +3653,7 @@ struct measure_ranges_args {
     GpRegion **regions;
 };
 
-GpStatus measure_ranges_callback(GpGraphics *graphics,
+static GpStatus measure_ranges_callback(GpGraphics *graphics,
     GDIPCONST WCHAR *string, INT index, INT length, GDIPCONST GpFont *font,
     GDIPCONST RectF *rect, GDIPCONST GpStringFormat *format,
     INT lineno, const RectF *bounds, void *user_data)
@@ -4046,6 +4216,20 @@ GpStatus WINGDIPAPI GdipSetRenderingOrigin(GpGraphics *graphics, INT x, INT y)
     return NotImplemented;
 }
 
+GpStatus WINGDIPAPI GdipGetRenderingOrigin(GpGraphics *graphics, INT *x, INT *y)
+{
+    static int calls;
+
+    TRACE("(%p,%p,%p)\n", graphics, x, y);
+
+    if (!(calls++))
+        FIXME("not implemented\n");
+
+    *x = *y = 0;
+
+    return NotImplemented;
+}
+
 GpStatus WINGDIPAPI GdipSetSmoothingMode(GpGraphics *graphics, SmoothingMode mode)
 {
     TRACE("(%p, %d)\n", graphics, mode);
@@ -4481,7 +4665,12 @@ GpStatus WINGDIPAPI GdipTransformPointsI(GpGraphics *graphics, GpCoordinateSpace
 
 HPALETTE WINGDIPAPI GdipCreateHalftonePalette(void)
 {
-    FIXME("\n");
+    static int calls;
+
+    TRACE("\n");
+
+    if (!calls++)
+      FIXME("stub\n");
 
     return NULL;
 }
@@ -4542,6 +4731,13 @@ GpStatus WINGDIPAPI GdipDrawDriverString(GpGraphics *graphics, GDIPCONST UINT16 
     return NotImplemented;
 }
 
+GpStatus WINGDIPAPI GdipRecordMetafile(HDC hdc, EmfType type, GDIPCONST GpRectF *frameRect,
+                                       MetafileFrameUnit frameUnit, GDIPCONST WCHAR *desc, GpMetafile **metafile)
+{
+    FIXME("(%p %d %p %d %p %p): stub\n", hdc, type, frameRect, frameUnit, desc, metafile);
+    return NotImplemented;
+}
+
 /*****************************************************************************
  * GdipRecordMetafileI [GDIPLUS.@]
  */
@@ -4549,6 +4745,13 @@ GpStatus WINGDIPAPI GdipRecordMetafileI(HDC hdc, EmfType type, GDIPCONST GpRect 
                                         MetafileFrameUnit frameUnit, GDIPCONST WCHAR *desc, GpMetafile **metafile)
 {
     FIXME("(%p %d %p %d %p %p): stub\n", hdc, type, frameRect, frameUnit, desc, metafile);
+    return NotImplemented;
+}
+
+GpStatus WINGDIPAPI GdipRecordMetafileStream(IStream *stream, HDC hdc, EmfType type, GDIPCONST GpRect *frameRect,
+                                        MetafileFrameUnit frameUnit, GDIPCONST WCHAR *desc, GpMetafile **metafile)
+{
+    FIXME("(%p %p %d %p %d %p %p): stub\n", stream, hdc, type, frameRect, frameUnit, desc, metafile);
     return NotImplemented;
 }
 

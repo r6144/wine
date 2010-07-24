@@ -40,9 +40,17 @@ WINE_DEFAULT_DEBUG_CHANNEL(winedbg);
 
 static struct be_process_io be_process_minidump_io;
 
-static DWORD64  get_addr64(DWORD64 addr)
+/* we need this function on 32bit hosts to ensure we zero out the higher DWORD
+ * stored in the minidump file (sometimes it's not cleared, or the conversion from
+ * 32bit to 64bit wide integers is done as signed, which is wrong)
+ * So we clamp on 32bit CPUs (as stored in minidump information) all addresses to
+ * keep only the lower 32 bits.
+ * FIXME: as of today, since we don't support a backend CPU which is different from
+ * CPU this process is running on, casting to (DWORD_PTR) will do just fine.
+ */
+static inline DWORD64  get_addr64(DWORD64 addr)
 {
-    return addr & 0xFFFFFFFF;
+    return (DWORD_PTR)addr;
 }
 
 void minidump_write(const char* file, const EXCEPTION_RECORD* rec)
@@ -253,6 +261,9 @@ static enum dbg_start minidump_do_reload(struct tgt_process_minidump_data* data)
         case PROCESSOR_ARCHITECTURE_PPC:
             str = "PowerPC";
             break;
+        case PROCESSOR_ARCHITECTURE_AMD64:
+            str = "X86_64";
+            break;
         default:
             str = "???";
             break;
@@ -378,7 +389,7 @@ static enum dbg_start minidump_do_reload(struct tgt_process_minidump_data* data)
             memory_get_current_pc(&addr);
             stack_fetch_frames(&dbg_context);
             be_cpu->print_context(dbg_curr_thread->handle, &dbg_context, 0);
-            stack_info();
+            stack_info(-1);
             be_cpu->print_segment_info(dbg_curr_thread->handle, &dbg_context);
             stack_backtrace(mes->ThreadId);
             source_list_from_addr(&addr, 0);

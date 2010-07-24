@@ -68,10 +68,10 @@ WINE_DEFAULT_DEBUG_CHANNEL(wave);
 #define MAKE_FUNCPTR(f) static typeof(f) * fp_##f = NULL;
 
 /* Function pointers for dynamic loading of libjack */
-/* these are prefixed with "fp_", ie. "fp_jack_client_new" */
+/* these are prefixed with "fp_", ie. "fp_jack_client_open" */
 MAKE_FUNCPTR(jack_activate);
 MAKE_FUNCPTR(jack_connect);
-MAKE_FUNCPTR(jack_client_new);
+MAKE_FUNCPTR(jack_client_open);
 MAKE_FUNCPTR(jack_client_close);
 MAKE_FUNCPTR(jack_deactivate);
 MAKE_FUNCPTR(jack_set_process_callback);
@@ -633,12 +633,12 @@ static int JACK_OpenWaveOutDevice(WINE_WAVEOUT* wwo)
         /* try to become a client of the JACK server */
         snprintf(client_name, sizeof(client_name), "wine_jack_out_%d", wwo->wDevID);
 	TRACE("client name '%s'\n", client_name);
-        if ((client = fp_jack_client_new (client_name)) == 0)
+        if ((client = fp_jack_client_open (client_name, JackUseExactName, NULL)) == 0)
         {
                 /* jack has problems with shutting down clients, so lets */
                 /* wait a short while and try once more before we give up */
                 Sleep(250);
-                if ((client = fp_jack_client_new (client_name)) == 0)
+                if ((client = fp_jack_client_open (client_name, JackUseExactName, NULL)) == 0)
                 {
                   ERR("jack server not running?\n");
                   return 0;
@@ -834,15 +834,19 @@ static void	JACK_CloseWaveInDevice(WINE_WAVEIN* wwi)
 #endif
 }
 
+static int WAVE_loadcount;
+
 /******************************************************************
  *		JACK_WaveRelease
  *
  *
  */
-LONG	JACK_WaveRelease(void)
+static LONG JACK_WaveRelease(void)
 { 
   int iDevice;
 
+  if (--WAVE_loadcount)
+      return 1;
   TRACE("closing all open waveout devices\n");
 
   /* close all open output devices */
@@ -887,18 +891,20 @@ LONG	JACK_WaveRelease(void)
  *
  * Initialize internal structures from JACK server info
  */
-LONG JACK_WaveInit(void)
+static LONG JACK_WaveInit(void)
 {
     int i;
     CHAR szPname[MAXPNAMELEN];
 
     TRACE("called\n");
+    if (WAVE_loadcount++)
+        return 1;
 
     /* setup function pointers */
 #define LOAD_FUNCPTR(f) if((fp_##f = wine_dlsym(jackhandle, #f, NULL, 0)) == NULL) goto sym_not_found;    
     LOAD_FUNCPTR(jack_activate);
     LOAD_FUNCPTR(jack_connect);
-    LOAD_FUNCPTR(jack_client_new);
+    LOAD_FUNCPTR(jack_client_open);
     LOAD_FUNCPTR(jack_client_close);
     LOAD_FUNCPTR(jack_deactivate);
     LOAD_FUNCPTR(jack_set_process_callback);
@@ -1665,7 +1671,9 @@ DWORD WINAPI JACK_wodMessage(UINT wDevID, UINT wMsg, DWORD dwUser,
 
   switch (wMsg) {
   case DRVM_INIT:
+    return JACK_WaveInit();
   case DRVM_EXIT:
+    return JACK_WaveRelease();
   case DRVM_ENABLE:
   case DRVM_DISABLE:
     /* FIXME: Pretend this is supported */
@@ -1903,12 +1911,12 @@ static int JACK_OpenWaveInDevice(WINE_WAVEIN* wwi, WORD nChannels)
         /* try to become a client of the JACK server */
         snprintf(client_name, sizeof(client_name), "wine_jack_in_%d", wwi->wDevID);
         TRACE("client name '%s'\n", client_name);
-        if ((client = fp_jack_client_new (client_name)) == 0)
+        if ((client = fp_jack_client_open (client_name, JackUseExactName, NULL)) == 0)
         {
                 /* jack has problems with shutting down clients, so lets */
                 /* wait a short while and try once more before we give up */
                 Sleep(250);
-                if ((client = fp_jack_client_new (client_name)) == 0)
+                if ((client = fp_jack_client_open (client_name, JackUseExactName, NULL)) == 0)
                 {
                   ERR("jack server not running?\n");
                   return 0;
@@ -2362,7 +2370,9 @@ DWORD WINAPI JACK_widMessage(WORD wDevID, WORD wMsg, DWORD dwUser,
 
     switch (wMsg) {
     case DRVM_INIT:
+        return JACK_WaveInit();
     case DRVM_EXIT:
+        return JACK_WaveRelease();
     case DRVM_ENABLE:
     case DRVM_DISABLE:
 	/* FIXME: Pretend this is supported */

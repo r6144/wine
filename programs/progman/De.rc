@@ -22,11 +22,13 @@
 
 #include "progman.h"
 
+LANGUAGE LANG_GERMAN, SUBLANG_NEUTRAL
+
 #pragma code_page(65001)
 
 /* Menu */
 
-MAIN_MENU MENU LANGUAGE LANG_GERMAN, SUBLANG_NEUTRAL
+MAIN_MENU MENU
 {
  POPUP "&Datei" {
    MENUITEM "&Neu...",              PM_NEW
@@ -58,19 +60,13 @@ POPUP "&Hilfe" {
    MENUITEM "Hilfe &benutzen",     PM_HELPONHELP
    MENUITEM "&Lernprogramm",         PM_TUTORIAL
    MENUITEM SEPARATOR
-
-   POPUP "&Info..." {
-     MENUITEM "&Lizenz",        PM_LICENSE
-     MENUITEM "&KEINE GARANTIE",    PM_NO_WARRANTY
-     MENUITEM "Ü&ber WINE",     PM_ABOUT_WINE
-   }
+   MENUITEM "Ü&ber Wine",     PM_ABOUT_WINE
  }
 }
 
 /* Dialog `New' */
 
 DIALOG_NEW DIALOG 0, 0, 170, 65
-LANGUAGE LANG_GERMAN, SUBLANG_NEUTRAL
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Neues Programmobjekt"
 {
@@ -86,7 +82,6 @@ PUSHBUTTON    "&Hilfe",        PM_HELP,        105, 45,  60, 15, WS_TABSTOP
 /* Dialog `Move' */
 
 DIALOG_MOVE DIALOG 0, 0, 250, 65
-LANGUAGE LANG_GERMAN, SUBLANG_NEUTRAL
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Programm verschieben"
 {
@@ -104,7 +99,6 @@ PUSHBUTTON    "&Hilfe",            PM_HELP,           185, 45,  60, 15, WS_TABST
 /* Dialog `Copy' */
 
 DIALOG_COPY DIALOG 0, 0, 250, 65
-LANGUAGE LANG_GERMAN, SUBLANG_NEUTRAL
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Programm kopieren"
 {
@@ -122,7 +116,6 @@ PUSHBUTTON    "&Hilfe",            PM_HELP,           185, 45,  60, 15, WS_TABST
 /* Dialog `Group attributes' */
 
 DIALOG_GROUP DIALOG 0, 0, 230, 65
-LANGUAGE LANG_GERMAN, SUBLANG_NEUTRAL
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Programmgruppeneigenschaften"
 {
@@ -138,7 +131,6 @@ PUSHBUTTON    "&Hilfe",          PM_HELP,             155, 45,  60, 15, WS_TABST
 /* Dialog `Program attributes' */
 
 DIALOG_PROGRAM DIALOG 0, 0, 250, 105
-LANGUAGE LANG_GERMAN, SUBLANG_NEUTRAL
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Programmeigenschaften"
 {
@@ -163,7 +155,6 @@ PUSHBUTTON    "&Hilfe",                 PM_HELP,             185, 85,  60, 15, W
 /* Dialog `Symbol' */
 
 DIALOG_SYMBOL DIALOG 0, 0, 200, 85
-LANGUAGE LANG_GERMAN, SUBLANG_NEUTRAL
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Symbol auswählen"
 {
@@ -181,7 +172,6 @@ PUSHBUTTON    "&Hilfe",       PM_HELP,           135, 65,  60, 15, WS_TABSTOP
 /* Dialog `Execute' */
 
 DIALOG_EXECUTE DIALOG 0, 0, 200, 85
-LANGUAGE LANG_GERMAN, SUBLANG_NEUTRAL
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Programm ausführen"
 {
@@ -197,7 +187,7 @@ PUSHBUTTON    "&Hilfe",             PM_HELP,   135, 65,  60, 15, WS_TABSTOP
 
 /* Strings */
 
-STRINGTABLE DISCARDABLE LANGUAGE LANG_GERMAN, SUBLANG_NEUTRAL
+STRINGTABLE
 {
 IDS_PROGRAM_MANAGER,		"Programm-Manager"
 IDS_ERROR,			"FEHLER"
@@ -221,31 +211,4 @@ IDS_PROGRAMS,			"Programme"
 IDS_LIBRARIES_DLL,		"Bibliotheken (*.dll)"
 IDS_SYMBOL_FILES,		"Symboldateien"
 IDS_SYMBOLS_ICO,		"Symbole (*.ico)"
-}
-
-STRINGTABLE DISCARDABLE LANGUAGE LANG_GERMAN, SUBLANG_NEUTRAL
-{
-IDS_LICENSE_CAPTION,            "LIZENZ"
-IDS_LICENSE,
-"Diese Bibliothek ist freie Software; Sie dürfen sie unter den \
-Bedingungen der GNU Lesser General Public License, wie von der \
-Free Software Foundation veröffentlicht, weiterverteilen und/oder \
-modifizieren; entweder gemäß Version 2.1 der Lizenz oder (nach \
-Ihrer Option) jeder späteren Version.\n\
-Diese Bibliothek wird in der Hoffnung weiterverbreitet, daß sie \
-nützlich sein wird, jedoch OHNE IRGENDEINE GARANTIE, auch ohne \
-die implizierte Garantie der MARKTREIFE oder der VERWENDBARKEIT \
-FÜR EINEN BESTIMMTEN ZWECK. Mehr Details finden Sie in der \
-GNU Lesser General Public License.\n\
-Sie sollten eine Kopie der GNU Lesser General Public License zusammen \
-mit dieser Bibliothek erhalten haben; falls nicht, schreiben Sie an \
-die Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, \
-Boston, MA 02110, USA."
-
-IDS_WARRANTY_CAPTION, "KEINE GARANTIE"
-IDS_WARRANTY,
-"Diese Bibliothek wird in der Hoffnung weiterverbreitet, daß sie nützlich \
-sein wird, jedoch OHNE IRGENDEINE GARANTIE, auch ohne die implizierte Garantie \
-der MARKTREIFE oder der VERWENDBARKEIT FÜR EINEN BESTIMMTEN ZWECK. Mehr Details \
-finden Sie in der GNU Lesser General Public License."
 }

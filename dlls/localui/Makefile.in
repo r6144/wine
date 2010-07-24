@@ -3,7 +3,7 @@ TOPOBJDIR = ../..
 SRCDIR    = @srcdir@
 VPATH     = @srcdir@
 MODULE    = localui.dll
-IMPORTS   = winspool user32 kernel32
+IMPORTS   = winspool user32
 
 C_SRCS = \
 	localui.c
@@ -13,7 +13,11 @@ RC_SRCS = \
 	ui_Da.rc \
 	ui_De.rc \
 	ui_En.rc \
+	ui_Es.rc \
 	ui_Fr.rc \
+	ui_Hu.rc \
+	ui_It.rc \
+	ui_Ja.rc \
 	ui_Ko.rc \
 	ui_Lt.rc \
 	ui_Nl.rc \
@@ -24,6 +28,7 @@ RC_SRCS = \
 	ui_Ru.rc \
 	ui_Si.rc \
 	ui_Sv.rc \
+	ui_Uk.rc \
 	ui_Zh.rc
 
 @MAKE_DLL_RULES@

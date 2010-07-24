@@ -4,7 +4,7 @@ SRCDIR    = @srcdir@
 VPATH     = @srcdir@
 MODULE    = windowscodecs.dll
 IMPORTLIB = windowscodecs
-IMPORTS   = uuid ole32 advapi32 kernel32
+IMPORTS   = uuid ole32 shlwapi advapi32
 EXTRAINCL = @PNGINCL@
 
 C_SRCS = \
@@ -12,6 +12,7 @@ C_SRCS = \
 	bmpencode.c \
 	clsfactory.c \
 	converter.c \
+	fliprotate.c \
 	gifformat.c \
 	icoformat.c \
 	imgfactory.c \

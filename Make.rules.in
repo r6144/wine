@@ -48,6 +48,7 @@ LINT      = @LINT@
 LINTFLAGS = @LINTFLAGS@
 FONTFORGE = @FONTFORGE@
 RSVG      = @RSVG@
+CONVERT   = @CONVERT@
 ICOTOOL   = @ICOTOOL@
 CROSSCC   = @CROSSCC@
 CROSSTARGET = @CROSSTARGET@
@@ -60,9 +61,9 @@ ALLCFLAGS    = $(INCLUDES) $(DEFS) $(DLLFLAGS) $(EXTRACFLAGS) $(CPPFLAGS) $(CFLA
 ALLLINTFLAGS = $(INCLUDES) $(DEFS) $(LINTFLAGS)
 IDLFLAGS     = $(INCLUDES) $(DEFS) $(EXTRAIDLFLAGS)
 TARGETFLAGS  = @TARGETFLAGS@
-WINEBUILDFLAGS = $(TARGETFLAGS) $(DLLFLAGS)
 MKINSTALLDIRS= $(TOPSRCDIR)/tools/mkinstalldirs -m 755
 WINAPI_CHECK = $(TOPSRCDIR)/tools/winapi/winapi_check
+BUILDIMAGE   = $(TOPSRCDIR)/tools/buildimage
 C2MAN        = $(TOPSRCDIR)/tools/c2man.pl
 RUNTEST      = $(TOPSRCDIR)/tools/runtest
 WINEBUILD    = $(TOOLSDIR)/tools/winebuild/winebuild$(TOOLSEXT)
@@ -71,7 +72,7 @@ MAKECTESTS   = $(TOOLSDIR)/tools/make_ctests$(TOOLSEXT)
 WRC          = $(TOOLSDIR)/tools/wrc/wrc$(TOOLSEXT)
 WMC          = $(TOOLSDIR)/tools/wmc/wmc$(TOOLSEXT)
 WIDL         = $(TOOLSDIR)/tools/widl/widl$(TOOLSEXT)
-WINEGCC      = $(TOOLSDIR)/tools/winegcc/winegcc $(TARGETFLAGS) -B$(TOOLSDIR)/tools/winebuild --sysroot=$(TOPOBJDIR)
+WINEGCC      = $(TOOLSDIR)/tools/winegcc/winegcc $(TARGETFLAGS) -B$(TOOLSDIR)/tools/winebuild --sysroot=$(TOPOBJDIR) @UNWINDFLAGS@
 CROSSWINEGCC = $(TOOLSDIR)/tools/winegcc/winegcc $(CROSSTARGET:%=-b %) -B$(TOOLSDIR)/tools/winebuild --sysroot=$(TOPOBJDIR) --lib-suffix=.cross.a
 RELPATH      = $(TOOLSDIR)/tools/relpath$(TOOLSEXT)
 SFNT2FNT     = $(TOOLSDIR)/tools/sfnt2fnt$(TOOLSEXT)
@@ -135,13 +136,13 @@ filter: dummy
 
 # Implicit rules
 
-.SUFFIXES: .mc .rc .mc.rc .res .idl .tlb .h .y .l .tab.c .tab.h .yy.c .ok .man.in .man _c.c _i.c _p.c _s.c .cross.o @MAINTAINER_MODE@ .sfd .ttf .svg .ico
+.SUFFIXES: .mc .rc .mc.rc .res .idl .tlb .h .y .l .tab.c .tab.h .yy.c .ok .man.in .man _c.c _i.c _p.c _s.c .cross.o @MAINTAINER_MODE@ .sfd .ttf .svg .ico .bmp
 
 .c.o:
 	$(CC) -c $(ALLCFLAGS) -o $@ $<
 
 .c.cross.o:
-	$(CROSSCC) -c $(INCLUDES) $(DEFS) $(CPPFLAGS) $(CFLAGS) -o $@ $<
+	$(CROSSCC) -c $(INCLUDES) $(DEFS) -DWINE_CROSSTEST $(CPPFLAGS) $(CFLAGS) -o $@ $<
 
 .y.tab.c:
 	$(BISON) $(BISONFLAGS) -p $*_ -o $@ $<
@@ -189,11 +190,10 @@ filter: dummy
 	LC_ALL=C sed -e 's,@bindir\@,$(bindir),g' -e 's,@dlldir\@,$(dlldir),g' -e 's,@PACKAGE_STRING\@,@PACKAGE_STRING@,g' $< >$@ || ($(RM) $@ && false)
 
 .svg.ico:
-	$(RSVG) -w 16 -h 16 -f png $< $*-16.png
-	$(RSVG) -w 32 -h 32 -f png $< $*-32.png
-	$(RSVG) -w 48 -h 48 -f png $< $*-48.png
-	$(ICOTOOL) -c -o $@ $*-16.png $*-32.png $*-48.png
-	$(RM) $*-16.png $*-32.png $*-48.png
+	CONVERT="$(CONVERT)" ICOTOOL="$(ICOTOOL)" RSVG="$(RSVG)" $(BUILDIMAGE) $< $@
+
+.svg.bmp:
+	CONVERT="$(CONVERT)" ICOTOOL="$(ICOTOOL)" RSVG="$(RSVG)" $(BUILDIMAGE) $< $@
 
 # Rules for IDL files
 

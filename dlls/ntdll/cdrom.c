@@ -83,8 +83,28 @@
 # include <IOKit/storage/IOMedia.h>
 # include <IOKit/storage/IOCDMediaBSDClient.h>
 # include <IOKit/storage/IODVDMediaBSDClient.h>
+# include <IOKit/scsi/SCSITask.h>
 # include <IOKit/scsi/SCSICmds_REQUEST_SENSE_Defs.h>
 # define SENSEBUFLEN kSenseDefaultSize
+
+typedef struct
+{
+    uint32_t attribute;
+    uint32_t timeout;
+    uint32_t response;
+    uint32_t status;
+    uint8_t direction;
+    uint8_t cdbSize;
+    uint8_t reserved0144[2];
+    uint8_t cdb[16];
+    void* buffer;
+    uint64_t bufferSize;
+    void* sense;
+    uint64_t senseLen;
+} dk_scsi_command_t;
+
+#define DKIOCSCSICOMMAND _IOWR('d', 253, dk_scsi_command_t)
+
 #endif
 
 #define NONAMELESSUNION
@@ -156,6 +176,8 @@ X(IOCTL_STORAGE_CHECK_VERIFY)
 X(IOCTL_STORAGE_EJECTION_CONTROL)
 X(IOCTL_STORAGE_EJECT_MEDIA)
 X(IOCTL_STORAGE_GET_DEVICE_NUMBER)
+X(IOCTL_STORAGE_GET_MEDIA_TYPES)
+X(IOCTL_STORAGE_GET_MEDIA_TYPES_EX)
 X(IOCTL_STORAGE_LOAD_MEDIA)
 X(IOCTL_STORAGE_MEDIA_REMOVAL)
 X(IOCTL_STORAGE_RESET_DEVICE)
@@ -590,20 +612,21 @@ static int CDROM_GetInterfaceInfo(int fd, UCHAR* iface, UCHAR* port, UCHAR* devi
     struct scsi_addr addr;
     if (ioctl(fd, SCIOCIDENTIFY, &addr) != -1)
     {
-        switch (addr.type) 
+        switch (addr.type)
         {
-        case TYPE_SCSI:  *port = 1;
+        case TYPE_SCSI:
+            *port = 1;
             *iface = addr.addr.scsi.scbus;
             *device = addr.addr.scsi.target;
             *lun = addr.addr.scsi.lun;
-            break;
-        case TYPE_ATAPI: *port = 0;
+            return 1;
+        case TYPE_ATAPI:
+            *port = 0;
             *iface = addr.addr.atapi.atbus;
             *device = addr.addr.atapi.drive;
             *lun = 0;
-            break;
+            return 1;
         }
-        return 1;
     }
     return 0;
 #elif defined(__FreeBSD__)
@@ -722,6 +745,18 @@ static NTSTATUS CDROM_GetDriveGeometry(int dev, int fd, DISK_GEOMETRY* dg)
   dg->SectorsPerTrack = 32;  
   dg->BytesPerSector= 2048; 
   return ret;
+}
+
+/******************************************************************
+ *		CDROM_GetMediaType
+ *
+ */
+static NTSTATUS CDROM_GetMediaType(int dev, GET_MEDIA_TYPES* medtype)
+{
+    FIXME(": faking success\n");
+    medtype->DeviceType = FILE_DEVICE_CD_ROM;
+    medtype->MediaInfoCount = 0;
+    return STATUS_SUCCESS;
 }
 
 /**************************************************************************
@@ -1649,6 +1684,9 @@ static NTSTATUS CDROM_ScsiPassThroughDirect(int fd, PSCSI_PASS_THROUGH_DIRECT pP
 #elif defined HAVE_SCSIREQ_T_CMD
     scsireq_t cmd;
     int io;
+#elif defined __APPLE__
+    dk_scsi_command_t cmd;
+    int io;
 #endif
 
     if (pPacket->Length < sizeof(SCSI_PASS_THROUGH_DIRECT))
@@ -1752,6 +1790,64 @@ static NTSTATUS CDROM_ScsiPassThroughDirect(int fd, PSCSI_PASS_THROUGH_DIRECT pP
     pPacket->ScsiStatus = cmd.status;
 
     ret = CDROM_GetStatusCode(io);
+
+#elif defined(__APPLE__)
+
+    memset(&cmd, 0, sizeof(cmd));
+    memcpy(cmd.cdb, pPacket->Cdb, pPacket->CdbLength);
+
+    cmd.cdbSize        = pPacket->CdbLength;
+    cmd.buffer         = pPacket->DataBuffer;
+    cmd.bufferSize     = pPacket->DataTransferLength;
+    cmd.sense          = (char*)pPacket + pPacket->SenseInfoOffset;
+    cmd.senseLen       = pPacket->SenseInfoLength;
+    cmd.timeout        = pPacket->TimeOutValue*1000; /* in milliseconds */
+
+    switch (pPacket->DataIn)
+    {
+    case SCSI_IOCTL_DATA_OUT:
+        cmd.direction = kSCSIDataTransfer_FromInitiatorToTarget;
+	break;
+    case SCSI_IOCTL_DATA_IN:
+        cmd.direction = kSCSIDataTransfer_FromTargetToInitiator;
+	break;
+    case SCSI_IOCTL_DATA_UNSPECIFIED:
+        cmd.direction = kSCSIDataTransfer_NoDataTransfer;
+	break;
+    default:
+       return STATUS_INVALID_PARAMETER;
+    }
+
+    io = ioctl(fd, DKIOCSCSICOMMAND, &cmd);
+
+    if (cmd.response == kSCSIServiceResponse_SERVICE_DELIVERY_OR_TARGET_FAILURE)
+    {
+        /* Command failed */
+        switch (cmd.status)
+        {
+        case kSCSITaskStatus_TaskTimeoutOccurred:     return STATUS_TIMEOUT;
+                                                      break;
+        case kSCSITaskStatus_ProtocolTimeoutOccurred: return STATUS_IO_TIMEOUT;
+                                                      break;
+        case kSCSITaskStatus_DeviceNotResponding:     return STATUS_DEVICE_BUSY;
+                                                      break;
+        case kSCSITaskStatus_DeviceNotPresent:
+            return STATUS_NO_SUCH_DEVICE;
+            break;
+        case kSCSITaskStatus_DeliveryFailure:
+            return STATUS_DEVICE_PROTOCOL_ERROR;
+            break;
+        case kSCSITaskStatus_No_Status:
+        default:
+            return STATUS_UNSUCCESSFUL;
+            break;
+        }
+    }
+
+    if (cmd.status != kSCSITaskStatus_No_Status)
+        pPacket->ScsiStatus = cmd.status;
+
+    ret = CDROM_GetStatusCode(io);
 #endif
     return ret;
 }
@@ -1769,6 +1865,9 @@ static NTSTATUS CDROM_ScsiPassThrough(int fd, PSCSI_PASS_THROUGH pPacket)
     int io;
 #elif defined HAVE_SCSIREQ_T_CMD
     scsireq_t cmd;
+    int io;
+#elif defined __APPLE__
+    dk_scsi_command_t cmd;
     int io;
 #endif
 
@@ -1881,6 +1980,67 @@ static NTSTATUS CDROM_ScsiPassThrough(int fd, PSCSI_PASS_THROUGH pPacket)
     }
 
     pPacket->ScsiStatus = cmd.status;
+
+    ret = CDROM_GetStatusCode(io);
+
+#elif defined(__APPLE__)
+
+    memset(&cmd, 0, sizeof(cmd));
+    memcpy(cmd.cdb, pPacket->Cdb, pPacket->CdbLength);
+
+    cmd.cdbSize        = pPacket->CdbLength;
+    cmd.buffer         = (char*)pPacket + pPacket->DataBufferOffset;
+    cmd.bufferSize     = pPacket->DataTransferLength;
+    cmd.sense          = (char*)pPacket + pPacket->SenseInfoOffset;
+    cmd.senseLen       = pPacket->SenseInfoLength;
+    cmd.timeout        = pPacket->TimeOutValue*1000; /* in milliseconds */
+
+    switch (pPacket->DataIn)
+    {
+    case SCSI_IOCTL_DATA_OUT:
+        cmd.direction = kSCSIDataTransfer_FromInitiatorToTarget;
+	break;
+    case SCSI_IOCTL_DATA_IN:
+        cmd.direction = kSCSIDataTransfer_FromTargetToInitiator;
+	break;
+    case SCSI_IOCTL_DATA_UNSPECIFIED:
+        cmd.direction = kSCSIDataTransfer_NoDataTransfer;
+	break;
+    default:
+       return STATUS_INVALID_PARAMETER;
+    }
+
+    io = ioctl(fd, DKIOCSCSICOMMAND, &cmd);
+
+    if (cmd.response == kSCSIServiceResponse_SERVICE_DELIVERY_OR_TARGET_FAILURE)
+    {
+        /* Command failed */
+        switch (cmd.status)
+        {
+        case kSCSITaskStatus_TaskTimeoutOccurred:
+            return STATUS_TIMEOUT;
+            break;
+        case kSCSITaskStatus_ProtocolTimeoutOccurred:
+            return STATUS_IO_TIMEOUT;
+            break;
+        case kSCSITaskStatus_DeviceNotResponding:
+            return STATUS_DEVICE_BUSY;
+            break;
+        case kSCSITaskStatus_DeviceNotPresent:
+            return STATUS_NO_SUCH_DEVICE;
+            break;
+        case kSCSITaskStatus_DeliveryFailure:
+            return STATUS_DEVICE_PROTOCOL_ERROR;
+            break;
+        case kSCSITaskStatus_No_Status:
+        default:
+            return STATUS_UNSUCCESSFUL;
+            break;
+        }
+    }
+
+    if (cmd.status != kSCSITaskStatus_No_Status)
+        pPacket->ScsiStatus = cmd.status;
 
     ret = CDROM_GetStatusCode(io);
 #endif
@@ -2830,7 +2990,13 @@ NTSTATUS CDROM_DeviceIoControl(HANDLE hDevice,
         else status = CDROM_ControlEjection(fd, lpInBuffer);
         break;
 
-/* EPP     case IOCTL_STORAGE_GET_MEDIA_TYPES: */
+    case IOCTL_STORAGE_GET_MEDIA_TYPES:
+    case IOCTL_STORAGE_GET_MEDIA_TYPES_EX:
+        sz = sizeof(GET_MEDIA_TYPES);
+        if (lpInBuffer != NULL || nInBufferSize != 0) status = STATUS_INVALID_PARAMETER;
+        else if (nOutBufferSize < sz) status = STATUS_BUFFER_TOO_SMALL;
+        else status = CDROM_GetMediaType(dev, lpOutBuffer);
+        break;
 
     case IOCTL_STORAGE_GET_DEVICE_NUMBER:
         sz = sizeof(STORAGE_DEVICE_NUMBER);

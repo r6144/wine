@@ -3391,6 +3391,151 @@ static void VertexBufferLockRest(void)
     IDirect3DVertexBuffer7_Release(buffer);
 }
 
+static void FindDevice(void)
+{
+    static const struct
+    {
+        const GUID *guid;
+        int todo;
+    } deviceGUIDs[] =
+    {
+        {&IID_IDirect3DRampDevice, 1},
+        {&IID_IDirect3DRGBDevice},
+    };
+
+    static const GUID *nonexistent_deviceGUIDs[] = {&IID_IDirect3DMMXDevice,
+                                                    &IID_IDirect3DRefDevice,
+                                                    &IID_IDirect3DTnLHalDevice,
+                                                    &IID_IDirect3DNullDevice};
+
+    D3DFINDDEVICESEARCH search = {0};
+    D3DFINDDEVICERESULT result = {0};
+    IDirect3DDevice *d3dhal;
+    HRESULT hr;
+    int i;
+
+    /* Test invalid parameters. */
+    hr = IDirect3D_FindDevice(Direct3D1, NULL, NULL);
+    ok(hr == DDERR_INVALIDPARAMS,
+       "Expected IDirect3D1::FindDevice to return DDERR_INVALIDPARAMS, got 0x%08x\n", hr);
+
+    hr = IDirect3D_FindDevice(Direct3D1, NULL, &result);
+    ok(hr == DDERR_INVALIDPARAMS,
+       "Expected IDirect3D1::FindDevice to return DDERR_INVALIDPARAMS, got 0x%08x\n", hr);
+
+    hr = IDirect3D_FindDevice(Direct3D1, &search, NULL);
+    ok(hr == DDERR_INVALIDPARAMS,
+       "Expected IDirect3D1::FindDevice to return DDERR_INVALIDPARAMS, got 0x%08x\n", hr);
+
+    search.dwSize = 0;
+    result.dwSize = 0;
+
+    hr = IDirect3D_FindDevice(Direct3D1, &search, &result);
+    ok(hr == DDERR_INVALIDPARAMS,
+       "Expected IDirect3D1::FindDevice to return DDERR_INVALIDPARAMS, got 0x%08x\n", hr);
+
+    search.dwSize = sizeof(search) + 1;
+    result.dwSize = sizeof(result) + 1;
+
+    hr = IDirect3D_FindDevice(Direct3D1, &search, &result);
+    ok(hr == DDERR_INVALIDPARAMS,
+       "Expected IDirect3D1::FindDevice to return DDERR_INVALIDPARAMS, got 0x%08x\n", hr);
+
+    /* Specifying no flags is permitted. */
+    search.dwSize = sizeof(search);
+    search.dwFlags = 0;
+    result.dwSize = sizeof(result);
+
+    hr = IDirect3D_FindDevice(Direct3D1, &search, &result);
+    ok(hr == D3D_OK,
+       "Expected IDirect3D1::FindDevice to return D3D_OK, got 0x%08x\n", hr);
+
+    /* Try an arbitrary non-device GUID. */
+    search.dwSize = sizeof(search);
+    search.dwFlags = D3DFDS_GUID;
+    search.guid = IID_IDirect3D;
+    result.dwSize = sizeof(result);
+
+    hr = IDirect3D_FindDevice(Direct3D1, &search, &result);
+    ok(hr == DDERR_NOTFOUND,
+       "Expected IDirect3D1::FindDevice to return DDERR_NOTFOUND, got 0x%08x\n", hr);
+
+    /* These GUIDs appear to be never present. */
+    for (i = 0; i < sizeof(nonexistent_deviceGUIDs)/sizeof(nonexistent_deviceGUIDs[0]); i++)
+    {
+        search.dwSize = sizeof(search);
+        search.dwFlags = D3DFDS_GUID;
+        search.guid = *nonexistent_deviceGUIDs[i];
+        result.dwSize = sizeof(result);
+
+        hr = IDirect3D_FindDevice(Direct3D1, &search, &result);
+        ok(hr == DDERR_NOTFOUND,
+           "[%d] Expected IDirect3D1::FindDevice to return DDERR_NOTFOUND, got 0x%08x\n", i, hr);
+    }
+
+    /* The HAL device can only be enumerated if hardware acceleration is present. */
+    search.dwSize = sizeof(search);
+    search.dwFlags = D3DFDS_GUID;
+    search.guid = IID_IDirect3DHALDevice;
+    result.dwSize = sizeof(result);
+
+    hr = IDirect3D_FindDevice(Direct3D1, &search, &result);
+    trace("IDirect3D::FindDevice returned 0x%08x for the HAL device GUID\n", hr);
+    if (SUCCEEDED(hr))
+    {
+        hr = IDirectDrawSurface_QueryInterface(Surface1, &IID_IDirect3DHALDevice, (void **)&d3dhal);
+        /* Currently Wine only supports the creation of one Direct3D device
+         * for a given DirectDraw instance. */
+        todo_wine
+        ok(SUCCEEDED(hr), "Expected IDirectDrawSurface::QueryInterface to succeed, got 0x%08x\n", hr);
+
+        if (SUCCEEDED(hr))
+            IDirect3DDevice_Release(d3dhal);
+    }
+    else
+    {
+        hr = IDirectDrawSurface_QueryInterface(Surface1, &IID_IDirect3DHALDevice, (void **)&d3dhal);
+        ok(FAILED(hr), "Expected IDirectDrawSurface::QueryInterface to fail, got 0x%08x\n", hr);
+
+        if (SUCCEEDED(hr))
+            IDirect3DDevice_Release(d3dhal);
+    }
+
+    /* These GUIDs appear to be always present. */
+    for (i = 0; i < sizeof(deviceGUIDs)/sizeof(deviceGUIDs[0]); i++)
+    {
+        search.dwSize = sizeof(search);
+        search.dwFlags = D3DFDS_GUID;
+        search.guid = *deviceGUIDs[i].guid;
+        result.dwSize = sizeof(result);
+
+        hr = IDirect3D_FindDevice(Direct3D1, &search, &result);
+
+        if (deviceGUIDs[i].todo)
+        {
+            todo_wine
+            ok(hr == D3D_OK,
+               "[%d] Expected IDirect3D1::FindDevice to return D3D_OK, got 0x%08x\n", i, hr);
+        }
+        else
+        {
+            ok(hr == D3D_OK,
+               "[%d] Expected IDirect3D1::FindDevice to return D3D_OK, got 0x%08x\n", i, hr);
+        }
+    }
+
+    /* Curiously the color model criteria seem to be ignored. */
+    search.dwSize = sizeof(search);
+    search.dwFlags = D3DFDS_COLORMODEL;
+    search.dcmColorModel = 0xdeadbeef;
+    result.dwSize = sizeof(result);
+
+    hr = IDirect3D_FindDevice(Direct3D1, &search, &result);
+    todo_wine
+    ok(hr == D3D_OK,
+       "Expected IDirect3D1::FindDevice to return D3D_OK, got 0x%08x\n", hr);
+}
+
 START_TEST(d3d)
 {
     init_function_pointers();
@@ -3425,6 +3570,7 @@ START_TEST(d3d)
         Direct3D1Test();
         TextureLoadTest();
         ViewportTest();
+        FindDevice();
         D3D1_releaseObjects();
     }
 

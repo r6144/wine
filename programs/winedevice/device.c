@@ -67,7 +67,8 @@ static HMODULE load_driver_module( const WCHAR *name )
     IMAGE_NT_HEADERS *nt;
     const IMAGE_IMPORT_DESCRIPTOR *imports;
     size_t page_size = getpagesize();
-    int i, delta;
+    int i;
+    INT_PTR delta;
     ULONG size;
     HMODULE module = LoadLibraryW( name );
 
@@ -100,7 +101,10 @@ static HMODULE load_driver_module( const WCHAR *name )
                 if (!rel) goto error;
             }
             /* make sure we don't try again */
+            size = FIELD_OFFSET( IMAGE_NT_HEADERS, OptionalHeader ) + nt->FileHeader.SizeOfOptionalHeader;
+            VirtualProtect( nt, size, PAGE_READWRITE, &old );
             nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress = 0;
+            VirtualProtect( nt, size, old, NULL );
         }
     }
 

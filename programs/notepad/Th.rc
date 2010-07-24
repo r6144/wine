@@ -53,6 +53,7 @@ MAIN_MENU MENU
  POPUP "คันหา" {
   MENUITEM "ค้นหา\tCtrl+F",   CMD_SEARCH
   MENUITEM "ค้นหาต่อไป\tF3",  CMD_SEARCH_NEXT
+  MENUITEM "&Replace...\tCtrl+H", CMD_REPLACE
  }
  POPUP "ช่วยเหลีอ" {
   MENUITEM "เนื้อหา",         CMD_HELP_CONTENTS
@@ -90,7 +91,7 @@ PUSHBUTTON    "ยกเลิก",     IDCANCEL,               180, 21, 40, 15, WS_TABSTOP
 PUSHBUTTON    "ช่วยเหลีอ",       IDHELP,                180, 39, 40, 15, WS_TABSTOP
 }
 
-STRINGTABLE DISCARDABLE
+STRINGTABLE
 {
 STRING_PAGESETUP_HEADERVALUE, "&f"
 STRING_PAGESETUP_FOOTERVALUE, "หน้า &p"

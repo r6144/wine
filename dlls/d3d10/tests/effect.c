@@ -2648,8 +2648,8 @@ static void test_effect_local_shader(ID3D10Device *device)
     BOOL ret;
     ID3D10Effect* effect;
     ID3D10EffectVariable* v;
-    ID3D10EffectPass *p, *null_pass;
-    ID3D10EffectTechnique *t;
+    ID3D10EffectPass *p, *p2, *null_pass;
+    ID3D10EffectTechnique *t, *t2, *null_technique;
     D3D10_PASS_SHADER_DESC pdesc = {0};
     D3D10_EFFECT_VARIABLE_DESC vdesc = {0};
     ID3D10EffectType *type;
@@ -2660,8 +2660,37 @@ static void test_effect_local_shader(ID3D10Device *device)
     hr = create_effect(fx_local_shader, 0, device, NULL, &effect);
     ok(SUCCEEDED(hr), "D3D10CreateEffectFromMemory failed!\n");
 
+    null_technique = effect->lpVtbl->GetTechniqueByIndex(effect, 0xffffffff);
+    null_pass = null_technique->lpVtbl->GetPassByIndex(null_technique, 0xffffffff);
+
+    /* check technique */
+    t = effect->lpVtbl->GetTechniqueByName(effect, NULL);
+    ok(null_technique == t, "GetTechniqueByName got %p, expected %p\n", t, null_technique);
+
+    t = effect->lpVtbl->GetTechniqueByName(effect, "invalid");
+    ok(null_technique == t, "GetTechniqueByName got %p, expected %p\n", t, null_technique);
+
     t = effect->lpVtbl->GetTechniqueByIndex(effect, 0);
-    null_pass = t->lpVtbl->GetPassByIndex(t, 10000);
+    ok(null_technique != t, "GetTechniqueByIndex failed %p\n", t);
+
+    t2 = effect->lpVtbl->GetTechniqueByName(effect, "Render");
+    ok(t2 == t, "GetTechniqueByName got %p, expected %p\n", t2, t);
+
+    /* check invalid pass arguments */
+    p = null_technique->lpVtbl->GetPassByName(null_technique, NULL);
+    ok(null_pass == p, "GetPassByName got %p, expected %p\n", p, null_pass);
+
+    p = null_technique->lpVtbl->GetPassByName(null_technique, "invalid");
+    ok(null_pass == p, "GetPassByName got %p, expected %p\n", p, null_pass);
+
+#if 0
+    /* This crashes on W7/DX10, if t is a valid technique and name=NULL. */
+    p = t->lpVtbl->GetPassByName(t, NULL);
+    ok(null_pass == p, "GetPassByName got %p, expected %p\n", p, null_pass);
+#endif
+
+    p = t->lpVtbl->GetPassByIndex(t, 0xffffffff);
+    ok(null_pass == p, "GetPassByIndex got %p, expected %p\n", p, null_pass);
 
     /* check for invalid arguments */
     hr = null_pass->lpVtbl->GetVertexShaderDesc(null_pass, NULL);
@@ -2682,8 +2711,12 @@ static void test_effect_local_shader(ID3D10Device *device)
     hr = null_pass->lpVtbl->GetGeometryShaderDesc(null_pass, &pdesc);
     ok(hr == E_FAIL, "GetGeometryShaderDesc got %x, expected %x\n", hr, E_FAIL);
 
+    /* check valid pass arguments */
     t = effect->lpVtbl->GetTechniqueByIndex(effect, 0);
     p = t->lpVtbl->GetPassByIndex(t, 0);
+
+    p2 = t->lpVtbl->GetPassByName(t, "P0");
+    ok(p2 == p, "GetPassByName got %p, expected %p\n", p2, p);
 
     hr = p->lpVtbl->GetVertexShaderDesc(p, NULL);
     ok(hr == E_INVALIDARG, "GetVertexShaderDesc got %x, expected %x\n", hr, E_INVALIDARG);
@@ -3441,6 +3474,131 @@ static void test_effect_local_shader(ID3D10Device *device)
     effect->lpVtbl->Release(effect);
 }
 
+/*
+ * test_effect_get_variable_by
+ */
+#if 0
+cbuffer cb
+{
+    float   f1 : SV_POSITION;
+    float   f2 : COLOR0;
+};
+cbuffer cb2
+{
+    float   f3 : SV_POSITION;
+    float   f4 : COLOR1;
+};
+Texture1D tex1 : COLOR2;
+Texture1D tex2 : COLOR1;
+#endif
+static DWORD fx_test_egvb[] = {
+0x43425844, 0x63d60ede, 0xf75a09d1, 0x47da5604, 0x7ef6e331, 0x00000001, 0x000001ca, 0x00000001,
+0x00000024, 0x30315846, 0x0000019e, 0xfeff1001, 0x00000002, 0x00000004, 0x00000002, 0x00000000,
+0x00000000, 0x00000000, 0x00000000, 0x0000008a, 0x00000000, 0x00000002, 0x00000000, 0x00000000,
+0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x66006263,
+0x74616f6c, 0x00000700, 0x00000100, 0x00000000, 0x00000400, 0x00001000, 0x00000400, 0x00090900,
+0x00316600, 0x505f5653, 0x5449534f, 0x004e4f49, 0x43003266, 0x524f4c4f, 0x62630030, 0x33660032,
+0x00346600, 0x4f4c4f43, 0x54003152, 0x75747865, 0x44316572, 0x00005300, 0x00000200, 0x00000000,
+0x00000000, 0x00000000, 0x00000000, 0x00000a00, 0x78657400, 0x4f430031, 0x32524f4c, 0x78657400,
+0x00040032, 0x00100000, 0x00000000, 0x00020000, 0xffff0000, 0x0000ffff, 0x00290000, 0x000d0000,
+0x002c0000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00380000, 0x000d0000, 0x003b0000,
+0x00040000, 0x00000000, 0x00000000, 0x00000000, 0x00420000, 0x00100000, 0x00000000, 0x00020000,
+0xffff0000, 0x0000ffff, 0x00460000, 0x000d0000, 0x002c0000, 0x00000000, 0x00000000, 0x00000000,
+0x00000000, 0x00490000, 0x000d0000, 0x004c0000, 0x00040000, 0x00000000, 0x00000000, 0x00000000,
+0x00790000, 0x005d0000, 0x007e0000, 0xffff0000, 0x0000ffff, 0x00850000, 0x005d0000, 0x004c0000,
+0xffff0000, 0x0000ffff, 0x00000000,
+};
+
+static void test_effect_get_variable_by(ID3D10Device *device)
+{
+    ID3D10Effect *effect;
+    ID3D10EffectVariable *variable_by_index, *variable, *null_variable;
+    HRESULT hr;
+
+    hr = create_effect(fx_test_egvb, 0, device, NULL, &effect);
+    ok(SUCCEEDED(hr), "D3D10CreateEffectFromMemory failed (%x)\n", hr);
+
+    /* get the null variable */
+    null_variable = effect->lpVtbl->GetVariableByIndex(effect, 0xffffffff);
+
+    /* check for invalid arguments */
+    variable = effect->lpVtbl->GetVariableByName(effect, NULL);
+    ok(null_variable == variable, "GetVariableByName got %p, expected %p\n", variable, null_variable);
+
+    variable = effect->lpVtbl->GetVariableBySemantic(effect, NULL);
+    ok(null_variable == variable, "GetVariableBySemantic got %p, expected %p\n", variable, null_variable);
+
+    variable = effect->lpVtbl->GetVariableByName(effect, "invalid");
+    ok(null_variable == variable, "GetVariableByName got %p, expected %p\n", variable, null_variable);
+
+    variable = effect->lpVtbl->GetVariableBySemantic(effect, "invalid");
+    ok(null_variable == variable, "GetVariableBySemantic got %p, expected %p\n", variable, null_variable);
+
+    /* variable f1 */
+    variable_by_index = effect->lpVtbl->GetVariableByIndex(effect, 0);
+    ok(null_variable != variable_by_index, "GetVariableByIndex failed %p\n", variable_by_index);
+
+    variable = effect->lpVtbl->GetVariableByName(effect, "f1");
+    ok(variable_by_index == variable, "GetVariableByName got %p, expected %p\n", variable, variable_by_index);
+
+    variable = effect->lpVtbl->GetVariableBySemantic(effect, "SV_POSITION");
+    ok(variable_by_index == variable, "GetVariableBySemantic got %p, expected %p\n", variable, variable_by_index);
+
+    /* variable f2 */
+    variable_by_index = effect->lpVtbl->GetVariableByIndex(effect, 1);
+    ok(null_variable != variable_by_index, "GetVariableByIndex failed %p\n", variable_by_index);
+
+    variable = effect->lpVtbl->GetVariableByName(effect, "f2");
+    ok(variable_by_index == variable, "GetVariableByName got %p, expected %p\n", variable, variable_by_index);
+
+    variable = effect->lpVtbl->GetVariableBySemantic(effect, "COLOR0");
+    ok(variable_by_index == variable, "GetVariableBySemantic got %p, expected %p\n", variable, variable_by_index);
+
+    /* variable f3 */
+    variable_by_index = effect->lpVtbl->GetVariableByIndex(effect, 2);
+    ok(null_variable != variable_by_index, "GetVariableByIndex failed %p\n", variable_by_index);
+
+    variable = effect->lpVtbl->GetVariableByName(effect, "f3");
+    ok(variable_by_index == variable, "GetVariableByName got %p, expected %p\n", variable, variable_by_index);
+
+    variable = effect->lpVtbl->GetVariableBySemantic(effect, "SV_POSITION");
+    ok(variable != null_variable, "GetVariableBySemantic failed %p\n", variable);
+    ok(variable != variable_by_index, "GetVariableBySemantic failed %p\n", variable);
+
+    /* variable f4 */
+    variable_by_index = effect->lpVtbl->GetVariableByIndex(effect, 3);
+    ok(null_variable != variable_by_index, "GetVariableByIndex failed %p\n", variable_by_index);
+
+    variable = effect->lpVtbl->GetVariableByName(effect, "f4");
+    ok(variable_by_index == variable, "GetVariableByName got %p, expected %p\n", variable, variable_by_index);
+
+    variable = effect->lpVtbl->GetVariableBySemantic(effect, "COLOR1");
+    ok(variable_by_index == variable, "GetVariableBySemantic got %p, expected %p\n", variable, variable_by_index);
+
+    /* variable tex1 */
+    variable_by_index = effect->lpVtbl->GetVariableByIndex(effect, 4);
+    ok(null_variable != variable_by_index, "GetVariableByIndex failed %p\n", variable_by_index);
+
+    variable = effect->lpVtbl->GetVariableByName(effect, "tex1");
+    ok(variable_by_index == variable, "GetVariableByName got %p, expected %p\n", variable, variable_by_index);
+
+    variable = effect->lpVtbl->GetVariableBySemantic(effect, "COLOR2");
+    ok(variable_by_index == variable, "GetVariableBySemantic got %p, expected %p\n", variable, variable_by_index);
+
+    /* variable tex2 */
+    variable_by_index = effect->lpVtbl->GetVariableByIndex(effect, 5);
+    ok(null_variable != variable_by_index, "GetVariableByIndex failed %p\n", variable_by_index);
+
+    variable = effect->lpVtbl->GetVariableByName(effect, "tex2");
+    ok(variable_by_index == variable, "GetVariableByName got %p, expected %p\n", variable, variable_by_index);
+
+    variable = effect->lpVtbl->GetVariableBySemantic(effect, "COLOR1");
+    ok(variable != null_variable, "GetVariableBySemantic failed %p\n", variable);
+    ok(variable != variable_by_index, "GetVariableBySemantic failed %p\n", variable);
+
+    effect->lpVtbl->Release(effect);
+}
+
 START_TEST(effect)
 {
     ID3D10Device *device;
@@ -3460,6 +3618,7 @@ START_TEST(effect)
     test_effect_variable_type_class(device);
     test_effect_constant_buffer_stride(device);
     test_effect_local_shader(device);
+    test_effect_get_variable_by(device);
 
     refcount = ID3D10Device_Release(device);
     ok(!refcount, "Device has %u references left\n", refcount);

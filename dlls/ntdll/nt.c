@@ -888,8 +888,18 @@ void fill_cpu_info(void)
     /* choose sensible defaults ...
      * FIXME: perhaps overridable with precompiler flags?
      */
+#ifdef __i386__
     cached_sci.Architecture     = PROCESSOR_ARCHITECTURE_INTEL;
     cached_sci.Level		= 5; /* 586 */
+#elif defined(__x86_64__)
+    cached_sci.Architecture     = PROCESSOR_ARCHITECTURE_AMD64;
+#elif defined(__powerpc__)
+    cached_sci.Architecture     = PROCESSOR_ARCHITECTURE_PPC;
+#elif defined(__ALPHA__)
+    cached_sci.Architecture     = PROCESSOR_ARCHITECTURE_ALPHA;
+#else
+#error Unknown CPU
+#endif
     cached_sci.Revision   	= 0;
     cached_sci.Reserved         = 0;
     cached_sci.FeatureSet       = 0x1fff; /* FIXME: set some sensible defaults out of ProcessFeatures[] */
@@ -1932,6 +1942,18 @@ NTSTATUS WINAPI NtAccessCheckAndAuditAlarm(PUNICODE_STRING SubsystemName, HANDLE
     FIXME("(%s, %p, %s, %p, 0x%08x, %p, %d, %p, %p, %p), stub\n", debugstr_us(SubsystemName), HandleId,
           debugstr_us(ObjectTypeName), SecurityDescriptor, DesiredAccess, GenericMapping, ObjectCreation,
           GrantedAccess, AccessStatus, GenerateOnClose);
+
+    return STATUS_NOT_IMPLEMENTED;
+}
+
+/******************************************************************************
+ *  NtSystemDebugControl   (NTDLL.@)
+ *  ZwSystemDebugControl   (NTDLL.@)
+ */
+NTSTATUS WINAPI NtSystemDebugControl(SYSDBG_COMMAND command, PVOID inbuffer, ULONG inbuflength, PVOID outbuffer,
+                                     ULONG outbuflength, PULONG retlength)
+{
+    FIXME("(%d, %p, %d, %p, %d, %p), stub\n", command, inbuffer, inbuflength, outbuffer, outbuflength, retlength);
 
     return STATUS_NOT_IMPLEMENTED;
 }

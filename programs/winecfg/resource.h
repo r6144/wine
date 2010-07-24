@@ -45,8 +45,9 @@
 #define IDS_SHELL_FOLDER                16
 #define IDS_LINKS_TO                    17
 #define IDS_WINECFG_TITLE_APP           18   /* App specific title */
+#define IDI_WINECFG                     100
 #define IDD_MAINDLG                     101
-#define IDB_WINE                        104
+#define IDI_LOGO                        102
 #define IDD_ABOUTCFG                    107
 #define IDD_APPCFG                      108
 #define IDD_AUDIOCFG                    109
@@ -121,8 +122,7 @@
 #define IDC_COMBO_TYPE                  1065
 #define IDC_EDIT_DEVICE                 1066
 #define IDC_BUTTON_BROWSE_PATH          1067
-#define IDC_RADIO_AUTODETECT            1068
-#define IDC_RADIO_ASSIGN                1069
+#define IDC_STATIC_DEVICE               1068
 #define IDC_BUTTON_BROWSE_DEVICE        1070
 #define IDC_STATIC_SERIAL               1072
 #define IDC_STATIC_LABEL                1073
@@ -130,7 +130,6 @@
 #define IDS_DRIVE_NO_C                  1075
 #define IDC_BUTTON_SHOW_HIDE_ADVANCED   1076
 #define IDC_STATIC_TYPE                 1077
-#define IDC_LABELSERIAL_STATIC          1078
 #define IDC_SHOW_DOT_FILES              1080
 
 #define IDC_DRIVE_LABEL                 1078
@@ -260,3 +259,8 @@
 /* About tab */
 #define IDC_ABT_OWNER                8432
 #define IDC_ABT_ORG                  8433
+#define IDC_ABT_PANEL                8434
+#define IDC_ABT_PANEL_TEXT           8435
+#define IDC_ABT_TITLE_TEXT           8436
+#define IDC_ABT_WEB_LINK             8437
+#define IDC_ABT_LICENSE_TEXT         8438

@@ -119,7 +119,6 @@ typedef nsISupports nsIDOMDOMImplementation;
 typedef nsISupports nsIDOMCDATASection;
 typedef nsISupports nsIDOMProcessingInstruction;
 typedef nsISupports nsIDOMEntityReference;
-typedef nsISupports nsIDOMHTMLOptionsCollection;
 typedef nsISupports nsIWebProgressListener;
 typedef nsISupports nsIDOMCSSValue;
 typedef nsISupports nsIPrintSession;
@@ -132,7 +131,6 @@ typedef nsISupports nsIDOMMediaList;
 typedef nsISupports nsIDOMHTMLTableCaptionElement;
 typedef nsISupports nsIDOMHTMLTableSectionElement;
 typedef nsISupports nsIDOMClientRectList;
-typedef nsISupports nsIDOMClientRect;
 typedef nsISupports nsIDOMLocation;
 typedef nsISupports nsIDocument;
 typedef nsISupports nsIContent;
@@ -735,6 +733,22 @@ interface nsIDOMElementCSSInlineStyle : nsISupports
 
 [
     object,
+    uuid(b2f824c4-d9d3-499b-8d3b-45c8245497c6),
+    local
+    /* NOT_FROZEN */
+]
+interface nsIDOMClientRect : nsISupports
+{
+    nsresult GetLeft(float *aLeft);
+    nsresult GetTop(float *aTop);
+    nsresult GetRight(float *aRight);
+    nsresult GetBottom(float *aBottom);
+    nsresult GetWidth(float *aWidth);
+    nsresult GetHeight(float *aHeight);
+}
+
+[
+    object,
     uuid(f0aef489-18c5-4de6-99d5-58b3758b098c),
     local
     /* NOT_FROZEN */
@@ -1317,6 +1331,20 @@ interface nsIDOMHTMLOptionElement : nsIDOMHTMLElement
     nsresult SetSelected(PRBool aSelected);
     nsresult GetValue(nsAString *aValue);
     nsresult SetValue(const nsAString *aValue);
+}
+
+[
+    object,
+    uuid(bce0213c-f70f-488f-b93f-688acca55d63),
+    local
+    /* FROZEN */
+]
+interface nsIDOMHTMLOptionsCollection : nsISupports
+{
+    nsresult GetLength(PRUint32 *aLength);
+    nsresult SetLength(PRUint32 aLength);
+    nsresult Item(PRUint32 index, nsIDOMNode **_retval);
+    nsresult NamedItem(const nsAString *name, nsIDOMNode **_retval);
 }
 
 [

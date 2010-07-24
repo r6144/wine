@@ -4,7 +4,7 @@ SRCDIR    = @srcdir@
 VPATH     = @srcdir@
 MODULE    = oleacc.dll
 IMPORTLIB = oleacc
-IMPORTS   = user32 kernel32
+IMPORTS   = user32
 
 C_SRCS = \
 	main.c
@@ -13,12 +13,16 @@ RC_SRCS = \
 	oleacc_De.rc \
 	oleacc_En.rc \
 	oleacc_Fr.rc \
+	oleacc_Hu.rc \
+	oleacc_It.rc \
 	oleacc_Ko.rc \
 	oleacc_Lt.rc \
 	oleacc_Nl.rc \
 	oleacc_No.rc \
 	oleacc_Pl.rc \
 	oleacc_Pt.rc \
-	oleacc_Ro.rc
+	oleacc_Ro.rc \
+	oleacc_Si.rc \
+	oleacc_Uk.rc
 
 @MAKE_DLL_RULES@

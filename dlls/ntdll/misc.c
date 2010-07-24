@@ -2,6 +2,7 @@
  * Helper functions for ntdll
  *
  * Copyright 2000 Juergen Schmied
+ * Copyright 2010 Marcus Meissner
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -249,4 +250,86 @@ double CDECL NTDLL_sqrt( double d )
 double CDECL NTDLL_tan( double d )
 {
     return tan( d );
+}
+
+
+/* Merge Sort. Algorithm taken from http://www.linux-related.de/index.html?/coding/sort/sort_merge.htm */
+static void
+NTDLL_mergesort( void *arr, void *barr, int elemsize, int(__cdecl *compar)(const void *, const void *),
+                 int left, int right )
+{
+    if(right>left) {
+        int i, j, k, m;
+        m=(right+left)/2;
+        NTDLL_mergesort( arr, barr, elemsize, compar, left, m);
+        NTDLL_mergesort( arr, barr, elemsize, compar, m+1, right);
+
+#define X(a,i) ((char*)a+elemsize*(i))
+        for (i=m+1; i>left; i--)
+            memcpy (X(barr,(i-1)),X(arr,(i-1)),elemsize);
+        for (j=m; j<right; j++)
+            memcpy (X(barr,(right+m-j)),X(arr,(j+1)),elemsize);
+
+        for (k=left; k<=right; k++) {
+            /*arr[k]=(barr[i]<barr[j])?barr[i++]:barr[j--];*/
+            if (i != j && compar(X(barr,i),X(barr,j))<0) {
+                memcpy(X(arr,k),X(barr,i),elemsize);
+                i++;
+            } else {
+                memcpy(X(arr,k),X(barr,j),elemsize);
+                j--;
+            }
+        }
+    }
+#undef X
+}
+
+/*********************************************************************
+ *                  qsort   (NTDLL.@)
+ */
+void __cdecl NTDLL_qsort( void *base, size_t nmemb, size_t size,
+                          int(__cdecl *compar)(const void *, const void *) )
+{
+    void *secondarr = RtlAllocateHeap (GetProcessHeap(), 0, nmemb*size);
+    NTDLL_mergesort( base, secondarr, size, compar, 0, nmemb-1 );
+    RtlFreeHeap (GetProcessHeap(),0, secondarr);
+}
+
+/*********************************************************************
+ *                  bsearch   (NTDLL.@)
+ */
+void * __cdecl
+NTDLL_bsearch( const void *key, const void *base, size_t nmemb,
+               size_t size, int (__cdecl *compar)(const void *, const void *) )
+{
+    ssize_t min = 0;
+    ssize_t max = nmemb - 1;
+
+    while (min <= max)
+    {
+        ssize_t cursor = (min + max) / 2;
+        int ret = compar(key,(const char *)base+(cursor*size));
+        if (!ret)
+            return (char*)base+(cursor*size);
+        if (ret < 0)
+            max = cursor - 1;
+        else
+            min = cursor + 1;
+    }
+    return NULL;
+}
+
+
+/*********************************************************************
+ *                  _lfind   (NTDLL.@)
+ */
+void * __cdecl _lfind( const void *key, const void *base, unsigned int *nmemb,
+                       size_t size, int(__cdecl *compar)(const void *, const void *) )
+{
+    size_t i, n = *nmemb;
+
+    for (i=0;i<n;i++)
+        if (!compar(key,(char*)base+(size*i)))
+            return (char*)base+(size*i);
+    return NULL;
 }

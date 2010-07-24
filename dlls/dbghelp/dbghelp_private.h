@@ -347,12 +347,14 @@ struct module_format
 
 struct module
 {
+    struct process*             process;
     IMAGEHLP_MODULEW64          module;
     /* ANSI copy of module.ModuleName for efficiency */
     char                        module_name[MAX_PATH];
     struct module*              next;
     enum module_type		type : 16;
     unsigned short              is_virtual : 1;
+    DWORD64                     reloc_delta;
 
     /* specific information for debug types */
     struct module_format*       format_info[DFI_LAST];

@@ -71,6 +71,7 @@ typedef struct
     WORD                    depth;
     WORD                    infoBpp;
     WORD                    compression;
+    ColorShifts            *shifts;
     RGBQUAD                *colorMap;
     int                     nColorMap;
     Drawable                drawable;
@@ -193,7 +194,7 @@ static int X11DRV_DIB_GetDIBImageBytes( int width, int height, int depth )
  */
 int bitmap_info_size( const BITMAPINFO * info, WORD coloruse )
 {
-    unsigned int colors, masks = 0;
+    unsigned int colors, size, masks = 0;
 
     if (info->bmiHeader.biSize == sizeof(BITMAPCOREHEADER))
     {
@@ -208,8 +209,8 @@ int bitmap_info_size( const BITMAPINFO * info, WORD coloruse )
         if (!colors && (info->bmiHeader.biBitCount <= 8))
             colors = 1 << info->bmiHeader.biBitCount;
         if (info->bmiHeader.biCompression == BI_BITFIELDS) masks = 3;
-        return sizeof(BITMAPINFOHEADER) + masks * sizeof(DWORD) + colors *
-               ((coloruse == DIB_RGB_COLORS) ? sizeof(RGBQUAD) : sizeof(WORD));
+        size = max( info->bmiHeader.biSize, sizeof(BITMAPINFOHEADER) + masks * sizeof(DWORD) );
+        return size + colors * ((coloruse == DIB_RGB_COLORS) ? sizeof(RGBQUAD) : sizeof(WORD));
     }
 }
 
@@ -970,7 +971,6 @@ static void X11DRV_DIB_GetImageBits_4( int lines, BYTE *dstbits,
 {
     DWORD x;
     int h, width = min(srcwidth, dstwidth);
-    BYTE *bits;
 
     if (lines < 0 )
     {
@@ -978,8 +978,6 @@ static void X11DRV_DIB_GetImageBits_4( int lines, BYTE *dstbits,
        dstbits = dstbits + ( linebytes * (lines-1) );
        linebytes = -linebytes;
     }
-
-    bits = dstbits;
 
     switch (bmpImage->depth) {
     case 1:
@@ -3215,7 +3213,6 @@ static void X11DRV_DIB_GetImageBits_32( X11DRV_PDEVICE *physDev, int lines, BYTE
 {
     DWORD x;
     int h, width = min(srcwidth, dstwidth);
-    BYTE *bits;
     const dib_conversions *convs = (bmpImage->byte_order == LSBFirst) ? &dib_normal : &dib_src_byteswap;
 
     if (lines < 0 )
@@ -3224,8 +3221,6 @@ static void X11DRV_DIB_GetImageBits_32( X11DRV_PDEVICE *physDev, int lines, BYTE
         dstbits = dstbits + ( linebytes * (lines-1) );
         linebytes = -linebytes;
     }
-
-    bits = dstbits;
 
     switch (bmpImage->depth)
     {
@@ -3578,6 +3573,12 @@ static int X11DRV_DIB_SetImageBits( const X11DRV_DIB_IMAGEBITS_DESCR *descr )
             wine_tsx11_unlock();
             return 0;
         }
+        if (descr->shifts)
+        {
+            bmpImage->red_mask = descr->shifts->physicalRed.max << descr->shifts->physicalRed.shift;
+            bmpImage->green_mask = descr->shifts->physicalGreen.max << descr->shifts->physicalGreen.shift;
+            bmpImage->blue_mask = descr->shifts->physicalBlue.max << descr->shifts->physicalBlue.shift;
+        }
     }
     wine_tsx11_unlock();
 
@@ -3735,6 +3736,12 @@ static int X11DRV_DIB_GetImageBits( const X11DRV_DIB_IMAGEBITS_DESCR *descr )
             XDestroyImage( bmpImage );
             wine_tsx11_unlock();
             return 0;
+        }
+        if (descr->shifts)
+        {
+            bmpImage->red_mask = descr->shifts->physicalRed.max << descr->shifts->physicalRed.shift;
+            bmpImage->green_mask = descr->shifts->physicalGreen.max << descr->shifts->physicalGreen.shift;
+            bmpImage->blue_mask = descr->shifts->physicalBlue.max << descr->shifts->physicalBlue.shift;
         }
     }
 
@@ -3969,6 +3976,7 @@ INT CDECL X11DRV_SetDIBitsToDevice( X11DRV_PDEVICE *physDev, INT xDest, INT yDes
     descr.lines      = top_down ? -lines : lines;
     descr.infoWidth  = width;
     descr.depth      = physDev->depth;
+    descr.shifts     = physDev->color_shifts;
     descr.drawable   = physDev->drawable;
     descr.gc         = physDev->gc;
     descr.xSrc       = xSrc;
@@ -4058,6 +4066,7 @@ INT CDECL X11DRV_SetDIBits( X11DRV_PDEVICE *physDev, HBITMAP hbitmap, UINT start
   descr.infoWidth  = width;
   descr.lines      = tmpheight >= 0 ? lines : -lines;
   descr.depth      = physBitmap->pixmap_depth;
+  descr.shifts     = physBitmap->trueColor ? &physBitmap->pixmap_color_shifts : NULL;
   descr.drawable   = physBitmap->pixmap;
   descr.gc         = get_bitmap_gc(physBitmap->pixmap_depth);
   descr.xSrc       = 0;
@@ -4080,10 +4089,10 @@ INT CDECL X11DRV_SetDIBits( X11DRV_PDEVICE *physDev, HBITMAP hbitmap, UINT start
       descr.infoBpp == ds.dsBm.bmBitsPixel &&
       physBitmap->base && physBitmap->size < 65536)
   {
-      unsigned int srcwidthb = ds.dsBm.bmWidthBytes;
-      int dstwidthb = X11DRV_DIB_GetDIBWidthBytes( width, descr.infoBpp );
-      LPBYTE dbits = physBitmap->base;
-      const BYTE *sbits = (const BYTE*)bits + (startscan * srcwidthb);
+      unsigned int srcwidthb = X11DRV_DIB_GetDIBWidthBytes( width, descr.infoBpp );
+      int dstwidthb = ds.dsBm.bmWidthBytes;
+      LPBYTE dbits = physBitmap->base + startscan * dstwidthb;
+      const BYTE *sbits = bits;
       int widthb;
       UINT y;
 
@@ -4214,6 +4223,7 @@ INT CDECL X11DRV_GetDIBits( X11DRV_PDEVICE *physDev, HBITMAP hbitmap, UINT start
   descr.infoWidth  = width;
   descr.lines      = lines;
   descr.depth      = physBitmap->pixmap_depth;
+  descr.shifts     = physBitmap->trueColor ? &physBitmap->pixmap_color_shifts : NULL;
   descr.drawable   = physBitmap->pixmap;
   descr.gc         = get_bitmap_gc(physBitmap->pixmap_depth);
   descr.width      = dib.dsBm.bmWidth;
@@ -4289,6 +4299,7 @@ static void X11DRV_DIB_DoCopyDIBSection(X_PHYSBITMAP *physBitmap, BOOL toDIB,
   descr.nColorMap   = nColorMap;
   descr.bits        = dibSection.dsBm.bmBits;
   descr.depth       = physBitmap->pixmap_depth;
+  descr.shifts      = physBitmap->trueColor ? &physBitmap->pixmap_color_shifts : NULL;
   descr.compression = dibSection.dsBmih.biCompression;
   descr.physBitmap  = physBitmap;
 
@@ -4783,7 +4794,7 @@ HBITMAP CDECL X11DRV_CreateDIBSection( X11DRV_PDEVICE *physDev, HBITMAP hbitmap,
                                                          &physBitmap->nColorMap );
     }
 
-    if (!X11DRV_XRender_SetPhysBitmapDepth( physBitmap, &dib ))
+    if (!X11DRV_XRender_SetPhysBitmapDepth( physBitmap, dib.dsBm.bmBitsPixel, &dib ))
     {
         if (dib.dsBm.bmBitsPixel == 1)
         {

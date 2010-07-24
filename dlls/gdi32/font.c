@@ -180,7 +180,7 @@ static void FONT_LogFontWToA( const LOGFONTW *fontW, LPLOGFONTA fontA )
 
 static void FONT_EnumLogFontExWToA( const ENUMLOGFONTEXW *fontW, LPENUMLOGFONTEXA fontA )
 {
-    FONT_LogFontWToA( (const LOGFONTW *)fontW, (LPLOGFONTA)fontA);
+    FONT_LogFontWToA( &fontW->elfLogFont, &fontA->elfLogFont );
 
     WideCharToMultiByte( CP_ACP, 0, fontW->elfFullName, -1,
 			 (LPSTR) fontA->elfFullName, LF_FULLFACESIZE, NULL, NULL );
@@ -191,6 +191,21 @@ static void FONT_EnumLogFontExWToA( const ENUMLOGFONTEXW *fontW, LPENUMLOGFONTEX
     WideCharToMultiByte( CP_ACP, 0, fontW->elfScript, -1,
 			 (LPSTR) fontA->elfScript, LF_FACESIZE, NULL, NULL );
     fontA->elfScript[LF_FACESIZE-1] = '\0';
+}
+
+static void FONT_EnumLogFontExAToW( const ENUMLOGFONTEXA *fontA, LPENUMLOGFONTEXW fontW )
+{
+    FONT_LogFontAToW( &fontA->elfLogFont, &fontW->elfLogFont );
+
+    MultiByteToWideChar( CP_ACP, 0, (LPCSTR)fontA->elfFullName, -1,
+			 fontW->elfFullName, LF_FULLFACESIZE );
+    fontW->elfFullName[LF_FULLFACESIZE-1] = '\0';
+    MultiByteToWideChar( CP_ACP, 0, (LPCSTR)fontA->elfStyle, -1,
+			 fontW->elfStyle, LF_FACESIZE );
+    fontW->elfStyle[LF_FACESIZE-1] = '\0';
+    MultiByteToWideChar( CP_ACP, 0, (LPCSTR)fontA->elfScript, -1,
+			 fontW->elfScript, LF_FACESIZE );
+    fontW->elfScript[LF_FACESIZE-1] = '\0';
 }
 
 /***********************************************************************
@@ -287,30 +302,42 @@ static LPWSTR FONT_mbtowc(HDC hdc, LPCSTR str, INT count, INT *plenW, UINT *pCP)
     return strW;
 }
 
-
 /***********************************************************************
- *           CreateFontIndirectA   (GDI32.@)
+ *           CreateFontIndirectExA   (GDI32.@)
  */
-HFONT WINAPI CreateFontIndirectA( const LOGFONTA *plfA )
+HFONT WINAPI CreateFontIndirectExA( const ENUMLOGFONTEXDVA *penumexA )
 {
-    LOGFONTW lfW;
+    ENUMLOGFONTEXDVW enumexW;
 
-    if (!plfA) return 0;
+    if (!penumexA) return 0;
 
-    FONT_LogFontAToW( plfA, &lfW );
-    return CreateFontIndirectW( &lfW );
+    FONT_EnumLogFontExAToW( &penumexA->elfEnumLogfontEx, &enumexW.elfEnumLogfontEx );
+    enumexW.elfDesignVector = penumexA->elfDesignVector;
+    return CreateFontIndirectExW( &enumexW );
 }
 
 /***********************************************************************
- *           CreateFontIndirectW   (GDI32.@)
+ *           CreateFontIndirectExA   (GDI32.@)
  */
-HFONT WINAPI CreateFontIndirectW( const LOGFONTW *plf )
+HFONT WINAPI CreateFontIndirectExW( const ENUMLOGFONTEXDVW *penumex )
 {
     HFONT hFont;
     FONTOBJ *fontPtr;
+    const LOGFONTW *plf;
 
-    if (!plf) return 0;
+    if (!penumex) return 0;
 
+    if (penumex->elfEnumLogfontEx.elfFullName[0] ||
+        penumex->elfEnumLogfontEx.elfStyle[0] ||
+        penumex->elfEnumLogfontEx.elfScript[0])
+    {
+        FIXME("some fields ignored. fullname=%s, style=%s, script=%s\n",
+            debugstr_w(penumex->elfEnumLogfontEx.elfFullName),
+            debugstr_w(penumex->elfEnumLogfontEx.elfStyle),
+            debugstr_w(penumex->elfEnumLogfontEx.elfScript));
+    }
+
+    plf = &penumex->elfEnumLogfontEx.elfLogFont;
     if (!(fontPtr = HeapAlloc( GetProcessHeap(), 0, sizeof(*fontPtr) ))) return 0;
 
     fontPtr->logfont = *plf;
@@ -342,6 +369,35 @@ HFONT WINAPI CreateFontIndirectW( const LOGFONTW *plf )
           plf->lfUnderline ? "Underline" : "", hFont);
 
     return hFont;
+}
+
+/***********************************************************************
+ *           CreateFontIndirectA   (GDI32.@)
+ */
+HFONT WINAPI CreateFontIndirectA( const LOGFONTA *plfA )
+{
+    LOGFONTW lfW;
+
+    if (!plfA) return 0;
+
+    FONT_LogFontAToW( plfA, &lfW );
+    return CreateFontIndirectW( &lfW );
+}
+
+/***********************************************************************
+ *           CreateFontIndirectW   (GDI32.@)
+ */
+HFONT WINAPI CreateFontIndirectW( const LOGFONTW *plf )
+{
+    ENUMLOGFONTEXDVW exdv;
+
+    if (!plf) return 0;
+
+    exdv.elfEnumLogfontEx.elfLogFont = *plf;
+    exdv.elfEnumLogfontEx.elfFullName[0] = 0;
+    exdv.elfEnumLogfontEx.elfStyle[0] = 0;
+    exdv.elfEnumLogfontEx.elfScript[0] = 0;
+    return CreateFontIndirectExW( &exdv );
 }
 
 /*************************************************************************
@@ -1586,13 +1642,29 @@ BOOL WINAPI ExtTextOutA( HDC hdc, INT x, INT y, UINT flags,
     if (lpDx) {
         unsigned int i = 0, j = 0;
 
-        lpDxW = HeapAlloc( GetProcessHeap(), 0, wlen*sizeof(INT));
+        /* allocate enough for a ETO_PDY */
+        lpDxW = HeapAlloc( GetProcessHeap(), 0, 2*wlen*sizeof(INT));
         while(i < count) {
-            if(IsDBCSLeadByteEx(codepage, str[i])) {
-                lpDxW[j++] = lpDx[i] + lpDx[i+1];
+            if(IsDBCSLeadByteEx(codepage, str[i]))
+            {
+                if(flags & ETO_PDY)
+                {
+                    lpDxW[j++] = lpDx[i * 2]     + lpDx[(i + 1) * 2];
+                    lpDxW[j++] = lpDx[i * 2 + 1] + lpDx[(i + 1) * 2 + 1];
+                }
+                else
+                    lpDxW[j++] = lpDx[i] + lpDx[i + 1];
                 i = i + 2;
-            } else {
-                lpDxW[j++] = lpDx[i];
+            }
+            else
+            {
+                if(flags & ETO_PDY)
+                {
+                    lpDxW[j++] = lpDx[i * 2];
+                    lpDxW[j++] = lpDx[i * 2 + 1];
+                }
+                else
+                    lpDxW[j++] = lpDx[i];
                 i = i + 1;
             }
         }
@@ -1647,11 +1719,11 @@ BOOL WINAPI ExtTextOutW( HDC hdc, INT x, INT y, UINT flags,
     TEXTMETRICW tm;
     LOGFONTW lf;
     double cosEsc, sinEsc;
-    INT *deltas = NULL, char_extra;
+    INT char_extra;
     SIZE sz;
     RECT rc;
     BOOL done_extents = FALSE;
-    INT width = 0, xwidth = 0, ywidth = 0;
+    POINT *deltas = NULL, width = {0, 0};
     DWORD type;
     DC * dc = get_dc_ptr( hdc );
     INT breakRem;
@@ -1661,9 +1733,9 @@ BOOL WINAPI ExtTextOutW( HDC hdc, INT x, INT y, UINT flags,
 
     breakRem = dc->breakRem;
 
-    if (quietfixme == 0 && flags & (ETO_NUMERICSLOCAL | ETO_NUMERICSLATIN | ETO_PDY))
+    if (quietfixme == 0 && flags & (ETO_NUMERICSLOCAL | ETO_NUMERICSLATIN))
     {
-        FIXME("flags ETO_NUMERICSLOCAL | ETO_NUMERICSLATIN | ETO_PDY unimplemented\n");
+        FIXME("flags ETO_NUMERICSLOCAL | ETO_NUMERICSLATIN unimplemented\n");
         quietfixme = 1;
     }
     if (!dc->funcs->pExtTextOut && !PATH_IsPathOpen(dc->path))
@@ -1686,21 +1758,27 @@ BOOL WINAPI ExtTextOutW( HDC hdc, INT x, INT y, UINT flags,
         
     if( !(flags & (ETO_GLYPH_INDEX | ETO_IGNORELANGUAGE)) && count > 0 )
     {
+        INT cGlyphs;
         reordered_str = HeapAlloc(GetProcessHeap(), 0, count*sizeof(WCHAR));
 
-        BIDI_Reorder( str, count, GCP_REORDER,
+        BIDI_Reorder( hdc, str, count, GCP_REORDER,
                       ((flags&ETO_RTLREADING)!=0 || (GetTextAlign(hdc)&TA_RTLREADING)!=0)?
                       WINE_GCPW_FORCE_RTL:WINE_GCPW_FORCE_LTR,
-                      reordered_str, count, NULL );
+                      reordered_str, count, NULL, &glyphs, &cGlyphs);
     
         flags |= ETO_IGNORELANGUAGE;
+        if (glyphs)
+        {
+            flags |= ETO_GLYPH_INDEX;
+            if (cGlyphs != count)
+                count = cGlyphs;
+        }
     }
+    else if(flags & ETO_GLYPH_INDEX)
+        glyphs = reordered_str;
 
     TRACE("%p, %d, %d, %08x, %p, %s, %d, %p)\n", hdc, x, y, flags,
           lprect, debugstr_wn(str, count), count, lpDx);
-
-    if(flags & ETO_GLYPH_INDEX)
-        glyphs = reordered_str;
 
     if(lprect)
         TRACE("rect: %d,%d - %d,%d\n", lprect->left, lprect->top, lprect->right,
@@ -1777,13 +1855,25 @@ BOOL WINAPI ExtTextOutW( HDC hdc, INT x, INT y, UINT flags,
     {
         UINT i;
         SIZE tmpsz;
-        deltas = HeapAlloc(GetProcessHeap(), 0, count * sizeof(INT));
+        POINT total = {0, 0}, desired[2];
+
+        deltas = HeapAlloc(GetProcessHeap(), 0, count * sizeof(*deltas));
         for(i = 0; i < count; i++)
         {
-            if(lpDx && (flags & ETO_PDY))
-                deltas[i] = lpDx[i*2] + char_extra;
-            else if(lpDx)
-                deltas[i] = lpDx[i] + char_extra;
+            if(lpDx)
+            {
+                if(flags & ETO_PDY)
+                {
+                    deltas[i].x = lpDx[i * 2] + char_extra;
+                    deltas[i].y = -lpDx[i * 2 + 1];
+                }
+                else
+                {
+                    deltas[i].x = lpDx[i] + char_extra;
+                    deltas[i].y = 0;
+                }
+
+            }
             else
             {
                 if(flags & ETO_GLYPH_INDEX)
@@ -1791,21 +1881,37 @@ BOOL WINAPI ExtTextOutW( HDC hdc, INT x, INT y, UINT flags,
                 else
                     GetTextExtentPointW(hdc, reordered_str + i, 1, &tmpsz);
 
-                deltas[i] = tmpsz.cx;
+                deltas[i].x = tmpsz.cx;
+                deltas[i].y = 0;
             }
             
             if (!(flags & ETO_GLYPH_INDEX) && (dc->breakExtra || breakRem) && reordered_str[i] == tm.tmBreakChar)
             {
-                deltas[i] = deltas[i] + dc->breakExtra;
+                deltas[i].x = deltas[i].x + dc->breakExtra;
                 if (breakRem > 0)
                 {
                     breakRem--;
-                    deltas[i]++;
+                    deltas[i].x++;
                 }
             }
-            deltas[i] = INTERNAL_XWSTODS(dc, deltas[i]);
-            width += deltas[i];
+            total.x += deltas[i].x;
+            total.y += deltas[i].y;
+
+            desired[0].x = desired[0].y = 0;
+
+            desired[1].x =  cosEsc * total.x + sinEsc * total.y;
+            desired[1].y = -sinEsc * total.x + cosEsc * total.y;
+
+            LPtoDP(hdc, desired, 2);
+            desired[1].x -= desired[0].x;
+            desired[1].y -= desired[0].y;
+
+            deltas[i].x = desired[1].x - width.x;
+            deltas[i].y = desired[1].y - width.y;
+
+            width = desired[1];
         }
+        flags |= ETO_PDY;
     }
     else
     {
@@ -1817,10 +1923,9 @@ BOOL WINAPI ExtTextOutW( HDC hdc, INT x, INT y, UINT flags,
                 GetTextExtentPointW(hdc, reordered_str, count, &sz);
             done_extents = TRUE;
         }
-        width = INTERNAL_XWSTODS(dc, sz.cx);
+        width.x = INTERNAL_XWSTODS(dc, sz.cx);
+        width.y = 0;
     }
-    xwidth = width * cosEsc;
-    ywidth = width * sinEsc;
 
     tm.tmAscent = abs(INTERNAL_YWSTODS(dc, tm.tmAscent));
     tm.tmDescent = abs(INTERNAL_YWSTODS(dc, tm.tmDescent));
@@ -1829,21 +1934,21 @@ BOOL WINAPI ExtTextOutW( HDC hdc, INT x, INT y, UINT flags,
     case TA_LEFT:
         if (align & TA_UPDATECP)
         {
-            pt.x = x + xwidth;
-            pt.y = y - ywidth;
+            pt.x = x + width.x;
+            pt.y = y + width.y;
             DPtoLP(hdc, &pt, 1);
             MoveToEx(hdc, pt.x, pt.y, NULL);
         }
         break;
 
     case TA_CENTER:
-        x -= xwidth / 2;
-        y += ywidth / 2;
+        x -= width.x / 2;
+        y -= width.y / 2;
         break;
 
     case TA_RIGHT:
-        x -= xwidth;
-        y += ywidth;
+        x -= width.x;
+        y -= width.y;
         if (align & TA_UPDATECP)
         {
             pt.x = x;
@@ -1874,12 +1979,12 @@ BOOL WINAPI ExtTextOutW( HDC hdc, INT x, INT y, UINT flags,
     {
         if(!((flags & ETO_CLIPPED) && (flags & ETO_OPAQUE)))
         {
-            if(!(flags & ETO_OPAQUE) || x < rc.left || x + width >= rc.right ||
+            if(!(flags & ETO_OPAQUE) || x < rc.left || x + width.x >= rc.right ||
                y - tm.tmAscent < rc.top || y + tm.tmDescent >= rc.bottom)
             {
                 RECT rc;
                 rc.left = x;
-                rc.right = x + width;
+                rc.right = x + width.x;
                 rc.top = y - tm.tmAscent;
                 rc.bottom = y + tm.tmDescent;
                 dc->funcs->pExtTextOut(dc->physDev, 0, 0, ETO_OPAQUE, &rc, NULL, 0, NULL);
@@ -1891,7 +1996,8 @@ BOOL WINAPI ExtTextOutW( HDC hdc, INT x, INT y, UINT flags,
     {
         HFONT orig_font = dc->hFont, cur_font;
         UINT glyph;
-        INT span = 0, *offsets = NULL;
+        INT span = 0;
+        POINT *offsets = NULL;
         unsigned int i;
 
         glyphs = HeapAlloc(GetProcessHeap(), 0, count * sizeof(WORD));
@@ -1904,32 +2010,37 @@ BOOL WINAPI ExtTextOutW( HDC hdc, INT x, INT y, UINT flags,
                 {
                     unsigned int j;
                     offsets = HeapAlloc(GetProcessHeap(), 0, count * sizeof(*deltas));
-                    offsets[0] = 0;
+                    offsets[0].x = offsets[0].y = 0;
+
                     if(!deltas)
                     {
                         SIZE tmpsz;
                         for(j = 1; j < count; j++)
                         {
                             GetTextExtentPointW(hdc, reordered_str + j - 1, 1, &tmpsz);
-                            offsets[j] = offsets[j-1] + INTERNAL_XWSTODS(dc, tmpsz.cx);
+                            offsets[j].x = offsets[j - 1].x + INTERNAL_XWSTODS(dc, tmpsz.cx);
+                            offsets[j].y = 0;
                         }
                     }
                     else
                     {
                         for(j = 1; j < count; j++)
-                            offsets[j] = offsets[j-1] + deltas[j];
+                        {
+                            offsets[j].x = offsets[j - 1].x + deltas[j].x;
+                            offsets[j].y = offsets[j - 1].y + deltas[j].y;
+                        }
                     }
                 }
                 if(span)
                 {
                     if (PATH_IsPathOpen(dc->path))
-                        ret = PATH_ExtTextOut(dc, x + offsets[i - span] * cosEsc, y - offsets[i - span] * sinEsc,
+                        ret = PATH_ExtTextOut(dc, x + offsets[i - span].x, y + offsets[i - span].y,
                                               (flags & ~ETO_OPAQUE) | ETO_GLYPH_INDEX, &rc,
-                                              glyphs, span, deltas ? deltas + i - span : NULL);
+                                              glyphs, span, deltas ? (INT*)(deltas + (i - span)) : NULL);
                     else
-                        dc->funcs->pExtTextOut(dc->physDev, x + offsets[i - span] * cosEsc, y - offsets[i - span] * sinEsc,
-                                           (flags & ~ETO_OPAQUE) | ETO_GLYPH_INDEX, &rc,
-                                           glyphs, span, deltas ? deltas + i - span : NULL);
+                        dc->funcs->pExtTextOut(dc->physDev, x + offsets[i - span].x, y + offsets[i - span].y,
+                                               (flags & ~ETO_OPAQUE) | ETO_GLYPH_INDEX, &rc,
+                                               glyphs, span, deltas ? (INT*)(deltas + (i - span)) : NULL);
                     span = 0;
                 }
                 SelectObject(hdc, cur_font);
@@ -1939,15 +2050,15 @@ BOOL WINAPI ExtTextOutW( HDC hdc, INT x, INT y, UINT flags,
             if(i == count - 1)
             {
                 if (PATH_IsPathOpen(dc->path))
-                    ret = PATH_ExtTextOut(dc, x + (offsets ? offsets[count - span] * cosEsc : 0),
-                                          y - (offsets ? offsets[count - span] * sinEsc : 0),
+                    ret = PATH_ExtTextOut(dc, x + (offsets ? offsets[count - span].x : 0),
+                                          y + (offsets ? offsets[count - span].y : 0),
                                           (flags & ~ETO_OPAQUE) | ETO_GLYPH_INDEX, &rc,
-                                          glyphs, span, deltas ? deltas + count - span : NULL);
+                                          glyphs, span, deltas ? (INT*)(deltas + (count - span)) : NULL);
                 else
-                    ret = dc->funcs->pExtTextOut(dc->physDev, x + (offsets ? offsets[count - span] * cosEsc : 0),
-                                             y - (offsets ? offsets[count - span] * sinEsc : 0),
-                                             (flags & ~ETO_OPAQUE) | ETO_GLYPH_INDEX, &rc,
-                                             glyphs, span, deltas ? deltas + count - span : NULL);
+                    ret = dc->funcs->pExtTextOut(dc->physDev, x + (offsets ? offsets[count - span].x : 0),
+                                                 y + (offsets ? offsets[count - span].y : 0),
+                                                 (flags & ~ETO_OPAQUE) | ETO_GLYPH_INDEX, &rc,
+                                                 glyphs, span, deltas ? (INT*)(deltas + (count - span)) : NULL);
                 SelectObject(hdc, orig_font);
                 HeapFree(GetProcessHeap(), 0, offsets);
            }
@@ -1964,10 +2075,10 @@ BOOL WINAPI ExtTextOutW( HDC hdc, INT x, INT y, UINT flags,
 
         if (PATH_IsPathOpen(dc->path))
             ret = PATH_ExtTextOut(dc, x, y, (flags & ~ETO_OPAQUE), &rc,
-                                  glyphs ? glyphs : reordered_str, count, deltas);
+                                  glyphs ? glyphs : reordered_str, count, (INT*)deltas);
         else
             ret = dc->funcs->pExtTextOut(dc->physDev, x, y, (flags & ~ETO_OPAQUE), &rc,
-                                     glyphs ? glyphs : reordered_str, count, deltas);
+                                         glyphs ? glyphs : reordered_str, count, (INT*)deltas);
     }
 
 done:
@@ -2017,8 +2128,8 @@ done:
             {
                 pts[0].x = x - underlinePos * sinEsc;
                 pts[0].y = y - underlinePos * cosEsc;
-                pts[1].x = x + xwidth - underlinePos * sinEsc;
-                pts[1].y = y - ywidth - underlinePos * cosEsc;
+                pts[1].x = x + width.x - underlinePos * sinEsc;
+                pts[1].y = y + width.y - underlinePos * cosEsc;
                 pts[2].x = pts[1].x + underlineWidth * sinEsc;
                 pts[2].y = pts[1].y + underlineWidth * cosEsc;
                 pts[3].x = pts[0].x + underlineWidth * sinEsc;
@@ -2033,8 +2144,8 @@ done:
             {
                 pts[0].x = x - strikeoutPos * sinEsc;
                 pts[0].y = y - strikeoutPos * cosEsc;
-                pts[1].x = x + xwidth - strikeoutPos * sinEsc;
-                pts[1].y = y - ywidth - strikeoutPos * cosEsc;
+                pts[1].x = x + width.x - strikeoutPos * sinEsc;
+                pts[1].y = y + width.y - strikeoutPos * cosEsc;
                 pts[2].x = pts[1].x + strikeoutWidth * sinEsc;
                 pts[2].y = pts[1].y + strikeoutWidth * cosEsc;
                 pts[3].x = pts[0].x + strikeoutWidth * sinEsc;
@@ -2060,8 +2171,8 @@ done:
                 hpen = SelectObject(hdc, hpen);
                 pts[0].x = x;
                 pts[0].y = y;
-                pts[1].x = x + xwidth;
-                pts[1].y = y - ywidth;
+                pts[1].x = x + width.x;
+                pts[1].y = y + width.y;
                 DPtoLP(hdc, pts, 2);
                 MoveToEx(hdc, pts[0].x - underlinePos * sinEsc, pts[0].y - underlinePos * cosEsc, &oldpt);
                 LineTo(hdc, pts[1].x - underlinePos * sinEsc, pts[1].y - underlinePos * cosEsc);
@@ -2075,8 +2186,8 @@ done:
                 hpen = SelectObject(hdc, hpen);
                 pts[0].x = x;
                 pts[0].y = y;
-                pts[1].x = x + xwidth;
-                pts[1].y = y - ywidth;
+                pts[1].x = x + width.x;
+                pts[1].y = y + width.y;
                 DPtoLP(hdc, pts, 2);
                 MoveToEx(hdc, pts[0].x - strikeoutPos * sinEsc, pts[0].y - strikeoutPos * cosEsc, &oldpt);
                 LineTo(hdc, pts[1].x - strikeoutPos * sinEsc, pts[1].y - strikeoutPos * cosEsc);
@@ -2829,8 +2940,8 @@ GetCharacterPlacementW(
 		}
 	} else
 	{
-            BIDI_Reorder( lpString, uCount, dwFlags, WINE_GCPW_FORCE_LTR, lpResults->lpOutString,
-                          nSet, lpResults->lpOrder );
+            BIDI_Reorder(NULL, lpString, uCount, dwFlags, WINE_GCPW_FORCE_LTR, lpResults->lpOutString,
+                          nSet, lpResults->lpOrder, NULL, NULL );
 	}
 
 	/* FIXME: Will use the placement chars */

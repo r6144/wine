@@ -101,7 +101,7 @@ CompositeMonikerImpl_QueryInterface(IMoniker* iface,REFIID riid,void** ppvObject
     TRACE("(%p,%p,%p)\n",This,riid,ppvObject);
 
     /* Perform a sanity check on the parameters.*/
-    if ( (This==0) || (ppvObject==0) )
+    if ( ppvObject==0 )
 	return E_INVALIDARG;
 
     /* Initialize the return parameter */
@@ -445,7 +445,6 @@ static HRESULT WINAPI
 CompositeMonikerImpl_Reduce(IMoniker* iface, IBindCtx* pbc, DWORD dwReduceHowFar,
                IMoniker** ppmkToLeft, IMoniker** ppmkReduced)
 {
-    HRESULT   res;
     IMoniker *tempMk,*antiMk,*mostRigthMk,*leftReducedComposedMk,*mostRigthReducedMk;
     IEnumMoniker *enumMoniker;
 
@@ -462,8 +461,8 @@ CompositeMonikerImpl_Reduce(IMoniker* iface, IBindCtx* pbc, DWORD dwReduceHowFar
         IEnumMoniker_Next(enumMoniker,1,&mostRigthMk,NULL);
         IEnumMoniker_Release(enumMoniker);
 
-        res=CreateAntiMoniker(&antiMk);
-        res=IMoniker_ComposeWith(iface,antiMk,0,&tempMk);
+        CreateAntiMoniker(&antiMk);
+        IMoniker_ComposeWith(iface,antiMk,0,&tempMk);
         IMoniker_Release(antiMk);
 
         return IMoniker_Reduce(mostRigthMk,pbc,dwReduceHowFar,&tempMk, ppmkReduced);
@@ -479,8 +478,8 @@ CompositeMonikerImpl_Reduce(IMoniker* iface, IBindCtx* pbc, DWORD dwReduceHowFar
         IEnumMoniker_Next(enumMoniker,1,&mostRigthMk,NULL);
         IEnumMoniker_Release(enumMoniker);
 
-        res=CreateAntiMoniker(&antiMk);
-        res=IMoniker_ComposeWith(iface,antiMk,0,&tempMk);
+        CreateAntiMoniker(&antiMk);
+        IMoniker_ComposeWith(iface,antiMk,0,&tempMk);
         IMoniker_Release(antiMk);
 
         /* If any of the components  reduces itself, the method returns S_OK and passes back a composite */
@@ -1505,7 +1504,7 @@ EnumMonikerImpl_QueryInterface(IEnumMoniker* iface,REFIID riid,void** ppvObject)
     TRACE("(%p,%p,%p)\n",This,riid,ppvObject);
 
     /* Perform a sanity check on the parameters.*/
-    if ( (This==0) || (ppvObject==0) )
+    if ( ppvObject==0 )
 	return E_INVALIDARG;
 
     /* Initialize the return parameter */

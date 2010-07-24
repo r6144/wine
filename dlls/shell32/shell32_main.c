@@ -38,6 +38,7 @@
 #include "wingdi.h"
 #include "shlobj.h"
 #include "shlwapi.h"
+#include "propsys.h"
 
 #include "undocshell.h"
 #include "pidl.h"
@@ -436,7 +437,7 @@ DWORD_PTR WINAPI SHGetFileInfoW(LPCWSTR path,DWORD dwFileAttributes,
     /* get the displayname */
     if (SUCCEEDED(hr) && (flags & SHGFI_DISPLAYNAME))
     {
-        if (flags & SHGFI_USEFILEATTRIBUTES)
+        if (flags & SHGFI_USEFILEATTRIBUTES && !(flags & SHGFI_PIDL))
         {
             lstrcpyW (psfi->szDisplayName, PathFindFileNameW(szFullPath));
         }
@@ -455,7 +456,7 @@ DWORD_PTR WINAPI SHGetFileInfoW(LPCWSTR path,DWORD dwFileAttributes,
         static const WCHAR szFile[] = { 'F','i','l','e',0 };
         static const WCHAR szDashFile[] = { '-','f','i','l','e',0 };
 
-        if (!(flags & SHGFI_USEFILEATTRIBUTES))
+        if (!(flags & SHGFI_USEFILEATTRIBUTES) || (flags & SHGFI_PIDL))
         {
             char ftype[80];
 
@@ -508,7 +509,7 @@ DWORD_PTR WINAPI SHGetFileInfoW(LPCWSTR path,DWORD dwFileAttributes,
     {
         UINT uDummy,uFlags;
 
-        if (flags & SHGFI_USEFILEATTRIBUTES)
+        if (flags & SHGFI_USEFILEATTRIBUTES && !(flags & SHGFI_PIDL))
         {
             if (dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
             {
@@ -853,6 +854,15 @@ VOID WINAPI Printers_UnregisterWindow(HANDLE hClassPidl, HWND hwnd)
 {
     FIXME("(%p, %p) stub!\n", hClassPidl, hwnd);
 } 
+
+/*************************************************************************
+ * SHGetPropertyStoreFromParsingName [SHELL32.@]
+ */
+HRESULT SHGetPropertyStoreFromParsingName(PCWSTR pszPath, IBindCtx *pbc, GETPROPERTYSTOREFLAGS flags, REFIID riid, void **ppv)
+{
+    FIXME("(%s %p %u %p %p) stub!\n", debugstr_w(pszPath), pbc, flags, riid, ppv);
+    return E_NOTIMPL;
+}
 
 /*************************************************************************/
 
@@ -1224,4 +1234,10 @@ LRESULT CALLBACK ShellHookProc(DWORD a, DWORD b, DWORD c)
 {
     FIXME("Stub\n");
     return 0;
+}
+
+HRESULT WINAPI SHGetLocalizedName(LPCWSTR path, LPWSTR module, UINT size, INT *res)
+{
+    FIXME("%s %p %u %p: stub\n", debugstr_w(path), module, size, res);
+    return E_NOTIMPL;
 }

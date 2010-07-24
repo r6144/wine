@@ -45,8 +45,6 @@ extern HINSTANCE shell32_hInstance;
 extern HIMAGELIST	ShellSmallIconList;
 extern HIMAGELIST	ShellBigIconList;
 
-BOOL WINAPI Shell_GetImageList(HIMAGELIST * lpBigList, HIMAGELIST * lpSmallList);
-
 /* Iconcache */
 #define INVALID_INDEX -1
 BOOL SIC_Initialize(void);
@@ -89,6 +87,7 @@ HRESULT WINAPI IShellLink_ConstructFromFile(IUnknown * pUnkOuter, REFIID riid, L
 HRESULT WINAPI ISF_Desktop_Constructor(IUnknown * pUnkOuter, REFIID riid, LPVOID * ppv);
 HRESULT WINAPI ISF_MyComputer_Constructor(IUnknown * pUnkOuter, REFIID riid, LPVOID * ppv);
 HRESULT WINAPI ISF_NetworkPlaces_Constructor(IUnknown * pUnkOuter, REFIID riid, LPVOID * ppv);
+HRESULT WINAPI Printers_Constructor(IUnknown * pUnkOuter, REFIID riid, LPVOID * ppv);
 HRESULT WINAPI IDropTargetHelper_Constructor (IUnknown * pUnkOuter, REFIID riid, LPVOID * ppv);
 HRESULT WINAPI IFileSystemBindData_Constructor(const WIN32_FIND_DATAW *pfd, LPBC *ppV);
 HRESULT WINAPI IControlPanel_Constructor(IUnknown * pUnkOuter, REFIID riid, LPVOID * ppv);
@@ -106,11 +105,6 @@ HRESULT WINAPI IAutoComplete_Constructor(IUnknown * pUnkOuter, REFIID riid, LPVO
 
 LPEXTRACTICONA	IExtractIconA_Constructor(LPCITEMIDLIST);
 LPEXTRACTICONW	IExtractIconW_Constructor(LPCITEMIDLIST);
-
-/* menu merging */
-#define MM_ADDSEPARATOR         0x00000001L
-#define MM_SUBMENUSHAVEIDS      0x00000002L
-HRESULT WINAPI Shell_MergeMenus (HMENU hmDst, HMENU hmSrc, UINT uInsert, UINT uIDAdjust, UINT uIDAdjustMax, ULONG uFlags);
 
 /* initialisation for FORMATETC */
 #define InitFormatEtc(fe, cf, med) \

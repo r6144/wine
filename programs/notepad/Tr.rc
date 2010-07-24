@@ -53,6 +53,7 @@ POPUP "D&üzenle" {
 POPUP "&Bul" {
   MENUITEM "&Bul...\tCtrl+F",         CMD_SEARCH
   MENUITEM "&Sonrakini bul\tF3",   CMD_SEARCH_NEXT
+  MENUITEM "&Replace...\tCtrl+H",  CMD_REPLACE
  }
 POPUP "&Yardým" {
   MENUITEM "&Ýçindekiler",              CMD_HELP_CONTENTS
@@ -90,7 +91,7 @@ PUSHBUTTON    "Ýptal",     IDCANCEL,               180, 21, 40, 15, WS_TABSTOP
 PUSHBUTTON    "&Yardým",       IDHELP,                180, 39, 40, 15, WS_TABSTOP
 }
 
-STRINGTABLE DISCARDABLE
+STRINGTABLE
 {
 STRING_PAGESETUP_HEADERVALUE,   "&f"
 STRING_PAGESETUP_FOOTERVALUE,   "&p. Sayfa"

@@ -22,6 +22,7 @@
 #include "wine/debug.h"
 #include "shdocvw.h"
 #include "exdispid.h"
+#include "mshtml.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(shdocvw);
 
@@ -102,9 +103,15 @@ static HRESULT WINAPI WebBrowser_QueryInterface(IWebBrowser2 *iface, REFIID riid
     }else if(IsEqualGUID(&IID_IHlinkFrame, riid)) {
         TRACE("(%p)->(IID_IHlinkFrame %p)\n", This, ppv);
         *ppv = HLINKFRAME(This);
+    }else if(IsEqualGUID(&IID_ITargetFrame2, riid)) {
+        TRACE("(%p)->(IID_ITargetFrame2 %p)\n", This, ppv);
+        *ppv = TARGETFRAME2(This);
     }else if(IsEqualGUID(&IID_IServiceProvider, riid)) {
         *ppv = SERVPROV(This);
         TRACE("(%p)->(IID_IServiceProvider %p)\n", This, ppv);
+    }else if(IsEqualGUID(&IID_IDataObject, riid)) {
+        *ppv = DATAOBJECT(This);
+        TRACE("(%p)->(IID_IDataObject %p)\n", This, ppv);
     }else if(IsEqualGUID(&IID_IQuickActivate, riid)) {
         TRACE("(%p)->(IID_IQuickActivate %p) returning NULL\n", This, ppv);
         return E_NOINTERFACE;
@@ -294,7 +301,7 @@ static HRESULT WINAPI WebBrowser_Stop(IWebBrowser2 *iface)
 {
     WebBrowser *This = WEBBROWSER_THIS(iface);
     FIXME("(%p)\n", This);
-    return E_NOTIMPL;
+    return S_OK;
 }
 
 static HRESULT WINAPI WebBrowser_get_Application(IWebBrowser2 *iface, IDispatch **ppDisp)
@@ -328,13 +335,28 @@ static HRESULT WINAPI WebBrowser_get_Container(IWebBrowser2 *iface, IDispatch **
 static HRESULT WINAPI WebBrowser_get_Document(IWebBrowser2 *iface, IDispatch **ppDisp)
 {
     WebBrowser *This = WEBBROWSER_THIS(iface);
+    IDispatch *disp = NULL;
 
     TRACE("(%p)->(%p)\n", This, ppDisp);
 
-    *ppDisp = NULL;
-    if(This->doc_host.document)
-        IUnknown_QueryInterface(This->doc_host.document, &IID_IDispatch, (void**)ppDisp);
+    if(This->doc_host.document) {
+        HRESULT hres;
 
+        hres = IUnknown_QueryInterface(This->doc_host.document, &IID_IDispatch, (void**)&disp);
+        if(SUCCEEDED(hres)) {
+            IDispatch *html_doc;
+
+            /* Some broken apps cast returned IDispatch to IHTMLDocument2
+             * without QueryInterface call */
+            hres = IDispatch_QueryInterface(disp, &IID_IHTMLDocument2, (void**)&html_doc);
+            if(SUCCEEDED(hres)) {
+                IDispatch_Release(disp);
+                disp = html_doc;
+            }
+        }
+    }
+
+    *ppDisp = disp;
     return S_OK;
 }
 
@@ -1132,6 +1154,7 @@ static HRESULT WebBrowser_Create(INT version, IUnknown *pOuter, REFIID riid, voi
 
     WebBrowser_OleObject_Init(ret);
     WebBrowser_ViewObject_Init(ret);
+    WebBrowser_DataObject_Init(ret);
     WebBrowser_Persist_Init(ret);
     WebBrowser_ClassInfo_Init(ret);
     WebBrowser_HlinkFrame_Init(ret);

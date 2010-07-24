@@ -45,7 +45,7 @@
 static const WCHAR testparentclassW[] =
     {'L','i','s','t','v','i','e','w',' ','t','e','s','t',' ','p','a','r','e','n','t','W', 0};
 
-HWND hwndparent, hwndparentW;
+static HWND hwndparent, hwndparentW;
 /* prevents edit box creation, LVN_BEGINLABELEDIT return value */
 static BOOL blockEdit;
 /* return nonzero on NM_HOVER */
@@ -54,9 +54,11 @@ static BOOL g_block_hover;
 static BOOL g_dump_itemchanged;
 /* format reported to control:
    -1 falls to defproc, anything else returned */
-INT  notifyFormat;
+static INT  notifyFormat;
 /* indicates we're running < 5.80 version */
-BOOL g_is_below_5;
+static BOOL g_is_below_5;
+/* item data passed to LVN_GETDISPINFOA */
+static LVITEMA g_itema;
 
 static HWND subclass_editbox(HWND hwndListview);
 
@@ -366,6 +368,12 @@ static LRESULT WINAPI parent_wnd_proc(HWND hwnd, UINT message, WPARAM wParam, LP
                          nmlv->iItem, nmlv->uNewState, nmlv->uOldState, nmlv->uChanged);
               }
               break;
+          case LVN_GETDISPINFOA:
+              {
+                  NMLVDISPINFOA *dispinfo = (NMLVDISPINFOA*)lParam;
+                  g_itema = dispinfo->item;
+              }
+              break;
           case NM_HOVER:
               if (g_block_hover) return 1;
               break;
@@ -607,8 +615,8 @@ static HWND subclass_editbox(HWND hwndListview)
 }
 
 /* Performs a single LVM_HITTEST test */
-static void test_lvm_hittest(HWND hwnd, INT x, INT y, INT item, UINT flags, UINT broken_flags,
-                             BOOL todo_item, BOOL todo_flags, int line)
+static void test_lvm_hittest_(HWND hwnd, INT x, INT y, INT item, UINT flags, UINT broken_flags,
+                              BOOL todo_item, BOOL todo_flags, int line)
 {
     LVHITTESTINFO lpht;
     DWORD ret;
@@ -624,14 +632,14 @@ static void test_lvm_hittest(HWND hwnd, INT x, INT y, INT item, UINT flags, UINT
     {
         todo_wine
         {
-            ok_(__FILE__, line)(ret == item, "Expected %d item, got %d\n", item, ret);
+            ok_(__FILE__, line)(ret == item, "Expected %d retval, got %d\n", item, ret);
             ok_(__FILE__, line)(lpht.iItem == item, "Expected %d item, got %d\n", item, lpht.iItem);
             ok_(__FILE__, line)(lpht.iSubItem == 10, "Expected subitem not overwrited\n");
         }
     }
     else
     {
-        ok_(__FILE__, line)(ret == item, "Expected %d item, got %d\n", item, ret);
+        ok_(__FILE__, line)(ret == item, "Expected %d retval, got %d\n", item, ret);
         ok_(__FILE__, line)(lpht.iItem == item, "Expected %d item, got %d\n", item, lpht.iItem);
         ok_(__FILE__, line)(lpht.iSubItem == 10, "Expected subitem not overwrited\n");
     }
@@ -639,18 +647,20 @@ static void test_lvm_hittest(HWND hwnd, INT x, INT y, INT item, UINT flags, UINT
     if (todo_flags)
     {
         todo_wine
-            ok_(__FILE__, line)(lpht.flags == flags, "Expected flags %x, got %x\n", flags, lpht.flags);
+            ok_(__FILE__, line)(lpht.flags == flags, "Expected flags 0x%x, got 0x%x\n", flags, lpht.flags);
     }
     else if (broken_flags)
         ok_(__FILE__, line)(lpht.flags == flags || broken(lpht.flags == broken_flags),
                             "Expected flags %x, got %x\n", flags, lpht.flags);
     else
-        ok_(__FILE__, line)(lpht.flags == flags, "Expected flags %x, got %x\n", flags, lpht.flags);
+        ok_(__FILE__, line)(lpht.flags == flags, "Expected flags 0x%x, got 0x%x\n", flags, lpht.flags);
 }
 
+#define test_lvm_hittest(a,b,c,d,e,f,g,h) test_lvm_hittest_(a,b,c,d,e,f,g,h,__LINE__)
+
 /* Performs a single LVM_SUBITEMHITTEST test */
-static void test_lvm_subitemhittest(HWND hwnd, INT x, INT y, INT item, INT subitem, UINT flags,
-                                    BOOL todo_item, BOOL todo_subitem, BOOL todo_flags, int line)
+static void test_lvm_subitemhittest_(HWND hwnd, INT x, INT y, INT item, INT subitem, UINT flags,
+                                     BOOL todo_item, BOOL todo_subitem, BOOL todo_flags, int line)
 {
     LVHITTESTINFO lpht;
     DWORD ret;
@@ -665,13 +675,13 @@ static void test_lvm_subitemhittest(HWND hwnd, INT x, INT y, INT item, INT subit
     {
         todo_wine
         {
-            ok_(__FILE__, line)(ret == item, "Expected %d item, got %d\n", item, ret);
+            ok_(__FILE__, line)(ret == item, "Expected %d retval, got %d\n", item, ret);
             ok_(__FILE__, line)(lpht.iItem == item, "Expected %d item, got %d\n", item, lpht.iItem);
         }
     }
     else
     {
-        ok_(__FILE__, line)(ret == item, "Expected %d item, got %d\n", item, ret);
+        ok_(__FILE__, line)(ret == item, "Expected %d retval, got %d\n", item, ret);
         ok_(__FILE__, line)(lpht.iItem == item, "Expected %d item, got %d\n", item, lpht.iItem);
     }
 
@@ -686,11 +696,13 @@ static void test_lvm_subitemhittest(HWND hwnd, INT x, INT y, INT item, INT subit
     if (todo_flags)
     {
         todo_wine
-            ok_(__FILE__, line)(lpht.flags == flags, "Expected flags %x, got %x\n", flags, lpht.flags);
+            ok_(__FILE__, line)(lpht.flags == flags, "Expected flags 0x%x, got 0x%x\n", flags, lpht.flags);
     }
     else
-        ok_(__FILE__, line)(lpht.flags == flags, "Expected flags %x, got %x\n", flags, lpht.flags);
+        ok_(__FILE__, line)(lpht.flags == flags, "Expected flags 0x%x, got 0x%x\n", flags, lpht.flags);
 }
+
+#define test_lvm_subitemhittest(a,b,c,d,e,f,g,h,i) test_lvm_subitemhittest_(a,b,c,d,e,f,g,h,i,__LINE__)
 
 static void test_images(void)
 {
@@ -1182,54 +1194,74 @@ static void test_items(void)
 
 static void test_columns(void)
 {
-    HWND hwnd, hwndheader;
-    LVCOLUMN column;
-    DWORD rc;
+    HWND hwnd;
+    LVCOLUMNA column;
+    LVITEMA item;
     INT order[2];
+    CHAR buff[5];
+    DWORD rc;
 
-    hwnd = CreateWindowEx(0, "SysListView32", "foo", LVS_REPORT,
+    hwnd = CreateWindowExA(0, "SysListView32", "foo", LVS_REPORT,
                 10, 10, 100, 200, hwndparent, NULL, NULL, NULL);
     ok(hwnd != NULL, "failed to create listview window\n");
 
     /* Add a column with no mask */
     memset(&column, 0xcc, sizeof(column));
     column.mask = 0;
-    rc = ListView_InsertColumn(hwnd, 0, &column);
-    ok(rc==0, "Inserting column with no mask failed with %d\n", rc);
+    rc = SendMessageA(hwnd, LVM_INSERTCOLUMNA, 0, (LPARAM)&column);
+    ok(rc == 0, "Inserting column with no mask failed with %d\n", rc);
 
     /* Check its width */
-    rc = ListView_GetColumnWidth(hwnd, 0);
-    ok(rc==10 ||
-       broken(rc==0), /* win9x */
+    rc = SendMessageA(hwnd, LVM_GETCOLUMNWIDTH, 0, 0);
+    ok(rc == 10 || broken(rc == 0) /* win9x */,
        "Inserting column with no mask failed to set width to 10 with %d\n", rc);
 
     DestroyWindow(hwnd);
 
     /* LVM_GETCOLUMNORDERARRAY */
     hwnd = create_listview_control(LVS_REPORT);
-    hwndheader = subclass_header(hwnd);
+    subclass_header(hwnd);
 
     memset(&column, 0, sizeof(column));
     column.mask = LVCF_WIDTH;
     column.cx = 100;
-    rc = ListView_InsertColumn(hwnd, 0, &column);
+    rc = SendMessageA(hwnd, LVM_INSERTCOLUMNA, 0, (LPARAM)&column);
     ok(rc == 0, "Inserting column failed with %d\n", rc);
 
     column.cx = 200;
-    rc = ListView_InsertColumn(hwnd, 1, &column);
+    rc = SendMessageA(hwnd, LVM_INSERTCOLUMNA, 1, (LPARAM)&column);
     ok(rc == 1, "Inserting column failed with %d\n", rc);
 
     flush_sequences(sequences, NUM_MSG_SEQUENCES);
 
-    rc = SendMessage(hwnd, LVM_GETCOLUMNORDERARRAY, 2, (LPARAM)&order);
-    ok(rc != 0, "Expected LVM_GETCOLUMNORDERARRAY to succeed\n");
+    rc = SendMessageA(hwnd, LVM_GETCOLUMNORDERARRAY, 2, (LPARAM)&order);
+    ok(rc == 1, "Expected LVM_GETCOLUMNORDERARRAY to succeed\n");
     ok(order[0] == 0, "Expected order 0, got %d\n", order[0]);
     ok(order[1] == 1, "Expected order 1, got %d\n", order[1]);
 
     ok_sequence(sequences, LISTVIEW_SEQ_INDEX, listview_getorderarray_seq, "get order array", FALSE);
 
+    /* after column added subitem is considered as present */
+    insert_item(hwnd, 0);
+
+    flush_sequences(sequences, NUM_MSG_SEQUENCES);
+
+    item.pszText = buff;
+    item.cchTextMax = sizeof(buff);
+    item.iItem = 0;
+    item.iSubItem = 1;
+    item.mask = LVIF_TEXT;
+    memset(&g_itema, 0, sizeof(g_itema));
+    rc = SendMessageA(hwnd, LVM_GETITEMA, 0, (LPARAM)&item);
+    ok(rc == 1, "got %d\n", rc);
+    ok(g_itema.iSubItem == 1, "got %d\n", g_itema.iSubItem);
+
+    ok_sequence(sequences, PARENT_SEQ_INDEX, single_getdispinfo_parent_seq,
+        "get subitem text after column added", FALSE);
+
     DestroyWindow(hwnd);
 }
+
 /* test setting imagelist between WM_NCCREATE and WM_CREATE */
 static WNDPROC listviewWndProc;
 static HIMAGELIST test_create_imagelist;
@@ -1437,13 +1469,13 @@ static void test_create(void)
 
 static void test_redraw(void)
 {
-    HWND hwnd, hwndheader;
+    HWND hwnd;
     HDC hdc;
     BOOL res;
     DWORD r;
 
     hwnd = create_listview_control(LVS_REPORT);
-    hwndheader = subclass_header(hwnd);
+    subclass_header(hwnd);
 
     flush_sequences(sequences, NUM_MSG_SEQUENCES);
 
@@ -2057,7 +2089,8 @@ static void test_subitem_rect(void)
     HWND hwnd;
     DWORD r;
     LVCOLUMN col;
-    RECT rect;
+    RECT rect, rect2;
+    INT arr[3];
 
     /* test LVM_GETSUBITEMRECT for header */
     hwnd = create_listview_control(LVS_REPORT);
@@ -2066,15 +2099,12 @@ static void test_subitem_rect(void)
     memset(&col, 0, sizeof(LVCOLUMN));
     col.mask = LVCF_WIDTH;
     col.cx = 100;
-    r = -1;
     r = SendMessage(hwnd, LVM_INSERTCOLUMN, 0, (LPARAM)&col);
     expect(0, r);
     col.cx = 150;
-    r = -1;
     r = SendMessage(hwnd, LVM_INSERTCOLUMN, 1, (LPARAM)&col);
     expect(1, r);
     col.cx = 200;
-    r = -1;
     r = SendMessage(hwnd, LVM_INSERTCOLUMN, 2, (LPARAM)&col);
     expect(2, r);
     /* item = -1 means header, subitem index is 1 based */
@@ -2146,6 +2176,95 @@ todo_wine
     expect(240, rect.right);
 
     SendMessage(hwnd, LVM_SCROLL, -10, 0);
+
+    DestroyWindow(hwnd);
+
+    /* test subitem rects after re-arranging columns */
+    hwnd = create_listview_control(LVS_REPORT);
+    ok(hwnd != NULL, "failed to create a listview window\n");
+    memset(&col, 0, sizeof(LVCOLUMN));
+    col.mask = LVCF_WIDTH;
+
+    col.cx = 100;
+    r = SendMessage(hwnd, LVM_INSERTCOLUMN, 0, (LPARAM)&col);
+    expect(0, r);
+
+    col.cx = 200;
+    r = SendMessage(hwnd, LVM_INSERTCOLUMN, 1, (LPARAM)&col);
+    expect(1, r);
+
+    col.cx = 300;
+    r = SendMessage(hwnd, LVM_INSERTCOLUMN, 2, (LPARAM)&col);
+    expect(2, r);
+
+    insert_item(hwnd, 0);
+    insert_item(hwnd, 1);
+
+    /* wrong item is refused for main item */
+    rect.left = LVIR_BOUNDS;
+    rect.top  = 0;
+    rect.right = rect.bottom = -1;
+    r = SendMessage(hwnd, LVM_GETSUBITEMRECT, 2, (LPARAM)&rect);
+    ok(r == FALSE, "got %d\n", r);
+
+    /* for subitems rectangle is calculated even if there's no item added */
+    rect.left = LVIR_BOUNDS;
+    rect.top  = 1;
+    rect.right = rect.bottom = -1;
+    r = SendMessage(hwnd, LVM_GETSUBITEMRECT, 1, (LPARAM)&rect);
+    ok(r == TRUE, "got %d\n", r);
+
+    rect2.left = LVIR_BOUNDS;
+    rect2.top  = 1;
+    rect2.right = rect2.bottom = -1;
+    r = SendMessage(hwnd, LVM_GETSUBITEMRECT, 2, (LPARAM)&rect2);
+todo_wine {
+    ok(r == TRUE, "got %d\n", r);
+    expect(rect.right, rect2.right);
+    expect(rect.left, rect2.left);
+    expect(rect.bottom, rect2.top);
+    ok(rect2.bottom > rect2.top, "expected not zero height\n");
+}
+
+    arr[0] = 1; arr[1] = 0; arr[2] = 2;
+    r = SendMessage(hwnd, LVM_SETCOLUMNORDERARRAY, 3, (LPARAM)arr);
+    expect(TRUE, r);
+
+    rect.left = LVIR_BOUNDS;
+    rect.top  = 0;
+    rect.right = rect.bottom = -1;
+    r = SendMessage(hwnd, LVM_GETSUBITEMRECT, 0, (LPARAM)&rect);
+    ok(r == TRUE, "got %d\n", r);
+    expect(0, rect.left);
+    expect(600, rect.right);
+
+    rect.left = LVIR_BOUNDS;
+    rect.top  = 1;
+    rect.right = rect.bottom = -1;
+    r = SendMessage(hwnd, LVM_GETSUBITEMRECT, 0, (LPARAM)&rect);
+    ok(r == TRUE, "got %d\n", r);
+    expect(0, rect.left);
+    expect(200, rect.right);
+
+    rect2.left = LVIR_BOUNDS;
+    rect2.top  = 1;
+    rect2.right = rect2.bottom = -1;
+    r = SendMessage(hwnd, LVM_GETSUBITEMRECT, 1, (LPARAM)&rect2);
+    ok(r == TRUE, "got %d\n", r);
+    expect(0, rect2.left);
+    expect(200, rect2.right);
+    /* items are of the same height */
+    ok(rect2.top > 0, "expected positive item height\n");
+    expect(rect.bottom, rect2.top);
+    expect(rect.bottom * 2 - rect.top, rect2.bottom);
+
+    rect.left = LVIR_BOUNDS;
+    rect.top  = 2;
+    rect.right = rect.bottom = -1;
+    r = SendMessage(hwnd, LVM_GETSUBITEMRECT, 0, (LPARAM)&rect);
+    ok(r == TRUE, "got %d\n", r);
+    expect(300, rect.left);
+    expect(600, rect.right);
 
     DestroyWindow(hwnd);
 
@@ -2905,62 +3024,69 @@ static void test_hittest(void)
     expect(TRUE, r);
 
     /* LVS_EX_FULLROWSELECT not set, no icons attached */
+
+    /* outside columns by x position - valid is [0, 199] */
+    x = -1;
+    y = pos.y + (bounds.bottom - bounds.top) / 2;
+    test_lvm_hittest(hwnd, x, y, -1, LVHT_TOLEFT, 0, FALSE, FALSE);
+    test_lvm_subitemhittest(hwnd, x, y, -1, -1, LVHT_NOWHERE, FALSE, FALSE, FALSE);
+
     x = pos.x + 50; /* column half width */
     y = pos.y + (bounds.bottom - bounds.top) / 2;
-    test_lvm_hittest(hwnd, x, y, 0, LVHT_ONITEMLABEL, 0, FALSE, FALSE, __LINE__);
-    test_lvm_subitemhittest(hwnd, x, y, 0, 0, LVHT_ONITEMLABEL, FALSE, FALSE, FALSE, __LINE__);
+    test_lvm_hittest(hwnd, x, y, 0, LVHT_ONITEMLABEL, 0, FALSE, FALSE);
+    test_lvm_subitemhittest(hwnd, x, y, 0, 0, LVHT_ONITEMLABEL, FALSE, FALSE, FALSE);
     x = pos.x + 150; /* outside column */
     y = pos.y + (bounds.bottom - bounds.top) / 2;
-    test_lvm_hittest(hwnd, x, y, -1, LVHT_TORIGHT, 0, FALSE, FALSE, __LINE__);
-    test_lvm_subitemhittest(hwnd, x, y, 0, 1, LVHT_ONITEMLABEL, FALSE, FALSE, FALSE, __LINE__);
+    test_lvm_hittest(hwnd, x, y, -1, LVHT_TORIGHT, 0, FALSE, FALSE);
+    test_lvm_subitemhittest(hwnd, x, y, 0, 1, LVHT_ONITEMLABEL, FALSE, FALSE, FALSE);
     y = (bounds.bottom - bounds.top) / 2;
-    test_lvm_hittest(hwnd, x, y, -1, LVHT_TORIGHT, 0, FALSE, TRUE, __LINE__);
-    test_lvm_subitemhittest(hwnd, x, y, 0, 1, LVHT_ONITEMLABEL, FALSE, FALSE, FALSE, __LINE__);
+    test_lvm_hittest(hwnd, x, y, -1, LVHT_TORIGHT, 0, FALSE, TRUE);
+    test_lvm_subitemhittest(hwnd, x, y, 0, 1, LVHT_ONITEMLABEL, FALSE, FALSE, FALSE);
     /* outside possible client rectangle (to right) */
     x = pos.x + 500;
     y = pos.y + (bounds.bottom - bounds.top) / 2;
-    test_lvm_hittest(hwnd, x, y, -1, LVHT_TORIGHT, 0, FALSE, FALSE, __LINE__);
-    test_lvm_subitemhittest(hwnd, x, y, -1, -1, LVHT_NOWHERE, FALSE, FALSE, FALSE, __LINE__);
+    test_lvm_hittest(hwnd, x, y, -1, LVHT_TORIGHT, 0, FALSE, FALSE);
+    test_lvm_subitemhittest(hwnd, x, y, -1, -1, LVHT_NOWHERE, FALSE, FALSE, FALSE);
     y = (bounds.bottom - bounds.top) / 2;
-    test_lvm_hittest(hwnd, x, y, -1, LVHT_TORIGHT, 0, FALSE, TRUE, __LINE__);
-    test_lvm_subitemhittest(hwnd, x, y, -1, -1, LVHT_NOWHERE, FALSE, FALSE, FALSE, __LINE__);
+    test_lvm_hittest(hwnd, x, y, -1, LVHT_TORIGHT, 0, FALSE, TRUE);
+    test_lvm_subitemhittest(hwnd, x, y, -1, -1, LVHT_NOWHERE, FALSE, FALSE, FALSE);
     /* subitem returned with -1 item too */
     x = pos.x + 150;
     y = -10;
-    test_lvm_subitemhittest(hwnd, x, y, -1, 1, LVHT_NOWHERE, FALSE, FALSE, FALSE, __LINE__);
+    test_lvm_subitemhittest(hwnd, x, y, -1, 1, LVHT_NOWHERE, FALSE, FALSE, FALSE);
     /* parent client area is 100x100 by default */
     MoveWindow(hwnd, 0, 0, 300, 100, FALSE);
     x = pos.x + 150; /* outside column */
     y = pos.y + (bounds.bottom - bounds.top) / 2;
-    test_lvm_hittest(hwnd, x, y, -1, LVHT_NOWHERE, 0, FALSE, FALSE, __LINE__);
-    test_lvm_subitemhittest(hwnd, x, y, 0, 1, LVHT_ONITEMLABEL, FALSE, FALSE, FALSE, __LINE__);
+    test_lvm_hittest(hwnd, x, y, -1, LVHT_NOWHERE, 0, FALSE, FALSE);
+    test_lvm_subitemhittest(hwnd, x, y, 0, 1, LVHT_ONITEMLABEL, FALSE, FALSE, FALSE);
     y = (bounds.bottom - bounds.top) / 2;
-    test_lvm_hittest(hwnd, x, y, -1, LVHT_NOWHERE, 0, FALSE, TRUE, __LINE__);
-    test_lvm_subitemhittest(hwnd, x, y, 0, 1, LVHT_ONITEMLABEL, FALSE, FALSE, FALSE, __LINE__);
+    test_lvm_hittest(hwnd, x, y, -1, LVHT_NOWHERE, 0, FALSE, TRUE);
+    test_lvm_subitemhittest(hwnd, x, y, 0, 1, LVHT_ONITEMLABEL, FALSE, FALSE, FALSE);
     /* the same with LVS_EX_FULLROWSELECT */
     SendMessage(hwnd, LVM_SETEXTENDEDLISTVIEWSTYLE, 0, LVS_EX_FULLROWSELECT);
     x = pos.x + 150; /* outside column */
     y = pos.y + (bounds.bottom - bounds.top) / 2;
-    test_lvm_hittest(hwnd, x, y, 0, LVHT_ONITEM, LVHT_ONITEMLABEL, FALSE, FALSE, __LINE__);
-    test_lvm_subitemhittest(hwnd, x, y, 0, 1, LVHT_ONITEMLABEL, FALSE, FALSE, FALSE, __LINE__);
+    test_lvm_hittest(hwnd, x, y, 0, LVHT_ONITEM, LVHT_ONITEMLABEL, FALSE, FALSE);
+    test_lvm_subitemhittest(hwnd, x, y, 0, 1, LVHT_ONITEMLABEL, FALSE, FALSE, FALSE);
     y = (bounds.bottom - bounds.top) / 2;
-    test_lvm_subitemhittest(hwnd, x, y, 0, 1, LVHT_ONITEMLABEL, FALSE, FALSE, FALSE, __LINE__);
+    test_lvm_subitemhittest(hwnd, x, y, 0, 1, LVHT_ONITEMLABEL, FALSE, FALSE, FALSE);
     MoveWindow(hwnd, 0, 0, 100, 100, FALSE);
     x = pos.x + 150; /* outside column */
     y = pos.y + (bounds.bottom - bounds.top) / 2;
-    test_lvm_hittest(hwnd, x, y, -1, LVHT_TORIGHT, 0, FALSE, FALSE, __LINE__);
-    test_lvm_subitemhittest(hwnd, x, y, 0, 1, LVHT_ONITEMLABEL, FALSE, FALSE, FALSE, __LINE__);
+    test_lvm_hittest(hwnd, x, y, -1, LVHT_TORIGHT, 0, FALSE, FALSE);
+    test_lvm_subitemhittest(hwnd, x, y, 0, 1, LVHT_ONITEMLABEL, FALSE, FALSE, FALSE);
     y = (bounds.bottom - bounds.top) / 2;
-    test_lvm_hittest(hwnd, x, y, -1, LVHT_TORIGHT, 0, FALSE, TRUE, __LINE__);
-    test_lvm_subitemhittest(hwnd, x, y, 0, 1, LVHT_ONITEMLABEL, FALSE, FALSE, FALSE, __LINE__);
+    test_lvm_hittest(hwnd, x, y, -1, LVHT_TORIGHT, 0, FALSE, TRUE);
+    test_lvm_subitemhittest(hwnd, x, y, 0, 1, LVHT_ONITEMLABEL, FALSE, FALSE, FALSE);
     /* outside possible client rectangle (to right) */
     x = pos.x + 500;
     y = pos.y + (bounds.bottom - bounds.top) / 2;
-    test_lvm_hittest(hwnd, x, y, -1, LVHT_TORIGHT, 0, FALSE, FALSE, __LINE__);
-    test_lvm_subitemhittest(hwnd, x, y, -1, -1, LVHT_NOWHERE, FALSE, FALSE, FALSE, __LINE__);
+    test_lvm_hittest(hwnd, x, y, -1, LVHT_TORIGHT, 0, FALSE, FALSE);
+    test_lvm_subitemhittest(hwnd, x, y, -1, -1, LVHT_NOWHERE, FALSE, FALSE, FALSE);
     y = (bounds.bottom - bounds.top) / 2;
-    test_lvm_hittest(hwnd, x, y, -1, LVHT_TORIGHT, 0, FALSE, TRUE, __LINE__);
-    test_lvm_subitemhittest(hwnd, x, y, -1, -1, LVHT_NOWHERE, FALSE, FALSE, FALSE, __LINE__);
+    test_lvm_hittest(hwnd, x, y, -1, LVHT_TORIGHT, 0, FALSE, TRUE);
+    test_lvm_subitemhittest(hwnd, x, y, -1, -1, LVHT_NOWHERE, FALSE, FALSE, FALSE);
     /* try with icons, state icons index is 1 based so at least 2 bitmaps needed */
     himl = ImageList_Create(16, 16, 0, 4, 4);
     ok(himl != NULL, "failed to create imagelist\n");
@@ -2985,10 +3111,10 @@ static void test_hittest(void)
     /* on state icon */
     x = pos.x + 8;
     y = pos.y + (bounds.bottom - bounds.top) / 2;
-    test_lvm_hittest(hwnd, x, y, 0, LVHT_ONITEMSTATEICON, 0, FALSE, FALSE, __LINE__);
-    test_lvm_subitemhittest(hwnd, x, y, 0, 0, LVHT_ONITEMSTATEICON, FALSE, FALSE, FALSE, __LINE__);
+    test_lvm_hittest(hwnd, x, y, 0, LVHT_ONITEMSTATEICON, 0, FALSE, FALSE);
+    test_lvm_subitemhittest(hwnd, x, y, 0, 0, LVHT_ONITEMSTATEICON, FALSE, FALSE, FALSE);
     y = (bounds.bottom - bounds.top) / 2;
-    test_lvm_subitemhittest(hwnd, x, y, 0, 0, LVHT_ONITEMSTATEICON, FALSE, FALSE, FALSE, __LINE__);
+    test_lvm_subitemhittest(hwnd, x, y, 0, 0, LVHT_ONITEMSTATEICON, FALSE, FALSE, FALSE);
 
     /* state icons indices are 1 based, check with valid index */
     item.mask = LVIF_STATE;
@@ -3001,10 +3127,10 @@ static void test_hittest(void)
     /* on state icon */
     x = pos.x + 8;
     y = pos.y + (bounds.bottom - bounds.top) / 2;
-    test_lvm_hittest(hwnd, x, y, 0, LVHT_ONITEMSTATEICON, 0, FALSE, FALSE, __LINE__);
-    test_lvm_subitemhittest(hwnd, x, y, 0, 0, LVHT_ONITEMSTATEICON, FALSE, FALSE, FALSE, __LINE__);
+    test_lvm_hittest(hwnd, x, y, 0, LVHT_ONITEMSTATEICON, 0, FALSE, FALSE);
+    test_lvm_subitemhittest(hwnd, x, y, 0, 0, LVHT_ONITEMSTATEICON, FALSE, FALSE, FALSE);
     y = (bounds.bottom - bounds.top) / 2;
-    test_lvm_subitemhittest(hwnd, x, y, 0, 0, LVHT_ONITEMSTATEICON, FALSE, FALSE, FALSE, __LINE__);
+    test_lvm_subitemhittest(hwnd, x, y, 0, 0, LVHT_ONITEMSTATEICON, FALSE, FALSE, FALSE);
 
     himl2 = (HIMAGELIST)SendMessage(hwnd, LVM_SETIMAGELIST, LVSIL_STATE, 0);
     ok(himl2 == himl, "should return handle\n");
@@ -3014,10 +3140,10 @@ static void test_hittest(void)
     /* on item icon */
     x = pos.x + 8;
     y = pos.y + (bounds.bottom - bounds.top) / 2;
-    test_lvm_hittest(hwnd, x, y, 0, LVHT_ONITEMICON, 0, FALSE, FALSE, __LINE__);
-    test_lvm_subitemhittest(hwnd, x, y, 0, 0, LVHT_ONITEMICON, FALSE, FALSE, FALSE, __LINE__);
+    test_lvm_hittest(hwnd, x, y, 0, LVHT_ONITEMICON, 0, FALSE, FALSE);
+    test_lvm_subitemhittest(hwnd, x, y, 0, 0, LVHT_ONITEMICON, FALSE, FALSE, FALSE);
     y = (bounds.bottom - bounds.top) / 2;
-    test_lvm_subitemhittest(hwnd, x, y, 0, 0, LVHT_ONITEMICON, FALSE, FALSE, FALSE, __LINE__);
+    test_lvm_subitemhittest(hwnd, x, y, 0, 0, LVHT_ONITEMICON, FALSE, FALSE, FALSE);
 
     DestroyWindow(hwnd);
 }
@@ -3378,18 +3504,17 @@ static void test_getitemrect(void)
     expect(2 + 16, rect.left);
     expect(34, rect.right);
 
-
     DestroyWindow(hwnd);
 }
 
 static void test_editbox(void)
 {
-    HWND hwnd, hwndedit, hwndedit2;
+    static CHAR testitemA[]  = "testitem";
+    static CHAR testitem1A[] = "testitem_quitelongname";
+    static CHAR buffer[25];
+    HWND hwnd, hwndedit, hwndedit2, header;
     LVITEMA item;
     DWORD r;
-    static CHAR testitemA[]  = "testitem";
-    static CHAR testitem1A[] = "testitem1";
-    static CHAR buffer[10];
 
     hwnd = create_listview_control(LVS_EDITLABELS | LVS_REPORT);
     ok(hwnd != NULL, "failed to create a listview window\n");
@@ -3404,21 +3529,49 @@ static void test_editbox(void)
     r = SendMessage(hwnd, LVM_INSERTITEMA, 0, (LPARAM)&item);
     expect(0, r);
 
+    /* test notifications without edit created */
+    flush_sequences(sequences, NUM_MSG_SEQUENCES);
+    r = SendMessage(hwnd, WM_COMMAND, MAKEWPARAM(0, EN_SETFOCUS), (LPARAM)0xdeadbeef);
+    expect(0, r);
+    ok_sequence(sequences, PARENT_SEQ_INDEX, empty_seq,
+                "edit box WM_COMMAND (EN_SETFOCUS), no edit created", FALSE);
+    /* same thing but with valid window */
+    hwndedit = CreateWindowA("Edit", "Test edit", WS_VISIBLE | WS_CHILD, 0, 0, 20,
+                10, hwnd, (HMENU)1, (HINSTANCE)GetWindowLongPtrA(hwnd, GWLP_HINSTANCE), 0);
+    flush_sequences(sequences, NUM_MSG_SEQUENCES);
+    r = SendMessage(hwnd, WM_COMMAND, MAKEWPARAM(0, EN_SETFOCUS), (LPARAM)hwndedit);
+    expect(0, r);
+    ok_sequence(sequences, PARENT_SEQ_INDEX, empty_seq,
+                "edit box WM_COMMAND (EN_SETFOCUS), no edit created #2", FALSE);
+    DestroyWindow(hwndedit);
+
     /* setting focus is necessary */
     SetFocus(hwnd);
     hwndedit = (HWND)SendMessage(hwnd, LVM_EDITLABEL, 0, 0);
     ok(IsWindow(hwndedit), "Expected Edit window to be created\n");
 
+    /* test children Z-order after Edit box created */
+    header = (HWND)SendMessageA(hwnd, LVM_GETHEADER, 0, 0);
+    ok(IsWindow(header), "Expected header to be created\n");
+    ok(GetTopWindow(hwnd) == header, "Expected header to be on top\n");
+    ok(GetNextWindow(header, GW_HWNDNEXT) == hwndedit, "got %p\n", GetNextWindow(header, GW_HWNDNEXT));
+
     /* modify initial string */
     r = SendMessage(hwndedit, WM_SETTEXT, 0, (LPARAM)testitem1A);
     expect(TRUE, r);
+
+    /* edit window is resized and repositioned,
+       check again for Z-order - it should be preserved */
+    ok(GetTopWindow(hwnd) == header, "Expected header to be on top\n");
+    ok(GetNextWindow(header, GW_HWNDNEXT) == hwndedit, "got %p\n", GetNextWindow(header, GW_HWNDNEXT));
+
     /* return focus to listview */
     SetFocus(hwnd);
 
     memset(&item, 0, sizeof(item));
     item.mask = LVIF_TEXT;
     item.pszText = buffer;
-    item.cchTextMax = 10;
+    item.cchTextMax = sizeof(buffer);
     item.iItem = 0;
     item.iSubItem = 0;
     r = SendMessage(hwnd, LVM_GETITEMA, 0, (LPARAM)&item);
@@ -3458,7 +3611,7 @@ static void test_editbox(void)
     expect(0, r);
     memset(&item, 0, sizeof(item));
     item.pszText = buffer;
-    item.cchTextMax = 10;
+    item.cchTextMax = sizeof(buffer);
     item.iItem = 0;
     item.iSubItem = 0;
     r = SendMessage(hwnd, LVM_GETITEMTEXTA, 0, (LPARAM)&item);
@@ -3484,7 +3637,7 @@ static void test_editbox(void)
 
     memset(&item, 0, sizeof(item));
     item.pszText = buffer;
-    item.cchTextMax = 10;
+    item.cchTextMax = sizeof(buffer);
     item.iItem = 0;
     item.iSubItem = 0;
     r = SendMessage(hwnd, LVM_GETITEMTEXTA, 0, (LPARAM)&item);
@@ -4070,14 +4223,10 @@ static void test_approximate_viewrect(void)
 {
     HWND hwnd;
     DWORD ret;
-    INT cx, cy;
     HIMAGELIST himl;
     HBITMAP hbmp;
     LVITEMA itema;
     static CHAR test[] = "abracadabra, a very long item label";
-
-    cx = GetSystemMetrics(SM_CXICONSPACING) - GetSystemMetrics(SM_CXICON);
-    cy = GetSystemMetrics(SM_CYICONSPACING) - GetSystemMetrics(SM_CYICON);
 
     hwnd = create_listview_control(LVS_ICON);
     himl = ImageList_Create(40, 40, 0, 4, 4);
@@ -4344,6 +4493,28 @@ static void test_header_notification(void)
     DestroyWindow(list);
 }
 
+static void test_createdragimage(void)
+{
+    HIMAGELIST himl;
+    POINT pt;
+    HWND list;
+
+    list = create_listview_control(LVS_ICON);
+    ok(list != 0, "failed to create listview window\n");
+
+    insert_item(list, 0);
+
+    /* NULL point */
+    himl = (HIMAGELIST)SendMessageA(list, LVM_CREATEDRAGIMAGE, 0, 0);
+    ok(himl == NULL, "got %p\n", himl);
+
+    himl = (HIMAGELIST)SendMessageA(list, LVM_CREATEDRAGIMAGE, 0, (LPARAM)&pt);
+    ok(himl != NULL, "got %p\n", himl);
+    ImageList_Destroy(himl);
+
+    DestroyWindow(list);
+}
+
 START_TEST(listview)
 {
     HMODULE hComctl32;
@@ -4406,6 +4577,7 @@ START_TEST(listview)
     test_finditem();
     test_hover();
     test_destroynotify();
+    test_createdragimage();
 
     if (!load_v6_module(&ctx_cookie, &hCtx))
     {

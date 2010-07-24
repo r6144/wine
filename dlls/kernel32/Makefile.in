@@ -7,7 +7,7 @@ MODULE    = kernel32.dll
 IMPORTLIB = kernel32
 IMPORTS   = ntdll
 EXTRALIBS = @COREFOUNDATIONLIB@ @LIBPOLL@
-EXTRADLLFLAGS = -Wb,-F,KERNEL32.dll -Wl,--image-base,0x7b800000
+EXTRADLLFLAGS = -nodefaultlibs -Wb,-F,KERNEL32.dll -Wl,--image-base,0x7b800000
 
 C_SRCS = \
 	actctx.c \
@@ -51,16 +51,21 @@ RC_SRCS = \
 	version.rc
 
 MC_SRCS = \
+	nls/winerr_dan.mc \
 	nls/winerr_deu.mc \
 	nls/winerr_enu.mc \
 	nls/winerr_fra.mc \
+	nls/winerr_ita.mc \
 	nls/winerr_jpn.mc \
 	nls/winerr_kor.mc \
 	nls/winerr_lth.mc \
 	nls/winerr_nld.mc \
 	nls/winerr_nor.mc \
 	nls/winerr_plk.mc \
-	nls/winerr_ptg.mc
+	nls/winerr_ptb.mc \
+	nls/winerr_ptg.mc \
+	nls/winerr_rus.mc \
+	nls/winerr_ukr.mc
 
 EXTRASUBDIRS = nls
 

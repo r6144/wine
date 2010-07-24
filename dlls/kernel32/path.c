@@ -684,7 +684,10 @@ UINT WINAPI GetTempFileNameW( LPCWSTR path, LPCWSTR prefix, UINT unique, LPWSTR 
         /* get a "random" unique number and try to create the file */
         HANDLE handle;
         UINT num = GetTickCount() & 0xffff;
+        static UINT last;
 
+        /* avoid using the same name twice in a short interval */
+        if (last - num < 10) num = last + 1;
         if (!num) num = 1;
         unique = num;
         do
@@ -696,6 +699,7 @@ UINT WINAPI GetTempFileNameW( LPCWSTR path, LPCWSTR prefix, UINT unique, LPWSTR 
             {  /* We created it */
                 TRACE("created %s\n", debugstr_w(buffer) );
                 CloseHandle( handle );
+                last = unique;
                 break;
             }
             if (GetLastError() != ERROR_FILE_EXISTS &&
@@ -869,6 +873,24 @@ DWORD WINAPI SearchPathA( LPCSTR path, LPCSTR name, LPCSTR ext,
     return ret;
 }
 
+static BOOL is_same_file(HANDLE h1, HANDLE h2)
+{
+    int fd1;
+    BOOL ret = FALSE;
+    if (wine_server_handle_to_fd(h1, 0, &fd1, NULL) == STATUS_SUCCESS)
+    {
+        int fd2;
+        if (wine_server_handle_to_fd(h2, 0, &fd2, NULL) == STATUS_SUCCESS)
+        {
+            struct stat stat1, stat2;
+            if (fstat(fd1, &stat1) == 0 && fstat(fd2, &stat2) == 0)
+                ret = (stat1.st_dev == stat2.st_dev && stat1.st_ino == stat2.st_ino);
+            wine_server_release_fd(h2, fd2);
+        }
+        wine_server_release_fd(h1, fd1);
+    }
+    return ret;
+}
 
 /**************************************************************************
  *           CopyFileW   (KERNEL32.@)
@@ -909,6 +931,25 @@ BOOL WINAPI CopyFileW( LPCWSTR source, LPCWSTR dest, BOOL fail_if_exists )
         HeapFree( GetProcessHeap(), 0, buffer );
         CloseHandle( h1 );
         return FALSE;
+    }
+
+    if (!fail_if_exists)
+    {
+        BOOL same_file = FALSE;
+        h2 = CreateFileW( dest, 0, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
+                         OPEN_EXISTING, 0, 0);
+        if (h2 != INVALID_HANDLE_VALUE)
+        {
+            same_file = is_same_file( h1, h2 );
+            CloseHandle( h2 );
+        }
+        if (same_file)
+        {
+            HeapFree( GetProcessHeap(), 0, buffer );
+            CloseHandle( h1 );
+            SetLastError( ERROR_SHARING_VIOLATION );
+            return FALSE;
+        }
     }
 
     if ((h2 = CreateFileW( dest, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
@@ -1217,10 +1258,54 @@ BOOL WINAPI MoveFileA( LPCSTR source, LPCSTR dest )
 BOOL WINAPI CreateHardLinkW(LPCWSTR lpFileName, LPCWSTR lpExistingFileName,
     LPSECURITY_ATTRIBUTES lpSecurityAttributes)
 {
-    FIXME("(%s, %s, %p): stub\n", debugstr_w(lpFileName),
+    NTSTATUS status;
+    UNICODE_STRING ntDest, ntSource;
+    ANSI_STRING unixDest, unixSource;
+    BOOL ret = FALSE;
+
+    TRACE("(%s, %s, %p)\n", debugstr_w(lpFileName),
         debugstr_w(lpExistingFileName), lpSecurityAttributes);
-    SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
-    return FALSE;
+
+    ntDest.Buffer = ntSource.Buffer = NULL;
+    if (!RtlDosPathNameToNtPathName_U( lpFileName, &ntDest, NULL, NULL ) ||
+        !RtlDosPathNameToNtPathName_U( lpExistingFileName, &ntSource, NULL, NULL ))
+    {
+        SetLastError( ERROR_PATH_NOT_FOUND );
+        goto err;
+    }
+
+    unixSource.Buffer = unixDest.Buffer = NULL;
+    status = wine_nt_to_unix_file_name( &ntSource, &unixSource, FILE_OPEN, FALSE );
+    if (!status)
+    {
+        status = wine_nt_to_unix_file_name( &ntDest, &unixDest, FILE_CREATE, FALSE );
+        if (!status) /* destination must not exist */
+        {
+            status = STATUS_OBJECT_NAME_EXISTS;
+        } else if (status == STATUS_NO_SUCH_FILE)
+        {
+            status = STATUS_SUCCESS;
+        }
+    }
+
+    if (status)
+         SetLastError( RtlNtStatusToDosError(status) );
+    else if (!link( unixSource.Buffer, unixDest.Buffer ))
+    {
+        TRACE("Hardlinked '%s' to '%s'\n", debugstr_a( unixDest.Buffer ),
+                debugstr_a( unixSource.Buffer ));
+        ret = TRUE;
+    }
+    else
+        FILE_SetDosError();
+
+    RtlFreeAnsiString( &unixSource );
+    RtlFreeAnsiString( &unixDest );
+
+err:
+    RtlFreeUnicodeString( &ntSource );
+    RtlFreeUnicodeString( &ntDest );
+    return ret;
 }
 
 
@@ -1230,10 +1315,25 @@ BOOL WINAPI CreateHardLinkW(LPCWSTR lpFileName, LPCWSTR lpExistingFileName,
 BOOL WINAPI CreateHardLinkA(LPCSTR lpFileName, LPCSTR lpExistingFileName,
     LPSECURITY_ATTRIBUTES lpSecurityAttributes)
 {
-    FIXME("(%s, %s, %p): stub\n", debugstr_a(lpFileName),
-        debugstr_a(lpExistingFileName), lpSecurityAttributes);
-    SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
-    return FALSE;
+    WCHAR *sourceW, *destW;
+    BOOL res;
+
+    if (!(sourceW = FILE_name_AtoW( lpExistingFileName, TRUE )))
+    {
+        return FALSE;
+    }
+    if (!(destW = FILE_name_AtoW( lpFileName, TRUE )))
+    {
+        HeapFree( GetProcessHeap(), 0, sourceW );
+        return FALSE;
+    }
+
+    res = CreateHardLinkW( destW, sourceW, lpSecurityAttributes );
+
+    HeapFree( GetProcessHeap(), 0, sourceW );
+    HeapFree( GetProcessHeap(), 0, destW );
+
+    return res;
 }
 
 
@@ -1688,10 +1788,15 @@ WCHAR * CDECL wine_get_dos_file_name( LPCSTR str )
         SetLastError( RtlNtStatusToDosError( status ) );
         return NULL;
     }
-    /* get rid of the \??\ prefix */
-    /* FIXME: should implement RtlNtPathNameToDosPathName and use that instead */
-    len = nt_name.Length - 4 * sizeof(WCHAR);
-    memmove( nt_name.Buffer, nt_name.Buffer + 4, len );
-    nt_name.Buffer[len / sizeof(WCHAR)] = 0;
+    if (nt_name.Buffer[5] == ':')
+    {
+        /* get rid of the \??\ prefix */
+        /* FIXME: should implement RtlNtPathNameToDosPathName and use that instead */
+        len = nt_name.Length - 4 * sizeof(WCHAR);
+        memmove( nt_name.Buffer, nt_name.Buffer + 4, len );
+        nt_name.Buffer[len / sizeof(WCHAR)] = 0;
+    }
+    else
+        nt_name.Buffer[1] = '\\';
     return nt_name.Buffer;
 }

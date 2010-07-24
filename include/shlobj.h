@@ -82,6 +82,8 @@ VOID         WINAPI SHUpdateImageW(LPCWSTR,INT,UINT,INT);
 int          WINAPI RestartDialog(HWND,LPCWSTR,DWORD);
 int          WINAPI RestartDialogEx(HWND,LPCWSTR,DWORD,DWORD);
 BOOL         WINAPI IsUserAnAdmin(void);
+UINT         WINAPI Shell_MergeMenus(HMENU,HMENU,UINT,UINT,UINT,ULONG);
+BOOL         WINAPI Shell_GetImageLists(HIMAGELIST*,HIMAGELIST*);
 
 #define SHFMT_ERROR     0xFFFFFFFFL  /* Error on last format, drive may be formattable */
 #define SHFMT_CANCEL    0xFFFFFFFEL  /* Last format was cancelled */
@@ -115,6 +117,11 @@ BOOL WINAPI SHObjectProperties(HWND,DWORD,LPCWSTR,LPCWSTR);
 #define PCS_PATHTOOLONG     0x00000008
 
 int WINAPI PathCleanupSpec(LPCWSTR,LPWSTR);
+
+/* Shell_MergeMenus flags */
+#define MM_ADDSEPARATOR     0x00000001
+#define MM_SUBMENUSHAVEIDS  0x00000002
+#define MM_DONTREMOVESEPS   0x00000004
 
 /*****************************************************************************
  * IContextMenu interface
@@ -346,33 +353,28 @@ typedef struct
 #define FCIDM_TOOLBAR      (FCIDM_BROWSERFIRST + 0)
 #define FCIDM_STATUS       (FCIDM_BROWSERFIRST + 1)
 
-
-/****************************************************************************
- * IShellIcon interface
- */
-
-#define INTERFACE IShellIcon
-DECLARE_INTERFACE_(IShellIcon,IUnknown)
+#define INTERFACE IShellDetails
+DECLARE_INTERFACE_(IShellDetails, IUnknown)
 {
     /*** IUnknown methods ***/
-    STDMETHOD_(HRESULT,QueryInterface)(THIS_ REFIID riid, void** ppvObject) PURE;
-    STDMETHOD_(ULONG,AddRef)(THIS) PURE;
-    STDMETHOD_(ULONG,Release)(THIS) PURE;
-    /*** IShellIcon methods ***/
-    STDMETHOD(GetIconOf)(THIS_ LPCITEMIDLIST pidl, UINT flags, LPINT lpIconIndex) PURE;
+    STDMETHOD_(HRESULT,QueryInterface) (THIS_ REFIID riid, void **ppv) PURE;
+    STDMETHOD_(ULONG,AddRef) (THIS)  PURE;
+    STDMETHOD_(ULONG,Release) (THIS) PURE;
+    /*** IShellDetails methods ***/
+    STDMETHOD(GetDetailsOf)(THIS_ PCUITEMID_CHILD pidl, UINT iColumn, SHELLDETAILS *pDetails) PURE;
+    STDMETHOD(ColumnClick)(THIS_ UINT iColumn) PURE;
 };
 #undef INTERFACE
 
 #if !defined(__cplusplus) || defined(CINTERFACE)
 /*** IUnknown methods ***/
-#define IShellIcon_QueryInterface(p,a,b)      (p)->lpVtbl->QueryInterface(p,a,b)
-#define IShellIcon_AddRef(p)                  (p)->lpVtbl->AddRef(p)
-#define IShellIcon_Release(p)                 (p)->lpVtbl->Release(p)
-/*** IShellIcon methods ***/
-#define IShellIcon_GetIconOf(p,a,b,c)         (p)->lpVtbl->GetIconOf(p,a,b,c)
+#define IShellDetails_QueryInterface(p,a,b)    (p)->lpVtbl->QueryInterface(p,a,b)
+#define IShellDetails_AddRef(p)                (p)->lpVtbl->AddRef(p)
+#define IShellDetails_Release(p)               (p)->lpVtbl->Release(p)
+/*** IShellDetails methods ***/
+#define IShellDetails_GetDetailsOf(p,a,b,c)    (p)->lpVtbl->GetDetailsOf(p,a,b,c)
+#define IShellDetails_ColumnClick(p,a)         (p)->lpVtbl->ColumnClick(p,a)
 #endif
-
-typedef IShellIcon *LPSHELLICON;
 
 /* IQueryInfo interface */
 #define INTERFACE IQueryInfo
@@ -547,6 +549,8 @@ DECLARE_INTERFACE_(IShellFolderViewCB,IUnknown)
  * IShellFolderView interface
  */
 
+#include <pshpack8.h>
+
 typedef struct _ITEMSPACING
 {
     int cxSmall;
@@ -554,6 +558,8 @@ typedef struct _ITEMSPACING
     int cxLarge;
     int cyLarge;
 } ITEMSPACING;
+
+#include <poppack.h>
 
 #define INTERFACE IShellFolderView
 DEFINE_GUID(IID_IShellFolderView,0x37a378c0,0xf82d,0x11ce,0xae,0x65,0x08,0x00,0x2b,0x2e,0x12,0x62);
@@ -784,6 +790,8 @@ typedef HRESULT (CALLBACK *LPFNVIEWCALLBACK)(
 	WPARAM wParam,
 	LPARAM lParam);
 
+#include <pshpack8.h>
+
 typedef struct _CSFV
 {
   UINT             cbSize;
@@ -794,6 +802,8 @@ typedef struct _CSFV
   LPFNVIEWCALLBACK pfnCallback;
   FOLDERVIEWMODE   fvm;
 } CSFV, *LPCSFV;
+
+#include <poppack.h>
 
 HRESULT WINAPI SHCreateShellFolderViewEx(LPCSFV pshfvi, IShellView **ppshv);
 
@@ -855,6 +865,8 @@ HRESULT WINAPI SHCreateShellFolderViewEx(LPCSFV pshfvi, IShellView **ppshv);
 #define SFVM_GET_WEBVIEW_THEME        86 /* undocumented */
 #define SFVM_GETDEFERREDVIEWSETTINGS  92 /* undocumented */
 
+#include <pshpack8.h>
+
 typedef struct _SFV_CREATE
 {
     UINT cbSize;
@@ -862,6 +874,8 @@ typedef struct _SFV_CREATE
     IShellView *psvOuter;
     IShellFolderViewCB *psfvcb;
 } SFV_CREATE;
+
+#include <poppack.h>
 
 HRESULT WINAPI SHCreateShellFolderView(const SFV_CREATE *pscfv, IShellView **ppsv);
 
@@ -1290,10 +1304,16 @@ typedef struct _SHChangeNotifyEntry
 #define SHCNF_PRINTERW		0x0006
 #define SHCNF_TYPE		0x00FF
 #define SHCNF_FLUSH		0x1000
-#define SHCNF_FLUSHNOWAIT	0x2000
+#define SHCNF_FLUSHNOWAIT	0x3000
+#define SHCNF_NOTIFYRECURSIVE	0x10000
 
 #define SHCNF_PATH              WINELIB_NAME_AW(SHCNF_PATH)
 #define SHCNF_PRINTER           WINELIB_NAME_AW(SHCNF_PRINTER)
+
+#define SHCNRF_InterruptLevel 0x0001
+#define SHCNRF_ShellLevel 0x0002
+#define SHCNRF_RecursiveInterrupt 0x1000
+#define SHCNRF_NewDelivery 0x8000
 
 void WINAPI SHChangeNotify(LONG wEventId, UINT uFlags, LPCVOID dwItem1, LPCVOID dwItem2);
 

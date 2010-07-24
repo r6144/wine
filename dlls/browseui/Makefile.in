@@ -3,7 +3,7 @@ TOPOBJDIR = ../..
 SRCDIR    = @srcdir@
 VPATH     = @srcdir@
 MODULE    = browseui.dll
-IMPORTS   = uuid ole32 user32 advapi32 kernel32
+IMPORTS   = uuid ole32 user32 advapi32
 EXTRADEFS = -DCOM_NO_WINDOWS_H
 
 C_SRCS = \
@@ -15,10 +15,12 @@ C_SRCS = \
 	regsvr.c
 
 RC_SRCS = \
+	rsrc_Da.rc \
 	rsrc_De.rc \
 	rsrc_En.rc \
 	rsrc_Es.rc \
 	rsrc_Fr.rc \
+	rsrc_Hu.rc \
 	rsrc_It.rc \
 	rsrc_Ja.rc \
 	rsrc_Ko.rc \
@@ -31,6 +33,7 @@ RC_SRCS = \
 	rsrc_Ru.rc \
 	rsrc_Si.rc \
 	rsrc_Sv.rc \
+	rsrc_Uk.rc \
 	rsrc_Zh.rc \
 	version.rc
 

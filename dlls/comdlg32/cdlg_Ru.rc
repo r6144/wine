@@ -28,7 +28,7 @@
 
 LANGUAGE LANG_RUSSIAN, SUBLANG_DEFAULT
 
-OPEN_FILE DIALOG LOADONCALL MOVEABLE DISCARDABLE 36, 24, 275, 134
+OPEN_FILE DIALOG 36, 24, 275, 134
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Открыть"
 FONT 8, "MS Shell Dlg"
@@ -50,7 +50,7 @@ FONT 8, "MS Shell Dlg"
 }
 
 
-SAVE_FILE DIALOG LOADONCALL MOVEABLE DISCARDABLE 36, 24, 275, 134
+SAVE_FILE DIALOG 36, 24, 275, 134
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Сохранить как..."
 FONT 8, "MS Shell Dlg"
@@ -72,7 +72,7 @@ FONT 8, "MS Shell Dlg"
 }
 
 
-PRINT DIALOG LOADONCALL MOVEABLE DISCARDABLE 36, 24, 264, 134
+PRINT DIALOG 36, 24, 264, 134
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Печать"
 FONT 8, "MS Shell Dlg"
@@ -80,7 +80,7 @@ FONT 8, "MS Shell Dlg"
  LTEXT "Принтер:", 1088, 6, 6, 40, 9
  LTEXT "", 1089, 60, 6, 150, 9
  GROUPBOX "Печатать", 1072, 6, 30, 160, 65, BS_GROUPBOX
- RADIOBUTTON "&Все", 1056, 16, 45, 60, 12
+ RADIOBUTTON "&Всё", 1056, 16, 45, 60, 12
  RADIOBUTTON "В&ыделенный фрагмент", 1057, 16, 60, 60, 12
  RADIOBUTTON "&Страницы", 1058, 16, 75, 60, 12
  DEFPUSHBUTTON "Печать", IDOK, 206, 6, 56, 14, BS_DEFPUSHBUTTON | WS_GROUP | WS_TABSTOP
@@ -95,7 +95,7 @@ FONT 8, "MS Shell Dlg"
 }
 
 
-PRINT_SETUP DIALOG LOADONCALL MOVEABLE DISCARDABLE 36, 24, 264, 134
+PRINT_SETUP DIALOG 36, 24, 264, 134
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Настройка принтера"
 FONT 8, "MS Shell Dlg"
@@ -121,7 +121,7 @@ FONT 8, "MS Shell Dlg"
 }
 
 
-CHOOSE_FONT DIALOG DISCARDABLE  13, 54, 264, 147
+CHOOSE_FONT DIALOG  13, 54, 264, 147
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Шрифт"
 FONT 8, "MS Shell Dlg"
@@ -140,8 +140,8 @@ FONT 8, "MS Shell Dlg"
     PUSHBUTTON      "&Применить", 1026,218,40,40,14,WS_GROUP | WS_TABSTOP
     PUSHBUTTON      "&Справка" , 1038,218,57,40,14,WS_GROUP | WS_TABSTOP
     GROUPBOX        "Атрибуты",1072,6,72,84,34,WS_GROUP
-    CHECKBOX	    "&Зачеркнутый", 1040, 10,82,75,10, BS_AUTOCHECKBOX | WS_TABSTOP
-    CHECKBOX 	    "Под&черкнутый", 1041, 10,94,75,10, BS_AUTOCHECKBOX
+    CHECKBOX	    "&Зачёркнутый", 1040, 10,82,75,10, BS_AUTOCHECKBOX | WS_TABSTOP
+    CHECKBOX 	    "Под&чёркнутый", 1041, 10,94,75,10, BS_AUTOCHECKBOX
     LTEXT           "Ц&вет:", 1091 ,6,110,30,9
     COMBOBOX        1139,6,120,84,100,CBS_DROPDOWNLIST | CBS_OWNERDRAWFIXED | CBS_HASSTRINGS |
 		    CBS_AUTOHSCROLL |  WS_BORDER | WS_VSCROLL | WS_TABSTOP
@@ -153,7 +153,7 @@ FONT 8, "MS Shell Dlg"
 }
 
 
-CHOOSE_COLOR DIALOG LOADONCALL MOVEABLE DISCARDABLE 36, 24, 310, 185
+CHOOSE_COLOR DIALOG 36, 24, 310, 185
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Изменение палитры"
 FONT 8, "MS Shell Dlg"
@@ -187,7 +187,7 @@ FONT 8, "MS Shell Dlg"
 }
 
 
-FINDDLGORD DIALOG LOADONCALL MOVEABLE DISCARDABLE 36, 24, 245, 62
+FINDDLGORD DIALOG 36, 24, 245, 62
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Поиск"
 FONT 8, "MS Shell Dlg"
@@ -206,7 +206,7 @@ FONT 8, "MS Shell Dlg"
 }
 
 
-REPLACEDLGORD DIALOG LOADONCALL MOVEABLE DISCARDABLE 36, 24, 230, 94
+REPLACEDLGORD DIALOG 36, 24, 230, 94
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Замена"
 FONT 8, "MS Shell Dlg"
@@ -220,12 +220,12 @@ FONT 8, "MS Shell Dlg"
 
  DEFPUSHBUTTON "&Найти далее", IDOK, 174,  4, 50, 14, WS_GROUP | WS_TABSTOP | BS_DEFPUSHBUTTON
  PUSHBUTTON "&Заменить", psh1	 , 174, 21, 50, 14, WS_GROUP | WS_TABSTOP
- PUSHBUTTON "Заменить &все", psh2 , 174, 38, 50, 14, WS_GROUP | WS_TABSTOP
+ PUSHBUTTON "Заменить &всё", psh2 , 174, 38, 50, 14, WS_GROUP | WS_TABSTOP
  PUSHBUTTON "Отмена", IDCANCEL	 , 174, 55, 50, 14, WS_GROUP | WS_TABSTOP
  PUSHBUTTON "&Справка", pshHelp	 , 174, 75, 50, 14, WS_GROUP | WS_TABSTOP
 }
 
-PRINT32 DIALOG LOADONCALL MOVEABLE DISCARDABLE  32, 32, 288, 186
+PRINT32 DIALOG  32, 32, 288, 186
 STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU |
       DS_CONTEXTHELP | DS_3DLOOK
 CAPTION "Печать"
@@ -265,7 +265,7 @@ FONT 8, "MS Shell Dlg"
     RTEXT           "&до:",           stc3, 108,124,  12,8
 }
 
-PRINT32_SETUP DIALOG LOADONCALL MOVEABLE DISCARDABLE  32, 32, 288, 178
+PRINT32_SETUP DIALOG  32, 32, 288, 178
 STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU |
       DS_CONTEXTHELP | DS_3DLOOK
 CAPTION "Установки принтера"
@@ -300,7 +300,7 @@ BEGIN
     CONTROL         "Л&андшафт",     rad2,"Button",BS_AUTORADIOBUTTON,224,126,52,12
 END
 
-PAGESETUPDLGORD DIALOG LOADONCALL MOVEABLE DISCARDABLE 32, 32, 240, 240
+PAGESETUPDLGORD DIALOG 32, 32, 240, 240
 STYLE DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
 CAPTION "Параметры страницы"
 FONT 8, "MS Shell Dlg"
@@ -329,9 +329,9 @@ BEGIN
   PUSHBUTTON "Отмена", IDCANCEL, 126, 220, 50, 14
   PUSHBUTTON "&Принтер...", psh3, 184, 220, 48, 14
 END
-					      
 
-NEWFILEOPENORD DIALOG LOADONCALL MOVEABLE DISCARDABLE 0, 0, 280, 164
+
+NEWFILEOPENORD DIALOG 0, 0, 280, 164
 STYLE DS_MODALFRAME | DS_CONTEXTHELP | WS_VISIBLE | WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_CLIPCHILDREN
 CAPTION "Открыть"
 FONT 8, "MS Shell Dlg"
@@ -355,7 +355,7 @@ FONT 8, "MS Shell Dlg"
     PUSHBUTTON		"&Справка",		 pshHelp,222,145,50,14
 }
 
-STRINGTABLE DISCARDABLE
+STRINGTABLE
 {
     IDS_ABOUTBOX            "&О тесте ВыборПапки"
     IDS_DOCUMENTFOLDERS     "Папки документов"
@@ -367,13 +367,13 @@ STRINGTABLE DISCARDABLE
     IDS_MYCOMPUTER          "Мой компьютер"
 }
 
-STRINGTABLE DISCARDABLE
+STRINGTABLE
 {
     IDS_SYSTEMFOLDERS       "Системные папки"
     IDS_LOCALHARDRIVES      "Локальные жесткие диски"
     IDS_FILENOTFOUND        "Файл не найден"
     IDS_VERIFYFILE          "Проверьте, правильно ли указано имя файла"
-    IDS_CREATEFILE          "Файла не существует\nХотите ли Вы его создать?"
+    IDS_CREATEFILE          "Файла не существует.\nХотите ли вы его создать?"
     IDS_OVERWRITEFILE       "Файл уже существует.\nЗаменить его?"
     IDS_INVALID_FILENAME_TITLE "Некорректный символ в записи пути"
     IDS_INVALID_FILENAME    "Имя файла не может содержать следующие символы:\n                          / : < > |"
@@ -381,7 +381,7 @@ STRINGTABLE DISCARDABLE
     IDS_FILENOTEXISTING     "Файл не существует"
 }
 
-STRINGTABLE DISCARDABLE
+STRINGTABLE
 {
     IDS_UPFOLDER         "Вверх на один уровень"
     IDS_NEWFOLDER        "Создать новую папку"
@@ -390,7 +390,7 @@ STRINGTABLE DISCARDABLE
     IDS_TODESKTOP        "Переход на рабочий стол"
 }
 
-STRINGTABLE DISCARDABLE
+STRINGTABLE
 {
     PD32_PRINT_TITLE       "Печать"
 
@@ -403,7 +403,7 @@ STRINGTABLE DISCARDABLE
     PD32_NR_OF_COPIES_EMPTY               "Значение Числа Копий не может быть \
 пустым"
     PD32_TOO_LARGE_COPIES                 "Такое большое количество копий не \
-может быть напечатано Вашим принтером.\nВведите значение между 1 и %d"
+может быть напечатано вашим принтером.\nВведите значение между 1 и %d"
     PD32_PRINT_ERROR                      "Произошла ошибка принтера"
     PD32_NO_DEFAULT_PRINTER               "Нет принтера, установленного по умолчанию"
     PD32_CANT_FIND_PRINTER                "Не удалось найти принтер"
@@ -448,7 +448,7 @@ STRINGTABLE DISCARDABLE
     PD32_PRINTER_STATUS_POWER_SAVE        "Питание в безопасном режиме; "
 }
 
-STRINGTABLE DISCARDABLE /* Font styles */
+STRINGTABLE /* Font styles */
 {
     IDS_FONT_REGULAR       "Нормальный"
     IDS_FONT_BOLD          "Жирный"
@@ -456,7 +456,7 @@ STRINGTABLE DISCARDABLE /* Font styles */
     IDS_FONT_BOLD_ITALIC   "Жирный курсив"
 }
 
-STRINGTABLE DISCARDABLE /* Color names */
+STRINGTABLE /* Color names */
 {
     IDS_COLOR_BLACK     "Чёрный"
     IDS_COLOR_MAROON    "Тёмно-бордовый"
@@ -476,7 +476,7 @@ STRINGTABLE DISCARDABLE /* Color names */
     IDS_COLOR_WHITE     "Белый"
 }
 
-STRINGTABLE DISCARDABLE
+STRINGTABLE
 {
     IDS_FONT_SIZE   "Выберите шрифт размером %d - %d пунктов."
     IDS_SAVE_BUTTON "&Сохранить"

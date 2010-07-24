@@ -48,72 +48,16 @@ PropSheetCallback (HWND hWnd, UINT uMsg, LPARAM lParam)
 	break;
 
     case PSCB_INITIALIZED:
+        /* Set the window icon */
+        SendMessageW( hWnd, WM_SETICON, ICON_BIG,
+                      (LPARAM)LoadIconW( (HINSTANCE)GetWindowLongPtrW(hWnd, GWLP_HINSTANCE),
+                                         MAKEINTRESOURCEW(IDI_WINECFG) ));
 	break;
 
     default:
 	break;
     }
     return 0;
-}
-
-static INT_PTR CALLBACK
-AboutDlgProc (HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
-{
-    char *owner, *org;
-
-    switch (uMsg) {
-
-	case WM_NOTIFY:
-	    switch(((LPNMHDR)lParam)->code)
-	    {
-            case PSN_APPLY:
-                /*save registration info to registry */
-                owner = get_text(hDlg, IDC_ABT_OWNER);
-                org   = get_text(hDlg, IDC_ABT_ORG);
-
-                set_reg_key(HKEY_LOCAL_MACHINE, "Software\\Microsoft\\Windows\\CurrentVersion",
-                            "RegisteredOwner", owner ? owner : "");
-                set_reg_key(HKEY_LOCAL_MACHINE, "Software\\Microsoft\\Windows\\CurrentVersion",
-                            "RegisteredOrganization", org ? org : "");
-                set_reg_key(HKEY_LOCAL_MACHINE, "Software\\Microsoft\\Windows NT\\CurrentVersion",
-                            "RegisteredOwner", owner ? owner : "");
-                set_reg_key(HKEY_LOCAL_MACHINE, "Software\\Microsoft\\Windows NT\\CurrentVersion",
-                            "RegisteredOrganization", org ? org : "");
-                apply();
-
-                HeapFree(GetProcessHeap(), 0, owner);
-                HeapFree(GetProcessHeap(), 0, org);
-                break;
-            }
-            break;
-
-        case WM_INITDIALOG:
-            /* read owner and organization info from registry, load it into text box */
-            owner = get_reg_key(HKEY_LOCAL_MACHINE, "Software\\Microsoft\\Windows NT\\CurrentVersion",
-                                "RegisteredOwner", "");
-            org =   get_reg_key(HKEY_LOCAL_MACHINE, "Software\\Microsoft\\Windows NT\\CurrentVersion",
-                                "RegisteredOrganization", "");
-
-            SetDlgItemText(hDlg, IDC_ABT_OWNER, owner);
-            SetDlgItemText(hDlg, IDC_ABT_ORG, org);
-
-            SendMessage(GetParent(hDlg), PSM_UNCHANGED, 0, 0);
-
-            HeapFree(GetProcessHeap(), 0, owner);
-            HeapFree(GetProcessHeap(), 0, org);
-            break;
-
-	case WM_COMMAND:
-            switch(HIWORD(wParam))
-            {
-            case EN_CHANGE:
-		/* enable apply button */
-                SendMessage(GetParent(hDlg), PSM_CHANGED, 0, 0);
-                break;
-            }
-            break;
-    }
-    return FALSE;
 }
 
 #define NUM_PROPERTY_PAGES 7
@@ -218,7 +162,7 @@ doPropertySheet (HINSTANCE hInstance, HWND hOwner)
     psh.dwFlags = PSH_PROPSHEETPAGE | PSH_USEICONID | PSH_USECALLBACK;
     psh.hwndParent = hOwner;
     psh.hInstance = hInstance;
-    psh.u.pszIcon = NULL;
+    psh.u.pszIcon = MAKEINTRESOURCEW (IDI_WINECFG);
     psh.pszCaption =  load_string (IDS_WINECFG_TITLE);
     psh.nPages = NUM_PROPERTY_PAGES;
     psh.u3.ppsp = psp;

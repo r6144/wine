@@ -2427,6 +2427,12 @@ static void dump_send_hardware_message_request( const struct send_hardware_messa
     fprintf( stderr, ", time=%08x", req->time );
 }
 
+static void dump_send_hardware_message_reply( const struct send_hardware_message_reply *req )
+{
+    fprintf( stderr, " cursor=%08x", req->cursor );
+    fprintf( stderr, ", count=%d", req->count );
+}
+
 static void dump_get_message_request( const struct get_message_request *req )
 {
     fprintf( stderr, " flags=%08x", req->flags );
@@ -3070,6 +3076,8 @@ static void dump_get_thread_input_reply( const struct get_thread_input_reply *re
     fprintf( stderr, ", menu_owner=%08x", req->menu_owner );
     fprintf( stderr, ", move_size=%08x", req->move_size );
     fprintf( stderr, ", caret=%08x", req->caret );
+    fprintf( stderr, ", cursor=%08x", req->cursor );
+    fprintf( stderr, ", show_count=%d", req->show_count );
     dump_rectangle( ", rect=", &req->rect );
 }
 
@@ -3586,7 +3594,8 @@ static void dump_query_symlink_request( const struct query_symlink_request *req 
 
 static void dump_query_symlink_reply( const struct query_symlink_reply *req )
 {
-    dump_varargs_unicode_str( " target_name=", cur_size );
+    fprintf( stderr, " total=%u", req->total );
+    dump_varargs_unicode_str( ", target_name=", cur_size );
 }
 
 static void dump_get_object_info_request( const struct get_object_info_request *req )
@@ -4190,7 +4199,7 @@ static const dump_func reply_dumpers[REQ_NB_REQUESTS] = {
     (dump_func)dump_get_process_idle_event_reply,
     NULL,
     NULL,
-    NULL,
+    (dump_func)dump_send_hardware_message_reply,
     (dump_func)dump_get_message_reply,
     NULL,
     NULL,
@@ -4564,6 +4573,7 @@ static const struct
     { "ABANDONED_WAIT_0",            STATUS_ABANDONED_WAIT_0 },
     { "ACCESS_DENIED",               STATUS_ACCESS_DENIED },
     { "ACCESS_VIOLATION",            STATUS_ACCESS_VIOLATION },
+    { "ADDRESS_ALREADY_ASSOCIATED",  STATUS_ADDRESS_ALREADY_ASSOCIATED },
     { "ALERTED",                     STATUS_ALERTED },
     { "ALIAS_EXISTS",                STATUS_ALIAS_EXISTS },
     { "BAD_DEVICE_TYPE",             STATUS_BAD_DEVICE_TYPE },
@@ -4574,7 +4584,12 @@ static const struct
     { "CANCELLED",                   STATUS_CANCELLED },
     { "CANNOT_DELETE",               STATUS_CANNOT_DELETE },
     { "CANT_OPEN_ANONYMOUS",         STATUS_CANT_OPEN_ANONYMOUS },
+    { "CANT_WAIT",                   STATUS_CANT_WAIT },
     { "CHILD_MUST_BE_VOLATILE",      STATUS_CHILD_MUST_BE_VOLATILE },
+    { "CONNECTION_ABORTED",          STATUS_CONNECTION_ABORTED },
+    { "CONNECTION_DISCONNECTED",     STATUS_CONNECTION_DISCONNECTED },
+    { "CONNECTION_REFUSED",          STATUS_CONNECTION_REFUSED },
+    { "CONNECTION_RESET",            STATUS_CONNECTION_RESET },
     { "DEBUGGER_INACTIVE",           STATUS_DEBUGGER_INACTIVE },
     { "DEVICE_BUSY",                 STATUS_DEVICE_BUSY },
     { "DIRECTORY_NOT_EMPTY",         STATUS_DIRECTORY_NOT_EMPTY },
@@ -4593,6 +4608,7 @@ static const struct
     { "GENERIC_NOT_MAPPED",          STATUS_GENERIC_NOT_MAPPED },
     { "HANDLES_CLOSED",              STATUS_HANDLES_CLOSED },
     { "HANDLE_NOT_CLOSABLE",         STATUS_HANDLE_NOT_CLOSABLE },
+    { "HOST_UNREACHABLE",            STATUS_HOST_UNREACHABLE },
     { "ILLEGAL_FUNCTION",            STATUS_ILLEGAL_FUNCTION },
     { "INSTANCE_NOT_AVAILABLE",      STATUS_INSTANCE_NOT_AVAILABLE },
     { "INSUFFICIENT_RESOURCES",      STATUS_INSUFFICIENT_RESOURCES },
@@ -4607,6 +4623,8 @@ static const struct
     { "MAPPED_FILE_SIZE_ZERO",       STATUS_MAPPED_FILE_SIZE_ZERO },
     { "MUTANT_NOT_OWNED",            STATUS_MUTANT_NOT_OWNED },
     { "NAME_TOO_LONG",               STATUS_NAME_TOO_LONG },
+    { "NETWORK_BUSY",                STATUS_NETWORK_BUSY },
+    { "NETWORK_UNREACHABLE",         STATUS_NETWORK_UNREACHABLE },
     { "NOTIFY_ENUM_DIR",             STATUS_NOTIFY_ENUM_DIR },
     { "NOT_ALL_ASSIGNED",            STATUS_NOT_ALL_ASSIGNED },
     { "NOT_A_DIRECTORY",             STATUS_NOT_A_DIRECTORY },

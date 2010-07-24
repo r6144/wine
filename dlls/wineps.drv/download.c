@@ -33,6 +33,8 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(psdrv);
 
+BOOL WINAPI GetTransform( HDC hdc, DWORD which, XFORM *xform );
+
 #define MS_MAKE_TAG( _x1, _x2, _x3, _x4 ) \
           ( ( (DWORD)_x4 << 24 ) |     \
             ( (DWORD)_x3 << 16 ) |     \
@@ -168,20 +170,23 @@ static BOOL is_room_for_font(PSDRV_PDEVICE *physDev)
  * the font size we'll get the data directly from the TrueType HEAD table rather
  * than using GetOutlineTextMetrics.
  */
-static BOOL get_bbox(PSDRV_PDEVICE *physDev, RECT *rc, UINT *emsize)
+static BOOL get_bbox(HDC hdc, RECT *rc, UINT *emsize)
 {
     BYTE head[54]; /* the head table is 54 bytes long */
 
-    if(GetFontData(physDev->hdc, MS_MAKE_TAG('h','e','a','d'), 0, head,
-                   sizeof(head)) == GDI_ERROR) {
+    if(GetFontData(hdc, MS_MAKE_TAG('h','e','a','d'), 0, head, sizeof(head)) == GDI_ERROR)
+    {
         ERR("Can't retrieve head table\n");
         return FALSE;
     }
     *emsize = GET_BE_WORD(head + 18); /* unitsPerEm */
-    rc->left = (signed short)GET_BE_WORD(head + 36); /* xMin */
-    rc->bottom = (signed short)GET_BE_WORD(head + 38); /* yMin */
-    rc->right = (signed short)GET_BE_WORD(head + 40); /* xMax */
-    rc->top = (signed short)GET_BE_WORD(head + 42); /* yMax */
+    if(rc)
+    {
+        rc->left   = (signed short)GET_BE_WORD(head + 36); /* xMin */
+        rc->bottom = (signed short)GET_BE_WORD(head + 38); /* yMin */
+        rc->right  = (signed short)GET_BE_WORD(head + 40); /* xMax */
+        rc->top    = (signed short)GET_BE_WORD(head + 42); /* yMax */
+    }
     return TRUE;
 }
 
@@ -193,32 +198,47 @@ static BOOL get_bbox(PSDRV_PDEVICE *physDev, RECT *rc, UINT *emsize)
  */
 BOOL PSDRV_SelectDownloadFont(PSDRV_PDEVICE *physDev)
 {
-    char *ps_name;
-    LPOUTLINETEXTMETRICA potm;
-    DWORD len = GetOutlineTextMetricsA(physDev->hdc, 0, NULL);
-
-    if(!len) return FALSE;
-    potm = HeapAlloc(GetProcessHeap(), 0, len);
-    GetOutlineTextMetricsA(physDev->hdc, len, potm);
-    get_download_name(physDev, potm, &ps_name);
-
     physDev->font.fontloc = Download;
-    physDev->font.fontinfo.Download = is_font_downloaded(physDev, ps_name);
+    physDev->font.fontinfo.Download = NULL;
 
-    physDev->font.size = abs(PSDRV_YWStoDS(physDev, /* ppem */
-                                       potm->otmTextMetrics.tmAscent +
-                                       potm->otmTextMetrics.tmDescent -
-                                       potm->otmTextMetrics.tmInternalLeading));
-    physDev->font.underlineThickness = potm->otmsUnderscoreSize;
-    physDev->font.underlinePosition = potm->otmsUnderscorePosition;
-    physDev->font.strikeoutThickness = potm->otmsStrikeoutSize;
-    physDev->font.strikeoutPosition = potm->otmsStrikeoutPosition;
-
-    HeapFree(GetProcessHeap(), 0, ps_name);
-    HeapFree(GetProcessHeap(), 0, potm);
     return TRUE;
 }
 
+static UINT calc_ppem_for_height(HDC hdc, LONG height)
+{
+    BYTE os2[78]; /* size of version 0 table */
+    BYTE hhea[8]; /* just enough to get the ascender and descender */
+    LONG ascent = 0, descent = 0;
+    UINT emsize;
+
+    if(height < 0) return -height;
+
+    if(GetFontData(hdc, MS_MAKE_TAG('O','S','/','2'), 0, os2, sizeof(os2)) == sizeof(os2))
+    {
+        ascent  = GET_BE_WORD(os2 + 74); /* usWinAscent */
+        descent = GET_BE_WORD(os2 + 76); /* usWinDescent */
+    }
+
+    if(ascent + descent == 0)
+    {
+        if(GetFontData(hdc, MS_MAKE_TAG('h','h','e','a'), 0, hhea, sizeof(hhea)) == sizeof(hhea))
+        {
+            ascent  =  (signed short)GET_BE_WORD(hhea + 4); /* Ascender */
+            descent = -(signed short)GET_BE_WORD(hhea + 6); /* Descender */
+        }
+    }
+
+    if(ascent + descent == 0) return height;
+
+    get_bbox(hdc, NULL, &emsize);
+
+    return MulDiv(emsize, height, ascent + descent);
+}
+
+static inline float ps_round(float f)
+{
+    return (f > 0) ? (f + 0.5) : (f - 0.5);
+}
 /****************************************************************************
  *  PSDRV_WriteSetDownloadFont
  *
@@ -231,6 +251,9 @@ BOOL PSDRV_WriteSetDownloadFont(PSDRV_PDEVICE *physDev)
     LPOUTLINETEXTMETRICA potm;
     DWORD len = GetOutlineTextMetricsA(physDev->hdc, 0, NULL);
     DOWNLOAD *pdl;
+    LOGFONTW lf;
+    UINT ppem;
+    XFORM xform;
 
     assert(physDev->font.fontloc == Download);
 
@@ -238,12 +261,40 @@ BOOL PSDRV_WriteSetDownloadFont(PSDRV_PDEVICE *physDev)
     GetOutlineTextMetricsA(physDev->hdc, len, potm);
 
     get_download_name(physDev, potm, &ps_name);
+    physDev->font.fontinfo.Download = is_font_downloaded(physDev, ps_name);
+
+    if (!GetObjectW( GetCurrentObject(physDev->hdc, OBJ_FONT), sizeof(lf), &lf ))
+        return FALSE;
+
+    ppem = calc_ppem_for_height(physDev->hdc, lf.lfHeight);
+
+    /* Retrieve the world -> device transform */
+    GetTransform(physDev->hdc, 0x204, &xform);
+
+    physDev->font.size.xx = ps_round(ppem * xform.eM11);
+    physDev->font.size.xy = ps_round(ppem * xform.eM12);
+    physDev->font.size.yx = ps_round(ppem * xform.eM21);
+    physDev->font.size.yy = ps_round(ppem * xform.eM22);
+
+    switch(GetMapMode(physDev->hdc))
+    {
+    case MM_TEXT:
+    case MM_ISOTROPIC:
+    case MM_ANISOTROPIC:
+        physDev->font.size.yx *= -1;
+        physDev->font.size.yy *= -1;
+    }
+
+    physDev->font.underlineThickness = potm->otmsUnderscoreSize;
+    physDev->font.underlinePosition = potm->otmsUnderscorePosition;
+    physDev->font.strikeoutThickness = potm->otmsStrikeoutSize;
+    physDev->font.strikeoutPosition = potm->otmsStrikeoutPosition;
 
     if(physDev->font.fontinfo.Download == NULL) {
         RECT bbox;
         UINT emsize;
 
-        if (!get_bbox(physDev, &bbox, &emsize)) {
+        if (!get_bbox(physDev->hdc, &bbox, &emsize)) {
 	    HeapFree(GetProcessHeap(), 0, potm);
 	    return FALSE;
 	}

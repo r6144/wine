@@ -78,7 +78,7 @@ typedef void (*__cdecl MSVCRT__se_translator_function)(unsigned int code, struct
 typedef void (*__cdecl MSVCRT__beginthread_start_routine_t)(void *);
 typedef unsigned int (__stdcall *MSVCRT__beginthreadex_start_routine_t)(void *);
 typedef int (*__cdecl MSVCRT__onexit_t)(void);
-typedef void (__cdecl *MSVCRT_invalid_parameter_handler)(const wchar_t*, const wchar_t*, const wchar_t*, unsigned, unsigned*);
+typedef void (__cdecl *MSVCRT_invalid_parameter_handler)(const MSVCRT_wchar_t*, const MSVCRT_wchar_t*, const MSVCRT_wchar_t*, unsigned, MSVCRT_uintptr_t);
 
 typedef struct {long double x;} MSVCRT__LDOUBLE;
 
@@ -115,6 +115,7 @@ struct __thread_data {
     MSVCRT_unexpected_function      unexpected_handler;
     MSVCRT__se_translator_function  se_translator;
     EXCEPTION_RECORD               *exc_record;
+    struct MSVCRT_localeinfo_struct *locale;
 };
 
 typedef struct __thread_data thread_data_t;
@@ -124,11 +125,8 @@ extern thread_data_t *msvcrt_get_thread_data(void);
 extern int MSVCRT___lc_codepage;
 extern int MSVCRT___lc_collate_cp;
 extern int MSVCRT___mb_cur_max;
-extern LCID MSVCRT_current_lc_all_lcid;
 extern WORD MSVCRT__ctype [257];
-extern WORD MSVCRT_current_ctype[257];
 extern WORD* MSVCRT__pctype;
-extern MSVCRT_invalid_parameter_handler MSVCRT_invalid_parameter;
 
 void   msvcrt_set_errno(int);
 
@@ -171,6 +169,8 @@ extern void msvcrt_init_signals(void);
 extern void msvcrt_free_signals(void);
 
 extern unsigned msvcrt_create_io_inherit_block(WORD*, BYTE**);
+
+extern unsigned int __cdecl _control87(unsigned int, unsigned int);
 
 /* run-time error codes */
 #define _RT_STACK       0
@@ -709,6 +709,8 @@ typedef void (__cdecl *MSVCRT___sighandler_t)(int);
 #define _MB_CP_ANSI     -3
 #define _MB_CP_LOCALE   -4
 
+#define MSVCRT__TRUNCATE ((MSVCRT_size_t)-1)
+
 void  __cdecl    MSVCRT_free(void*);
 void* __cdecl    MSVCRT_malloc(MSVCRT_size_t);
 void* __cdecl    MSVCRT_calloc(MSVCRT_size_t,MSVCRT_size_t);
@@ -737,8 +739,8 @@ MSVCRT___time32_t __cdecl MSVCRT__time32(MSVCRT___time32_t*);
 MSVCRT___time64_t __cdecl MSVCRT__time64(MSVCRT___time64_t*);
 MSVCRT_FILE*   __cdecl MSVCRT__fdopen(int, const char *);
 MSVCRT_FILE*   __cdecl MSVCRT__wfdopen(int, const MSVCRT_wchar_t *);
-int            __cdecl MSVCRT_vsnprintf(char *str, unsigned int len, const char *format, __ms_va_list valist);
-int            __cdecl MSVCRT_vsnwprintf(MSVCRT_wchar_t *str, unsigned int len,
+int            __cdecl MSVCRT_vsnprintf(char *str, MSVCRT_size_t len, const char *format, __ms_va_list valist);
+int            __cdecl MSVCRT_vsnwprintf(MSVCRT_wchar_t *str, MSVCRT_size_t len,
                                        const MSVCRT_wchar_t *format, __ms_va_list valist );
 int            __cdecl MSVCRT_raise(int sig);
 
@@ -765,14 +767,24 @@ typedef struct MSVCRT_threadlocaleinfostruct {
     int *lconv_intl_refcount;
     int *lconv_num_refcount;
     int *lconv_mon_refcount;
-    struct lconv *lconv;
+    struct MSVCRT_lconv *lconv;
     int *ctype1_refcount;
     unsigned short *ctype1;
-    const unsigned short *pctype;
-    const unsigned char *pclmap;
-    const unsigned char *pcumap;
-    struct __lc_time_data *lc_time_curr;
+    unsigned short *pctype;
+    unsigned char *pclmap;
+    unsigned char *pcumap;
+    struct MSVCRT___lc_time_data *lc_time_curr;
 } MSVCRT_threadlocinfo;
+
+typedef struct MSVCRT_threadmbcinfostruct {
+    int refcount;
+    int mbcodepage;
+    int ismbcodepage;
+    int mblcid;
+    unsigned short mbulinfo[6];
+    char mbctype[257];
+    char mbcasemap[256];
+} MSVCRT_threadmbcinfo;
 
 typedef struct MSVCRT_threadlocaleinfostruct *MSVCRT_pthreadlocinfo;
 typedef struct MSVCRT_threadmbcinfostruct *MSVCRT_pthreadmbcinfo;
@@ -782,6 +794,13 @@ typedef struct MSVCRT_localeinfo_struct
     MSVCRT_pthreadlocinfo locinfo;
     MSVCRT_pthreadmbcinfo mbcinfo;
 } MSVCRT__locale_tstruct, *MSVCRT__locale_t;
+
+#define MSVCRT__ENABLE_PER_THREAD_LOCALE 1
+#define MSVCRT__DISABLE_PER_THREAD_LOCALE 2
+
+extern MSVCRT__locale_t MSVCRT_locale;
+MSVCRT__locale_t get_locale(void);
+void __cdecl MSVCRT__free_locale(MSVCRT__locale_t);
 
 #ifndef __WINE_MSVCRT_TEST
 int            __cdecl MSVCRT__write(int,const void*,unsigned int);
@@ -815,6 +834,8 @@ int     __cdecl MSVCRT__pipe(int *, unsigned int, int);
 MSVCRT_wchar_t* __cdecl _wgetenv(const MSVCRT_wchar_t*);
 void __cdecl    _wsearchenv(const MSVCRT_wchar_t*, const MSVCRT_wchar_t*, MSVCRT_wchar_t*);
 MSVCRT_intptr_t __cdecl MSVCRT__spawnvpe(int, const char*, const char* const*, const char* const*);
+void __cdecl MSVCRT__invalid_parameter(const MSVCRT_wchar_t *expr, const MSVCRT_wchar_t *func,
+                                       const MSVCRT_wchar_t *file, unsigned int line, MSVCRT_uintptr_t arg);
 #endif
 
 #endif /* __WINE_MSVCRT_H */

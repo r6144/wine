@@ -289,6 +289,7 @@ static void construct_window_to_viewport(DC *dc, XFORM *xform)
     scaleX = (double)dc->vportExtX / (double)dc->wndExtX;
     scaleY = (double)dc->vportExtY / (double)dc->wndExtY;
 
+    if (dc->layout & LAYOUT_RTL) scaleX = -scaleX;
     xform->eM11 = scaleX;
     xform->eM12 = 0.0;
     xform->eM21 = 0.0;
@@ -674,7 +675,6 @@ HDC WINAPI CreateDCW( LPCWSTR driver, LPCWSTR device, LPCWSTR output,
 
 error:
     if (dc) free_dc_ptr( dc );
-    DRIVER_release_driver( funcs );
     return 0;
 }
 
@@ -759,10 +759,9 @@ HDC WINAPI CreateCompatibleDC( HDC hdc )
             physDev = origDC->physDev;
         }
         release_dc_ptr( origDC );
-        if (funcs) funcs = DRIVER_get_driver( funcs );
     }
 
-    if (!funcs && !(funcs = DRIVER_load_driver( displayW ))) return 0;
+    if (!funcs && !(funcs = DRIVER_get_display_driver())) return 0;
 
     if (!(dc = alloc_dc_ptr( funcs, OBJ_MEMDC ))) goto error;
 
@@ -790,7 +789,6 @@ HDC WINAPI CreateCompatibleDC( HDC hdc )
 
 error:
     if (dc) free_dc_ptr( dc );
-    DRIVER_release_driver( funcs );
     return 0;
 }
 
@@ -800,7 +798,6 @@ error:
  */
 BOOL WINAPI DeleteDC( HDC hdc )
 {
-    const DC_FUNCTIONS *funcs = NULL;
     DC * dc;
 
     TRACE("%p\n", hdc );
@@ -838,13 +835,11 @@ BOOL WINAPI DeleteDC( HDC hdc )
 	SelectObject( hdc, GetStockObject(WHITE_BRUSH) );
 	SelectObject( hdc, GetStockObject(SYSTEM_FONT) );
         SelectObject( hdc, GetStockObject(DEFAULT_BITMAP) );
-        funcs = dc->funcs;
         if (dc->funcs->pDeleteDC) dc->funcs->pDeleteDC(dc->physDev);
         dc->physDev = NULL;
     }
 
     free_dc_ptr( dc );
-    if (funcs) DRIVER_release_driver( funcs );  /* do that after releasing the GDI lock */
     return TRUE;
 }
 
@@ -918,6 +913,11 @@ INT WINAPI GetDeviceCaps( HDC hdc, INT cap )
         case LOGPIXELSX:  ret = 72; break;
         case LOGPIXELSY:  ret = 72; break;
         case SIZEPALETTE: ret = 2; break;
+        case TEXTCAPS:
+            ret = (TC_OP_CHARACTER | TC_OP_STROKE | TC_CP_STROKE |
+                   TC_CR_ANY | TC_SF_X_YINDEP | TC_SA_DOUBLE | TC_SA_INTEGER |
+                   TC_SA_CONTIN | TC_UA_ABLE | TC_SO_ABLE | TC_RA_ABLE | TC_VA_ABLE);
+            break;
         }
         release_dc_ptr( dc );
     }
@@ -1540,9 +1540,13 @@ UINT WINAPI GetBoundsRect(HDC hdc, LPRECT rect, UINT flags)
 
     if ( !dc ) return 0;
 
-    if (rect) *rect = dc->BoundsRect;
-
-    ret = ((dc->flags & DC_BOUNDS_SET) ? DCB_SET : DCB_RESET);
+    if (rect)
+    {
+        *rect = dc->BoundsRect;
+        ret = ((dc->flags & DC_BOUNDS_SET) ? DCB_SET : DCB_RESET);
+    }
+    else
+        ret = 0;
 
     if (flags & DCB_RESET)
     {
@@ -1945,6 +1949,11 @@ DWORD WINAPI SetLayout(HDC hdc, DWORD layout)
     {
         oldlayout = dc->layout;
         dc->layout = layout;
+        if (layout != oldlayout)
+        {
+            if (layout & LAYOUT_RTL) dc->MapMode = MM_ANISOTROPIC;
+            DC_UpdateXforms( dc );
+        }
         release_dc_ptr( dc );
     }
 

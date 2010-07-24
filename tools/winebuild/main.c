@@ -47,6 +47,7 @@ int verbose = 0;
 int save_temps = 0;
 int link_ext_symbols = 0;
 int force_pointer_size = 0;
+int unwind_tables = 0;
 
 #ifdef __i386__
 enum target_cpu target_cpu = CPU_x86;
@@ -237,7 +238,7 @@ static const char usage_str[] =
 "   -e, --entry=FUNC          Set the DLL entry point function (default: DllMain)\n"
 "   -E, --export=FILE         Export the symbols defined in the .spec or .def file\n"
 "       --external-symbols    Allow linking to external symbols\n"
-"   -f FLAGS                  Compiler flags (only -fPIC is supported)\n"
+"   -f FLAGS                  Compiler flags (-fPIC and -fasynchronous-unwind-tables are supported)\n"
 "   -F, --filename=DLLFILE    Set the DLL filename (default: from input file name)\n"
 "       --fake-module         Create a fake binary module\n"
 "   -h, --help                Display this help message\n"
@@ -250,7 +251,7 @@ static const char usage_str[] =
 "       --ld-cmd=LD           Command to use for linking (default: ld)\n"
 "   -l, --library=LIB         Import the specified library\n"
 "   -L, --library-path=DIR    Look for imports libraries in DIR\n"
-"   -m32, -m64                Force building 32-bit resp. 64-bit code\n"
+"   -m16, -m32, -m64          Force building 16-bit, 32-bit resp. 64-bit code\n"
 "   -M, --main-module=MODULE  Set the name of the main module for a Win16 dll\n"
 "       --nm-cmd=NM           Command to use to get undefined symbols (default: nm)\n"
 "       --nxcompat=y|n        Set the NX compatibility flag (default: yes)\n"
@@ -381,9 +382,10 @@ static char **parse_options( int argc, char **argv, DLLSPEC *spec )
             lib_path[nb_lib_paths++] = xstrdup( optarg );
             break;
         case 'm':
-            if (strcmp( optarg, "32" ) && strcmp( optarg, "64" ))
-                fatal_error( "Invalid -m option '%s', expected -m32 or -m64\n", optarg );
-            if (!strcmp( optarg, "32" )) force_pointer_size = 4;
+            if (strcmp( optarg, "16" ) && strcmp( optarg, "32" ) && strcmp( optarg, "64" ))
+                fatal_error( "Invalid -m option '%s', expected -m16, -m32 or -m64\n", optarg );
+            if (!strcmp( optarg, "16" )) spec->type = SPEC_WIN16;
+            else if (!strcmp( optarg, "32" )) force_pointer_size = 4;
             else force_pointer_size = 8;
             break;
         case 'M':
@@ -404,6 +406,8 @@ static char **parse_options( int argc, char **argv, DLLSPEC *spec )
             break;
         case 'f':
             if (!strcmp( optarg, "PIC") || !strcmp( optarg, "pic")) UsePIC = 1;
+            else if (!strcmp( optarg, "asynchronous-unwind-tables")) unwind_tables = 1;
+            else if (!strcmp( optarg, "no-asynchronous-unwind-tables")) unwind_tables = 0;
             /* ignore all other flags */
             break;
         case 'h':
@@ -618,7 +622,6 @@ int main(int argc, char **argv)
     case MODE_DLL:
         if (spec->subsystem != IMAGE_SUBSYSTEM_NATIVE)
             spec->characteristics |= IMAGE_FILE_DLL;
-        if (!spec_file_name) fatal_error( "missing .spec file\n" );
         /* fall through */
     case MODE_EXE:
         load_resources( argv, spec );

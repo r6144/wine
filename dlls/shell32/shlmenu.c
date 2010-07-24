@@ -628,7 +628,7 @@ LRESULT WINAPI FileMenu_DrawItem(
 
 	ExtTextOutW (lpdis->hDC, xt , yt, ETO_OPAQUE, &TextRect, pMyItem->szItemText, pMyItem->cchItemText, NULL);
 
-	Shell_GetImageList(0, &hImageList);
+	Shell_GetImageLists(0, &hImageList);
 	ImageList_Draw(hImageList, pMyItem->iIconIndex, lpdis->hDC, xi, yi, ILD_NORMAL);
 
 	TRACE("-- 0x%04x 0x%04x 0x%04x 0x%04x\n", TextRect.left, TextRect.top, TextRect.right, TextRect.bottom);
@@ -857,7 +857,7 @@ static BOOL _SHIsMenuSeparator(HMENU hm, int i)
 /*************************************************************************
  * Shell_MergeMenus				[SHELL32.67]
  */
-HRESULT WINAPI Shell_MergeMenus (HMENU hmDst, HMENU hmSrc, UINT uInsert, UINT uIDAdjust, UINT uIDAdjustMax, ULONG uFlags)
+UINT WINAPI Shell_MergeMenus (HMENU hmDst, HMENU hmSrc, UINT uInsert, UINT uIDAdjust, UINT uIDAdjustMax, ULONG uFlags)
 {	int		nItem;
 	HMENU		hmSubMenu;
 	BOOL		bAlreadySeparated;

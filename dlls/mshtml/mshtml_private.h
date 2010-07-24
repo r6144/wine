@@ -38,6 +38,7 @@
 #define NS_ERROR_FAILURE          ((nsresult)0x80004005L)
 #define NS_NOINTERFACE            ((nsresult)0x80004002L)
 #define NS_ERROR_NOT_IMPLEMENTED  ((nsresult)0x80004001L)
+#define NS_ERROR_NOT_AVAILABLE    ((nsresult)0x80040111L)
 #define NS_ERROR_INVALID_ARG      ((nsresult)0x80070057L) 
 #define NS_ERROR_UNEXPECTED       ((nsresult)0x8000ffffL)
 #define NS_ERROR_UNKNOWN_PROTOCOL ((nsresult)0x804b0012L)
@@ -119,6 +120,7 @@ typedef enum {
     IHTMLInputElement_tid,
     IHTMLLocation_tid,
     IHTMLOptionElement_tid,
+    IHTMLRect_tid,
     IHTMLScreen_tid,
     IHTMLScriptElement_tid,
     IHTMLSelectElement_tid,
@@ -143,6 +145,7 @@ typedef struct dispex_dynamic_data_t dispex_dynamic_data_t;
 
 #define MSHTML_DISPID_CUSTOM_MIN 0x60000000
 #define MSHTML_DISPID_CUSTOM_MAX 0x6fffffff
+#define MSHTML_CUSTOM_DISPID_CNT (MSHTML_DISPID_CUSTOM_MAX-MSHTML_DISPID_CUSTOM_MIN)
 
 typedef struct {
     HRESULT (*value)(IUnknown*,LCID,WORD,DISPPARAMS*,VARIANT*,EXCEPINFO*,IServiceProvider*);
@@ -436,8 +439,6 @@ struct NSContainer {
     nsIURIContentListener *content_listener;
 
     HWND hwnd;
-
-    HWND reset_focus; /* hack */
 };
 
 typedef struct nsWineURI nsWineURI;
@@ -462,8 +463,15 @@ typedef struct {
     char *content_type;
     char *charset;
     PRUint32 response_status;
+    struct list response_headers;
     UINT url_scheme;
 } nsChannel;
+
+struct ResponseHeader {
+    struct list entry;
+    WCHAR *header;
+    WCHAR *data;
+};
 
 typedef struct {
     HRESULT (*qi)(HTMLDOMNode*,REFIID,void**);
@@ -721,8 +729,10 @@ HRESULT call_set_active_object(IOleInPlaceUIWindow*,IOleInPlaceActiveObject*);
 void *nsalloc(size_t) __WINE_ALLOC_SIZE(1);
 void nsfree(void*);
 
+void nsACString_InitDepend(nsACString*,const char*);
 void nsACString_SetData(nsACString*,const char*);
 PRUint32 nsACString_GetData(const nsACString*,const char**);
+void nsACString_Finish(nsACString*);
 
 BOOL nsAString_Init(nsAString*,const PRUnichar*);
 void nsAString_InitDepend(nsAString*,const PRUnichar*);
@@ -837,7 +847,6 @@ void update_title(HTMLDocumentObj*);
 
 /* editor */
 void init_editor(HTMLDocument*);
-void set_ns_editmode(NSContainer*);
 void handle_edit_event(HTMLDocument*,nsIDOMEvent*);
 HRESULT editor_exec_copy(HTMLDocument*,DWORD,VARIANT*,VARIANT*);
 HRESULT editor_exec_cut(HTMLDocument*,DWORD,VARIANT*,VARIANT*);

@@ -36,6 +36,7 @@
 #include <winerror.h>
 #include <winnt.h>
 
+#include <urlmon.h>
 #include <wtypes.h>
 #include <olectl.h>
 #include <objidl.h>
@@ -214,6 +215,13 @@ test_pic_with_stream(LPSTREAM stream, unsigned int imgsize)
 	hres = IPicture_get_Handle (pic, &handle);
 	ok(hres == S_OK,"IPicture_get_Handle does not return S_OK, but 0x%08x\n", hres);
 	ok(handle != 0, "IPicture_get_Handle returns a NULL handle, but it should be non NULL\n");
+
+        if (handle)
+        {
+            BITMAP bmp;
+            GetObject((HGDIOBJ)handle, sizeof(BITMAP), &bmp);
+            todo_wine ok(bmp.bmBits != 0, "not a dib\n");
+        }
 
 	width = 0;
 	hres = IPicture_get_Width (pic, &width);
@@ -737,6 +745,141 @@ static void test_get_Type(void)
     IPicture_Release(pic);
 }
 
+static void test_OleLoadPicturePath(void)
+{
+    static WCHAR emptyW[] = {0};
+
+    IPicture *pic;
+    HRESULT hres;
+    int i;
+    char temp_path[MAX_PATH];
+    char temp_file[MAX_PATH];
+    WCHAR temp_fileW[MAX_PATH + 5] = {'f','i','l','e',':','/','/','/'};
+    HANDLE file;
+    DWORD size;
+    WCHAR *ptr;
+
+    const struct
+    {
+        LPOLESTR szURLorPath;
+        REFIID riid;
+        IPicture **pic;
+    } invalid_parameters[] =
+    {
+        {NULL,  NULL,          NULL},
+        {NULL,  NULL,          &pic},
+        {NULL,  &IID_IPicture, NULL},
+        {NULL,  &IID_IPicture, &pic},
+        {emptyW, NULL,          NULL},
+        {emptyW, &IID_IPicture, NULL},
+    };
+
+    for (i = 0; i < sizeof(invalid_parameters)/sizeof(invalid_parameters[0]); i++)
+    {
+        pic = (IPicture *)0xdeadbeef;
+        hres = OleLoadPicturePath(invalid_parameters[i].szURLorPath, NULL, 0, 0,
+                                  invalid_parameters[i].riid,
+                                  (void **)invalid_parameters[i].pic);
+        ok(hres == E_INVALIDARG,
+           "[%d] Expected OleLoadPicturePath to return E_INVALIDARG, got 0x%08x\n", i, hres);
+        ok(pic == (IPicture *)0xdeadbeef,
+           "[%d] Expected output pointer to be 0xdeadbeef, got %p\n", i, pic);
+    }
+
+    pic = (IPicture *)0xdeadbeef;
+    hres = OleLoadPicturePath(emptyW, NULL, 0, 0, NULL, (void **)&pic);
+    todo_wine
+    ok(hres == INET_E_UNKNOWN_PROTOCOL || /* XP/Vista+ */
+       hres == E_UNEXPECTED || /* NT4/Win95 */
+       hres == E_FAIL || /* Win95 OSR2 */
+       hres == E_OUTOFMEMORY, /* Win98/Win2k/Win2k3 */
+       "Expected OleLoadPicturePath to return INET_E_UNKNOWN_PROTOCOL, got 0x%08x\n", hres);
+    ok(pic == NULL,
+       "Expected the output interface pointer to be NULL, got %p\n", pic);
+
+    pic = (IPicture *)0xdeadbeef;
+    hres = OleLoadPicturePath(emptyW, NULL, 0, 0, &IID_IPicture, (void **)&pic);
+    todo_wine
+    ok(hres == INET_E_UNKNOWN_PROTOCOL || /* XP/Vista+ */
+       hres == E_UNEXPECTED || /* NT4/Win95 */
+       hres == E_FAIL || /* Win95 OSR2 */
+       hres == E_OUTOFMEMORY, /* Win98/Win2k/Win2k3 */
+       "Expected OleLoadPicturePath to return INET_E_UNKNOWN_PROTOCOL, got 0x%08x\n", hres);
+    ok(pic == NULL,
+       "Expected the output interface pointer to be NULL, got %p\n", pic);
+
+    /* Create a local temporary image file for testing. */
+    GetTempPathA(sizeof(temp_path), temp_path);
+    GetTempFileNameA(temp_path, "bmp", 0, temp_file);
+    file = CreateFileA(temp_file, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
+                       FILE_ATTRIBUTE_NORMAL, NULL);
+    WriteFile(file, bmpimage, sizeof(bmpimage), &size, NULL);
+    CloseHandle(file);
+
+    MultiByteToWideChar(CP_ACP, 0, temp_file, -1, temp_fileW + 8, sizeof(temp_fileW)/sizeof(WCHAR) - 8);
+
+    /* Try a normal DOS path. */
+    hres = OleLoadPicturePath(temp_fileW + 8, NULL, 0, 0, &IID_IPicture, (void **)&pic);
+    ok(hres == S_OK ||
+       broken(hres == E_UNEXPECTED), /* NT4/Win95 */
+       "Expected OleLoadPicturePath to return S_OK, got 0x%08x\n", hres);
+    if (pic)
+        IPicture_Release(pic);
+
+    /* Try a DOS path with tacked on "file:". */
+    hres = OleLoadPicturePath(temp_fileW, NULL, 0, 0, &IID_IPicture, (void **)&pic);
+    ok(hres == S_OK ||
+       broken(hres == E_UNEXPECTED), /* NT4/Win95 */
+       "Expected OleLoadPicturePath to return S_OK, got 0x%08x\n", hres);
+    if (pic)
+        IPicture_Release(pic);
+
+    DeleteFileA(temp_file);
+
+    /* Try with a nonexistent file. */
+    hres = OleLoadPicturePath(temp_fileW + 8, NULL, 0, 0, &IID_IPicture, (void **)&pic);
+    ok(hres == INET_E_RESOURCE_NOT_FOUND || /* XP+ */
+       hres == E_UNEXPECTED || /* NT4/Win95 */
+       hres == E_FAIL, /* Win9x/Win2k */
+       "Expected OleLoadPicturePath to return INET_E_RESOURCE_NOT_FOUND, got 0x%08x\n", hres);
+
+    hres = OleLoadPicturePath(temp_fileW, NULL, 0, 0, &IID_IPicture, (void **)&pic);
+    ok(hres == INET_E_RESOURCE_NOT_FOUND || /* XP+ */
+       hres == E_UNEXPECTED || /* NT4/Win95 */
+       hres == E_FAIL, /* Win9x/Win2k */
+       "Expected OleLoadPicturePath to return INET_E_RESOURCE_NOT_FOUND, got 0x%08x\n", hres);
+
+    file = CreateFileA(temp_file, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
+                       FILE_ATTRIBUTE_NORMAL, NULL);
+    WriteFile(file, bmpimage, sizeof(bmpimage), &size, NULL);
+    CloseHandle(file);
+
+    /* Try a "file:" URL with slash separators. */
+    ptr = temp_fileW + 8;
+    while (*ptr)
+    {
+        if (*ptr == '\\')
+            *ptr = '/';
+        ptr++;
+    }
+
+    hres = OleLoadPicturePath(temp_fileW, NULL, 0, 0, &IID_IPicture, (void **)&pic);
+    ok(hres == S_OK ||
+       broken(hres == E_UNEXPECTED), /* NT4/Win95 */
+       "Expected OleLoadPicturePath to return S_OK, got 0x%08x\n", hres);
+    if (pic)
+        IPicture_Release(pic);
+
+    DeleteFileA(temp_file);
+
+    /* Try with a nonexistent file. */
+    hres = OleLoadPicturePath(temp_fileW, NULL, 0, 0, &IID_IPicture, (void **)&pic);
+    ok(hres == INET_E_RESOURCE_NOT_FOUND || /* XP+ */
+       hres == E_UNEXPECTED || /* NT4/Win95 */
+       hres == E_FAIL, /* Win9x/Win2k */
+       "Expected OleLoadPicturePath to return INET_E_RESOURCE_NOT_FOUND, got 0x%08x\n", hres);
+}
+
 START_TEST(olepicture)
 {
 	hOleaut32 = GetModuleHandleA("oleaut32.dll");
@@ -753,7 +896,7 @@ START_TEST(olepicture)
 	test_pic(jpgimage, sizeof(jpgimage));
 	test_pic(bmpimage, sizeof(bmpimage));
         test_pic(gif4pixel, sizeof(gif4pixel));
-	/* FIXME: No PNG support yet in Wine or in older Windows... */
+	/* FIXME: No PNG support in Windows... */
 	if (0) test_pic(pngimage, sizeof(pngimage));
 	test_empty_image();
 	test_empty_image_2();
@@ -761,12 +904,13 @@ START_TEST(olepicture)
         test_metafile();
         test_enhmetafile();
 
-	test_Invoke();
-        test_OleCreatePictureIndirect();
-        test_Render();
-        test_get_Attributes();
-        test_get_Handle();
-        test_get_Type();
+    test_Invoke();
+    test_OleCreatePictureIndirect();
+    test_Render();
+    test_get_Attributes();
+    test_get_Handle();
+    test_get_Type();
+    test_OleLoadPicturePath();
 }
 
 
@@ -795,11 +939,11 @@ static HRESULT WINAPI NoStatStreamImpl_QueryInterface(
   NoStatStreamImpl* const This=(NoStatStreamImpl*)iface;
   if (ppvObject==0) return E_INVALIDARG;
   *ppvObject = 0;
-  if (memcmp(&IID_IUnknown, riid, sizeof(IID_IUnknown)) == 0)
+  if (IsEqualIID(&IID_IUnknown, riid))
   {
     *ppvObject = This;
   }
-  else if (memcmp(&IID_IStream, riid, sizeof(IID_IStream)) == 0)
+  else if (IsEqualIID(&IID_IStream, riid))
   {
     *ppvObject = This;
   }

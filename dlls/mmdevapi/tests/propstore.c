@@ -29,22 +29,38 @@
 #include "unknwn.h"
 #include "uuids.h"
 #include "mmdeviceapi.h"
+#include "devpkey.h"
 
 static void test_propertystore(IPropertyStore *store)
 {
     HRESULT hr;
-    PROPVARIANT pv = { 0 };
-    char temp[40];
+    PROPVARIANT pv;
+    char temp[128];
+    temp[sizeof(temp)-1] = 0;
 
+    pv.vt = VT_EMPTY;
     hr = IPropertyStore_GetValue(store, &PKEY_AudioEndpoint_GUID, &pv);
     ok(hr == S_OK, "Failed with %08x\n", hr);
-    if (hr == S_OK)
+    ok(pv.vt == VT_LPWSTR, "Value should be %i, is %i\n", VT_LPWSTR, pv.vt);
+    if (hr == S_OK && pv.vt == VT_LPWSTR)
     {
         WideCharToMultiByte(CP_ACP, 0, pv.u.pwszVal, -1, temp, sizeof(temp)-1, NULL, NULL);
-        temp[sizeof(temp)-1] = 0;
         trace("guid: %s\n", temp);
         CoTaskMemFree(pv.u.pwszVal);
     }
+
+    pv.vt = VT_EMPTY;
+    hr = IPropertyStore_GetValue(store, (const PROPERTYKEY*)&DEVPKEY_DeviceInterface_FriendlyName, &pv);
+    ok(hr == S_OK, "Failed with %08x\n", hr);
+    ok(pv.vt == VT_EMPTY, "Key should not be found\n");
+
+    pv.vt = VT_EMPTY;
+    hr = IPropertyStore_GetValue(store, (const PROPERTYKEY*)&DEVPKEY_DeviceInterface_Enabled, &pv);
+    ok(pv.vt == VT_EMPTY, "Key should not be found\n");
+
+    pv.vt = VT_EMPTY;
+    hr = IPropertyStore_GetValue(store, (const PROPERTYKEY*)&DEVPKEY_DeviceInterface_ClassGuid, &pv);
+    ok(pv.vt == VT_EMPTY, "Key should not be found\n");
 }
 
 START_TEST(propstore)
@@ -74,7 +90,7 @@ START_TEST(propstore)
     }
     store = NULL;
     hr = IMMDevice_OpenPropertyStore(dev, 3, &store);
-    todo_wine ok(hr == E_INVALIDARG, "Wrong hr returned: %08x\n", hr);
+    ok(hr == E_INVALIDARG, "Wrong hr returned: %08x\n", hr);
     if (hr != S_OK)
         /* It seems on windows returning with E_INVALIDARG doesn't
          * set store to NULL, so just don't set store to non-null
@@ -84,11 +100,11 @@ START_TEST(propstore)
     else if (store)
         IPropertyStore_Release(store);
     hr = IMMDevice_OpenPropertyStore(dev, STGM_READ, NULL);
-    todo_wine ok(hr == E_POINTER, "Wrong hr returned: %08x\n", hr);
+    ok(hr == E_POINTER, "Wrong hr returned: %08x\n", hr);
 
     store = NULL;
     hr = IMMDevice_OpenPropertyStore(dev, STGM_READ, &store);
-    todo_wine ok(hr == S_OK, "Opening valid store returned %08x\n", hr);
+    ok(hr == S_OK, "Opening valid store returned %08x\n", hr);
     if (store)
     {
         test_propertystore(store);

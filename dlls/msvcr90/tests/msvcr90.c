@@ -35,35 +35,39 @@ static int *p_sys_nerr;
 static int* (__cdecl *p__sys_nerr)(void);
 static char **p_sys_errlist;
 static char** (__cdecl *p__sys_errlist)(void);
+static __int64 (__cdecl *p_strtoi64)(const char *, char **, int);
+static unsigned __int64 (__cdecl *p_strtoui64)(const char *, char **, int);
+
+static void* (WINAPI *pEncodePointer)(void *);
 
 int cb_called[4];
 
 /* ########## */
 
-void __cdecl test_invalid_parameter_handler(const wchar_t *expression,
+static void __cdecl test_invalid_parameter_handler(const wchar_t *expression,
         const wchar_t *function, const wchar_t *file,
-        unsigned line, unsigned *res)
+        unsigned line, uintptr_t arg)
 {
     ok(expression == NULL, "expression is not NULL\n");
     ok(function == NULL, "function is not NULL\n");
     ok(file == NULL, "file is not NULL\n");
     ok(line == 0, "line = %u\n", line);
-    ok(res == NULL, "res = %p\n", res);
+    ok(arg == 0, "arg = %lx\n", (UINT_PTR)arg);
 }
 
-static int initterm_cb0(void)
+static int __cdecl initterm_cb0(void)
 {
     cb_called[0]++;
     return 0;
 }
 
-static int initterm_cb1(void)
+static int __cdecl initterm_cb1(void)
 {
     cb_called[1]++;
     return 1;
 }
 
-static int initterm_cb2(void)
+static int __cdecl initterm_cb2(void)
 {
     cb_called[2]++;
     return 2;
@@ -150,6 +154,8 @@ static void test__initterm_e(void)
 
 }
 
+/* Beware that _encode_pointer is a NOP before XP
+   (the parameter is returned unchanged) */
 static void test__encode_pointer(void)
 {
     void *ptr, *res;
@@ -164,12 +170,20 @@ static void test__encode_pointer(void)
     res = p_decode_pointer(res);
     ok(res == ptr, "Pointers are different after encoding and decoding\n");
 
+    ok(p_encoded_null() == p_encode_pointer(NULL), "Error encoding null\n");
+
     ptr = p_encode_pointer(p_encode_pointer);
-    res = EncodePointer(p_encode_pointer);
-    ok(ptr == res, "_encode_pointer produced different result than EncodePointer\n");
     ok(p_decode_pointer(ptr) == p_encode_pointer, "Error decoding pointer\n");
 
-    ok(p_encoded_null() == p_encode_pointer(NULL), "Error encoding null\n");
+    /* Not present before XP */
+    if (!pEncodePointer) {
+        win_skip("EncodePointer not found\n");
+        return;
+    }
+
+    res = pEncodePointer(p_encode_pointer);
+    ok(ptr == res, "_encode_pointer produced different result than EncodePointer\n");
+
 }
 
 static void test_error_messages(void)
@@ -193,11 +207,43 @@ static void test_error_messages(void)
     ok(*p_sys_errlist == *(p__sys_errlist()), "p_sys_errlist != p__sys_errlist()\n");
 }
 
+static void test__strtoi64(void)
+{
+    __int64 res;
+    unsigned __int64 ures;
+
+    if(!p_strtoi64 || !p_strtoui64) {
+        win_skip("_strtoi64 or _strtoui64 not found\n");
+        return;
+    }
+
+    if(!p_set_invalid_parameter_handler) {
+        win_skip("_set_invalid_parameter_handler not found\n");
+        return;
+    }
+
+    errno = 0xdeadbeef;
+    res = p_strtoi64(NULL, NULL, 10);
+    ok(res == 0, "res != 0\n");
+    res = p_strtoi64("123", NULL, 1);
+    ok(res == 0, "res != 0\n");
+    res = p_strtoi64("123", NULL, 37);
+    ok(res == 0, "res != 0\n");
+    ures = p_strtoui64(NULL, NULL, 10);
+    ok(ures == 0, "res = %d\n", (int)ures);
+    ures = p_strtoui64("123", NULL, 1);
+    ok(ures == 0, "res = %d\n", (int)ures);
+    ures = p_strtoui64("123", NULL, 37);
+    ok(ures == 0, "res = %d\n", (int)ures);
+    ok(errno == 0xdeadbeef, "errno = %x\n", errno);
+}
+
 /* ########## */
 
 START_TEST(msvcr90)
 {
     HMODULE hcrt;
+    HMODULE hkernel32;
 
     SetLastError(0xdeadbeef);
     hcrt = LoadLibraryA("msvcr90.dll");
@@ -219,8 +265,14 @@ START_TEST(msvcr90)
     p__sys_nerr = (void *) GetProcAddress(hcrt, "__sys_nerr");
     p_sys_errlist = (void *) GetProcAddress(hcrt, "_sys_errlist");
     p__sys_errlist = (void *) GetProcAddress(hcrt, "__sys_errlist");
+    p_strtoi64 = (void *) GetProcAddress(hcrt, "_strtoi64");
+    p_strtoui64 = (void *) GetProcAddress(hcrt, "_strtoui64");
+
+    hkernel32 = GetModuleHandleA("kernel32.dll");
+    pEncodePointer = (void *) GetProcAddress(hkernel32, "EncodePointer");
 
     test__initterm_e();
     test__encode_pointer();
     test_error_messages();
+    test__strtoi64();
 }

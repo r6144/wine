@@ -71,6 +71,27 @@ static inline LPWSTR heap_strdupW(LPCWSTR str)
     return ret;
 }
 
+static inline LPWSTR heap_strndupW(LPCWSTR str, UINT max_len)
+{
+    LPWSTR ret;
+    UINT len;
+
+    if(!str)
+        return NULL;
+
+    for(len=0; len<max_len; len++)
+        if(str[len] == '\0')
+            break;
+
+    ret = HeapAlloc(GetProcessHeap(), 0, sizeof(WCHAR)*(len+1));
+    if(ret) {
+        memcpy(ret, str, sizeof(WCHAR)*len);
+        ret[len] = '\0';
+    }
+
+    return ret;
+}
+
 static inline WCHAR *heap_strdupAtoW(const char *str)
 {
     LPWSTR ret = NULL;
@@ -148,6 +169,8 @@ typedef struct {
     DWORD (*FindNextFileW)(object_header_t*,void*);
 } object_vtbl_t;
 
+#define INTERNET_HANDLE_IN_USE 1
+
 struct _object_header_t
 {
     WH_TYPE htype;
@@ -156,6 +179,7 @@ struct _object_header_t
     DWORD  dwFlags;
     DWORD_PTR dwContext;
     DWORD  dwError;
+    ULONG  ErrorMask;
     DWORD  dwInternalFlags;
     LONG   refs;
     INTERNET_STATUS_CALLBACK lpfnStatusCB;
@@ -388,7 +412,7 @@ object_header_t *WININET_AddRef( object_header_t *info );
 BOOL WININET_Release( object_header_t *info );
 BOOL WININET_FreeHandle( HINTERNET hinternet );
 
-DWORD INET_QueryOption(DWORD,void*,DWORD*,BOOL);
+DWORD INET_QueryOption( object_header_t *, DWORD, void *, DWORD *, BOOL );
 
 time_t ConvertTimeString(LPCWSTR asctime);
 

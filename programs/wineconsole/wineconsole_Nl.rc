@@ -29,14 +29,13 @@ IDS_EDIT,		"&Bewerken"
 IDS_DEFAULT,		"&Standaardinstellingen"
 IDS_PROPERTIES,		"&Eigenschappen"
 IDS_MARK,		"&Markeren"
-IDS_COPY,		"&KopiÃren«"
+IDS_COPY,		"&Kopiëren"
 IDS_PASTE,		"&Plakken"
 IDS_SELECTALL,		"&Alles selecteren"
 IDS_SCROLL,		"Sc&rollen"
 IDS_SEARCH,		"&Zoeken"
 IDS_FNT_DISPLAY,	"Elk karakter is %ld pixels breed en %ld pixels hoog"
-IDS_FNT_PREVIEW_1,	"Dit is een test"
-IDS_FNT_PREVIEW_2,	""
+IDS_FNT_PREVIEW,	"Dit is een test"
 IDS_DLG_TIT_DEFAULT,    "Configuratie - standaard instelllingen"
 IDS_DLG_TIT_CURRENT,    "Configuratie - huidige instellingen"
 IDS_DLG_TIT_ERROR,	"Configuratiefout"
@@ -54,11 +53,11 @@ IDS_USAGE_BACKEND          "  --backend={user|curses}  Kiezen voor user zal een 
                            "                            curses zal proberen de huidige terminal om te zetten\n"\
                            "                            in een Wine console\n"
 IDS_USAGE_COMMAND          "  <commando>                Het Wine programma dat zal starten in de Wine console\n"
-IDS_USAGE_FOOTER           "\nExample:\n  wineconsole cmd\nStarts the Wine command prompt in a Wine console\n\n"
+IDS_USAGE_FOOTER           "\nVoorbeeld:\n  wineconsole cmd\nStart de Wine command prompt in een Wine console\n\n"
 
 END
 
-IDD_OPTION DIALOG LOADONCALL MOVEABLE DISCARDABLE 36, 24, 140, 105
+IDD_OPTION DIALOG 36, 24, 140, 105
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION " Opties "
 FONT 8, "MS Shell Dlg"
@@ -79,10 +78,10 @@ FONT 8, "MS Shell Dlg"
 	LTEXT "&Aantal te bewaren opdrachten :", -1, 14, 67, 78, 18
 	EDITTEXT IDC_OPT_HIST_SIZE, 92, 69, 31, 12, WS_TABSTOP|WS_BORDER|ES_NUMBER
 	CONTROL "", IDC_OPT_HIST_SIZE_UD, "msctls_updown32", UDS_SETBUDDYINT|UDS_ALIGNRIGHT|UDS_AUTOBUDDY|UDS_ARROWKEYS|UDS_NOTHOUSANDS, 0, 0, 0, 0
-	AUTOCHECKBOX "&Verwijderen dubbelen", IDC_OPT_HIST_NODOUBLE, 130, 67, 50, 18, WS_TABSTOP|BS_MULTILINE
+	AUTOCHECKBOX "&Verwijder dubbelen", IDC_OPT_HIST_NODOUBLE, 130, 67, 50, 18, WS_TABSTOP|BS_MULTILINE
 }
 
-IDD_FONT DIALOG LOADONCALL MOVEABLE DISCARDABLE 36, 24, 140, 105
+IDD_FONT DIALOG 36, 24, 140, 105
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION " Lettertype "
 FONT 8, "MS Shell Dlg"
@@ -98,12 +97,12 @@ FONT 8, "MS Shell Dlg"
 	LTEXT "", IDC_FNT_FONT_INFO, 128, 76, 80, 18
 }
 
-IDD_CONFIG DIALOG LOADONCALL MOVEABLE DISCARDABLE 36, 24, 140, 105
+IDD_CONFIG DIALOG 36, 24, 140, 105
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION " Configuratie "
 FONT 8, "MS Shell Dlg"
 {
-	GROUPBOX "Buffer zone", -1, 10, 11, 100, 42, BS_GROUPBOX
+	GROUPBOX "Bufferzone", -1, 10, 11, 100, 42, BS_GROUPBOX
 	LTEXT "&Breedte :", -1, 14, 25, 54, 9
 	EDITTEXT IDC_CNF_SB_WIDTH, 68, 23, 36, 12, WS_TABSTOP|WS_BORDER|ES_NUMBER
 	CONTROL "", IDC_CNF_SB_WIDTH_UD, "msctls_updown32", UDS_SETBUDDYINT|UDS_ALIGNRIGHT|UDS_AUTOBUDDY|UDS_ARROWKEYS|UDS_NOTHOUSANDS, 0, 0, 0, 0
@@ -119,14 +118,14 @@ FONT 8, "MS Shell Dlg"
 	EDITTEXT IDC_CNF_WIN_HEIGHT, 68, 81, 36, 12, WS_TABSTOP|WS_BORDER|ES_NUMBER
 	CONTROL "", IDC_CNF_WIN_HEIGHT_UD, "msctls_updown32", UDS_SETBUDDYINT|UDS_ALIGNRIGHT|UDS_AUTOBUDDY|UDS_ARROWKEYS|UDS_NOTHOUSANDS, 0, 0, 0, 0
 
-	GROUPBOX "Programma is geëindigd", -1, 115, 11, 80, 42, BS_GROUPBOX
+	GROUPBOX "Programma is beëindigd", -1, 115, 11, 80, 42, BS_GROUPBOX
 	AUTOCHECKBOX "&Console afsluiten", IDC_CNF_CLOSE_EXIT, 119, 25, 75, 20, WS_TABSTOP
 
 	GROUPBOX "Versie", -1, 115, 55, 80, 42
 	COMBOBOX IDC_CNF_EDITION_MODE, 119, 69, 75, 20, CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP
 }
 
-IDD_SAVE_SETTINGS DIALOG LOADONCALL MOVEABLE DISCARDABLE 20, 20, 140, 60
+IDD_SAVE_SETTINGS DIALOG 20, 20, 140, 60
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION
 CAPTION "Console parameters"
 FONT 8, "MS Shell Dlg"

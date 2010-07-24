@@ -752,6 +752,18 @@ static void setup_config_dir(void)
 
         mkdir( config_dir, 0777 );
         if (chdir( config_dir ) == -1) fatal_perror( "chdir to %s\n", config_dir );
+
+        if ((p = getenv( "WINEARCH" )) && !strcmp( p, "win32" ))
+        {
+            /* force creation of a 32-bit prefix */
+            int fd = open( "system.reg", O_WRONLY | O_CREAT | O_EXCL, 0666 );
+            if (fd != -1)
+            {
+                static const char regfile[] = "WINE REGISTRY Version 2\n\n#arch=win32\n";
+                write( fd, regfile, sizeof(regfile) - 1 );
+                close( fd );
+            }
+        }
         MESSAGE( "wine: created the configuration directory '%s'\n", config_dir );
     }
 
@@ -935,9 +947,9 @@ static int get_unix_tid(void)
 {
     int ret = -1;
 #if defined(linux) && defined(__i386__)
-    __asm__("int $0x80" : "=a" (ret) : "0" (224) /* SYS_gettid */);
+    ret = syscall(224 /*SYS_gettid*/);
 #elif defined(linux) && defined(__x86_64__)
-    __asm__("syscall" : "=a" (ret) : "0" (186) /* SYS_gettid */);
+    ret = syscall(186 /*SYS_gettid*/);
 #elif defined(__sun)
     ret = pthread_self();
 #elif defined(__APPLE__)
@@ -1039,6 +1051,8 @@ NTSTATUS server_init_process_done(void)
  */
 size_t server_init_thread( void *entry_point )
 {
+    static const int is_win64 = (sizeof(void *) > sizeof(int));
+    const char *arch = getenv( "WINEARCH" );
     int ret;
     int reply_pipe[2];
     struct sigaction sig_act;
@@ -1083,20 +1097,32 @@ size_t server_init_thread( void *entry_point )
     }
     SERVER_END_REQ;
 
-#ifndef _WIN64
-    is_wow64 = (server_cpus & (1 << CPU_x86_64)) != 0;
-#endif
+    is_wow64 = !is_win64 && (server_cpus & (1 << CPU_x86_64)) != 0;
     ntdll_get_thread_data()->wow64_redir = is_wow64;
 
-    if (ret)
+    switch (ret)
     {
-        if (ret == STATUS_NOT_SUPPORTED)
+    case STATUS_SUCCESS:
+        if (arch)
         {
-            static const char * const cpu_arch[] = { "x86", "x86_64", "Alpha", "PowerPC", "Sparc" };
-            server_protocol_error( "the running wineserver doesn't support the %s architecture.\n",
-                                   cpu_arch[client_cpu] );
+            if (!strcmp( arch, "win32" ) && (is_win64 || is_wow64))
+                fatal_error( "WINEARCH set to win32 but '%s' is a 64-bit installation.\n",
+                             wine_get_config_dir() );
+            if (!strcmp( arch, "win64" ) && !is_wow64)
+                fatal_error( "WINEARCH set to win64 but '%s' is a 32-bit installation.\n",
+                             wine_get_config_dir() );
         }
-        else server_protocol_error( "init_thread failed with status %x\n", ret );
+        return info_size;
+    case STATUS_NOT_REGISTRY_FILE:
+        fatal_error( "'%s' is a 32-bit installation, it cannot support 64-bit applications.\n",
+                     wine_get_config_dir() );
+    case STATUS_NOT_SUPPORTED:
+        if (is_win64)
+            fatal_error( "wineserver is 32-bit, it cannot support 64-bit applications.\n" );
+        else
+            fatal_error( "'%s' is a 64-bit installation, it cannot be used with a 32-bit wineserver.\n",
+                         wine_get_config_dir() );
+    default:
+        server_protocol_error( "init_thread failed with status %x\n", ret );
     }
-    return info_size;
 }

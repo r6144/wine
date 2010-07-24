@@ -503,7 +503,7 @@ HINTERNET WINAPI WinHttpConnect( HINTERNET hsession, LPCWSTR server, INTERNET_PO
     connect->session = session;
     list_add_head( &session->hdr.children, &connect->hdr.entry );
 
-    if (server && !(connect->hostname = strdupW( server ))) goto end;
+    if (!(connect->hostname = strdupW( server ))) goto end;
     connect->hostport = port;
 
     if (!set_server_for_hostname( connect, server, port ))
@@ -547,6 +547,30 @@ static void request_destroy( object_header_t *hdr )
     heap_free( request );
 }
 
+static void str_to_buffer( WCHAR *buffer, const WCHAR *str, LPDWORD buflen )
+{
+    int len = 0;
+    if (str) len = strlenW( str );
+    if (buffer && *buflen > len)
+    {
+        memcpy( buffer, str, len * sizeof(WCHAR) );
+        buffer[len] = 0;
+    }
+    *buflen = len * sizeof(WCHAR);
+}
+
+static WCHAR *blob_to_str( DWORD encoding, CERT_NAME_BLOB *blob )
+{
+    WCHAR *ret;
+    DWORD size, format = CERT_SIMPLE_NAME_STR | CERT_NAME_STR_CRLF_FLAG;
+
+    size = CertNameToStrW( encoding, blob, format, NULL, 0 );
+    if ((ret = LocalAlloc( 0, size * sizeof(WCHAR) )))
+        CertNameToStrW( encoding, blob, format, ret, size );
+
+    return ret;
+}
+
 static BOOL request_query_option( object_header_t *hdr, DWORD option, LPVOID buffer, LPDWORD buflen )
 {
     request_t *request = (request_t *)hdr;
@@ -586,6 +610,34 @@ static BOOL request_query_option( object_header_t *hdr, DWORD option, LPVOID buf
         *buflen = sizeof(cert);
         return TRUE;
     }
+    case WINHTTP_OPTION_SECURITY_CERTIFICATE_STRUCT:
+    {
+        const CERT_CONTEXT *cert;
+        WINHTTP_CERTIFICATE_INFO *ci = buffer;
+
+        FIXME("partial stub\n");
+
+        if (!buffer || *buflen < sizeof(*ci))
+        {
+            *buflen = sizeof(*ci);
+            set_last_error( ERROR_INSUFFICIENT_BUFFER );
+            return FALSE;
+        }
+        if (!(cert = netconn_get_certificate( &request->netconn ))) return FALSE;
+
+        ci->ftExpiry = cert->pCertInfo->NotAfter;
+        ci->ftStart  = cert->pCertInfo->NotBefore;
+        ci->lpszSubjectInfo = blob_to_str( cert->dwCertEncodingType, &cert->pCertInfo->Subject );
+        ci->lpszIssuerInfo  = blob_to_str( cert->dwCertEncodingType, &cert->pCertInfo->Issuer );
+        ci->lpszProtocolName      = NULL;
+        ci->lpszSignatureAlgName  = NULL;
+        ci->lpszEncryptionAlgName = NULL;
+        ci->dwKeySize = 128;
+
+        CertFreeCertificateContext( cert );
+        *buflen = sizeof(*ci);
+        return TRUE;
+    }
     case WINHTTP_OPTION_SECURITY_KEY_BITNESS:
     {
         if (!buffer || *buflen < sizeof(DWORD))
@@ -615,11 +667,41 @@ static BOOL request_query_option( object_header_t *hdr, DWORD option, LPVOID buf
         *(DWORD *)buffer = request->recv_timeout;
         *buflen = sizeof(DWORD);
         return TRUE;
+
+    case WINHTTP_OPTION_USERNAME:
+        str_to_buffer( buffer, request->connect->username, buflen );
+        return TRUE;
+
+    case WINHTTP_OPTION_PASSWORD:
+        str_to_buffer( buffer, request->connect->password, buflen );
+        return TRUE;
+
+    case WINHTTP_OPTION_PROXY_USERNAME:
+        str_to_buffer( buffer, request->connect->session->proxy_username, buflen );
+        return TRUE;
+
+    case WINHTTP_OPTION_PROXY_PASSWORD:
+        str_to_buffer( buffer, request->connect->session->proxy_password, buflen );
+        return TRUE;
+
     default:
         FIXME("unimplemented option %u\n", option);
         set_last_error( ERROR_INVALID_PARAMETER );
         return FALSE;
     }
+}
+
+static WCHAR *buffer_to_str( WCHAR *buffer, DWORD buflen )
+{
+    WCHAR *ret;
+    if ((ret = heap_alloc( (buflen + 1) * sizeof(WCHAR))))
+    {
+        memcpy( ret, buffer, buflen * sizeof(WCHAR) );
+        ret[buflen] = 0;
+        return ret;
+    }
+    set_last_error( ERROR_OUTOFMEMORY );
+    return NULL;
 }
 
 static BOOL request_set_option( object_header_t *hdr, DWORD option, LPVOID buffer, DWORD buflen )
@@ -681,9 +763,27 @@ static BOOL request_set_option( object_header_t *hdr, DWORD option, LPVOID buffe
         return TRUE;
     }
     case WINHTTP_OPTION_SECURITY_FLAGS:
-        FIXME("WINHTTP_OPTION_SECURITY_FLAGS unimplemented (%08x)\n",
-              *(DWORD *)buffer);
+    {
+        DWORD flags;
+
+        if (buflen < sizeof(DWORD))
+        {
+            set_last_error( ERROR_INSUFFICIENT_BUFFER );
+            return FALSE;
+        }
+        flags = *(DWORD *)buffer;
+        TRACE("0x%x\n", flags);
+        if (!(flags & (SECURITY_FLAG_IGNORE_CERT_CN_INVALID   |
+                       SECURITY_FLAG_IGNORE_CERT_DATE_INVALID |
+                       SECURITY_FLAG_IGNORE_UNKNOWN_CA        |
+                       SECURITY_FLAG_IGNORE_CERT_WRONG_USAGE)))
+        {
+            set_last_error( ERROR_INVALID_PARAMETER );
+            return FALSE;
+        }
+        request->netconn.security_flags = flags;
         return TRUE;
+    }
     case WINHTTP_OPTION_RESOLVE_TIMEOUT:
         request->resolve_timeout = *(DWORD *)buffer;
         return TRUE;
@@ -696,6 +796,39 @@ static BOOL request_set_option( object_header_t *hdr, DWORD option, LPVOID buffe
     case WINHTTP_OPTION_RECEIVE_TIMEOUT:
         request->recv_timeout = *(DWORD *)buffer;
         return TRUE;
+
+    case WINHTTP_OPTION_USERNAME:
+    {
+        connect_t *connect = request->connect;
+
+        heap_free( connect->username );
+        if (!(connect->username = buffer_to_str( buffer, buflen ))) return FALSE;
+        return TRUE;
+    }
+    case WINHTTP_OPTION_PASSWORD:
+    {
+        connect_t *connect = request->connect;
+
+        heap_free( connect->password );
+        if (!(connect->password = buffer_to_str( buffer, buflen ))) return FALSE;
+        return TRUE;
+    }
+    case WINHTTP_OPTION_PROXY_USERNAME:
+    {
+        session_t *session = request->connect->session;
+
+        heap_free( session->proxy_username );
+        if (!(session->proxy_username = buffer_to_str( buffer, buflen ))) return FALSE;
+        return TRUE;
+    }
+    case WINHTTP_OPTION_PROXY_PASSWORD:
+    {
+        session_t *session = request->connect->session;
+
+        heap_free( session->proxy_password );
+        if (!(session->proxy_password = buffer_to_str( buffer, buflen ))) return FALSE;
+        return TRUE;
+    }
     default:
         FIXME("unimplemented option %u\n", option);
         set_last_error( ERROR_INVALID_PARAMETER );

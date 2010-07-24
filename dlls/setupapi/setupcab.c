@@ -555,20 +555,21 @@ BOOL WINAPI SetupIterateCabinetA(PCSTR CabinetFile, DWORD Reserved,
 
   SC_HSC_A my_hsc;
   ERF erf;
-  CHAR pszCabinet[MAX_PATH], pszCabPath[MAX_PATH], *p;
+  CHAR pszCabinet[MAX_PATH], pszCabPath[MAX_PATH], *p = NULL;
   DWORD fpnsize;
   BOOL ret;
-
 
   TRACE("(CabinetFile == %s, Reserved == %u, MsgHandler == ^%p, Context == ^%p)\n",
         debugstr_a(CabinetFile), Reserved, MsgHandler, Context);
 
-  if (! LoadCABINETDll()) 
+  if (!LoadCABINETDll())
     return FALSE;
 
-  memset(&my_hsc, 0, sizeof(SC_HSC_A));
-  pszCabinet[0] = '\0';
-  pszCabPath[0] = '\0';
+  if (!CabinetFile)
+  {
+    SetLastError(ERROR_INVALID_PARAMETER);
+    return FALSE;
+  }
 
   fpnsize = strlen(CabinetFile);
   if (fpnsize >= MAX_PATH) {
@@ -621,7 +622,7 @@ BOOL WINAPI SetupIterateCabinetW(PCWSTR CabinetFile, DWORD Reserved,
   UINT len;
   SC_HSC_W my_hsc;
   ERF erf;
-  WCHAR pszCabPathW[MAX_PATH], *p;
+  WCHAR pszCabPathW[MAX_PATH], *p = NULL;
   DWORD fpnsize;
   BOOL ret;
 
@@ -631,9 +632,11 @@ BOOL WINAPI SetupIterateCabinetW(PCWSTR CabinetFile, DWORD Reserved,
   if (!LoadCABINETDll())
     return FALSE;
 
-  if (!CabinetFile) return FALSE;
-
-  memset(&my_hsc, 0, sizeof(SC_HSC_W));
+  if (!CabinetFile)
+  {
+    SetLastError(ERROR_INVALID_PARAMETER);
+    return FALSE;
+  }
 
   fpnsize = GetFullPathNameW(CabinetFile, MAX_PATH, pszCabPathW, &p);
   if (fpnsize > MAX_PATH) {

@@ -5,7 +5,7 @@ SRCDIR    = @srcdir@
 VPATH     = @srcdir@
 MODULE    = winspool.drv
 IMPORTLIB = winspool
-IMPORTS   = user32 gdi32 advapi32 kernel32 ntdll
+IMPORTS   = user32 gdi32 advapi32
 EXTRAINCL = @CUPSINCL@
 
 C_SRCS = \
@@ -21,7 +21,9 @@ RC_SRCS = \
 	Es.rc \
 	Fi.rc \
 	Fr.rc \
+	Hu.rc \
 	It.rc \
+	Ja.rc \
 	Ko.rc \
 	Lt.rc \
 	Nl.rc \
@@ -33,6 +35,7 @@ RC_SRCS = \
 	Si.rc \
 	Sv.rc \
 	Tr.rc \
+	Uk.rc \
 	Zh.rc \
 	winspool.rc
 

@@ -39,7 +39,7 @@ WINE_DEFAULT_DEBUG_CHANNEL(msvcrt);
       ~(alignment - 1)) - offset))
 
 
-typedef void (*MSVCRT_new_handler_func)(MSVCRT_size_t size);
+typedef void (CDECL *MSVCRT_new_handler_func)(MSVCRT_size_t size);
 
 static MSVCRT_new_handler_func MSVCRT_new_handler;
 static int MSVCRT_new_mode;
@@ -63,6 +63,16 @@ void* CDECL MSVCRT_operator_new(MSVCRT_size_t size)
   UNLOCK_HEAP;
   return retval;
 }
+
+
+/*********************************************************************
+ *		??2@YAPAXIHPBDH@Z (MSVCRT.@)
+ */
+void* CDECL MSVCRT_operator_new_dbg(MSVCRT_size_t size, int type, const char *file, int line)
+{
+    return MSVCRT_operator_new( size );
+}
+
 
 /*********************************************************************
  *		??3@YAXPAX@Z (MSVCRT.@)
@@ -240,6 +250,14 @@ int CDECL _heapadd(void* mem, MSVCRT_size_t size)
   TRACE("(%p,%ld) unsupported in Win32\n", mem,size);
   *MSVCRT__errno() = MSVCRT_ENOSYS;
   return -1;
+}
+
+/*********************************************************************
+ *		_heapadd (MSVCRT.@)
+ */
+MSVCRT_intptr_t CDECL _get_heap_handle(void)
+{
+    return (MSVCRT_intptr_t)GetProcessHeap();
 }
 
 /*********************************************************************
@@ -510,4 +528,71 @@ void * CDECL _aligned_realloc(void *memblock, MSVCRT_size_t size, MSVCRT_size_t 
 {
     TRACE("(%p, %lu, %lu)\n", memblock, size, alignment);
     return _aligned_offset_realloc(memblock, size, alignment, 0);
+}
+
+/*********************************************************************
+ *		memmove_s (MSVCRT.@)
+ */
+int CDECL memmove_s(void *dest, MSVCRT_size_t numberOfElements, const void *src, MSVCRT_size_t count)
+{
+    TRACE("(%p %lu %p %lu)\n", dest, numberOfElements, src, count);
+
+    if(!count)
+        return 0;
+
+    if(!dest || !src) {
+        if(dest)
+            memset(dest, 0, numberOfElements);
+
+        *MSVCRT__errno() = MSVCRT_EINVAL;
+        return MSVCRT_EINVAL;
+    }
+
+    if(count > numberOfElements) {
+        memset(dest, 0, numberOfElements);
+
+        *MSVCRT__errno() = MSVCRT_ERANGE;
+        return MSVCRT_ERANGE;
+    }
+
+    memmove(dest, src, count);
+    return 0;
+}
+
+/*********************************************************************
+ *		strncpy_s (MSVCRT.@)
+ */
+int CDECL strncpy_s(char *dest, MSVCRT_size_t numberOfElements,
+        const char *src, MSVCRT_size_t count)
+{
+    MSVCRT_size_t i, end;
+
+    TRACE("(%s %lu %s %lu)\n", dest, numberOfElements, src, count);
+
+    if(!count)
+        return 0;
+
+    if(!dest || !src || !numberOfElements) {
+        MSVCRT__invalid_parameter(NULL, NULL, NULL, 0, 0);
+        *MSVCRT__errno() = MSVCRT_EINVAL;
+        return MSVCRT_EINVAL;
+    }
+
+    if(count!=MSVCRT__TRUNCATE && count<numberOfElements)
+        end = count;
+    else
+        end = numberOfElements-1;
+
+    for(i=0; i<end && src[i]; i++)
+        dest[i] = src[i];
+
+    if(!src[i] || end==count || count==MSVCRT__TRUNCATE) {
+        dest[i] = '\0';
+        return 0;
+    }
+
+    MSVCRT__invalid_parameter(NULL, NULL, NULL, 0, 0);
+    dest[0] = '\0';
+    *MSVCRT__errno() = MSVCRT_EINVAL;
+    return MSVCRT_EINVAL;
 }

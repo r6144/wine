@@ -23,7 +23,9 @@
 
 #include "notepad_res.h"
 
-MAIN_MENU MENU LANGUAGE LANG_HUNGARIAN, SUBLANG_DEFAULT
+LANGUAGE LANG_HUNGARIAN, SUBLANG_DEFAULT
+
+MAIN_MENU MENU
 {
  POPUP "&Fájl" {
   MENUITEM "Ú&j\tCtrl+N",           CMD_NEW
@@ -54,6 +56,7 @@ POPUP "S&zerkesztés" {
 POPUP "&Keresés" {
   MENUITEM "&Keresés...",           CMD_SEARCH
   MENUITEM "Köve&tkezõ keresése\tF3",  CMD_SEARCH_NEXT
+  MENUITEM "&Replace...\tCtrl+H", CMD_REPLACE
  }
 POPUP "&Súgó" {
   MENUITEM "&Témakörök",         CMD_HELP_CONTENTS
@@ -92,7 +95,7 @@ PUSHBUTTON    "Mégse",     IDCANCEL,               180, 21, 40, 15, WS_TABSTOP
 PUSHBUTTON    "&Súgó",       IDHELP,                180, 39, 40, 15, WS_TABSTOP
 }
 
-STRINGTABLE DISCARDABLE LANGUAGE LANG_HUNGARIAN, SUBLANG_DEFAULT
+STRINGTABLE
 {
 STRING_PAGESETUP_HEADERVALUE,   "&f"
 STRING_PAGESETUP_FOOTERVALUE,   "Oldalszám: &p."

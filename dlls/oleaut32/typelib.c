@@ -283,30 +283,9 @@ static WCHAR *get_lcid_subkey( LCID lcid, SYSKIND syskind, WCHAR *buffer )
 static HRESULT TLB_ReadTypeLib(LPCWSTR pszFileName, LPWSTR pszPath, UINT cchPath, ITypeLib2 **ppTypeLib);
 
 
-/****************************************************************************
- *		QueryPathOfRegTypeLib	[OLEAUT32.164]
- *
- * Gets the path to a registered type library.
- *
- * PARAMS
- *  guid [I] referenced guid
- *  wMaj [I] major version
- *  wMin [I] minor version
- *  lcid [I] locale id
- *  path [O] path of typelib
- *
- * RETURNS
- *  Success: S_OK.
- *  Failure: If the type library is not registered then TYPE_E_LIBNOTREGISTERED
- *  or TYPE_E_REGISTRYACCESS if the type library registration key couldn't be
- *  opened.
- */
-HRESULT WINAPI QueryPathOfRegTypeLib(
-	REFGUID guid,
-	WORD wMaj,
-	WORD wMin,
-	LCID lcid,
-	LPBSTR path )
+/* Get the path to a registered type library. Helper for QueryPathOfRegTypeLib. */
+static HRESULT query_typelib_path( REFGUID guid, WORD wMaj, WORD wMin,
+                                   SYSKIND syskind, LCID lcid, LPBSTR path )
 {
     HRESULT hr = TYPE_E_LIBNOTREGISTERED;
     LCID myLCID = lcid;
@@ -336,7 +315,7 @@ HRESULT WINAPI QueryPathOfRegTypeLib(
     {
         LONG dwPathLen = sizeof(Path);
 
-        get_lcid_subkey( myLCID, SYS_WIN32, buffer );
+        get_lcid_subkey( myLCID, syskind, buffer );
 
         if (RegQueryValueW(hkey, buffer, Path, &dwPathLen))
         {
@@ -366,6 +345,29 @@ HRESULT WINAPI QueryPathOfRegTypeLib(
     RegCloseKey( hkey );
     TRACE_(typelib)("-- 0x%08x\n", hr);
     return hr;
+}
+
+/****************************************************************************
+ *		QueryPathOfRegTypeLib	[OLEAUT32.164]
+ *
+ * Gets the path to a registered type library.
+ *
+ * PARAMS
+ *  guid [I] referenced guid
+ *  wMaj [I] major version
+ *  wMin [I] minor version
+ *  lcid [I] locale id
+ *  path [O] path of typelib
+ *
+ * RETURNS
+ *  Success: S_OK.
+ *  Failure: If the type library is not registered then TYPE_E_LIBNOTREGISTERED
+ *  or TYPE_E_REGISTRYACCESS if the type library registration key couldn't be
+ *  opened.
+ */
+HRESULT WINAPI QueryPathOfRegTypeLib( REFGUID guid, WORD wMaj, WORD wMin, LCID lcid, LPBSTR path )
+{
+    return query_typelib_path( guid, wMaj, wMin, SYS_WIN32, lcid, path );
 }
 
 /******************************************************************************
@@ -691,7 +693,10 @@ HRESULT WINAPI RegisterTypeLib(
 			MESSAGE("\n");
 		    }
 
-		    if (tattr->wTypeFlags & (TYPEFLAG_FOLEAUTOMATION|TYPEFLAG_FDUAL|TYPEFLAG_FDISPATCHABLE))
+                    /* Register all dispinterfaces (which includes dual interfaces) and
+                       oleautomation interfaces */
+		    if ((kind == TKIND_INTERFACE && (tattr->wTypeFlags & TYPEFLAG_FOLEAUTOMATION)) ||
+                        kind == TKIND_DISPATCH)
 		    {
 			/* register interface<->typelib coupling */
 			get_interface_key( &tattr->guid, keyName );
@@ -796,7 +801,7 @@ HRESULT WINAPI UnRegisterTypeLib(
     }
 
     /* get the path to the typelib on disk */
-    if (QueryPathOfRegTypeLib(libid, wVerMajor, wVerMinor, lcid, &tlibPath) != S_OK) {
+    if (query_typelib_path(libid, wVerMajor, wVerMinor, syskind, lcid, &tlibPath) != S_OK) {
         result = E_INVALIDARG;
         goto end;
     }
@@ -832,19 +837,23 @@ HRESULT WINAPI UnRegisterTypeLib(
             goto enddeleteloop;
         }
 
-        /* the path to the type */
-        get_interface_key( &typeAttr->guid, subKeyName );
+        if ((kind == TKIND_INTERFACE && (typeAttr->wTypeFlags & TYPEFLAG_FOLEAUTOMATION)) ||
+            kind == TKIND_DISPATCH)
+        {
+            /* the path to the type */
+            get_interface_key( &typeAttr->guid, subKeyName );
 
-        /* Delete its bits */
-        if (RegOpenKeyExW(HKEY_CLASSES_ROOT, subKeyName, 0, KEY_WRITE, &subKey) != ERROR_SUCCESS) {
-            goto enddeleteloop;
+            /* Delete its bits */
+            if (RegOpenKeyExW(HKEY_CLASSES_ROOT, subKeyName, 0, KEY_WRITE, &subKey) != ERROR_SUCCESS)
+                goto enddeleteloop;
+
+            RegDeleteKeyW(subKey, ProxyStubClsidW);
+            RegDeleteKeyW(subKey, ProxyStubClsid32W);
+            RegDeleteKeyW(subKey, TypeLibW);
+            RegCloseKey(subKey);
+            subKey = NULL;
+            RegDeleteKeyW(HKEY_CLASSES_ROOT, subKeyName);
         }
-        RegDeleteKeyW(subKey, ProxyStubClsidW);
-        RegDeleteKeyW(subKey, ProxyStubClsid32W);
-        RegDeleteKeyW(subKey, TypeLibW);
-        RegCloseKey(subKey);
-        subKey = NULL;
-        RegDeleteKeyW(HKEY_CLASSES_ROOT, subKeyName);
 
 enddeleteloop:
         if (typeAttr) ITypeInfo_ReleaseTypeAttr(typeInfo, typeAttr);
@@ -1510,7 +1519,7 @@ static inline unsigned int MSFT_Tell(const TLBContext *pcx)
     return pcx->pos;
 }
 
-static inline void MSFT_Seek(TLBContext *pcx, long where)
+static inline void MSFT_Seek(TLBContext *pcx, LONG where)
 {
     if (where != DO_NOT_SEEK)
     {
@@ -1518,7 +1527,7 @@ static inline void MSFT_Seek(TLBContext *pcx, long where)
         if (where > pcx->length)
         {
             /* FIXME */
-            ERR("seek beyond end (%ld/%d)\n", where, pcx->length );
+            ERR("seek beyond end (%d/%d)\n", where, pcx->length );
             TLB_abort();
         }
         pcx->pos = where;
@@ -1526,9 +1535,9 @@ static inline void MSFT_Seek(TLBContext *pcx, long where)
 }
 
 /* read function */
-static DWORD MSFT_Read(void *buffer,  DWORD count, TLBContext *pcx, long where )
+static DWORD MSFT_Read(void *buffer,  DWORD count, TLBContext *pcx, LONG where )
 {
-    TRACE_(typelib)("pos=0x%08x len=0x%08x 0x%08x 0x%08x 0x%08lx\n",
+    TRACE_(typelib)("pos=0x%08x len=0x%08x 0x%08x 0x%08x 0x%08x\n",
        pcx->pos, count, pcx->oStart, pcx->length, where);
 
     MSFT_Seek(pcx, where);
@@ -1539,7 +1548,7 @@ static DWORD MSFT_Read(void *buffer,  DWORD count, TLBContext *pcx, long where )
 }
 
 static DWORD MSFT_ReadLEDWords(void *buffer,  DWORD count, TLBContext *pcx,
-			       long where )
+                               LONG where )
 {
   DWORD ret;
 
@@ -1550,7 +1559,7 @@ static DWORD MSFT_ReadLEDWords(void *buffer,  DWORD count, TLBContext *pcx,
 }
 
 static DWORD MSFT_ReadLEWords(void *buffer,  DWORD count, TLBContext *pcx,
-			      long where )
+                              LONG where )
 {
   DWORD ret;
 
@@ -1901,7 +1910,7 @@ MSFT_DoFuncs(TLBContext*     pcx,
                     {
                        if (!IS_INTRESOURCE(pFuncRec->OptAttr[2]))
                            ERR("ordinal 0x%08x invalid, IS_INTRESOURCE is false\n", pFuncRec->OptAttr[2]);
-                       (*pptfd)->Entry = (BSTR)pFuncRec->OptAttr[2];
+                       (*pptfd)->Entry = (BSTR)(DWORD_PTR)LOWORD(pFuncRec->OptAttr[2]);
                     }
                     else
                     {
@@ -2705,7 +2714,7 @@ static HRESULT TLB_ReadTypeLib(LPCWSTR pszFileName, LPWSTR pszPath, UINT cchPath
     if(index_str && *++index_str != '\0')
     {
         LPWSTR end_ptr;
-        long idx = strtolW(index_str, &end_ptr, 10);
+        LONG idx = strtolW(index_str, &end_ptr, 10);
         if(*end_ptr == '\0')
         {
             int str_len = index_str - pszFileName - 1;
@@ -2825,7 +2834,7 @@ static ITypeLibImpl* TypeLibImpl_Constructor(void)
 static ITypeLib2* ITypeLib2_Constructor_MSFT(LPVOID pLib, DWORD dwTLBLength)
 {
     TLBContext cx;
-    long lPSegDir;
+    LONG lPSegDir;
     MSFT_Header tlbHeader;
     MSFT_SegDir tlbSegDir;
     ITypeLibImpl * pTypeLibImpl;
@@ -2858,14 +2867,14 @@ static ITypeLib2* ITypeLib2_Constructor_MSFT(LPVOID pLib, DWORD dwTLBLength)
     lPSegDir = sizeof(tlbHeader) + (tlbHeader.nrtypeinfos)*4 + ((tlbHeader.varflags & HELPDLLFLAG)? 4 :0);
 
     /* now read the segment directory */
-    TRACE("read segment directory (at %ld)\n",lPSegDir);
+    TRACE("read segment directory (at %d)\n",lPSegDir);
     MSFT_ReadLEDWords(&tlbSegDir, sizeof(tlbSegDir), &cx, lPSegDir);
     cx.pTblDir = &tlbSegDir;
 
     /* just check two entries */
     if ( tlbSegDir.pTypeInfoTab.res0c != 0x0F || tlbSegDir.pImpInfo.res0c != 0x0F)
     {
-        ERR("cannot find the table directory, ptr=0x%lx\n",lPSegDir);
+        ERR("cannot find the table directory, ptr=0x%x\n",lPSegDir);
 	HeapFree(GetProcessHeap(),0,pTypeLibImpl);
 	return NULL;
     }
@@ -2927,7 +2936,7 @@ static ITypeLib2* ITypeLib2_Constructor_MSFT(LPVOID pLib, DWORD dwTLBLength)
 	    else if(td[0] == VT_CARRAY)
             {
 	        /* array descr table here */
-	        pTypeLibImpl->pTypeDesc[i].u.lpadesc = (void *)((int) td[2]);  /* temp store offset in*/
+	        pTypeLibImpl->pTypeDesc[i].u.lpadesc = (void *)(INT_PTR)td[2];  /* temp store offset in*/
             }
             else if(td[0] == VT_USERDEFINED)
 	    {
@@ -2942,7 +2951,7 @@ static ITypeLib2* ITypeLib2_Constructor_MSFT(LPVOID pLib, DWORD dwTLBLength)
             if(pTypeLibImpl->pTypeDesc[i].vt != VT_CARRAY) continue;
             if(tlbSegDir.pArrayDescriptions.offset>0)
 	    {
-                MSFT_ReadLEWords(td, sizeof(td), &cx, tlbSegDir.pArrayDescriptions.offset + (int) pTypeLibImpl->pTypeDesc[i].u.lpadesc);
+                MSFT_ReadLEWords(td, sizeof(td), &cx, tlbSegDir.pArrayDescriptions.offset + (INT_PTR)pTypeLibImpl->pTypeDesc[i].u.lpadesc);
                 pTypeLibImpl->pTypeDesc[i].u.lpadesc = TLB_Alloc(sizeof(ARRAYDESC)+sizeof(SAFEARRAYBOUND)*(td[3]-1));
 
                 if(td[1]<0)
@@ -4779,13 +4788,7 @@ static HRESULT WINAPI ITypeLibComp_fnBind(
                 &subtypeinfo, &subdesckind, &subbindptr);
             if (SUCCEEDED(hr) && (subdesckind != DESCKIND_NONE))
             {
-                TYPEDESC tdesc_appobject =
-                {
-                    {
-                        (TYPEDESC *)pTypeInfo->hreftype
-                    },
-                    VT_USERDEFINED
-                };
+                TYPEDESC tdesc_appobject;
                 const VARDESC vardesc_appobject =
                 {
                     -2,         /* memid */
@@ -4806,6 +4809,9 @@ static HRESULT WINAPI ITypeLibComp_fnBind(
                     0,          /* wVarFlags */
                     VAR_STATIC  /* varkind */
                 };
+
+                tdesc_appobject.u.hreftype = pTypeInfo->hreftype;
+                tdesc_appobject.vt = VT_USERDEFINED;
 
                 TRACE("found in implicit app object: %s\n", debugstr_w(szName));
 
@@ -5696,7 +5702,8 @@ _invoke(FARPROC func,CALLCONV callconv, int nrargs, DWORD *args) {
     if (TRACE_ON(ole)) {
 	int i;
 	TRACE("Calling %p(",func);
-	for (i=0;i<nrargs;i++) TRACE("%08x,",args[i]);
+	for (i=0;i<min(nrargs,30);i++) TRACE("%08x,",args[i]);
+	if (nrargs > 30) TRACE("...");
 	TRACE(")\n");
     }
 
@@ -6010,11 +6017,14 @@ static HRESULT WINAPI ITypeInfo_fnInvoke(
     unsigned int var_index;
     TYPEKIND type_kind;
     HRESULT hres;
-    const TLBFuncDesc *pFuncInfo;
+    const TLBFuncDesc *pFuncInfo = This->funclist;
 
     TRACE("(%p)(%p,id=%d,flags=0x%08x,%p,%p,%p,%p)\n",
       This,pIUnk,memid,wFlags,pDispParams,pVarResult,pExcepInfo,pArgErr
     );
+
+    if( pFuncInfo->funcdesc.wFuncFlags == FUNCFLAG_FRESTRICTED )
+        return DISP_E_MEMBERNOTFOUND;
 
     if (!pDispParams)
     {
@@ -6484,7 +6494,7 @@ func_fail:
             WARN("Could not search inherited interface!\n");
         }
     }
-    ERR("did not find member id %d, flags 0x%x!\n", memid, wFlags);
+    WARN("did not find member id %d, flags 0x%x!\n", memid, wFlags);
     return DISP_E_MEMBERNOTFOUND;
 }
 
@@ -6598,7 +6608,7 @@ static HRESULT WINAPI ITypeInfo_fnGetDllEntry( ITypeInfo2 *iface, MEMBERID memid
 	    if (pBstrName)
 		*pBstrName = NULL;
 	    if (pwOrdinal)
-		*pwOrdinal = (DWORD)pFDesc->Entry;
+		*pwOrdinal = LOWORD(pFDesc->Entry);
 	    return S_OK;
         }
     return TYPE_E_ELEMENTNOTFOUND;
@@ -7647,9 +7657,9 @@ static HRESULT WINAPI ITypeComp_fnBind(
     ITypeInfoImpl *This = info_impl_from_ITypeComp(iface);
     const TLBFuncDesc *pFDesc;
     const TLBVarDesc *pVDesc;
-    HRESULT hr = DISP_E_MEMBERNOTFOUND;
+    HRESULT hr = S_OK;
 
-    TRACE("(%s, %x, 0x%x, %p, %p, %p)\n", debugstr_w(szName), lHash, wFlags, ppTInfo, pDescKind, pBindPtr);
+    TRACE("(%p)->(%s, %x, 0x%x, %p, %p, %p)\n", This, debugstr_w(szName), lHash, wFlags, ppTInfo, pDescKind, pBindPtr);
 
     *pDescKind = DESCKIND_NONE;
     pBindPtr->lpfuncdesc = NULL;
@@ -7709,7 +7719,7 @@ static HRESULT WINAPI ITypeComp_fnBind(
         }
         WARN("Could not search inherited interface!\n");
     }
-    WARN("did not find member with name %s, flags 0x%x!\n", debugstr_w(szName), wFlags);
+    TRACE("did not find member with name %s, flags 0x%x\n", debugstr_w(szName), wFlags);
     return hr;
 }
 

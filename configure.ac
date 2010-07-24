@@ -11,17 +11,25 @@ AC_CONFIG_SRCDIR(server/atom.c)
 AC_CONFIG_HEADERS(include/config.h)
 AC_CONFIG_AUX_DIR(tools)
 
-dnl autoconf versions before 2.63b don't have AS_VAR_APPEND
+dnl autoconf versions before 2.63b don't have AS_VAR_APPEND or AS_VAR_IF
 m4_ifdef([AS_VAR_APPEND],,[as_fn_append () { eval $[1]=\$$[1]\$[2]; }
 AC_DEFUN([AS_VAR_APPEND],[as_fn_append $1 $2])])dnl
+m4_ifdef([AS_VAR_IF],,[AC_DEFUN([AS_VAR_IF],
+[AS_LITERAL_IF([$1],
+  [AS_IF([test "x$$1" = x""$2], [$3], [$4])],
+  [eval as_val=\$$1
+   AS_IF([test "x$as_val" = x""$2], [$3], [$4])])])])dnl
+dnl autoconf versions before 2.64 don't have AC_PACKAGE_URL
+m4_ifdef([AC_PACKAGE_URL],,
+  [AC_DEFINE([PACKAGE_URL], ["http://www.winehq.org"], [Define to the home page for this package.])
+   AC_SUBST([PACKAGE_URL], ["http://www.winehq.org"])])dnl
 
 dnl **** Command-line arguments ****
 
 AC_ARG_ENABLE(win16, AS_HELP_STRING([--disable-win16],[do not include Win16 support]))
 AC_ARG_ENABLE(win64, AS_HELP_STRING([--enable-win64],[build a Win64 emulator on AMD64 (won't run Win32 binaries)]))
 AC_ARG_ENABLE(tests, AS_HELP_STRING([--disable-tests],[do not build the regression tests]))
-AC_ARG_ENABLE(maintainer-mode, AS_HELP_STRING([--enable-maintainer-mode],[enable maintainer-specific build rules]),
-                               ,[AC_SUBST([MAINTAINER_MODE],[\#])])
+AC_ARG_ENABLE(maintainer-mode, AS_HELP_STRING([--enable-maintainer-mode],[enable maintainer-specific build rules]))
 
 AC_ARG_WITH(alsa,      AS_HELP_STRING([--without-alsa],[do not use the Alsa sound support]),
             [if test "x$withval" = "xno"; then ac_cv_header_sys_asoundlib_h=no; ac_cv_header_alsa_asoundlib_h=no; fi])
@@ -190,14 +198,11 @@ then
     fi
     AC_SUBST([WOW64_DISABLE],[\#])
     enable_fonts=${enable_fonts:-no}
-    enable_include=${enable_include:-no}
-    enable_rpcss=${enable_rpcss:-no}
     enable_server=${enable_server:-no}
     enable_tools=${enable_tools:-no}
-    enable_wineboot=${enable_wineboot:-no}
-    enable_winedbg=${enable_winedbg:-no}
-    enable_winemenubuilder=${enable_winemenubuilder:-no}
-    test "x$libdir" != "x\${exec_prefix}/lib" || libdir="\${exec_prefix}/lib32"
+elif test "x$enable_win64" = "xyes"
+then
+    test "x$libdir" != "x\${exec_prefix}/lib" || libdir="\${exec_prefix}/lib64"
 fi
 
 AC_CACHE_CHECK([for the directory containing the Wine tools], wine_cv_toolsdir,
@@ -281,13 +286,66 @@ dnl Check for various programs
 AC_CHECK_PROGS(FONTFORGE, fontforge, false)
 AC_CHECK_PROGS(PKG_CONFIG, pkg-config, false)
 AC_CHECK_PROGS(RSVG, rsvg, false)
+AC_CHECK_PROGS(CONVERT, convert, false)
 AC_CHECK_PROGS(ICOTOOL, icotool, false)
 
-if test "${enable_maintainer_mode+set}" = set
+if test "x$enable_maintainer_mode" != "xyes"
 then
+  AC_SUBST([MAINTAINER_MODE],[\#])
+else
   if test "$FONTFORGE" = "false"; then WINE_WARNING([fontforge is missing, fonts can't be rebuilt.]); fi
   if test "$RSVG" = "false"; then WINE_WARNING([rsvg is missing, icons can't be rebuilt.]); fi
-  if test "$ICOTOOL" = "false"; then WINE_WARNING([icotool is missing, icons can't be rebuilt.]); fi
+
+  dnl Check the imagemagick version
+  if test "$CONVERT" = false
+  then
+    WINE_WARNING([imagemagick is missing, icons can't be rebuilt.])
+  else
+    AC_MSG_CHECKING([for recent enough imagemagick])
+    convert_version=`convert --version | head -n1`
+    if test "x$convert_version" != "x"
+    then
+      convert_version_major=`expr "$convert_version" : '.* \([[0-9]]*\)\.[[0-9]]*'`
+      convert_version_minor=`expr "$convert_version" : '.* [[0-9]]*\.\([[0-9]]*\)'`
+      if test "$convert_version_major" -eq 6 -a "$convert_version_minor" -lt 6
+      then
+        CONVERT=false
+        WINE_WARNING([imagemagick version 6.6 or newer is needed to rebuild icons.])
+      fi
+    fi
+    if test "$CONVERT" = false
+    then
+      AC_MSG_RESULT([no ($convert_version_major.$convert_version_minor)])
+    else
+      AC_MSG_RESULT([yes ($convert_version_major.$convert_version_minor)])
+    fi
+  fi
+
+  dnl Check the icotool version
+  if test "$ICOTOOL" = false
+  then
+    WINE_WARNING([icotool is missing, icons can't be rebuilt.])
+  else
+    AC_MSG_CHECKING([for recent enough icotool])
+    icotool_version=`icotool --version | head -n1`
+    if test "x$icotool_version" != "x"
+    then
+      icotool_version_major=`expr "$icotool_version" : '.* \([[0-9]]*\)\.[[0-9]]*'`
+      icotool_version_minor=`expr "$icotool_version" : '.* [[0-9]]*\.\([[0-9]]*\)'`
+      if test "$icotool_version_major" -eq 0 -a "$icotool_version_minor" -lt 29
+      then
+        ICOTOOL=false
+        WINE_WARNING([icotool version 0.29.0 or newer is needed to rebuild icons.])
+      fi
+    fi
+    if test "$ICOTOOL" = false
+    then
+      AC_MSG_RESULT([no ($icotool_version_major.$icotool_version_minor)])
+    else
+      AC_MSG_RESULT([yes ($icotool_version_major.$icotool_version_minor)])
+    fi
+  fi
+
 fi
 
 case $host_cpu in
@@ -313,8 +371,6 @@ AC_SYS_LARGEFILE()
 AC_CHECK_HEADERS(\
 	AL/al.h \
 	AudioToolbox/AudioConverter.h \
-	AudioToolbox/AudioFile.h \
-	AudioToolbox/AudioFileStream.h \
 	AudioUnit/AudioUnit.h \
 	Carbon/Carbon.h \
 	CoreAudio/CoreAudio.h \
@@ -369,6 +425,7 @@ AC_CHECK_HEADERS(\
 	machine/cpu.h \
 	machine/limits.h \
 	machine/soundcard.h \
+	machine/sysarch.h \
 	mntent.h \
 	mpg123.h \
 	ncurses.h \
@@ -651,19 +708,12 @@ case $host_os in
     then
         dnl CoreServices needed by AudioUnit
         AC_SUBST(COREAUDIO,"-framework CoreAudio -framework AudioUnit -framework CoreServices -framework AudioToolbox -framework CoreMIDI")
-        ac_save_LIBS="$LIBS"
-        if test "$ac_cv_header_AudioToolbox_AudioFile_h" = "yes"
-        then
-            LIBS="$LIBS $COREAUDIO"
-            AC_CHECK_FUNCS(AudioFileStreamOpen)
-            LIBS="$ac_save_LIBS"
-        fi
-        test "x$ac_cv_func_AudioFileStreamOpen" = xyes || WINE_NOTICE([AudioToolbox version too old, mp3 codec won't be supported.])
     fi
     if test "$ac_cv_header_OpenAL_al_h" = "yes"
     then
-        AC_SUBST(LIBOPENAL,"-framework OpenAL")
-        ac_cv_lib_openal_alGetSource3i=yes
+        AC_SUBST(FRAMEWORK_OPENAL,"-framework OpenAL")
+        AC_DEFINE_UNQUOTED(HAVE_OPENAL,1,[Define to 1 if OpenAL is available])
+        ac_cv_lib_openal=yes
     fi
     if test "$ac_cv_header_IOKit_hid_IOHIDLib_h" = "yes"
     then
@@ -1108,7 +1158,7 @@ then
     fi
     CPPFLAGS="$ac_save_CPPFLAGS"
 fi
-WINE_NOTICE_WITH(hal,[test "x$ac_cv_lib_soname_hal" = "x"],
+WINE_NOTICE_WITH(hal,[test "x$ac_cv_lib_soname_hal" = "x" -a "x$ac_cv_header_DiskArbitration_DiskArbitration_h" != "xyes"],
                  [libhal/libdbus ${notice_platform}development files not found, no dynamic device support.])
 
 dnl **** Check for libgnutls ****
@@ -1478,16 +1528,18 @@ then
 fi
 WINE_NOTICE_WITH(mpg123,[test "x$ac_cv_lib_mpg123_mpg123_feed" != xyes -a x"$ac_cv_header_CoreAudio_CoreAudio_h" != xyes],
                  [libmpg123 ${notice_platform}development files not found (or too old), mp3 codec won't be supported.])
-test "x$ac_cv_lib_mpg123_mpg123_feed" = xyes -o "x$ac_cv_func_AudioFileStreamOpen" = xyes || enable_winemp3_acm=${enable_winemp3_acm:-no}
+test "x$ac_cv_lib_mpg123_mpg123_feed" = xyes -o "x$ac_cv_header_AudioToolbox_AudioConverter_h" = xyes || enable_winemp3_acm=${enable_winemp3_acm:-no}
 
 dnl **** Check for OpenAL 1.1 ****
 if test "$ac_cv_header_AL_al_h" = "yes"
 then
-    AC_CHECK_LIB(openal,alGetSource3i,[AC_SUBST(LIBOPENAL,"-lopenal")])
+    WINE_CHECK_SONAME(openal,alGetSource3i,[AC_SUBST(LIBOPENAL,"-lopenal")
+                      ac_cv_lib_openal=yes
+                      AC_DEFINE_UNQUOTED(HAVE_OPENAL,1,[Define to 1 if OpenAL is available])],,)
 fi
-WINE_NOTICE_WITH(openal,[test "x$ac_cv_lib_openal_alGetSource3i" != xyes],
+WINE_NOTICE_WITH(openal,[test "x$ac_cv_lib_openal" != xyes],
                  [libopenal ${notice_platform}development files not found (or too old), OpenAL won't be supported.])
-test "x$ac_cv_lib_openal_alGetSource3i" = xyes || enable_openal32=${enable_openal32:-no}
+test "x$ac_cv_lib_openal" = xyes || enable_openal32=${enable_openal32:-no}
 
 dnl **** Check for libkstat ****
 if test "$ac_cv_header_kstat_h" = "yes"
@@ -1553,7 +1605,7 @@ then
   fi
 
   dnl Enable -Werror for maintainer mode
-  if test "${enable_maintainer_mode+set}" = set
+  if test "x$enable_maintainer_mode" = "xyes"
   then
       WINE_TRY_CFLAGS([-Werror])
   fi
@@ -1664,6 +1716,7 @@ then
    asm_func_header="$asm_func_header.cfi_startproc\\n\\t"
    asm_func_trailer="\\n\\t.cfi_endproc$asm_func_trailer"
    AC_DEFINE([__ASM_CFI(str)],[str],[Define to a macro to output a .cfi assembly pseudo-op])
+   AC_SUBST([UNWINDFLAGS],[-fasynchronous-unwind-tables])
 else
    AC_DEFINE([__ASM_CFI(str)],[""])
 fi
@@ -1706,7 +1759,7 @@ case $host_os in
 esac
 
 AC_SUBST(MAIN_BINARY,"wine")
-test -z "$with_wine64" || MAIN_BINARY="wine32"
+test "x$enable_win64" != "xyes" || MAIN_BINARY="wine64"
 
 case $host_cpu in
   *i[[3456789]]86*)
@@ -2131,7 +2184,9 @@ esac
 
 dnl **** Generate output files ****
 
-AH_TOP([#define __WINE_CONFIG_H])
+AH_TOP([#ifndef WINE_CROSSTEST
+#define __WINE_CONFIG_H])
+AH_BOTTOM([#endif /* WINE_CROSSTEST */])
 
 AC_CONFIG_COMMANDS([include/stamp-h], [echo timestamp > include/stamp-h])
 
@@ -2140,6 +2195,7 @@ WINE_CONFIG_SYMLINK(fonts/marlett.ttf,,enable_fonts)
 WINE_CONFIG_SYMLINK(fonts/symbol.ttf,,enable_fonts)
 WINE_CONFIG_SYMLINK(fonts/tahoma.ttf,,enable_fonts)
 WINE_CONFIG_SYMLINK(fonts/tahomabd.ttf,,enable_fonts)
+WINE_CONFIG_SYMLINK(tools/l_intl.nls)
 WINE_CONFIG_SYMLINK(wine,tools/winewrapper)
 
 WINE_CONFIG_EXTRA_DIR(dlls/gdi32/enhmfdrv)
@@ -2168,6 +2224,7 @@ WINE_CONFIG_DLL(amstream)
 WINE_CONFIG_TEST(dlls/amstream/tests)
 WINE_CONFIG_DLL(appwiz.cpl)
 WINE_CONFIG_DLL(atl,,[atl])
+WINE_CONFIG_TEST(dlls/atl/tests)
 WINE_CONFIG_DLL(authz)
 WINE_CONFIG_DLL(avicap32,,[avicap32])
 WINE_CONFIG_DLL(avifil32,,[avifil32])
@@ -2398,6 +2455,9 @@ WINE_CONFIG_DLL(mssip32)
 WINE_CONFIG_DLL(mstask)
 WINE_CONFIG_TEST(dlls/mstask/tests)
 WINE_CONFIG_DLL(msvcirt)
+WINE_CONFIG_DLL(msvcp90)
+WINE_CONFIG_TEST(dlls/msvcp90/tests)
+WINE_CONFIG_DLL(msvcr100)
 WINE_CONFIG_DLL(msvcr70,,[msvcr70])
 WINE_CONFIG_DLL(msvcr71,,[msvcr71])
 WINE_CONFIG_DLL(msvcr80)
@@ -2489,6 +2549,7 @@ WINE_CONFIG_DLL(rsabase)
 WINE_CONFIG_DLL(rsaenh,,[rsaenh])
 WINE_CONFIG_TEST(dlls/rsaenh/tests)
 WINE_CONFIG_DLL(rtutils,,[rtutils])
+WINE_CONFIG_DLL(samlib)
 WINE_CONFIG_DLL(sane.ds)
 WINE_CONFIG_DLL(sccbase)
 WINE_CONFIG_DLL(schannel)
@@ -2656,6 +2717,7 @@ WINE_CONFIG_PROGRAM(lodctr,install)
 WINE_CONFIG_PROGRAM(mshta,install)
 WINE_CONFIG_PROGRAM(msiexec,installbin)
 WINE_CONFIG_PROGRAM(net,install)
+WINE_CONFIG_PROGRAM(ngen,install)
 WINE_CONFIG_PROGRAM(notepad,installbin)
 WINE_CONFIG_PROGRAM(oleview,install)
 WINE_CONFIG_PROGRAM(ping,install)
@@ -2664,7 +2726,9 @@ WINE_CONFIG_PROGRAM(reg,install)
 WINE_CONFIG_PROGRAM(regedit,installbin)
 WINE_CONFIG_PROGRAM(regsvr32,installbin)
 WINE_CONFIG_PROGRAM(rpcss,install)
+WINE_CONFIG_PROGRAM(rundll.exe16,install,enable_win16)
 WINE_CONFIG_PROGRAM(rundll32,install)
+WINE_CONFIG_PROGRAM(sc,install)
 WINE_CONFIG_PROGRAM(secedit,install)
 WINE_CONFIG_PROGRAM(services,install)
 WINE_CONFIG_PROGRAM(spoolsv,install)
@@ -2720,13 +2784,13 @@ dnl Some final makefile rules
 if test -n "$with_wine64"
 then
 WINE_APPEND_RULE([ALL_MAKEFILE_DEPENDS],
-[all: fonts server $with_wine64/loader/wine32
+[all: fonts server $with_wine64/loader/wine
 fonts server:
 	\$(RM) \$[@] && \$(LN_S) $with_wine64/\$[@] \$[@]
-$with_wine64/loader/wine32:
-	\$(RM) \$[@] && \$(LN_S) $ac_pwd/loader/wine32 \$[@]
+$with_wine64/loader/wine:
+	\$(RM) \$[@] && \$(LN_S) $ac_pwd/loader/wine \$[@]
 clean::
-	\$(RM) fonts server $with_wine64/loader/wine32])
+	\$(RM) fonts server $with_wine64/loader/wine])
 fi
 
 WINE_APPEND_RULE([ALL_MAKEFILE_DEPENDS],

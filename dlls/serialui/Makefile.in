@@ -4,7 +4,7 @@ SRCDIR    = @srcdir@
 VPATH     = @srcdir@
 MODULE    = serialui.dll
 IMPORTLIB = serialui
-IMPORTS   = user32 advapi32 kernel32
+IMPORTS   = user32 advapi32
 
 C_SRCS = \
 	confdlg.c
@@ -26,11 +26,14 @@ RC_SRCS = \
 	Lt.rc \
 	Nl.rc \
 	No.rc \
+	Pl.rc \
 	Pt.rc \
+	Ro.rc \
 	Ru.rc \
 	Si.rc \
 	Sv.rc \
 	Tr.rc \
+	Uk.rc \
 	Zh.rc
 
 @MAKE_DLL_RULES@

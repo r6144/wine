@@ -1,11 +1,11 @@
-EXTRADEFS = -DUNICODE
+EXTRADEFS = -DWINE_NO_UNICODE_MACROS
 TOPSRCDIR = @top_srcdir@
 TOPOBJDIR = ../..
 SRCDIR    = @srcdir@
 VPATH     = @srcdir@
 MODULE    = wineconsole.exe
 APPMODE   = -mwindows
-IMPORTS   = advapi32 kernel32 ntdll
+IMPORTS   = advapi32
 DELAYIMPORTS = comctl32 user32 gdi32
 
 C_SRCS = \
@@ -17,6 +17,7 @@ C_SRCS = \
 
 RC_SRCS = \
 	wineconsole_Cs.rc \
+	wineconsole_Da.rc \
 	wineconsole_De.rc \
 	wineconsole_En.rc \
 	wineconsole_Eo.rc \
@@ -30,10 +31,12 @@ RC_SRCS = \
 	wineconsole_No.rc \
 	wineconsole_Pl.rc \
 	wineconsole_Pt.rc \
+	wineconsole_Ro.rc \
 	wineconsole_Ru.rc \
 	wineconsole_Si.rc \
 	wineconsole_Sv.rc \
 	wineconsole_Tr.rc \
+	wineconsole_Uk.rc \
 	wineconsole_Zh.rc
 
 @MAKE_PROG_RULES@

@@ -3,7 +3,7 @@ TOPOBJDIR = ../..
 SRCDIR    = @srcdir@
 VPATH     = @srcdir@
 MODULE    = localspl.dll
-IMPORTS   = spoolss user32 advapi32 kernel32
+IMPORTS   = spoolss user32 advapi32
 
 C_SRCS = \
 	localmon.c \
@@ -12,11 +12,15 @@ C_SRCS = \
 
 RC_SRCS = \
 	localspl.rc \
+	spl_Cy.rc \
 	spl_Da.rc \
 	spl_De.rc \
 	spl_En.rc \
 	spl_Es.rc \
 	spl_Fr.rc \
+	spl_Hu.rc \
+	spl_It.rc \
+	spl_Ja.rc \
 	spl_Ko.rc \
 	spl_Lt.rc \
 	spl_Nl.rc \
@@ -27,6 +31,7 @@ RC_SRCS = \
 	spl_Ru.rc \
 	spl_Si.rc \
 	spl_Sv.rc \
+	spl_Uk.rc \
 	spl_Zh.rc
 
 @MAKE_DLL_RULES@

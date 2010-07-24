@@ -55,9 +55,13 @@ static LPSTR   (WINAPI *pStrFormatKBSizeA)(LONGLONG,LPSTR,UINT);
 static LPWSTR  (WINAPI *pStrFormatKBSizeW)(LONGLONG,LPWSTR,UINT);
 static BOOL    (WINAPI *pStrIsIntlEqualA)(BOOL,LPCSTR,LPCSTR,int);
 static BOOL    (WINAPI *pStrIsIntlEqualW)(BOOL,LPCWSTR,LPCWSTR,int);
-static HRESULT (WINAPI *pStrRetToBSTR)(STRRET*,void*,BSTR*);
+static LPWSTR  (WINAPI *pStrPBrkW)(LPCWSTR,LPCWSTR);
+static LPSTR   (WINAPI *pStrRChrA)(LPCSTR,LPCSTR,WORD);
+static HRESULT (WINAPI *pStrRetToBSTR)(STRRET*,LPCITEMIDLIST,BSTR*);
 static HRESULT (WINAPI *pStrRetToBufA)(STRRET*,LPCITEMIDLIST,LPSTR,UINT);
 static HRESULT (WINAPI *pStrRetToBufW)(STRRET*,LPCITEMIDLIST,LPWSTR,UINT);
+static LPWSTR  (WINAPI *pStrStrNW)(LPCWSTR,LPCWSTR,UINT);
+static LPWSTR  (WINAPI *pStrStrNIW)(LPCWSTR,LPCWSTR,UINT);
 static INT     (WINAPIV *pwnsprintfA)(LPSTR,INT,LPCSTR, ...);
 static INT     (WINAPIV *pwnsprintfW)(LPWSTR,INT,LPCWSTR, ...);
 static LPWSTR  (WINAPI *pStrChrNW)(LPWSTR,WCHAR,UINT);
@@ -107,6 +111,8 @@ typedef struct tagStrFormatSizeResult
   LONGLONG value;
   const char* byte_size_64;
   const char* kb_size;
+  int kb_size_broken;
+  const char* kb_size2;
 } StrFormatSizeResult;
 
 
@@ -117,15 +123,15 @@ static const StrFormatSizeResult StrFormatSize_results[] = {
   { 10191, "9.95 KB", "10 KB"},
   { 100353, "98.0 KB", "99 KB"},
   { 1022286, "998 KB", "999 KB"},
-  { 1046862, "0.99 MB", "1,023 KB"},
-  { 1048574619, "999 MB", "1,023,999 KB"},
-  { 1073741775, "0.99 GB", "1,048,576 KB"},
-  { ((LONGLONG)0x000000f9 << 32) | 0xfffff94e, "999 GB", "1,048,575,999 KB"},
-  { ((LONGLONG)0x000000ff << 32) | 0xfffffa9b, "0.99 TB", "1,073,741,823 KB"},
-  { ((LONGLONG)0x0003e7ff << 32) | 0xfffffa9b, "999 TB", "1,073,741,823,999 KB"},
-  { ((LONGLONG)0x0003ffff << 32) | 0xfffffbe8, "0.99 PB", "1,099,511,627,775 KB"},
-  { ((LONGLONG)0x0f9fffff << 32) | 0xfffffd35, "999 PB", "1,099,511,627,776,000 KB"},
-  { ((LONGLONG)0x0fffffff << 32) | 0xfffffa9b, "0.99 EB", "1,125,899,906,842,623 KB"},
+  { 1046862, "0.99 MB", "1,023 KB", 1, "1023 KB"},
+  { 1048574619, "999 MB", "1,023,999 KB", 1, "1023999 KB"},
+  { 1073741775, "0.99 GB", "1,048,576 KB", 1, "1048576 KB"},
+  { ((LONGLONG)0x000000f9 << 32) | 0xfffff94e, "999 GB", "1,048,575,999 KB", 1, "1048575999 KB"},
+  { ((LONGLONG)0x000000ff << 32) | 0xfffffa9b, "0.99 TB", "1,073,741,823 KB", 1, "1073741823 KB"},
+  { ((LONGLONG)0x0003e7ff << 32) | 0xfffffa9b, "999 TB", "1,073,741,823,999 KB", 1, "4294967295 KB"},
+  { ((LONGLONG)0x0003ffff << 32) | 0xfffffbe8, "0.99 PB", "1,099,511,627,775 KB", 1, "4294967295 KB"},
+  { ((LONGLONG)0x0f9fffff << 32) | 0xfffffd35, "999 PB", "1,099,511,627,776,000 KB", 1, "0 KB"},
+  { ((LONGLONG)0x0fffffff << 32) | 0xfffffa9b, "0.99 EB", "1,125,899,906,842,623 KB", 1, "4294967295 KB"},
   { 0, NULL, NULL }
 };
 
@@ -560,7 +566,11 @@ static void test_StrFormatKBSizeW(void)
   {
     pStrFormatKBSizeW(result->value, szBuffW, 256);
     WideCharToMultiByte(0,0,szBuffW,-1,szBuff,sizeof(szBuff)/sizeof(WCHAR),0,0);
-    ok(!strcmp(result->kb_size, szBuff),
+
+    /* shlwapi on Win98 SE does not appear to apply delimiters to the output
+     * and does not correctly handle extremely large values. */
+    ok(!strcmp(result->kb_size, szBuff) ||
+      (result->kb_size_broken && !strcmp(result->kb_size2, szBuff)),
         "Formatted %x%08x wrong: got %s, expected %s\n",
        (LONG)(result->value >> 32), (LONG)result->value, szBuff, result->kb_size);
     result++;
@@ -582,7 +592,10 @@ static void test_StrFormatKBSizeA(void)
   {
     pStrFormatKBSizeA(result->value, szBuff, 256);
 
-    ok(!strcmp(result->kb_size, szBuff),
+    /* shlwapi on Win98 SE does not appear to apply delimiters to the output
+     * and does not correctly handle extremely large values. */
+    ok(!strcmp(result->kb_size, szBuff) ||
+      (result->kb_size_broken && !strcmp(result->kb_size2, szBuff)),
         "Formatted %x%08x wrong: got %s, expected %s\n",
        (LONG)(result->value >> 32), (LONG)result->value, szBuff, result->kb_size);
     result++;
@@ -772,7 +785,16 @@ static void test_StrRStrI(void)
     static const WCHAR wszPattern4[] = {'a','b',0};
     LPWSTR retW;
     LPSTR retA;
-    
+
+    /* StrCpyNXA was chosen simply because it doesn't appear to be available on
+     * Win9x machines where StrRStrI crashes. Despite StrRStrI being exported
+     * by name, all StrRStrI tests appear to crash for unknown reasons. */
+    if (!pStrCpyNXA)
+    {
+        win_skip("StrRStrI crashes on older Win9x platforms\n");
+        return;
+    }
+
     check_strrstri(A, szTest, 4, "A", szTest+1);
     check_strrstri(A, szTest, 4, "aX", szTest+1);
     check_strrstri(A, szTest, 4, "Ay", NULL);
@@ -804,6 +826,12 @@ static void test_SHAnsiToAnsi(void)
     return;
   }
 
+  if (pSHAnsiToAnsi == (void *)pStrPBrkW)
+  {
+    win_skip("Ordinal 345 corresponds to StrPBrkW, skipping SHAnsiToAnsi tests\n");
+    return;
+  }
+
   memset(dest, '\n', sizeof(dest));
   dwRet = pSHAnsiToAnsi("hello", dest, sizeof(dest)/sizeof(dest[0]));
   ok(dwRet == 6 && !memcmp(dest, "hello\0\n\n", sizeof(dest)),
@@ -822,6 +850,12 @@ static void test_SHUnicodeToUnicode(void)
   if (!pSHUnicodeToUnicode)
   {
     win_skip("SHUnicodeToUnicode() is not available\n");
+    return;
+  }
+
+  if (pSHUnicodeToUnicode == (void *)pStrRChrA)
+  {
+    win_skip("Ordinal 346 corresponds to StrRChrA, skipping SHUnicodeToUnicode tests\n");
     return;
   }
 
@@ -875,10 +909,15 @@ if (0)
     expect_eq(wbuf[0], 0, WCHAR, "%x");
     expect_eq(wbuf[1], (WCHAR)0xbfbf, WCHAR, "%x");
 
-    memset(wbuf, 0xbf, sizeof(wbuf));
-    expect_eq(StrCpyNW(wbuf, 0, 10), wbuf, PWCHAR, "%p");
-    expect_eq(wbuf[0], 0, WCHAR, "%x");
-    expect_eq(wbuf[1], (WCHAR)0xbfbf, WCHAR, "%x");
+    if (pStrCpyNXA)
+    {
+        memset(wbuf, 0xbf, sizeof(wbuf));
+        expect_eq(StrCpyNW(wbuf, 0, 10), wbuf, PWCHAR, "%p");
+        expect_eq(wbuf[0], 0, WCHAR, "%x");
+        expect_eq(wbuf[1], (WCHAR)0xbfbf, WCHAR, "%x");
+    }
+    else
+        win_skip("StrCpyNW test crashes on older Win9x platforms\n");
 
     memset(wbuf, 0xbf, sizeof(wbuf));
     expect_eq(StrCpyNW(wbuf, 0, 0), wbuf, PWCHAR, "%p");
@@ -951,6 +990,387 @@ if (0)
         win_skip("wnsprintfW() is not available\n");
 }
 
+static void test_StrStrA(void)
+{
+    static const char *deadbeefA = "DeAdBeEf";
+
+    const struct
+    {
+        const char *search;
+        const char *expect;
+    } StrStrA_cases[] =
+    {
+        {"", NULL},
+        {"DeAd", deadbeefA},
+        {"dead", NULL},
+        {"AdBe", deadbeefA + 2},
+        {"adbe", NULL},
+        {"BeEf", deadbeefA + 4},
+        {"beef", NULL},
+    };
+
+    LPSTR ret;
+    int i;
+
+    /* Tests crash on Win9x/Win2k. */
+    if (0)
+    {
+        ret = StrStrA(NULL, NULL);
+        ok(!ret, "Expected StrStrA to return NULL, got %p\n", ret);
+
+        ret = StrStrA(NULL, "");
+        ok(!ret, "Expected StrStrA to return NULL, got %p\n", ret);
+
+        ret = StrStrA("", NULL);
+        ok(!ret, "Expected StrStrA to return NULL, got %p\n", ret);
+    }
+
+    ret = StrStrA("", "");
+    ok(!ret, "Expected StrStrA to return NULL, got %p\n", ret);
+
+    for (i = 0; i < sizeof(StrStrA_cases)/sizeof(StrStrA_cases[0]); i++)
+    {
+        ret = StrStrA(deadbeefA, StrStrA_cases[i].search);
+        ok(ret == StrStrA_cases[i].expect,
+           "[%d] Expected StrStrA to return %p, got %p\n",
+           i, StrStrA_cases[i].expect, ret);
+    }
+}
+
+static void test_StrStrW(void)
+{
+    static const WCHAR emptyW[] = {0};
+    static const WCHAR deadbeefW[] = {'D','e','A','d','B','e','E','f',0};
+    static const WCHAR deadW[] = {'D','e','A','d',0};
+    static const WCHAR dead_lowerW[] = {'d','e','a','d',0};
+    static const WCHAR adbeW[] = {'A','d','B','e',0};
+    static const WCHAR adbe_lowerW[] = {'a','d','b','e',0};
+    static const WCHAR beefW[] = {'B','e','E','f',0};
+    static const WCHAR beef_lowerW[] = {'b','e','e','f',0};
+
+    const struct
+    {
+        const WCHAR *search;
+        const WCHAR *expect;
+    } StrStrW_cases[] =
+    {
+        {emptyW, NULL},
+        {deadW, deadbeefW},
+        {dead_lowerW, NULL},
+        {adbeW, deadbeefW + 2},
+        {adbe_lowerW, NULL},
+        {beefW, deadbeefW + 4},
+        {beef_lowerW, NULL},
+    };
+
+    LPWSTR ret;
+    int i;
+
+    /* Tests crash on Win9x. */
+    if (0)
+    {
+        ret = StrStrW(NULL, NULL);
+        ok(!ret, "Expected StrStrW to return NULL, got %p\n", ret);
+
+        ret = StrStrW(NULL, emptyW);
+        ok(!ret, "Expected StrStrW to return NULL, got %p\n", ret);
+
+        ret = StrStrW(emptyW, NULL);
+        ok(!ret, "Expected StrStrW to return NULL, got %p\n", ret);
+    }
+
+    ret = StrStrW(emptyW, emptyW);
+    ok(!ret, "Expected StrStrW to return NULL, got %p\n", ret);
+
+    for (i = 0; i < sizeof(StrStrW_cases)/sizeof(StrStrW_cases[0]); i++)
+    {
+        ret = StrStrW(deadbeefW, StrStrW_cases[i].search);
+        ok(ret == StrStrW_cases[i].expect,
+           "[%d] Expected StrStrW to return %p, got %p\n",
+           i, StrStrW_cases[i].expect, ret);
+    }
+}
+
+static void test_StrStrIA(void)
+{
+    static const char *deadbeefA = "DeAdBeEf";
+
+    const struct
+    {
+        const char *search;
+        const char *expect;
+    } StrStrIA_cases[] =
+    {
+        {"", NULL},
+        {"DeAd", deadbeefA},
+        {"dead", deadbeefA},
+        {"AdBe", deadbeefA + 2},
+        {"adbe", deadbeefA + 2},
+        {"BeEf", deadbeefA + 4},
+        {"beef", deadbeefA + 4},
+        {"cafe", NULL},
+    };
+
+    LPSTR ret;
+    int i;
+
+    /* Tests crash on Win9x/Win2k. */
+    if (0)
+    {
+        ret = StrStrIA(NULL, NULL);
+        ok(!ret, "Expected StrStrIA to return NULL, got %p\n", ret);
+
+        ret = StrStrIA(NULL, "");
+        ok(!ret, "Expected StrStrIA to return NULL, got %p\n", ret);
+
+        ret = StrStrIA("", NULL);
+        ok(!ret, "Expected StrStrIA to return NULL, got %p\n", ret);
+    }
+
+    ret = StrStrIA("", "");
+    ok(!ret, "Expected StrStrIA to return NULL, got %p\n", ret);
+
+    for (i = 0; i < sizeof(StrStrIA_cases)/sizeof(StrStrIA_cases[0]); i++)
+    {
+        ret = StrStrIA(deadbeefA, StrStrIA_cases[i].search);
+        ok(ret == StrStrIA_cases[i].expect,
+           "[%d] Expected StrStrIA to return %p, got %p\n",
+           i, StrStrIA_cases[i].expect, ret);
+    }
+}
+
+static void test_StrStrIW(void)
+{
+    static const WCHAR emptyW[] = {0};
+    static const WCHAR deadbeefW[] = {'D','e','A','d','B','e','E','f',0};
+    static const WCHAR deadW[] = {'D','e','A','d',0};
+    static const WCHAR dead_lowerW[] = {'d','e','a','d',0};
+    static const WCHAR adbeW[] = {'A','d','B','e',0};
+    static const WCHAR adbe_lowerW[] = {'a','d','b','e',0};
+    static const WCHAR beefW[] = {'B','e','E','f',0};
+    static const WCHAR beef_lowerW[] = {'b','e','e','f',0};
+    static const WCHAR cafeW[] = {'c','a','f','e',0};
+
+    const struct
+    {
+        const WCHAR *search;
+        const WCHAR *expect;
+    } StrStrIW_cases[] =
+    {
+        {emptyW, NULL},
+        {deadW, deadbeefW},
+        {dead_lowerW, deadbeefW},
+        {adbeW, deadbeefW + 2},
+        {adbe_lowerW, deadbeefW + 2},
+        {beefW, deadbeefW + 4},
+        {beef_lowerW, deadbeefW + 4},
+        {cafeW, NULL},
+    };
+
+    LPWSTR ret;
+    int i;
+
+    /* Tests crash on Win9x/Win2k */
+    if (0)
+    {
+        ret = StrStrIW(NULL, NULL);
+        ok(!ret, "Expected StrStrIW to return NULL, got %p\n", ret);
+
+        ret = StrStrIW(NULL, emptyW);
+        ok(!ret, "Expected StrStrIW to return NULL, got %p\n", ret);
+
+        ret = StrStrIW(emptyW, NULL);
+        ok(!ret, "Expected StrStrIW to return NULL, got %p\n", ret);
+    }
+
+    ret = StrStrIW(emptyW, emptyW);
+    ok(!ret, "Expected StrStrIW to return NULL, got %p\n", ret);
+
+    for (i = 0; i < sizeof(StrStrIW_cases)/sizeof(StrStrIW_cases[0]); i++)
+    {
+        ret = StrStrIW(deadbeefW, StrStrIW_cases[i].search);
+        ok(ret == StrStrIW_cases[i].expect,
+           "[%d] Expected StrStrIW to return %p, got %p\n",
+           i, StrStrIW_cases[i].expect, ret);
+    }
+}
+
+static void test_StrStrNW(void)
+{
+    static const WCHAR emptyW[] = {0};
+    static const WCHAR deadbeefW[] = {'D','e','A','d','B','e','E','f',0};
+    static const WCHAR deadW[] = {'D','e','A','d',0};
+    static const WCHAR dead_lowerW[] = {'d','e','a','d',0};
+    static const WCHAR adbeW[] = {'A','d','B','e',0};
+    static const WCHAR adbe_lowerW[] = {'a','d','b','e',0};
+    static const WCHAR beefW[] = {'B','e','E','f',0};
+    static const WCHAR beef_lowerW[] = {'b','e','e','f',0};
+
+    const struct
+    {
+        const WCHAR *search;
+        const UINT count;
+        const WCHAR *expect;
+    } StrStrNW_cases[] =
+    {
+        {emptyW, sizeof(deadbeefW)/sizeof(WCHAR), NULL},
+        {deadW, sizeof(deadbeefW)/sizeof(WCHAR), deadbeefW},
+        {dead_lowerW, sizeof(deadbeefW)/sizeof(WCHAR), NULL},
+        {adbeW, sizeof(deadbeefW)/sizeof(WCHAR), deadbeefW + 2},
+        {adbe_lowerW, sizeof(deadbeefW)/sizeof(WCHAR), NULL},
+        {beefW, sizeof(deadbeefW)/sizeof(WCHAR), deadbeefW + 4},
+        {beef_lowerW, sizeof(deadbeefW)/sizeof(WCHAR), NULL},
+        {beefW, 0, NULL},
+        {beefW, 1, NULL},
+        {beefW, 2, NULL},
+        {beefW, 3, NULL},
+        {beefW, 4, NULL},
+        {beefW, 5, deadbeefW + 4},
+        {beefW, 6, deadbeefW + 4},
+        {beefW, 7, deadbeefW + 4},
+        {beefW, 8, deadbeefW + 4},
+        {beefW, 9, deadbeefW + 4},
+    };
+
+    LPWSTR ret;
+    UINT i;
+
+    if (!pStrStrNW)
+    {
+        win_skip("StrStrNW() is not available\n");
+        return;
+    }
+
+    ret = pStrStrNW(NULL, NULL, 0);
+    ok(!ret, "Expected StrStrNW to return NULL, got %p\n", ret);
+
+    ret = pStrStrNW(NULL, NULL, 10);
+    ok(!ret, "Expected StrStrNW to return NULL, got %p\n", ret);
+
+    ret = pStrStrNW(NULL, emptyW, 10);
+    ok(!ret, "Expected StrStrNW to return NULL, got %p\n", ret);
+
+    ret = pStrStrNW(emptyW, NULL, 10);
+    ok(!ret, "Expected StrStrNW to return NULL, got %p\n", ret);
+
+    ret = pStrStrNW(emptyW, emptyW, 10);
+    ok(!ret, "Expected StrStrNW to return NULL, got %p\n", ret);
+
+    for (i = 0; i < sizeof(StrStrNW_cases)/sizeof(StrStrNW_cases[0]); i++)
+    {
+        ret = pStrStrNW(deadbeefW, StrStrNW_cases[i].search, StrStrNW_cases[i].count);
+        ok(ret == StrStrNW_cases[i].expect,
+           "[%d] Expected StrStrNW to return %p, got %p\n",
+           i, StrStrNW_cases[i].expect, ret);
+    }
+
+    /* StrStrNW accepts counts larger than the search string length but rejects
+     * counts larger than around 2G. The limit seems to change based on the
+     * caller executable itself. */
+    ret = pStrStrNW(deadbeefW, beefW, 100);
+    ok(ret == deadbeefW + 4, "Expected StrStrNW to return deadbeefW + 4, got %p\n", ret);
+
+    if (0)
+    {
+        ret = pStrStrNW(deadbeefW, beefW, ~0U);
+        ok(!ret, "Expected StrStrNW to return NULL, got %p\n", ret);
+    }
+}
+
+static void test_StrStrNIW(void)
+{
+    static const WCHAR emptyW[] = {0};
+    static const WCHAR deadbeefW[] = {'D','e','A','d','B','e','E','f',0};
+    static const WCHAR deadW[] = {'D','e','A','d',0};
+    static const WCHAR dead_lowerW[] = {'d','e','a','d',0};
+    static const WCHAR adbeW[] = {'A','d','B','e',0};
+    static const WCHAR adbe_lowerW[] = {'a','d','b','e',0};
+    static const WCHAR beefW[] = {'B','e','E','f',0};
+    static const WCHAR beef_lowerW[] = {'b','e','e','f',0};
+    static const WCHAR cafeW[] = {'c','a','f','e',0};
+
+    const struct
+    {
+        const WCHAR *search;
+        const UINT count;
+        const WCHAR *expect;
+    } StrStrNIW_cases[] =
+    {
+        {emptyW, sizeof(deadbeefW)/sizeof(WCHAR), NULL},
+        {deadW, sizeof(deadbeefW)/sizeof(WCHAR), deadbeefW},
+        {dead_lowerW, sizeof(deadbeefW)/sizeof(WCHAR), deadbeefW},
+        {adbeW, sizeof(deadbeefW)/sizeof(WCHAR), deadbeefW + 2},
+        {adbe_lowerW, sizeof(deadbeefW)/sizeof(WCHAR), deadbeefW + 2},
+        {beefW, sizeof(deadbeefW)/sizeof(WCHAR), deadbeefW + 4},
+        {beef_lowerW, sizeof(deadbeefW)/sizeof(WCHAR), deadbeefW + 4},
+        {cafeW, sizeof(deadbeefW)/sizeof(WCHAR), NULL},
+        {beefW, 0, NULL},
+        {beefW, 1, NULL},
+        {beefW, 2, NULL},
+        {beefW, 3, NULL},
+        {beefW, 4, NULL},
+        {beefW, 5, deadbeefW + 4},
+        {beefW, 6, deadbeefW + 4},
+        {beefW, 7, deadbeefW + 4},
+        {beefW, 8, deadbeefW + 4},
+        {beefW, 9, deadbeefW + 4},
+        {beef_lowerW, 0, NULL},
+        {beef_lowerW, 1, NULL},
+        {beef_lowerW, 2, NULL},
+        {beef_lowerW, 3, NULL},
+        {beef_lowerW, 4, NULL},
+        {beef_lowerW, 5, deadbeefW + 4},
+        {beef_lowerW, 6, deadbeefW + 4},
+        {beef_lowerW, 7, deadbeefW + 4},
+        {beef_lowerW, 8, deadbeefW + 4},
+        {beef_lowerW, 9, deadbeefW + 4},
+    };
+
+    LPWSTR ret;
+    UINT i;
+
+    if (!pStrStrNIW)
+    {
+        win_skip("StrStrNIW() is not available\n");
+        return;
+    }
+
+    ret = pStrStrNIW(NULL, NULL, 0);
+    ok(!ret, "Expected StrStrNIW to return NULL, got %p\n", ret);
+
+    ret = pStrStrNIW(NULL, NULL, 10);
+    ok(!ret, "Expected StrStrNIW to return NULL, got %p\n", ret);
+
+    ret = pStrStrNIW(NULL, emptyW, 10);
+    ok(!ret, "Expected StrStrNIW to return NULL, got %p\n", ret);
+
+    ret = pStrStrNIW(emptyW, NULL, 10);
+    ok(!ret, "Expected StrStrNIW to return NULL, got %p\n", ret);
+
+    ret = pStrStrNIW(emptyW, emptyW, 10);
+    ok(!ret, "Expected StrStrNIW to return NULL, got %p\n", ret);
+
+    for (i = 0; i < sizeof(StrStrNIW_cases)/sizeof(StrStrNIW_cases[0]); i++)
+    {
+        ret = pStrStrNIW(deadbeefW, StrStrNIW_cases[i].search, StrStrNIW_cases[i].count);
+        ok(ret == StrStrNIW_cases[i].expect,
+           "[%d] Expected StrStrNIW to return %p, got %p\n",
+           i, StrStrNIW_cases[i].expect, ret);
+    }
+
+    /* StrStrNIW accepts counts larger than the search string length but rejects
+     * counts larger than around 2G. The limit seems to change based on the
+     * caller executable itself. */
+    ret = pStrStrNIW(deadbeefW, beefW, 100);
+    ok(ret == deadbeefW + 4, "Expected StrStrNIW to return deadbeefW + 4, got %p\n", ret);
+
+    if (0)
+    {
+        ret = pStrStrNIW(deadbeefW, beefW, ~0U);
+        ok(!ret, "Expected StrStrNIW to return NULL, got %p\n", ret);
+    }
+}
+
 START_TEST(string)
 {
   HMODULE hShlwapi;
@@ -978,9 +1398,13 @@ START_TEST(string)
   pStrFormatKBSizeW = (void *)GetProcAddress(hShlwapi, "StrFormatKBSizeW");
   pStrIsIntlEqualA = (void *)GetProcAddress(hShlwapi, "StrIsIntlEqualA");
   pStrIsIntlEqualW = (void *)GetProcAddress(hShlwapi, "StrIsIntlEqualW");
+  pStrPBrkW = (void *)GetProcAddress(hShlwapi, "StrPBrkW");
+  pStrRChrA = (void *)GetProcAddress(hShlwapi, "StrRChrA");
   pStrRetToBSTR = (void *)GetProcAddress(hShlwapi, "StrRetToBSTR");
   pStrRetToBufA = (void *)GetProcAddress(hShlwapi, "StrRetToBufA");
   pStrRetToBufW = (void *)GetProcAddress(hShlwapi, "StrRetToBufW");
+  pStrStrNW = (void *)GetProcAddress(hShlwapi, "StrStrNW");
+  pStrStrNIW = (void *)GetProcAddress(hShlwapi, "StrStrNIW");
   pwnsprintfA = (void *)GetProcAddress(hShlwapi, "wnsprintfA");
   pwnsprintfW = (void *)GetProcAddress(hShlwapi, "wnsprintfW");
 
@@ -1020,6 +1444,12 @@ START_TEST(string)
   test_SHAnsiToAnsi();
   test_SHUnicodeToUnicode();
   test_StrXXX_overflows();
+  test_StrStrA();
+  test_StrStrW();
+  test_StrStrIA();
+  test_StrStrIW();
+  test_StrStrNW();
+  test_StrStrNIW();
 
   CoUninitialize();
 }

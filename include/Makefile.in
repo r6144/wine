@@ -14,6 +14,7 @@ PUBLIC_IDL_H_SRCS = \
 	activscp.idl \
 	amstream.idl \
 	amvideo.idl \
+	asptlb.idl \
 	audioclient.idl \
 	audiopolicy.idl \
 	austream.idl \
@@ -36,6 +37,7 @@ PUBLIC_IDL_H_SRCS = \
 	endpointvolume.idl \
 	exdisp.idl \
 	fusion.idl \
+	gameux.idl \
 	hlink.idl \
 	htiframe.idl \
 	iads.idl \
@@ -173,6 +175,7 @@ SRCDIR_INCLUDES = \
 	d3dx9math.inl \
 	d3dx9mesh.h \
 	d3dx9shader.h \
+	d3dx9shape.h \
 	d3dx9tex.h \
 	dbccmd.idl \
 	dbcses.idl \
@@ -412,6 +415,7 @@ SRCDIR_INCLUDES = \
 	pshpack4.h \
 	pshpack8.h \
 	ras.h \
+	rasdlg.h \
 	raserror.h \
 	reason.h \
 	regstr.h \
@@ -548,7 +552,7 @@ IDL_H_SRCS = $(PUBLIC_IDL_H_SRCS) $(PRIVATE_IDL_H_SRCS)
 
 @MAKE_RULES@
 
-OBJDIR_INCLUDES = $(PUBLIC_IDL_H_SRCS:.idl=.h) $(IDL_TLB_SRCS:.idl=.tlb)
+OBJDIR_INCLUDES = $(PUBLIC_IDL_H_SRCS:.idl=.h)
 
 all: $(IDL_H_SRCS:.idl=.h) $(IDL_TLB_SRCS:.idl=.tlb)
 

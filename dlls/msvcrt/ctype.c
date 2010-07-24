@@ -50,22 +50,19 @@ WORD MSVCRT__ctype [257] = {
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 };
 
-/* Internal: Current ctype table for locale */
-WORD MSVCRT_current_ctype[257];
-
 /* pctype is used by macros in the Win32 headers. It must point
  * To a table of flags exactly like ctype. To allow locale
  * changes to affect ctypes (i.e. isleadbyte), we use a second table
  * and update its flags whenever the current locale changes.
  */
-WORD* MSVCRT__pctype = MSVCRT_current_ctype + 1;
+WORD* MSVCRT__pctype = NULL;
 
 /*********************************************************************
  *		__pctype_func (MSVCRT.@)
  */
 WORD** CDECL MSVCRT___pctype_func(void)
 {
-  return &MSVCRT__pctype;
+  return &get_locale()->locinfo->pctype;
 }
 
 /*********************************************************************
@@ -73,22 +70,24 @@ WORD** CDECL MSVCRT___pctype_func(void)
  */
 int CDECL _isctype(int c, int type)
 {
-  if (c >= -1 && c <= 255)
-    return MSVCRT__pctype[c] & type;
+  MSVCRT__locale_t locale = get_locale();
 
-  if (MSVCRT___mb_cur_max != 1 && c > 0)
+  if (c >= -1 && c <= 255)
+    return locale->locinfo->pctype[c] & type;
+
+  if (locale->locinfo->mb_cur_max != 1 && c > 0)
   {
     /* FIXME: Is there a faster way to do this? */
     WORD typeInfo;
     char convert[3], *pconv = convert;
 
-    if (MSVCRT__pctype[(UINT)c >> 8] & MSVCRT__LEADBYTE)
+    if (locale->locinfo->pctype[(UINT)c >> 8] & MSVCRT__LEADBYTE)
       *pconv++ = (UINT)c >> 8;
     *pconv++ = c & 0xff;
     *pconv = 0;
     /* FIXME: Use ctype LCID, not lc_all */
-    if (GetStringTypeExA(MSVCRT_current_lc_all_lcid, CT_CTYPE1,
-                         convert, convert[1] ? 2 : 1, &typeInfo))
+    if (GetStringTypeExA(get_locale()->locinfo->lc_handle[MSVCRT_LC_CTYPE],
+                CT_CTYPE1, convert, convert[1] ? 2 : 1, &typeInfo))
       return typeInfo & type;
   }
   return 0;

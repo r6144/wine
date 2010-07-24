@@ -1350,6 +1350,9 @@ static HRESULT WINAPI ServiceProvider_QueryService(IServiceProvider *iface,
 {
     *ppv = NULL;
 
+    if(!winetest_interactive)
+        return E_NOINTERFACE;
+
     if (IsEqualGUID(&SID_STopLevelBrowser, guidService))
         trace("Service SID_STopLevelBrowser\n");
     else if (IsEqualGUID(&SID_SEditCommandTarget, guidService))
@@ -2366,6 +2369,7 @@ static void test_IServiceProvider(IUnknown *unk)
 #define get_document(u) _get_document(__LINE__,u)
 static IDispatch *_get_document(unsigned line, IUnknown *unk)
 {
+    IHTMLDocument2 *html_doc;
     IWebBrowser2 *wb;
     IDispatch *disp;
     HRESULT hres;
@@ -2378,6 +2382,11 @@ static IDispatch *_get_document(unsigned line, IUnknown *unk)
     IWebBrowser2_Release(wb);
     ok_(__FILE__,line)(hres == S_OK, "get_Document failed: %08x\n", hres);
     ok_(__FILE__,line)(disp != NULL, "doc_disp == NULL\n");
+
+    hres = IDispatch_QueryInterface(disp, &IID_IHTMLDocument2, (void**)&html_doc);
+    ok_(__FILE__,line)(hres == S_OK, "Could not get IHTMLDocument iface: %08x\n", hres);
+    ok(disp == (IDispatch*)html_doc, "disp != html_doc\n");
+    IHTMLDocument_Release(html_doc);
 
     return disp;
 }

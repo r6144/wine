@@ -4,9 +4,13 @@ SRCDIR    = @srcdir@
 VPATH     = @srcdir@
 MODULE    = usp10.dll
 IMPORTLIB = usp10
-IMPORTS   = gdi32 kernel32
+IMPORTS   = gdi32
 
 C_SRCS = \
+	bidi.c \
+	mirror.c \
+	shape.c \
+	shaping.c \
 	usp10.c
 
 @MAKE_DLL_RULES@

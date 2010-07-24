@@ -15,9 +15,12 @@
 @ cdecl -i386 ??1bad_typeid@@UAE@XZ() msvcrt.??1bad_typeid@@UAE@XZ
 @ cdecl -i386 ??1exception@@UAE@XZ() msvcrt.??1exception@@UAE@XZ
 @ cdecl -i386 ??1type_info@@UAE@XZ() msvcrt.??1type_info@@UAE@XZ
-@ cdecl ??2@YAPAXI@Z(long) msvcrt.??2@YAPAXI@Z
-@ cdecl ??2@YAPAXIHPBDH@Z(long long str long) MSVCRTD_operator_new_dbg
-@ cdecl ??3@YAXPAX@Z(ptr) msvcrt.??3@YAXPAX@Z
+@ cdecl -arch=win32 ??2@YAPAXI@Z(long) msvcrt.??2@YAPAXI@Z
+@ cdecl -arch=win64 ??2@YAPEAX_K@Z(long) msvcrt.??2@YAPEAX_K@Z
+@ cdecl -arch=win32 ??2@YAPAXIHPBDH@Z(long long str long) MSVCRTD_operator_new_dbg
+@ cdecl -arch=win64 ??2@YAPEAX_KHPEBDH@Z(long long str long) MSVCRTD_operator_new_dbg
+@ cdecl -arch=win32 ??3@YAXPAX@Z(ptr) msvcrt.??3@YAXPAX@Z
+@ cdecl -arch=win64 ??3@YAXPEAX@Z(ptr) msvcrt.??3@YAXPEAX@Z
 @ cdecl -i386 ??4__non_rtti_object@@QAEAAV0@ABV0@@Z(ptr) msvcrt.??4__non_rtti_object@@QAEAAV0@ABV0@@Z
 @ cdecl -i386 ??4bad_cast@@QAEAAV0@ABV0@@Z(ptr) msvcrt.??4bad_cast@@QAEAAV0@ABV0@@Z
 @ cdecl -i386 ??4bad_typeid@@QAEAAV0@ABV0@@Z(ptr) msvcrt.??4bad_typeid@@QAEAAV0@ABV0@@Z
@@ -231,8 +234,8 @@
 @ extern _environ msvcrt._environ
 @ cdecl _eof(long) msvcrt._eof
 @ cdecl _errno() msvcrt._errno
-@ cdecl _except_handler2(ptr ptr ptr ptr) msvcrt._except_handler2
-@ cdecl _except_handler3(ptr ptr ptr ptr) msvcrt._except_handler3
+@ cdecl -i386 _except_handler2(ptr ptr ptr ptr) msvcrt._except_handler2
+@ cdecl -i386 _except_handler3(ptr ptr ptr ptr) msvcrt._except_handler3
 @ varargs _execl(str str) msvcrt._execl
 @ varargs _execle(str str) msvcrt._execle
 @ varargs _execlp(str str) msvcrt._execlp
@@ -293,7 +296,7 @@
 @ cdecl _getsystime(ptr) msvcrt._getsystime
 @ cdecl _getw(ptr) msvcrt._getw
 @ cdecl _getws(ptr) msvcrt._getws
-@ cdecl _global_unwind2(ptr) msvcrt._global_unwind2
+@ cdecl -i386 _global_unwind2(ptr) msvcrt._global_unwind2
 @ cdecl _heapadd (ptr long) msvcrt._heapadd
 @ cdecl _heapchk() msvcrt._heapchk
 @ cdecl _heapmin() msvcrt._heapmin

@@ -20,9 +20,11 @@
 
 #include "progman.h"
 
+LANGUAGE LANG_NORWEGIAN, SUBLANG_NORWEGIAN_BOKMAL
+
 /* Menu */
 
-MAIN_MENU MENU LANGUAGE LANG_NORWEGIAN, SUBLANG_NORWEGIAN_BOKMAL
+MAIN_MENU MENU
 {
  POPUP "&Fil" {
    MENUITEM "&Ny...",              PM_NEW
@@ -54,19 +56,13 @@ POPUP "&Hjelp" {
    MENUITEM "&Hjelp til hjelp",     PM_HELPONHELP
    MENUITEM "&Veiledning",         PM_TUTORIAL
    MENUITEM SEPARATOR
-
-   POPUP "&Informasjon..." {
-     MENUITEM "&Lisens",        PM_LICENSE
-     MENUITEM "I&NGEN GARANTI",    PM_NO_WARRANTY
-     MENUITEM "&om WINE",     PM_ABOUT_WINE
-   }
+   MENUITEM "&om Wine",     PM_ABOUT_WINE
  }
 }
 
 /* Dialog `New' */
 
 DIALOG_NEW DIALOG 0, 0, 170, 65
-LANGUAGE LANG_NORWEGIAN, SUBLANG_NORWEGIAN_BOKMAL
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Ny"
 {
@@ -82,7 +78,6 @@ PUSHBUTTON    "&Hjelp",        PM_HELP,        105, 45,  60, 15, WS_TABSTOP
 /* Dialog `Move' */
 
 DIALOG_MOVE DIALOG 0, 0, 250, 65
-LANGUAGE LANG_NORWEGIAN, SUBLANG_NORWEGIAN_BOKMAL
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Flytt program"
 {
@@ -100,7 +95,6 @@ PUSHBUTTON    "&Hjelp",            PM_HELP,           185, 45,  60, 15, WS_TABST
 /* Dialog `Copy' */
 
 DIALOG_COPY DIALOG 0, 0, 250, 65
-LANGUAGE LANG_NORWEGIAN, SUBLANG_NORWEGIAN_BOKMAL
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Kopier program"
 {
@@ -118,7 +112,6 @@ PUSHBUTTON    "&Hjelp",            PM_HELP,           185, 45,  60, 15, WS_TABST
 /* Dialog `Group attributes' */
 
 DIALOG_GROUP DIALOG 0, 0, 230, 65
-LANGUAGE LANG_NORWEGIAN, SUBLANG_NORWEGIAN_BOKMAL
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Programgruppeattributter"
 {
@@ -134,7 +127,6 @@ PUSHBUTTON    "&Hjelp",          PM_HELP,             155, 45,  60, 15, WS_TABST
 /* Dialog `Program attributes' */
 
 DIALOG_PROGRAM DIALOG 0, 0, 250, 105
-LANGUAGE LANG_NORWEGIAN, SUBLANG_NORWEGIAN_BOKMAL
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Programattributter"
 {
@@ -159,7 +151,6 @@ PUSHBUTTON    "&Hjelp",                 PM_HELP,             185, 85,  60, 15, W
 /* Dialog `Symbol' */
 
 DIALOG_SYMBOL DIALOG 0, 0, 200, 85
-LANGUAGE LANG_NORWEGIAN, SUBLANG_NORWEGIAN_BOKMAL
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Endre ikon"
 {
@@ -177,7 +168,6 @@ PUSHBUTTON    "&Hjelp",       PM_HELP,           135, 65,  60, 15, WS_TABSTOP
 /* Dialog `Execute' */
 
 DIALOG_EXECUTE DIALOG 0, 0, 200, 85
-LANGUAGE LANG_NORWEGIAN, SUBLANG_NORWEGIAN_BOKMAL
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Kjør program"
 {
@@ -193,7 +183,7 @@ PUSHBUTTON    "&Hjelp",             PM_HELP,   135, 65,  60, 15, WS_TABSTOP
 
 /* Strings */
 
-STRINGTABLE DISCARDABLE LANGUAGE LANG_NORWEGIAN, SUBLANG_NORWEGIAN_BOKMAL
+STRINGTABLE
 {
 IDS_PROGRAM_MANAGER,		"Programbehandling"
 IDS_ERROR,			"FEIL"
@@ -219,28 +209,4 @@ IDS_PROGRAMS,			"Programmer"
 IDS_LIBRARIES_DLL,		"Biblioteker (*.dll)"
 IDS_SYMBOL_FILES,		"Ikonfiler"
 IDS_SYMBOLS_ICO,		"Ikoner (*.ico)"
-}
-
-STRINGTABLE DISCARDABLE LANGUAGE LANG_NORWEGIAN, SUBLANG_NORWEGIAN_BOKMAL
-{
-IDS_LICENSE_CAPTION,            "LISENS"
-IDS_LICENSE,
-"Dette biblioteket er fri programvare; du kan redistribuere det  \
-og/eller endre det under vilkårene i «GNU Lesser General Public \
-License», utgitt av the Free Software Foundation; enten \
-versjon 2.1 av Lisensen, eller (hvis du ønsker det) en nyere versjon.\n\
-Dette biblioteket distribueres i håp om at det er nyttig, \
-men UTEN ENHVER GARANTI; ikke engang en uttrykte garantien for \
-HANDELSDYKTIGHET eller EGNETHET FOR ET SPESIELT FORMÅL. Se «GNU \
-Lesser General Public License» for flere detaljer.\n\
-Du skal ha mottatt et eksemplar av «GNU Lesser General Public \
-License» sammen med dette biblioteket; hvis ikke, skriv til: the Free Software \
-Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA"
-
-IDS_WARRANTY_CAPTION, "INGEN GARANTI"
-IDS_WARRANTY,
-"Dette biblioteket distribueres i det håp at det er nyttig, \
-men UTEN ENHVER GARANTI; ikke engang en uttrykte garantien for \
-HANDELSDYKTIGHET eller EGNETHET FOR ET SPESIELT FORMÅL. Se «GNU \
-Lesser General Public License» for flere detaljer."
 }

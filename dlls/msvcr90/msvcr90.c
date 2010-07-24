@@ -20,14 +20,17 @@
 
 #include <stdarg.h>
 
+#include "stdlib.h"
+#include "errno.h"
+#include "malloc.h"
 #include "windef.h"
 #include "winbase.h"
 #include "wine/debug.h"
+#include "sys/stat.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(msvcr90);
 
 typedef int (CDECL *_INITTERM_E_FN)(void);
-typedef void (__cdecl *_invalid_parameter_handler)(const wchar_t*, const wchar_t*, const wchar_t*, unsigned, unsigned*);
 
 /*********************************************************************
  *  DllMain (MSVCR90.@)
@@ -78,30 +81,6 @@ void * CDECL _encoded_null(void)
 }
 
 /*********************************************************************
- *  _get_invalid_parameter_handler (MSVCR90.@)
- */
-_invalid_parameter_handler CDECL _get_invalid_parameter_handler(void)
-{
-    TRACE("\n");
-    return *((_invalid_parameter_handler*)GetProcAddress(GetModuleHandleA("msvcrt.dll"), "_invalid_parameter"));
-}
-
-/*********************************************************************
- *  _set_invalid_parameter_handler (MSVCR90.@)
- */
-_invalid_parameter_handler CDECL _set_invalid_parameter_handler(_invalid_parameter_handler handler)
-{
-    _invalid_parameter_handler *ptr = (_invalid_parameter_handler*)GetProcAddress(
-            GetModuleHandleA("msvcrt.dll"), "_invalid_parameter");
-    _invalid_parameter_handler old = *ptr;
-
-    TRACE("(%p)\n", handler);
-
-    *ptr = handler;
-    return old;
-}
-
-/*********************************************************************
  *  _initterm_e (MSVCR90.@)
  *
  * call an array of application initialization functions and report the return value
@@ -114,6 +93,7 @@ int CDECL _initterm_e(_INITTERM_E_FN *table, _INITTERM_E_FN *end)
 
     while (!res && table < end) {
         if (*table) {
+            TRACE("calling %p\n", **table);
             res = (**table)();
             if (res)
                 TRACE("function %p failed: 0x%x\n", *table, res);
@@ -122,6 +102,14 @@ int CDECL _initterm_e(_INITTERM_E_FN *table, _INITTERM_E_FN *end)
         table++;
     }
     return res;
+}
+
+/*********************************************************************
+ * _invalid_parameter_noinfo (MSVCR90.@)
+ */
+void CDECL _invalid_parameter_noinfo(void)
+{
+    _invalid_parameter( NULL, NULL, NULL, 0, 0 );
 }
 
 /*********************************************************************
@@ -138,4 +126,81 @@ int* CDECL __sys_nerr(void)
 char** CDECL __sys_errlist(void)
 {
     return (char**)GetProcAddress(GetModuleHandleA("msvcrt.dll"), "_sys_errlist");
+}
+
+/*********************************************************************
+ * __clean_type_info_names_internal (MSVCR90.@)
+ */
+void CDECL __clean_type_info_names_internal(void *p)
+{
+    FIXME("(%p) stub\n", p);
+}
+
+/*********************************************************************
+ * _recalloc (MSVCR90.@)
+ */
+void* CDECL _recalloc(void* mem, size_t num, size_t size)
+{
+    size_t old_size;
+    void *ret;
+
+    if(!mem)
+        return calloc(num, size);
+
+    size = num*size;
+    old_size = _msize(mem);
+
+    ret = realloc(mem, size);
+    if(!ret) {
+        *_errno() = ENOMEM;
+        return NULL;
+    }
+
+    if(size>old_size)
+        memset((BYTE*)mem+old_size, 0, size-old_size);
+    return ret;
+}
+
+/*********************************************************************
+ *		_fstat64i32 (MSVCRT.@)
+ */
+
+static void msvcrt_stat64_to_stat64i32(const struct _stat64 *buf64, struct _stat64i32 *buf)
+{
+    buf->st_dev   = buf64->st_dev;
+    buf->st_ino   = buf64->st_ino;
+    buf->st_mode  = buf64->st_mode;
+    buf->st_nlink = buf64->st_nlink;
+    buf->st_uid   = buf64->st_uid;
+    buf->st_gid   = buf64->st_gid;
+    buf->st_rdev  = buf64->st_rdev;
+    buf->st_size  = buf64->st_size;
+    buf->st_atime = buf64->st_atime;
+    buf->st_mtime = buf64->st_mtime;
+    buf->st_ctime = buf64->st_ctime;
+}
+
+int CDECL _fstat64i32(int fd, struct _stat64i32* buf)
+{
+  int ret;
+  struct _stat64 buf64;
+
+  ret = _fstat64(fd, &buf64);
+  if (!ret)
+      msvcrt_stat64_to_stat64i32(&buf64, buf);
+  return ret;
+}
+
+/*********************************************************************
+ *		_stat64i32 (MSVCRT.@)
+ */
+int CDECL _stat64i32(const char* path, struct _stat64i32 * buf)
+{
+  int ret;
+  struct _stat64 buf64;
+
+  ret = _stat64(path, &buf64);
+  if (!ret)
+    msvcrt_stat64_to_stat64i32(&buf64, buf);
+  return ret;
 }

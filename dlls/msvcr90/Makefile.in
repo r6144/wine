@@ -3,7 +3,9 @@ TOPOBJDIR = ../..
 SRCDIR    = @srcdir@
 VPATH     = @srcdir@
 MODULE    = msvcr90.dll
-IMPORTS   = msvcrt kernel32
+IMPORTS   = msvcrt
+MODCFLAGS = @BUILTINFLAG@
+EXTRAINCL = -I$(TOPSRCDIR)/include/msvcrt
 
 C_SRCS = \
 	msvcr90.c

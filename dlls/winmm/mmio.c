@@ -584,7 +584,7 @@ static HMMIO MMIO_Open(LPSTR szFileName, MMIOINFO* refmminfo, DWORD dwOpenFlags,
     MMIOINFO    	mmioinfo;
     DWORD               pos;
 
-    TRACE("('%s', %p, %08X, %s);\n", szFileName, refmminfo, dwOpenFlags, is_unicode ? "unicode" : "ansi");
+    TRACE("(%s, %p, %08X, %s);\n", debugstr_a(szFileName), refmminfo, dwOpenFlags, is_unicode ? "unicode" : "ansi");
 
     if (!refmminfo) {
         refmminfo = &mmioinfo;
@@ -667,10 +667,11 @@ static HMMIO MMIO_Open(LPSTR szFileName, MMIOINFO* refmminfo, DWORD dwOpenFlags,
                                         (LPARAM)szFileName, 0, FALSE);
 
     /* grab file size, when possible */
-    if ((pos = _llseek((HFILE)wm->info.adwInfo[0], 0, SEEK_CUR)) != -1)
-    {
-        wm->dwFileSize = _llseek((HFILE)wm->info.adwInfo[0], 0, SEEK_END);
-        _llseek((HFILE)wm->info.adwInfo[0], pos, SEEK_SET);
+    if (wm->info.fccIOProc != FOURCC_MEM && (send_message(wm->ioProc, &wm->info, MMIOM_SEEK, 0, SEEK_CUR, FALSE)) != -1) {
+       pos = wm->info.lDiskOffset;
+       send_message(wm->ioProc, &wm->info, MMIOM_SEEK, 0, SEEK_END, FALSE);
+       wm->dwFileSize = wm->info.lDiskOffset;
+       send_message(wm->ioProc, &wm->info, MMIOM_SEEK, pos, SEEK_SET, FALSE);
     }
     else wm->dwFileSize = 0;
 
@@ -1057,7 +1058,7 @@ FOURCC WINAPI mmioStringToFOURCCA(LPCSTR sz, UINT uFlags)
     /* Pad with spaces */
     while (i < 4) cc[i++] = ' ';
 
-    TRACE("Got '%.4s'\n",cc);
+    TRACE("Got %s\n",debugstr_an(cc,4));
     return mmioFOURCC(cc[0],cc[1],cc[2],cc[3]);
 }
 
@@ -1172,8 +1173,8 @@ MMRESULT WINAPI mmioDescend(HMMIO hmmio, LPMMCKINFO lpck,
         srchType = lpck->fccType;
     }
 
-    TRACE("searching for %4.4s.%4.4s\n",
-          (LPCSTR)&srchCkId, srchType ? (LPCSTR)&srchType : "any");
+    TRACE("searching for %s.%s\n",
+          debugstr_an((LPCSTR)&srchCkId, 4), srchType ? debugstr_an((LPCSTR)&srchType, 4) : "<any>");
 
     while (TRUE)
     {
@@ -1188,9 +1189,9 @@ MMRESULT WINAPI mmioDescend(HMMIO hmmio, LPMMCKINFO lpck,
         }
 
         lpck->dwDataOffset = dwOldPos + 2 * sizeof(DWORD);
-        TRACE("ckid=%4.4s fcc=%4.4s cksize=%08X !\n",
-              (LPCSTR)&lpck->ckid,
-              srchType ? (LPCSTR)&lpck->fccType:"<na>",
+        TRACE("ckid=%s fcc=%s cksize=%08X !\n",
+              debugstr_an((LPCSTR)&lpck->ckid, 4),
+              srchType ? debugstr_an((LPCSTR)&lpck->fccType, 4) : "<na>",
               lpck->cksize);
         if ( (!srchCkId || (srchCkId == lpck->ckid)) &&
              (!srchType || (srchType == lpck->fccType)) )
@@ -1212,9 +1213,9 @@ MMRESULT WINAPI mmioDescend(HMMIO hmmio, LPMMCKINFO lpck,
 	mmioSeek(hmmio, lpck->dwDataOffset, SEEK_SET);
 	lpck->fccType = 0;
     }
-    TRACE("lpck: ckid=%.4s, cksize=%d, dwDataOffset=%d fccType=%08X (%.4s)!\n",
-	  (LPSTR)&lpck->ckid, lpck->cksize, lpck->dwDataOffset,
-	  lpck->fccType, srchType?(LPSTR)&lpck->fccType:"");
+    TRACE("lpck: ckid=%s, cksize=%d, dwDataOffset=%d fccType=%08X (%s)!\n",
+	  debugstr_an((LPSTR)&lpck->ckid, 4), lpck->cksize, lpck->dwDataOffset,
+	  lpck->fccType, srchType ? debugstr_an((LPSTR)&lpck->fccType, 4):"");
     return MMSYSERR_NOERROR;
 }
 
@@ -1271,7 +1272,7 @@ MMRESULT WINAPI mmioCreateChunk(HMMIO hmmio, MMCKINFO* lpck, UINT uFlags)
     else if (uFlags == MMIO_CREATERIFF)
 	lpck->ckid = FOURCC_RIFF;
 
-    TRACE("ckid=%.4s\n", (LPSTR)&lpck->ckid);
+    TRACE("ckid=%s\n", debugstr_an((LPSTR)&lpck->ckid, 4));
 
     size = 2 * sizeof(DWORD);
     lpck->dwDataOffset = dwOldPos + size;
@@ -1301,7 +1302,7 @@ MMRESULT WINAPI mmioRenameA(LPCSTR szFileName, LPCSTR szNewFileName,
     struct IOProcList   tmp;
     FOURCC              fcc;
 
-    TRACE("('%s', '%s', %p, %08X);\n",
+    TRACE("(%s, %s, %p, %08X);\n",
 	  debugstr_a(szFileName), debugstr_a(szNewFileName), lpmmioinfo, dwFlags);
 
     /* If both params are NULL, then parse the file name */

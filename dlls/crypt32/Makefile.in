@@ -5,7 +5,7 @@ SRCDIR    = @srcdir@
 VPATH     = @srcdir@
 MODULE    = crypt32.dll
 IMPORTLIB = crypt32
-IMPORTS   = user32 advapi32 kernel32 ntdll
+IMPORTS   = user32 advapi32
 EXTRALIBS = @SECURITYLIB@
 
 C_SRCS = \
@@ -38,10 +38,13 @@ RC_SRCS = \
 	crypt32_De.rc \
 	crypt32_En.rc \
 	crypt32_Fr.rc \
+	crypt32_Hu.rc \
+	crypt32_It.rc \
 	crypt32_Ko.rc \
 	crypt32_Lt.rc \
 	crypt32_Nl.rc \
 	crypt32_No.rc \
+	crypt32_Pl.rc \
 	crypt32_Pt.rc \
 	crypt32_Ro.rc \
 	crypt32_Sv.rc \

@@ -1285,7 +1285,9 @@ static NTSTATUS map_image( HANDLE hmapping, int fd, char *base, SIZE_T total_siz
             (nt->OptionalHeader.AddressOfEntryPoint < sec->VirtualAddress + size))
             vprot |= VPROT_EXEC;
 
-        VIRTUAL_SetProt( view, ptr + sec->VirtualAddress, size, vprot );
+        if (!VIRTUAL_SetProt( view, ptr + sec->VirtualAddress, size, vprot ) && (vprot & VPROT_EXEC))
+            ERR( "failed to set %08x protection on section %.8s, noexec filesystem?\n",
+                 sec->Characteristics, sec->Name );
     }
 
  done:
@@ -1355,6 +1357,10 @@ void virtual_init(void)
     virtual_heap = RtlCreateHeap( HEAP_NO_SERIALIZE, heap_base, VIRTUAL_HEAP_SIZE,
                                   VIRTUAL_HEAP_SIZE, NULL, NULL );
     create_view( &heap_view, heap_base, VIRTUAL_HEAP_SIZE, VPROT_COMMITTED | VPROT_READ | VPROT_WRITE );
+
+    /* make the DOS area accessible to hide bugs in broken apps like Excel 2003 */
+    if (wine_mmap_is_in_reserved_area( (void *)0x10000, 0x100000 ) == 1)
+        wine_anon_mmap( (void *)0x10000, 0x100000, PROT_READ | PROT_WRITE, MAP_FIXED );
 }
 
 
@@ -1683,9 +1689,10 @@ static int free_reserved_memory( void *base, size_t size, void *arg )
  */
 void virtual_release_address_space( BOOL free_high_mem )
 {
-#ifdef __i386__
     struct free_range range;
     sigset_t sigset;
+
+    if (user_space_limit == address_space_limit) return;  /* no need to free anything */
 
     server_enter_uninterrupted_section( &csVirtual, &sigset );
 
@@ -1707,7 +1714,6 @@ void virtual_release_address_space( BOOL free_high_mem )
     }
 
     server_leave_uninterrupted_section( &csVirtual, &sigset );
-#endif
 }
 
 
@@ -2630,7 +2636,7 @@ NTSTATUS WINAPI NtGetWriteWatch( HANDLE process, ULONG flags, PVOID base, SIZE_T
     if (!addresses) return STATUS_ACCESS_VIOLATION;
 
     TRACE( "%p %x %p-%p %p %lu\n", process, flags, base, (char *)base + size,
-           addresses, count ? *count : 0 );
+           addresses, *count );
 
     server_enter_uninterrupted_section( &csVirtual, &sigset );
 

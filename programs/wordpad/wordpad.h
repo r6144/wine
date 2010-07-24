@@ -185,11 +185,8 @@
 #define IDB_FORMATBAR 101
 
 #define IDI_WORDPAD 102
-#define IDI_RTF 103
-#define IDI_WRI 104
-#define IDI_TXT 105
 
-#define IDC_ZOOM 106
+#define IDC_ZOOM 103
 
 #define STRING_ALL_FILES 1400
 #define STRING_TEXT_FILES_TXT 1401
@@ -222,6 +219,9 @@
 #define STRING_PREVIEW_PAGES 1457
 
 #define STRING_UNITS_CM 1458
+#define STRING_UNITS_IN 1459
+#define STRING_UNITS_INCH 1460
+#define STRING_UNITS_PT 1461
 
 #define STRING_DEFAULT_FILENAME 1700
 #define STRING_PROMPT_SAVE_CHANGES 1701
@@ -237,8 +237,10 @@
 #define STRING_PRINTING_NOT_IMPLEMENTED 1711
 #define STRING_MAX_TAB_STOPS 1712
 
+/* wordpad.c */
 LPWSTR file_basename(LPWSTR);
 
+/* print.c */
 void dialog_printsetup(HWND);
 void dialog_print(HWND, LPWSTR);
 void target_device(HWND, DWORD);
@@ -247,7 +249,6 @@ LRESULT preview_command(HWND, WPARAM);
 void init_preview(HWND, LPWSTR);
 void close_preview(HWND);
 BOOL preview_isactive(void);
-LRESULT print_preview(HWND);
 void get_default_printer_opts(void);
 void registry_set_pagemargins(HKEY);
 void registry_read_pagemargins(HKEY);
@@ -256,6 +257,7 @@ void registry_read_previewpages(HKEY hKey);
 LRESULT CALLBACK ruler_proc(HWND, UINT, WPARAM, LPARAM);
 void redraw_ruler(HWND);
 
+/* registry.c */
 int reg_formatindex(WPARAM);
 void registry_read_filelist(HWND);
 void registry_read_options(void);
@@ -263,5 +265,8 @@ void registry_read_formatopts_all(DWORD[], DWORD[]);
 void registry_read_winrect(RECT*);
 void registry_read_maximized(DWORD*);
 void registry_set_filelist(LPCWSTR, HWND);
-void registry_set_formatopts_all(DWORD[]);
+void registry_set_formatopts_all(DWORD[], DWORD[]);
 void registry_set_options(HWND);
+
+/* olecallback.c */
+HRESULT setup_richedit_olecallback(HWND hEditorWnd);

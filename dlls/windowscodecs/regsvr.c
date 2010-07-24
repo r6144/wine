@@ -727,25 +727,25 @@ static struct regsvr_coclass const coclass_list[] = {
 	"WIC Imaging Factory",
 	NULL,
 	"windowscodecs.dll",
-	"Apartment"
+	"Both"
     },
     {   &CLSID_WICBmpDecoder,
 	"WIC BMP Decoder",
 	NULL,
 	"windowscodecs.dll",
-	"Apartment"
+	"Both"
     },
     {   &CLSID_WICPngDecoder,
 	"WIC PNG Decoder",
 	NULL,
 	"windowscodecs.dll",
-	"Apartment"
+	"Both"
     },
     {   &CLSID_WICPngEncoder,
 	"WIC PNG Encoder",
 	NULL,
 	"windowscodecs.dll",
-	"Apartment"
+	"Both"
     },
     {   &CLSID_WICBmpEncoder,
 	"WIC BMP Encoder",
@@ -757,19 +757,19 @@ static struct regsvr_coclass const coclass_list[] = {
 	"WIC GIF Decoder",
 	NULL,
 	"windowscodecs.dll",
-	"Apartment"
+	"Both"
     },
     {   &CLSID_WICIcoDecoder,
 	"WIC ICO Decoder",
 	NULL,
 	"windowscodecs.dll",
-	"Apartment"
+	"Both"
     },
     {   &CLSID_WICJpegDecoder,
 	"WIC JPEG Decoder",
 	NULL,
 	"windowscodecs.dll",
-	"Apartment"
+	"Both"
     },
     {   &CLSID_WICTiffDecoder,
 	"WIC TIFF Decoder",
@@ -781,7 +781,7 @@ static struct regsvr_coclass const coclass_list[] = {
 	"WIC Default Format Converter",
 	NULL,
 	"windowscodecs.dll",
-	"Apartment"
+	"Both"
     },
     { NULL }			/* list terminator */
 };

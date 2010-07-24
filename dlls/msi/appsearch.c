@@ -50,7 +50,7 @@ typedef struct tagMSISIGNATURE
     LPWSTR   Languages;
 }MSISIGNATURE;
 
-static void ACTION_VerStrToInteger(LPCWSTR verStr, PDWORD ms, PDWORD ls)
+void msi_parse_version_string(LPCWSTR verStr, PDWORD ms, PDWORD ls)
 {
     const WCHAR *ptr;
     int x1 = 0, x2 = 0, x3 = 0, x4 = 0;
@@ -109,13 +109,13 @@ static UINT ACTION_AppSearchGetSignature(MSIPACKAGE *package, MSISIGNATURE *sig,
     minVersion = msi_dup_record_field(row,3);
     if (minVersion)
     {
-        ACTION_VerStrToInteger(minVersion, &sig->MinVersionMS, &sig->MinVersionLS);
+        msi_parse_version_string( minVersion, &sig->MinVersionMS, &sig->MinVersionLS );
         msi_free( minVersion );
     }
     maxVersion = msi_dup_record_field(row,4);
     if (maxVersion)
     {
-        ACTION_VerStrToInteger(maxVersion, &sig->MaxVersionMS, &sig->MaxVersionLS);
+        msi_parse_version_string( maxVersion, &sig->MaxVersionMS, &sig->MaxVersionLS );
         msi_free( maxVersion );
     }
     sig->MinSize = MSI_RecordGetInteger(row,5);
@@ -929,7 +929,8 @@ static UINT ACTION_AppSearchDr(MSIPACKAGE *package, LPWSTR *appValue, MSISIGNATU
         'D','r','L','o','c','a','t','o','r',' ',
         'w','h','e','r','e',' ',
         'S','i','g','n','a','t','u','r','e','_',' ','=',' ', '\'','%','s','\'',0};
-    LPWSTR parentName = NULL, parent = NULL;
+    LPWSTR parent = NULL;
+    LPCWSTR parentName;
     WCHAR path[MAX_PATH];
     WCHAR expanded[MAX_PATH];
     MSIRECORD *row;
@@ -949,14 +950,18 @@ static UINT ACTION_AppSearchDr(MSIPACKAGE *package, LPWSTR *appValue, MSISIGNATU
     }
 
     /* check whether parent is set */
-    parentName = msi_dup_record_field(row,2);
+    parentName = MSI_RecordGetString(row, 2);
     if (parentName)
     {
         MSISIGNATURE parentSig;
 
         rc = ACTION_AppSearchSigName(package, parentName, &parentSig, &parent);
         ACTION_FreeSignature(&parentSig);
-        msi_free(parentName);
+        if (!parent)
+        {
+            msiobj_release(&row->hdr);
+            return ERROR_SUCCESS;
+        }
     }
 
     sz = MAX_PATH;
@@ -1041,7 +1046,10 @@ static UINT iterate_appsearch(MSIRECORD *row, LPVOID param)
     r = ACTION_AppSearchSigName(package, sigName, &sig, &value);
     if (value)
     {
-        MSI_SetPropertyW(package, propName, value);
+        r = msi_set_property( package->db, propName, value );
+        if (r == ERROR_SUCCESS && !strcmpW( propName, cszSourceDir ))
+            msi_reset_folders( package, TRUE );
+
         msi_free(value);
     }
     ACTION_FreeSignature(&sig);
@@ -1100,7 +1108,7 @@ static UINT ITERATE_CCPSearch(MSIRECORD *row, LPVOID param)
     if (value)
     {
         TRACE("Found signature %s\n", debugstr_w(signature));
-        MSI_SetPropertyW(package, success, szOne);
+        msi_set_property(package->db, success, szOne);
         msi_free(value);
         r = ERROR_NO_MORE_ITEMS;
     }

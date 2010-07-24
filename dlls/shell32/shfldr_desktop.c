@@ -65,7 +65,7 @@ extern HRESULT WINAPI IEParseDisplayNameWithBCW(DWORD codepage, LPCWSTR lpszDisp
 
 typedef struct {
     const IShellFolder2Vtbl *lpVtbl;
-    const IPersistVtbl *lpVtblIPersist;
+    const IPersistFolder2Vtbl *lpVtblPF2;
     LONG ref;
 
     /* both paths are parsible from the desktop */
@@ -76,12 +76,12 @@ typedef struct {
     BOOL fAcceptFmt;        /* flag for pending Drop */
 } IDesktopFolderImpl;
 
-static inline IDesktopFolderImpl *impl_from_IPersist( IPersist *iface )
+static inline IDesktopFolderImpl *impl_from_IPersistFolder2( IPersistFolder2 *iface )
 {
-    return (IDesktopFolderImpl *)((char*)iface - FIELD_OFFSET(IDesktopFolderImpl, lpVtblIPersist));
+    return (IDesktopFolderImpl *)((char*)iface - FIELD_OFFSET(IDesktopFolderImpl, lpVtblPF2));
 }
 
-static const shvheader DesktopSFHeader[] = {
+static const shvheader desktop_header[] = {
     {IDS_SHV_COLUMN1, SHCOLSTATE_TYPE_STR | SHCOLSTATE_ONBYDEFAULT, LVCFMT_RIGHT, 15},
     {IDS_SHV_COLUMN2, SHCOLSTATE_TYPE_STR | SHCOLSTATE_ONBYDEFAULT, LVCFMT_RIGHT, 10},
     {IDS_SHV_COLUMN3, SHCOLSTATE_TYPE_STR | SHCOLSTATE_ONBYDEFAULT, LVCFMT_RIGHT, 10},
@@ -89,12 +89,11 @@ static const shvheader DesktopSFHeader[] = {
     {IDS_SHV_COLUMN5, SHCOLSTATE_TYPE_STR | SHCOLSTATE_ONBYDEFAULT, LVCFMT_RIGHT, 5}
 };
 
-#define DESKTOPSHELLVIEWCOLUMNS 5
+#define DESKTOPSHELLVIEWCOLUMNS sizeof(desktop_header)/sizeof(shvheader)
 
 /**************************************************************************
  *    ISF_Desktop_fnQueryInterface
  *
- * NOTES supports not IPersistFolder
  */
 static HRESULT WINAPI ISF_Desktop_fnQueryInterface(
                 IShellFolder2 * iface, REFIID riid, LPVOID * ppvObj)
@@ -111,9 +110,11 @@ static HRESULT WINAPI ISF_Desktop_fnQueryInterface(
     {
         *ppvObj = This;
     }
-    else if (IsEqualIID (riid, &IID_IPersist))
+    else if (IsEqualIID (riid, &IID_IPersist) ||
+             IsEqualIID (riid, &IID_IPersistFolder) ||
+             IsEqualIID (riid, &IID_IPersistFolder2))
     {
-        *ppvObj = &This->lpVtblIPersist;
+        *ppvObj = &This->lpVtblPF2;
     }
 
     if (*ppvObj)
@@ -152,6 +153,7 @@ static HRESULT WINAPI ISF_Desktop_fnParseDisplayName (IShellFolder2 * iface,
     WCHAR szElement[MAX_PATH];
     LPCWSTR szNext = NULL;
     LPITEMIDLIST pidlTemp = NULL;
+    PARSEDURLW urldata;
     HRESULT hr = S_OK;
     CLSID clsid;
 
@@ -166,6 +168,8 @@ static HRESULT WINAPI ISF_Desktop_fnParseDisplayName (IShellFolder2 * iface,
 
     if (pchEaten)
         *pchEaten = 0;        /* strange but like the original */
+
+    urldata.cbSize = sizeof(urldata);
 
     if (lpszDisplayName[0] == ':' && lpszDisplayName[1] == ':')
     {
@@ -193,13 +197,8 @@ static HRESULT WINAPI ISF_Desktop_fnParseDisplayName (IShellFolder2 * iface,
         *ppidl = pidlTemp;
         return S_OK;
     }
-    else if (strchrW(lpszDisplayName,':'))
+    else if (SUCCEEDED(ParseURLW(lpszDisplayName, &urldata)))
     {
-        PARSEDURLW urldata;
-
-        urldata.cbSize = sizeof(urldata);
-        ParseURLW(lpszDisplayName,&urldata);
-
         if (urldata.nScheme == URL_SCHEME_SHELL) /* handle shell: urls */
         {
             TRACE ("-- shell url: %s\n", debugstr_w(urldata.pszSuffix));
@@ -215,21 +214,36 @@ static HRESULT WINAPI ISF_Desktop_fnParseDisplayName (IShellFolder2 * iface,
 
         if (*lpszDisplayName)
         {
-            WCHAR szPath[MAX_PATH];
-            LPWSTR pathPtr;
-
-            /* build a complete path to create a simple pidl */
-            lstrcpynW(szPath, This->sPathTarget, MAX_PATH);
-            pathPtr = PathAddBackslashW(szPath);
-            if (pathPtr)
+            if (*lpszDisplayName == '/')
             {
-                lstrcpynW(pathPtr, lpszDisplayName, MAX_PATH - (pathPtr - szPath));
-                hr = _ILCreateFromPathW(szPath, &pidlTemp);
+                /* UNIX paths should be parsed by unixfs */
+                IShellFolder *unixFS;
+                hr = UnixFolder_Constructor(NULL, &IID_IShellFolder, (LPVOID*)&unixFS);
+                if (SUCCEEDED(hr))
+                {
+                    hr = IShellFolder_ParseDisplayName(unixFS, NULL, NULL,
+                            lpszDisplayName, NULL, &pidlTemp, NULL);
+                    IShellFolder_Release(unixFS);
+                }
             }
             else
             {
-                /* should never reach here, but for completeness */
-                hr = HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER);
+                /* build a complete path to create a simple pidl */
+                WCHAR szPath[MAX_PATH];
+                LPWSTR pathPtr;
+
+                lstrcpynW(szPath, This->sPathTarget, MAX_PATH);
+                pathPtr = PathAddBackslashW(szPath);
+                if (pathPtr)
+                {
+                    lstrcpynW(pathPtr, lpszDisplayName, MAX_PATH - (pathPtr - szPath));
+                    hr = _ILCreateFromPathW(szPath, &pidlTemp);
+                }
+                else
+                {
+                    /* should never reach here, but for completeness */
+                    hr = HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER);
+                }
             }
         }
         else
@@ -775,7 +789,7 @@ static HRESULT WINAPI ISF_Desktop_fnGetDefaultColumnState (
     if (!pcsFlags || iColumn >= DESKTOPSHELLVIEWCOLUMNS)
     return E_INVALIDARG;
 
-    *pcsFlags = DesktopSFHeader[iColumn].pcsFlags;
+    *pcsFlags = desktop_header[iColumn].pcsFlags;
 
     return S_OK;
 }
@@ -801,14 +815,7 @@ static HRESULT WINAPI ISF_Desktop_fnGetDetailsOf (IShellFolder2 * iface,
         return E_INVALIDARG;
 
     if (!pidl)
-    {
-        psd->fmt = DesktopSFHeader[iColumn].fmt;
-        psd->cxChar = DesktopSFHeader[iColumn].cxChar;
-        psd->str.uType = STRRET_CSTR;
-        LoadStringA (shell32_hInstance, DesktopSFHeader[iColumn].colnameid,
-                     psd->str.u.cStr, MAX_PATH);
-        return S_OK;
-    }
+        return SHELL32_GetColumnDetails(desktop_header, iColumn, psd);
 
     /* the data from the pidl */
     psd->str.uType = STRRET_CSTR;
@@ -871,37 +878,56 @@ static const IShellFolder2Vtbl vt_MCFldr_ShellFolder2 =
 /**************************************************************************
  *    IPersist
  */
-static HRESULT WINAPI ISF_Desktop_IPersist_fnQueryInterface(
-    IPersist *iface, REFIID riid, LPVOID *ppvObj)
+static HRESULT WINAPI ISF_Desktop_IPersistFolder2_fnQueryInterface(
+    IPersistFolder2 *iface, REFIID riid, LPVOID *ppvObj)
 {
-    IDesktopFolderImpl *This = impl_from_IPersist( iface );
+    IDesktopFolderImpl *This = impl_from_IPersistFolder2( iface );
     return IShellFolder2_QueryInterface((IShellFolder2*)This, riid, ppvObj);
 }
 
-static ULONG WINAPI ISF_Desktop_IPersist_fnAddRef(IPersist *iface)
+static ULONG WINAPI ISF_Desktop_IPersistFolder2_fnAddRef(
+    IPersistFolder2 *iface)
 {
-    IDesktopFolderImpl *This = impl_from_IPersist( iface );
+    IDesktopFolderImpl *This = impl_from_IPersistFolder2( iface );
     return IShellFolder2_AddRef((IShellFolder2*)This);
 }
 
-static ULONG WINAPI ISF_Desktop_IPersist_fnRelease(IPersist *iface)
+static ULONG WINAPI ISF_Desktop_IPersistFolder2_fnRelease(
+    IPersistFolder2 *iface)
 {
-    IDesktopFolderImpl *This = impl_from_IPersist( iface );
+    IDesktopFolderImpl *This = impl_from_IPersistFolder2( iface );
     return IShellFolder2_Release((IShellFolder2*)This);
 }
 
-static HRESULT WINAPI ISF_Desktop_IPersist_fnGetClassID(IPersist *iface, CLSID *clsid)
+static HRESULT WINAPI ISF_Desktop_IPersistFolder2_fnGetClassID(
+    IPersistFolder2 *iface, CLSID *clsid)
 {
     *clsid = CLSID_ShellDesktop;
     return S_OK;
 }
-
-static const IPersistVtbl vt_IPersist =
+static HRESULT WINAPI ISF_Desktop_IPersistFolder2_fnInitialize(
+    IPersistFolder2 *iface, LPCITEMIDLIST pidl)
 {
-    ISF_Desktop_IPersist_fnQueryInterface,
-    ISF_Desktop_IPersist_fnAddRef,
-    ISF_Desktop_IPersist_fnRelease,
-    ISF_Desktop_IPersist_fnGetClassID
+    IDesktopFolderImpl *This = impl_from_IPersistFolder2( iface );
+    FIXME ("(%p)->(%p) stub\n", This, pidl);
+    return E_NOTIMPL;
+}
+static HRESULT WINAPI ISF_Desktop_IPersistFolder2_fnGetCurFolder(
+    IPersistFolder2 *iface, LPITEMIDLIST *ppidl)
+{
+    IDesktopFolderImpl *This = impl_from_IPersistFolder2( iface );
+    *ppidl = ILClone(This->pidlRoot);
+    return S_OK;
+}
+
+static const IPersistFolder2Vtbl vt_IPersistFolder2 =
+{
+    ISF_Desktop_IPersistFolder2_fnQueryInterface,
+    ISF_Desktop_IPersistFolder2_fnAddRef,
+    ISF_Desktop_IPersistFolder2_fnRelease,
+    ISF_Desktop_IPersistFolder2_fnGetClassID,
+    ISF_Desktop_IPersistFolder2_fnInitialize,
+    ISF_Desktop_IPersistFolder2_fnGetCurFolder
 };
 
 /**************************************************************************
@@ -933,7 +959,7 @@ HRESULT WINAPI ISF_Desktop_Constructor (
 
         sf->ref = 1;
         sf->lpVtbl = &vt_MCFldr_ShellFolder2;
-        sf->lpVtblIPersist = &vt_IPersist;
+        sf->lpVtblPF2 = &vt_IPersistFolder2;
         sf->pidlRoot = _ILCreateDesktop();    /* my qualified pidl */
         sf->sPathTarget = SHAlloc( (lstrlenW(szMyPath) + 1)*sizeof(WCHAR) );
         lstrcpyW( sf->sPathTarget, szMyPath );

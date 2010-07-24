@@ -521,7 +521,7 @@ GpStatus WINGDIPAPI GdipGetFontHeightGivenDPI(GDIPCONST GpFont *font, REAL dpi, 
 static INT CALLBACK is_font_installed_proc(const LOGFONTW *elf,
                             const TEXTMETRICW *ntm, DWORD type, LPARAM lParam)
 {
-    if (!ntm)
+    if (!ntm || type == RASTER_FONTTYPE)
     {
         return 1;
     }
@@ -643,12 +643,14 @@ GpStatus WINGDIPAPI GdipCloneFontFamily(GpFontFamily* FontFamily, GpFontFamily**
 GpStatus WINGDIPAPI GdipGetFamilyName (GDIPCONST GpFontFamily *family,
                                        WCHAR *name, LANGID language)
 {
+    static int lang_fixme;
+
     if (family == NULL)
          return InvalidParameter;
 
     TRACE("%p, %p, %d\n", family, name, language);
 
-    if (language != LANG_NEUTRAL)
+    if (language != LANG_NEUTRAL && !lang_fixme++)
         FIXME("No support for handling of multiple languages!\n");
 
     lstrcpynW (name, family->FamilyName, LF_FACESIZE);
@@ -758,15 +760,41 @@ GpStatus WINGDIPAPI GdipGetLineSpacing(GDIPCONST GpFontFamily *family,
     return Ok;
 }
 
+static INT CALLBACK font_has_style_proc(const LOGFONTW *elf,
+                            const TEXTMETRICW *ntm, DWORD type, LPARAM lParam)
+{
+    INT fontstyle=0;
+
+    if (!ntm) return 1;
+
+    if (ntm->tmWeight >= FW_BOLD) fontstyle |= FontStyleBold;
+    if (ntm->tmItalic) fontstyle |= FontStyleItalic;
+    if (ntm->tmUnderlined) fontstyle |= FontStyleUnderline;
+    if (ntm->tmStruckOut) fontstyle |= FontStyleStrikeout;
+
+    return (INT)lParam != fontstyle;
+}
+
 GpStatus WINGDIPAPI GdipIsStyleAvailable(GDIPCONST GpFontFamily* family,
         INT style, BOOL* IsStyleAvailable)
 {
-    FIXME("%p %d %p stub!\n", family, style, IsStyleAvailable);
+    HDC hdc;
+
+    TRACE("%p %d %p\n", family, style, IsStyleAvailable);
 
     if (!(family && IsStyleAvailable))
         return InvalidParameter;
 
-    return NotImplemented;
+    *IsStyleAvailable = FALSE;
+
+    hdc = GetDC(0);
+
+    if(!EnumFontFamiliesW(hdc, family->FamilyName, font_has_style_proc, (LPARAM)style))
+        *IsStyleAvailable = TRUE;
+
+    ReleaseDC(0, hdc);
+
+    return Ok;
 }
 
 /*****************************************************************************
@@ -827,15 +855,21 @@ GpStatus WINGDIPAPI GdipGetGenericFontFamilySerif(GpFontFamily **nativeFamily)
  */
 GpStatus WINGDIPAPI GdipGetGenericFontFamilySansSerif(GpFontFamily **nativeFamily)
 {
-    /* FIXME: On Windows this is called Microsoft Sans Serif, this shouldn't
-     * affect anything */
-    static const WCHAR MSSansSerif[] = {'M','S',' ','S','a','n','s',' ','S','e','r','i','f','\0'};
+    GpStatus stat;
+    static const WCHAR MicrosoftSansSerif[] = {'M','i','c','r','o','s','o','f','t',' ','S','a','n','s',' ','S','e','r','i','f','\0'};
+    static const WCHAR Tahoma[] = {'T','a','h','o','m','a','\0'};
 
     TRACE("(%p)\n", nativeFamily);
 
     if (nativeFamily == NULL) return InvalidParameter;
 
-    return GdipCreateFontFamilyFromName(MSSansSerif, NULL, nativeFamily);
+    stat = GdipCreateFontFamilyFromName(MicrosoftSansSerif, NULL, nativeFamily);
+
+    if (stat == FontFamilyNotFound)
+        /* FIXME: Microsoft Sans Serif is not installed on Wine. */
+        stat = GdipCreateFontFamilyFromName(Tahoma, NULL, nativeFamily);
+
+    return stat;
 }
 
 /*****************************************************************************
@@ -929,18 +963,33 @@ GpStatus WINGDIPAPI GdipGetFontCollectionFamilyList(
         GpFontFamily* gpfamilies[], INT* numFound)
 {
     INT i;
+    GpStatus stat=Ok;
 
     TRACE("%p, %d, %p, %p\n", fontCollection, numSought, gpfamilies, numFound);
 
     if (!(fontCollection && gpfamilies && numFound))
         return InvalidParameter;
 
-    for (i = 0; i < numSought && i < fontCollection->count; i++)
+    memset(gpfamilies, 0, sizeof(*gpfamilies) * numSought);
+
+    for (i = 0; i < numSought && i < fontCollection->count && stat == Ok; i++)
     {
-        gpfamilies[i] = fontCollection->FontFamilies[i];
+        stat = GdipCloneFontFamily(fontCollection->FontFamilies[i], &gpfamilies[i]);
     }
-    *numFound = i;
-    return Ok;
+
+    if (stat == Ok)
+        *numFound = i;
+    else
+    {
+        int numToFree=i;
+        for (i=0; i<numToFree; i++)
+        {
+            GdipDeleteFontFamily(gpfamilies[i]);
+            gpfamilies[i] = NULL;
+        }
+    }
+
+    return stat;
 }
 
 void free_installed_fonts(void)
@@ -957,6 +1006,9 @@ static INT CALLBACK add_font_proc(const LOGFONTW *lfw, const TEXTMETRICW *ntm,
 {
     GpFontCollection* fonts = (GpFontCollection*)lParam;
     int i;
+
+    if (type == RASTER_FONTTYPE)
+        return 1;
 
     /* skip duplicates */
     for (i=0; i<fonts->count; i++)

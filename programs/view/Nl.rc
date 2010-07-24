@@ -32,8 +32,8 @@ VIEW MENU
 BEGIN
     POPUP "&Bestand"
     BEGIN
-	MENUITEM "&Openen",        IDM_OPEN
-        MENUITEM "&Afsluiten", IDM_EXIT
+      MENUITEM "&Openen",        IDM_OPEN
+      MENUITEM "&Afsluiten",     IDM_EXIT
     END
     POPUP "&Verplaatsen"
     BEGIN
@@ -65,7 +65,7 @@ END
  *
  */
 
-STRINGTABLE DISCARDABLE
+STRINGTABLE
 BEGIN
-    IDS_DESCRIPTION         "Toont Metafile bestanden"
+    IDS_DESCRIPTION         "Algemene Metafile weergave"
 END

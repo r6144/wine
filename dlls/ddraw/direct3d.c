@@ -666,6 +666,13 @@ IDirect3DImpl_3_FindDevice(IDirect3D3 *iface,
 
     TRACE("(%p)->(%p,%p)\n", This, D3DDFS, D3DFDR);
 
+    if (!D3DDFS || !D3DFDR)
+        return DDERR_INVALIDPARAMS;
+
+    if (D3DDFS->dwSize != sizeof(D3DFINDDEVICESEARCH) ||
+        D3DFDR->dwSize != sizeof(D3DFINDDEVICERESULT))
+        return DDERR_INVALIDPARAMS;
+
     if ((D3DDFS->dwFlags & D3DFDS_COLORMODEL) &&
         (D3DDFS->dcmColorModel != D3DCOLOR_RGB))
     {
@@ -677,10 +684,10 @@ IDirect3DImpl_3_FindDevice(IDirect3D3 *iface,
         TRACE(" trying to match guid %s.\n", debugstr_guid(&(D3DDFS->guid)));
         if ((IsEqualGUID(&IID_D3DDEVICE_WineD3D, &(D3DDFS->guid)) == 0) &&
             (IsEqualGUID(&IID_IDirect3DHALDevice, &(D3DDFS->guid)) == 0) &&
-            (IsEqualGUID(&IID_IDirect3DRefDevice, &(D3DDFS->guid)) == 0))
+            (IsEqualGUID(&IID_IDirect3DRGBDevice, &(D3DDFS->guid)) == 0))
         {
             TRACE(" no match for this GUID.\n");
-            return DDERR_INVALIDPARAMS;
+            return DDERR_NOTFOUND;
         }
     }
 
@@ -1029,9 +1036,8 @@ IDirect3DImpl_7_CreateVertexBuffer(IDirect3D7 *iface,
             return hr;
     }
 
-    object->wineD3DVertexDeclaration = IDirectDrawImpl_FindDecl(This,
-                                                                Desc->dwFVF);
-    if(!object->wineD3DVertexDeclaration)
+    object->wineD3DVertexDeclaration = ddraw_find_decl(This, Desc->dwFVF);
+    if (!object->wineD3DVertexDeclaration)
     {
         ERR("Cannot find the vertex declaration for fvf %08x\n", Desc->dwFVF);
         IWineD3DBuffer_Release(object->wineD3DVertexBuffer);
@@ -1273,6 +1279,7 @@ IDirect3DImpl_GetCaps(IWineD3D *WineD3D,
 
     /* Copy the results into the d3d7 and d3d3 structures */
     Desc7->dwDevCaps = WCaps.DevCaps;
+    Desc7->dpcLineCaps.dwMiscCaps = WCaps.PrimitiveMiscCaps;
     Desc7->dpcLineCaps.dwRasterCaps = WCaps.RasterCaps;
     Desc7->dpcLineCaps.dwZCmpCaps = WCaps.ZCmpCaps;
     Desc7->dpcLineCaps.dwSrcBlendCaps = WCaps.SrcBlendCaps;

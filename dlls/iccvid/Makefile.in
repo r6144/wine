@@ -3,18 +3,20 @@ TOPOBJDIR = ../..
 SRCDIR    = @srcdir@
 VPATH     = @srcdir@
 MODULE    = iccvid.dll
-IMPORTS   = user32 kernel32
+IMPORTS   = user32
 
 C_SRCS = \
 	iccvid.c
 
 RC_SRCS = \
+	iccvid_Cy.rc \
 	iccvid_Da.rc \
 	iccvid_De.rc \
 	iccvid_En.rc \
 	iccvid_Es.rc \
 	iccvid_Fr.rc \
 	iccvid_Hu.rc \
+	iccvid_It.rc \
 	iccvid_Ja.rc \
 	iccvid_Ko.rc \
 	iccvid_Lt.rc \
@@ -26,6 +28,7 @@ RC_SRCS = \
 	iccvid_Ru.rc \
 	iccvid_Si.rc \
 	iccvid_Sv.rc \
-	iccvid_Tr.rc
+	iccvid_Tr.rc \
+	iccvid_Uk.rc
 
 @MAKE_DLL_RULES@

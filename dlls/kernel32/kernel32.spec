@@ -547,6 +547,8 @@
 @ stdcall GetLogicalDriveStringsA(long ptr)
 @ stdcall GetLogicalDriveStringsW(long ptr)
 @ stdcall GetLogicalDrives()
+@ stdcall GetLogicalProcessorInformation(ptr ptr)
+@ stdcall GetLogicalProcessorInformationEx(long ptr ptr)
 @ stdcall GetLongPathNameA (str long long)
 @ stdcall GetLongPathNameW (wstr long long)
 @ stdcall GetMailslotInfo(long ptr ptr ptr ptr)
@@ -873,7 +875,7 @@
 @ stdcall QueryFullProcessImageNameA(ptr long ptr ptr)
 @ stdcall QueryFullProcessImageNameW(ptr long ptr ptr)
 @ stdcall QueryInformationJobObject(long long ptr long ptr)
-# @ stub QueryMemoryResourceNotification
+@ stdcall QueryMemoryResourceNotification(ptr ptr)
 @ stub QueryNumberOfEventLogRecords
 @ stub QueryOldestEventLogRecord
 @ stdcall QueryPerformanceCounter(ptr)
@@ -933,6 +935,7 @@
 @ stdcall RtlFillMemory(ptr long long) ntdll.RtlFillMemory
 @ stdcall -arch=x86_64 RtlLookupFunctionEntry(long ptr ptr) ntdll.RtlLookupFunctionEntry
 @ stdcall RtlMoveMemory(ptr ptr long) ntdll.RtlMoveMemory
+@ stdcall -arch=x86_64 RtlPcToFileHeader(ptr ptr) ntdll.RtlPcToFileHeader
 @ stdcall RtlUnwind(ptr ptr ptr long) ntdll.RtlUnwind
 @ stdcall -arch=x86_64 RtlUnwindEx(long long ptr long ptr) ntdll.RtlUnwindEx
 @ stdcall -arch=x86_64 RtlVirtualUnwind(long long long ptr ptr ptr ptr ptr) ntdll.RtlVirtualUnwind
@@ -1094,9 +1097,9 @@
 @ stdcall Thread32Next(long ptr)
 @ stdcall -i386 -private ThunkConnect32(ptr str str str ptr ptr) krnl386.exe16.ThunkConnect32
 @ stdcall TlsAlloc()
-@ stub TlsAllocInternal
+@ stdcall TlsAllocInternal() TlsAlloc
 @ stdcall TlsFree(long)
-@ stub TlsFreeInternal
+@ stdcall TlsFreeInternal(long) TlsFree
 @ stdcall TlsGetValue(long)
 @ stdcall TlsSetValue(long ptr)
 @ stdcall Toolhelp32ReadProcessMemory(long ptr ptr long ptr)

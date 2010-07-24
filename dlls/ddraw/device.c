@@ -2409,22 +2409,60 @@ IDirect3DDeviceImpl_7_GetRenderState(IDirect3DDevice7 *iface,
         case D3DRENDERSTATE_TEXTUREMIN:
         {
             WINED3DTEXTUREFILTERTYPE tex_min;
+            WINED3DTEXTUREFILTERTYPE tex_mip;
 
             hr = IWineD3DDevice_GetSamplerState(This->wineD3DDevice,
-                                                0, WINED3DSAMP_MINFILTER,
-                                                &tex_min);
+                    0, WINED3DSAMP_MINFILTER, &tex_min);
+            if (FAILED(hr))
+            {
+                LeaveCriticalSection(&ddraw_cs);
+                return hr;
+            }
+            hr = IWineD3DDevice_GetSamplerState(This->wineD3DDevice,
+                    0, WINED3DSAMP_MIPFILTER, &tex_mip);
 
             switch (tex_min)
             {
                 case WINED3DTEXF_POINT:
-                    *Value = D3DFILTER_NEAREST;
+                    switch (tex_mip)
+                    {
+                        case WINED3DTEXF_NONE:
+                            *Value = D3DFILTER_NEAREST;
+                            break;
+                        case WINED3DTEXF_POINT:
+                            *Value = D3DFILTER_MIPNEAREST;
+                            break;
+                        case WINED3DTEXF_LINEAR:
+                            *Value = D3DFILTER_LINEARMIPNEAREST;
+                            break;
+                        default:
+                            ERR("Unhandled mip filter %#x.\n", tex_mip);
+                            *Value = D3DFILTER_NEAREST;
+                            break;
+                    }
                     break;
                 case WINED3DTEXF_LINEAR:
-                    *Value = D3DFILTER_LINEAR;
+                    switch (tex_mip)
+                    {
+                        case WINED3DTEXF_NONE:
+                            *Value = D3DFILTER_LINEAR;
+                            break;
+                        case WINED3DTEXF_POINT:
+                            *Value = D3DFILTER_MIPLINEAR;
+                            break;
+                        case WINED3DTEXF_LINEAR:
+                            *Value = D3DFILTER_LINEARMIPLINEAR;
+                            break;
+                        default:
+                            ERR("Unhandled mip filter %#x.\n", tex_mip);
+                            *Value = D3DFILTER_LINEAR;
+                            break;
+                    }
                     break;
                 default:
-                    ERR("Unhandled texture mag %d !\n",tex_min);
-                    *Value = 0;
+                    ERR("Unhandled texture min filter %#x.\n",tex_min);
+                    *Value = D3DFILTER_NEAREST;
+                    break;
             }
             break;
         }
@@ -2441,8 +2479,20 @@ IDirect3DDeviceImpl_7_GetRenderState(IDirect3DDevice7 *iface,
                                                 Value);
             break;
 
+        case D3DRENDERSTATE_BORDERCOLOR:
+            FIXME("Unhandled render state D3DRENDERSTATE_BORDERCOLOR.\n");
+            hr = E_NOTIMPL;
+            break;
+
         default:
-            /* FIXME: Unhandled: D3DRENDERSTATE_STIPPLEPATTERN00 - 31 */
+            if (RenderStateType >= D3DRENDERSTATE_STIPPLEPATTERN00
+                    && RenderStateType <= D3DRENDERSTATE_STIPPLEPATTERN31)
+            {
+                FIXME("Unhandled stipple pattern render state (%#x).\n",
+                        RenderStateType);
+                hr = E_NOTIMPL;
+                break;
+            }
             hr = IWineD3DDevice_GetRenderState(This->wineD3DDevice,
                                                RenderStateType,
                                                Value);
@@ -2640,22 +2690,39 @@ IDirect3DDeviceImpl_7_SetRenderState(IDirect3DDevice7 *iface,
     /* Some render states need special care */
     switch(RenderStateType)
     {
+        /*
+         * The ddraw texture filter mapping works like this:
+         *     D3DFILTER_NEAREST            Point min/mag, no mip
+         *     D3DFILTER_MIPNEAREST         Point min/mag, point mip
+         *     D3DFILTER_LINEARMIPNEAREST:  Point min/mag, linear mip
+         *
+         *     D3DFILTER_LINEAR             Linear min/mag, no mip
+         *     D3DFILTER_MIPLINEAR          Linear min/mag, point mip
+         *     D3DFILTER_LINEARMIPLINEAR    Linear min/mag, linear mip
+         *
+         * This is the opposite of the GL naming convention,
+         * D3DFILTER_LINEARMIPNEAREST corresponds to GL_NEAREST_MIPMAP_LINEAR.
+         */
         case D3DRENDERSTATE_TEXTUREMAG:
         {
-            WINED3DTEXTUREFILTERTYPE tex_mag = WINED3DTEXF_POINT;
+            WINED3DTEXTUREFILTERTYPE tex_mag;
 
-            switch ((D3DTEXTUREFILTER) Value)
+            switch (Value)
             {
                 case D3DFILTER_NEAREST:
+                case D3DFILTER_MIPNEAREST:
                 case D3DFILTER_LINEARMIPNEAREST:
                     tex_mag = WINED3DTEXF_POINT;
                     break;
                 case D3DFILTER_LINEAR:
+                case D3DFILTER_MIPLINEAR:
                 case D3DFILTER_LINEARMIPLINEAR:
                     tex_mag = WINED3DTEXF_LINEAR;
                     break;
                 default:
+                    tex_mag = WINED3DTEXF_POINT;
                     ERR("Unhandled texture mag %d !\n",Value);
+                    break;
             }
 
             hr = IWineD3DDevice_SetSamplerState(This->wineD3DDevice,
@@ -2666,24 +2733,26 @@ IDirect3DDeviceImpl_7_SetRenderState(IDirect3DDevice7 *iface,
 
         case D3DRENDERSTATE_TEXTUREMIN:
         {
-            WINED3DTEXTUREFILTERTYPE tex_min = WINED3DTEXF_POINT;
-            WINED3DTEXTUREFILTERTYPE tex_mip = WINED3DTEXF_NONE;
+            WINED3DTEXTUREFILTERTYPE tex_min;
+            WINED3DTEXTUREFILTERTYPE tex_mip;
 
             switch ((D3DTEXTUREFILTER) Value)
             {
                 case D3DFILTER_NEAREST:
                     tex_min = WINED3DTEXF_POINT;
+                    tex_mip = WINED3DTEXF_NONE;
                     break;
                 case D3DFILTER_LINEAR:
                     tex_min = WINED3DTEXF_LINEAR;
+                    tex_mip = WINED3DTEXF_NONE;
                     break;
                 case D3DFILTER_MIPNEAREST:
                     tex_min = WINED3DTEXF_POINT;
                     tex_mip = WINED3DTEXF_POINT;
                     break;
                 case D3DFILTER_MIPLINEAR:
-                    tex_min = WINED3DTEXF_POINT;
-                    tex_mip = WINED3DTEXF_LINEAR;
+                    tex_min = WINED3DTEXF_LINEAR;
+                    tex_mip = WINED3DTEXF_POINT;
                     break;
                 case D3DFILTER_LINEARMIPNEAREST:
                     tex_min = WINED3DTEXF_POINT;
@@ -2696,11 +2765,13 @@ IDirect3DDeviceImpl_7_SetRenderState(IDirect3DDevice7 *iface,
 
                 default:
                     ERR("Unhandled texture min %d !\n",Value);
+                    tex_min = WINED3DTEXF_POINT;
+                    tex_mip = WINED3DTEXF_NONE;
+                    break;
             }
 
-                   IWineD3DDevice_SetSamplerState(This->wineD3DDevice,
-                                                  0, WINED3DSAMP_MIPFILTER,
-                                                  tex_mip);
+            IWineD3DDevice_SetSamplerState(This->wineD3DDevice,
+                    0, WINED3DSAMP_MIPFILTER, tex_mip);
             hr = IWineD3DDevice_SetSamplerState(This->wineD3DDevice,
                                                 0, WINED3DSAMP_MINFILTER,
                                                 tex_min);
@@ -2723,9 +2794,22 @@ IDirect3DDeviceImpl_7_SetRenderState(IDirect3DDevice7 *iface,
                                                 Value);
             break;
 
-        default:
+        case D3DRENDERSTATE_BORDERCOLOR:
+            /* This should probably just forward to the corresponding sampler
+             * state. Needs tests. */
+            FIXME("Unhandled render state D3DRENDERSTATE_BORDERCOLOR.\n");
+            hr = E_NOTIMPL;
+            break;
 
-            /* FIXME: Unhandled: D3DRENDERSTATE_STIPPLEPATTERN00 - 31 */
+        default:
+            if (RenderStateType >= D3DRENDERSTATE_STIPPLEPATTERN00
+                    && RenderStateType <= D3DRENDERSTATE_STIPPLEPATTERN31)
+            {
+                FIXME("Unhandled stipple pattern render state (%#x).\n",
+                        RenderStateType);
+                hr = E_NOTIMPL;
+                break;
+            }
 
             hr = IWineD3DDevice_SetRenderState(This->wineD3DDevice,
                                                RenderStateType,
@@ -3469,8 +3553,7 @@ IDirect3DDeviceImpl_7_DrawPrimitive(IDirect3DDevice7 *iface,
 
     /* Set the FVF */
     EnterCriticalSection(&ddraw_cs);
-    hr = IWineD3DDevice_SetVertexDeclaration(This->wineD3DDevice,
-                                             IDirectDrawImpl_FindDecl(This->ddraw, VertexType));
+    hr = IWineD3DDevice_SetVertexDeclaration(This->wineD3DDevice, ddraw_find_decl(This->ddraw, VertexType));
     if(hr != D3D_OK)
     {
         LeaveCriticalSection(&ddraw_cs);
@@ -3592,8 +3675,7 @@ IDirect3DDeviceImpl_7_DrawIndexedPrimitive(IDirect3DDevice7 *iface,
 
     /* Set the D3DDevice's FVF */
     EnterCriticalSection(&ddraw_cs);
-    hr = IWineD3DDevice_SetVertexDeclaration(This->wineD3DDevice,
-                                             IDirectDrawImpl_FindDecl(This->ddraw, VertexType));
+    hr = IWineD3DDevice_SetVertexDeclaration(This->wineD3DDevice, ddraw_find_decl(This->ddraw, VertexType));
     if(FAILED(hr))
     {
         ERR(" (%p) Setting the FVF failed, hr = %x!\n", This, hr);
@@ -4215,6 +4297,7 @@ IDirect3DDeviceImpl_7_DrawIndexedPrimitiveVB(IDirect3DDevice7 *iface,
     DWORD stride = get_flexible_vertex_size(vb->fvf);
     WORD *LockedIndices;
     HRESULT hr;
+    WINED3DBUFFER_DESC desc;
 
     TRACE("(%p)->(%08x,%p,%d,%d,%p,%d,%08x)\n", This, PrimitiveType, vb, StartVertex, NumVertices, Indices, IndexCount, Flags);
 
@@ -4236,6 +4319,37 @@ IDirect3DDeviceImpl_7_DrawIndexedPrimitiveVB(IDirect3DDevice7 *iface,
         return hr;
     }
 
+    /* check that the buffer is large enough to hold the indices,
+     * reallocate if necessary.
+     */
+    hr = IWineD3DBuffer_GetDesc(This->indexbuffer, &desc);
+    if(desc.Size < IndexCount * sizeof(WORD))
+    {
+        UINT size = max(desc.Size * 2, IndexCount * sizeof(WORD));
+        IWineD3DBuffer *buffer;
+        IUnknown *parent;
+
+        TRACE("Growing index buffer to %u bytes\n", size);
+
+        IWineD3DBuffer_GetParent(This->indexbuffer, &parent);
+        hr = IWineD3DDevice_CreateIndexBuffer(This->wineD3DDevice, size,
+                WINED3DUSAGE_DYNAMIC /* Usage */, WINED3DPOOL_DEFAULT, &buffer, parent,
+                &ddraw_null_wined3d_parent_ops);
+        if(hr != D3D_OK)
+        {
+            ERR("(%p) IWineD3DDevice::CreateIndexBuffer failed with hr = %08x\n", This, hr);
+            IParent_Release(parent);
+            LeaveCriticalSection(&ddraw_cs);
+            return hr;
+        }
+
+        IWineD3DBuffer_Release(This->indexbuffer);
+        This->indexbuffer = buffer;
+
+        ((IParentImpl *)parent)->child = (IUnknown *)buffer;
+        IParent_Release(parent);
+    }
+
     /* copy the index stream into the index buffer.
      * A new IWineD3DDevice method could be created
      * which takes an user pointer containing the indices
@@ -4247,7 +4361,6 @@ IDirect3DDeviceImpl_7_DrawIndexedPrimitiveVB(IDirect3DDevice7 *iface,
                             IndexCount * sizeof(WORD),
                             (BYTE **) &LockedIndices,
                             0 /* Flags */);
-    assert(IndexCount < 0x100000);
     if(hr != D3D_OK)
     {
         ERR("(%p) IWineD3DBuffer::Map failed with hr = %08x\n", This, hr);

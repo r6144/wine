@@ -56,6 +56,15 @@ typedef struct _MSVCRT_EXCEPTION_FRAME
   PEXCEPTION_POINTERS xpointers;
 } MSVCRT_EXCEPTION_FRAME;
 
+typedef struct
+{
+  int   gs_cookie_offset;
+  ULONG gs_cookie_xor;
+  int   eh_cookie_offset;
+  ULONG eh_cookie_xor;
+  SCOPETABLE entries[1];
+} SCOPETABLE_V4;
+
 #define TRYLEVEL_END (-1) /* End of trylevel list */
 
 #if defined(__GNUC__) && defined(__i386__)
@@ -98,6 +107,11 @@ static inline int call_unwind_func( int (*func)(void), void *ebp )
 
 
 #ifdef __i386__
+
+static const SCOPETABLE_V4 *get_scopetable_v4( MSVCRT_EXCEPTION_FRAME *frame, ULONG_PTR cookie )
+{
+    return (const SCOPETABLE_V4 *)((ULONG_PTR)frame->scopetable ^ cookie);
+}
 
 static DWORD MSVCRT_nested_handler(PEXCEPTION_RECORD rec,
                                    EXCEPTION_REGISTRATION_RECORD* frame,
@@ -158,6 +172,33 @@ static void msvcrt_local_unwind2(MSVCRT_EXCEPTION_FRAME* frame, int trylevel, vo
   TRACE("unwound OK\n");
 }
 
+static void msvcrt_local_unwind4( ULONG *cookie, MSVCRT_EXCEPTION_FRAME* frame, int trylevel, void *ebp )
+{
+    EXCEPTION_REGISTRATION_RECORD reg;
+    const SCOPETABLE_V4 *scopetable = get_scopetable_v4( frame, *cookie );
+
+    TRACE("(%p,%d,%d)\n",frame, frame->trylevel, trylevel);
+
+    /* Register a handler in case of a nested exception */
+    reg.Handler = MSVCRT_nested_handler;
+    reg.Prev = NtCurrentTeb()->Tib.ExceptionList;
+    __wine_push_frame(&reg);
+
+    while (frame->trylevel != -2 && frame->trylevel != trylevel)
+    {
+        int level = frame->trylevel;
+        frame->trylevel = scopetable->entries[level].previousTryLevel;
+        if (!scopetable->entries[level].lpfnFilter)
+        {
+            TRACE( "__try block cleanup level %d handler %p ebp %p\n",
+                   level, scopetable->entries[level].lpfnHandler, ebp );
+            call_unwind_func( scopetable->entries[level].lpfnHandler, ebp );
+        }
+    }
+    __wine_pop_frame(&reg);
+    TRACE("unwound OK\n");
+}
+
 /*******************************************************************
  *		_local_unwind2 (MSVCRT.@)
  */
@@ -166,7 +207,13 @@ void CDECL _local_unwind2(MSVCRT_EXCEPTION_FRAME* frame, int trylevel)
     msvcrt_local_unwind2( frame, trylevel, &frame->_ebp );
 }
 
-#endif  /* __i386__ */
+/*******************************************************************
+ *		_local_unwind4 (MSVCRT.@)
+ */
+void CDECL _local_unwind4( ULONG *cookie, MSVCRT_EXCEPTION_FRAME* frame, int trylevel )
+{
+    msvcrt_local_unwind4( cookie, frame, trylevel, &frame->_ebp );
+}
 
 /*******************************************************************
  *		_global_unwind2 (MSVCRT.@)
@@ -198,7 +245,6 @@ int CDECL _except_handler3(PEXCEPTION_RECORD rec,
                            MSVCRT_EXCEPTION_FRAME* frame,
                            PCONTEXT context, void* dispatcher)
 {
-#if defined(__GNUC__) && defined(__i386__)
   int retval, trylevel;
   EXCEPTION_POINTERS exceptPtrs;
   PSCOPETABLE pScopeTable;
@@ -258,29 +304,87 @@ int CDECL _except_handler3(PEXCEPTION_RECORD rec,
       trylevel = pScopeTable[trylevel].previousTryLevel;
     }
   }
-#else
-  FIXME("exception %x flags=%x at %p handler=%p %p %p stub\n",
-        rec->ExceptionCode, rec->ExceptionFlags, rec->ExceptionAddress,
-        frame->handler, context, dispatcher);
-#endif
   TRACE("reached TRYLEVEL_END, returning ExceptionContinueSearch\n");
   return ExceptionContinueSearch;
 }
 
 /*********************************************************************
- *		_abnormal_termination (MSVCRT.@)
+ *		_except_handler4_common (MSVCRT.@)
  */
-int CDECL _abnormal_termination(void)
+int CDECL _except_handler4_common( ULONG *cookie, void (*check_cookie)(void),
+                                   EXCEPTION_RECORD *rec, MSVCRT_EXCEPTION_FRAME *frame,
+                                   CONTEXT *context, EXCEPTION_REGISTRATION_RECORD **dispatcher )
 {
-  FIXME("(void)stub\n");
-  return 0;
+    int retval, trylevel;
+    EXCEPTION_POINTERS exceptPtrs;
+    const SCOPETABLE_V4 *scope_table = get_scopetable_v4( frame, *cookie );
+
+    TRACE( "exception %x flags=%x at %p handler=%p %p %p cookie=%x scope table=%p cookies=%d/%x,%d/%x\n",
+           rec->ExceptionCode, rec->ExceptionFlags, rec->ExceptionAddress,
+           frame->handler, context, dispatcher, *cookie, scope_table,
+           scope_table->gs_cookie_offset, scope_table->gs_cookie_xor,
+           scope_table->eh_cookie_offset, scope_table->eh_cookie_xor );
+
+    /* FIXME: no cookie validation yet */
+
+    if (rec->ExceptionFlags & (EH_UNWINDING | EH_EXIT_UNWIND))
+    {
+        /* Unwinding the current frame */
+        msvcrt_local_unwind4( cookie, frame, -2, &frame->_ebp );
+        TRACE("unwound current frame, returning ExceptionContinueSearch\n");
+        return ExceptionContinueSearch;
+    }
+    else
+    {
+        /* Hunting for handler */
+        exceptPtrs.ExceptionRecord = rec;
+        exceptPtrs.ContextRecord = context;
+        *((DWORD *)frame-1) = (DWORD)&exceptPtrs;
+        trylevel = frame->trylevel;
+
+        while (trylevel != -2)
+        {
+            TRACE( "level %d prev %d filter %p\n", trylevel,
+                   scope_table->entries[trylevel].previousTryLevel,
+                   scope_table->entries[trylevel].lpfnFilter );
+            if (scope_table->entries[trylevel].lpfnFilter)
+            {
+                retval = call_filter( scope_table->entries[trylevel].lpfnFilter, &exceptPtrs, &frame->_ebp );
+
+                TRACE("filter returned %s\n", retval == EXCEPTION_CONTINUE_EXECUTION ?
+                      "CONTINUE_EXECUTION" : retval == EXCEPTION_EXECUTE_HANDLER ?
+                      "EXECUTE_HANDLER" : "CONTINUE_SEARCH");
+
+                if (retval == EXCEPTION_CONTINUE_EXECUTION)
+                    return ExceptionContinueExecution;
+
+                if (retval == EXCEPTION_EXECUTE_HANDLER)
+                {
+                    /* Unwind all higher frames, this one will handle the exception */
+                    _global_unwind2((EXCEPTION_REGISTRATION_RECORD*)frame);
+                    msvcrt_local_unwind4( cookie, frame, trylevel, &frame->_ebp );
+
+                    /* Set our trylevel to the enclosing block, and call the __finally
+                     * code, which won't return
+                     */
+                    frame->trylevel = scope_table->entries[trylevel].previousTryLevel;
+                    TRACE("__finally block %p\n",scope_table->entries[trylevel].lpfnHandler);
+                    call_finally_block(scope_table->entries[trylevel].lpfnHandler, &frame->_ebp);
+                    ERR("Returned from __finally block - expect crash!\n");
+                }
+            }
+            trylevel = scope_table->entries[trylevel].previousTryLevel;
+        }
+    }
+    TRACE("reached -2, returning ExceptionContinueSearch\n");
+    return ExceptionContinueSearch;
 }
+
 
 /*
  * setjmp/longjmp implementation
  */
 
-#ifdef __i386__
 #define MSVCRT_JMP_MAGIC 0x56433230 /* ID value for new jump structure */
 typedef void (__stdcall *MSVCRT_unwind_function)(const struct MSVCRT___JUMP_BUFFER *);
 
@@ -410,7 +514,47 @@ void __stdcall _seh_longjmp_unwind(struct MSVCRT___JUMP_BUFFER *jmp)
 {
     msvcrt_local_unwind2( (MSVCRT_EXCEPTION_FRAME *)jmp->Registration, jmp->TryLevel, (void *)jmp->Ebp );
 }
-#endif /* i386 */
+
+#elif defined(__x86_64__)
+
+/*******************************************************************
+ *		_setjmp (MSVCRT.@)
+ */
+__ASM_GLOBAL_FUNC( MSVCRT__setjmp,
+                   "xorq %rdx,%rdx\n\t"  /* frame */
+                   "jmp " __ASM_NAME("MSVCRT__setjmpex") );
+
+/*******************************************************************
+ *		_setjmpex (MSVCRT.@)
+ */
+__ASM_GLOBAL_FUNC( MSVCRT__setjmpex,
+                   "movq %rdx,(%rcx)\n\t"          /* jmp_buf->Frame */
+                   "movq %rbx,0x8(%rcx)\n\t"       /* jmp_buf->Rbx */
+                   "leaq 0x8(%rsp),%rax\n\t"
+                   "movq %rax,0x10(%rcx)\n\t"      /* jmp_buf->Rsp */
+                   "movq %rbp,0x18(%rcx)\n\t"      /* jmp_buf->Rbp */
+                   "movq %rsi,0x20(%rcx)\n\t"      /* jmp_buf->Rsi */
+                   "movq %rdi,0x28(%rcx)\n\t"      /* jmp_buf->Rdi */
+                   "movq %r12,0x30(%rcx)\n\t"      /* jmp_buf->R12 */
+                   "movq %r13,0x38(%rcx)\n\t"      /* jmp_buf->R13 */
+                   "movq %r14,0x40(%rcx)\n\t"      /* jmp_buf->R14 */
+                   "movq %r15,0x48(%rcx)\n\t"      /* jmp_buf->R15 */
+                   "movq (%rsp),%rax\n\t"
+                   "movq %rax,0x50(%rcx)\n\t"      /* jmp_buf->Rip */
+                   "movdqa %xmm6,0x60(%rcx)\n\t"   /* jmp_buf->Xmm6 */
+                   "movdqa %xmm7,0x70(%rcx)\n\t"   /* jmp_buf->Xmm7 */
+                   "movdqa %xmm8,0x80(%rcx)\n\t"   /* jmp_buf->Xmm8 */
+                   "movdqa %xmm9,0x90(%rcx)\n\t"   /* jmp_buf->Xmm9 */
+                   "movdqa %xmm10,0xa0(%rcx)\n\t"  /* jmp_buf->Xmm10 */
+                   "movdqa %xmm11,0xb0(%rcx)\n\t"  /* jmp_buf->Xmm11 */
+                   "movdqa %xmm12,0xc0(%rcx)\n\t"  /* jmp_buf->Xmm12 */
+                   "movdqa %xmm13,0xd0(%rcx)\n\t"  /* jmp_buf->Xmm13 */
+                   "movdqa %xmm14,0xe0(%rcx)\n\t"  /* jmp_buf->Xmm14 */
+                   "movdqa %xmm15,0xf0(%rcx)\n\t"  /* jmp_buf->Xmm15 */
+                   "xorq %rax,%rax\n\t"
+                   "retq" );
+
+#endif /* __x86_64__ */
 
 static MSVCRT___sighandler_t sighandlers[MSVCRT_NSIG] = { MSVCRT_SIG_DFL };
 
@@ -432,7 +576,7 @@ static BOOL WINAPI msvcrt_console_handler(DWORD ctrlType)
     return ret;
 }
 
-typedef void (*float_handler)(int, int);
+typedef void (CDECL *float_handler)(int, int);
 
 /* The exception codes are actually NTSTATUS values */
 static const struct
@@ -609,6 +753,15 @@ int CDECL _XcptFilter(NTSTATUS ex, PEXCEPTION_POINTERS ptr)
     TRACE("(%08x,%p)\n", ex, ptr);
     /* I assume ptr->ExceptionRecord->ExceptionCode is the same as ex */
     return msvcrt_exception_filter(ptr);
+}
+
+/*********************************************************************
+ *		_abnormal_termination (MSVCRT.@)
+ */
+int CDECL _abnormal_termination(void)
+{
+  FIXME("(void)stub\n");
+  return 0;
 }
 
 /******************************************************************

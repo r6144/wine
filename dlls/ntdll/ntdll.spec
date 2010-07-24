@@ -275,7 +275,7 @@
 @ stdcall NtQueryVolumeInformationFile(long ptr ptr long long)
 @ stdcall NtQueueApcThread(long ptr long long long)
 @ stdcall NtRaiseException(ptr ptr long)
-@ stub NtRaiseHardError
+@ stdcall NtRaiseHardError(long long ptr ptr long long)
 @ stdcall NtReadFile(long long ptr ptr ptr ptr long ptr ptr)
 @ stdcall NtReadFileScatter(long long ptr ptr ptr ptr long ptr ptr)
 @ stub NtReadRequestData
@@ -353,7 +353,7 @@
 @ stub NtStopProfile
 # @ stub NtSuspendProcess
 @ stdcall NtSuspendThread(long ptr)
-@ stub NtSystemDebugControl
+@ stdcall NtSystemDebugControl(long ptr long ptr long ptr)
 @ stdcall NtTerminateJobObject(long long)
 @ stdcall NtTerminateProcess(long long)
 @ stdcall NtTerminateThread(long long)
@@ -1209,7 +1209,7 @@
 @ stub ZwStopProfile
 # @ stub ZwSuspendProcess
 @ stdcall ZwSuspendThread(long ptr) NtSuspendThread
-@ stub ZwSystemDebugControl
+@ stdcall ZwSystemDebugControl(long ptr long ptr long ptr) NtSystemDebugControl
 @ stdcall ZwTerminateJobObject(long long) NtTerminateJobObject
 @ stdcall ZwTerminateProcess(long long) NtTerminateProcess
 @ stdcall ZwTerminateThread(long long) NtTerminateThread

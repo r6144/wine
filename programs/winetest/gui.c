@@ -433,8 +433,9 @@ DlgProc (HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     switch (msg) {
     case WM_INITDIALOG:
         SendMessage (hwnd, WM_SETICON, ICON_SMALL,
-                     (LPARAM)LoadIcon (GetModuleHandle (NULL),
-                                       MAKEINTRESOURCE (IDI_WINE)));
+                     (LPARAM)LoadImage( GetModuleHandle (NULL), MAKEINTRESOURCE (IDI_WINE), IMAGE_ICON,
+                                        GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON),
+                                        LR_SHARED ));
         SendMessage (hwnd, WM_SETICON, ICON_BIG,
                      (LPARAM)LoadIcon (GetModuleHandle (NULL),
                                        MAKEINTRESOURCE (IDI_WINE)));
@@ -455,7 +456,8 @@ DlgProc (HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                        MAKEINTRESOURCE (IDD_ABOUT), hwnd, AboutProc);
             return TRUE;
         case IDABORT:
-            report (R_WARNING, "Not implemented");
+            report (R_STATUS, "Aborting, please wait...");
+            aborting = TRUE;
             return TRUE;
         }
     }

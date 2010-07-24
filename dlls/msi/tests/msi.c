@@ -32,6 +32,8 @@
 static const char msifile[] = "winetest.msi";
 
 static BOOL (WINAPI *pConvertSidToStringSidA)(PSID, LPSTR*);
+static LONG (WINAPI *pRegDeleteKeyExA)(HKEY, LPCSTR, REGSAM, DWORD);
+static BOOL (WINAPI *pIsWow64Process)(HANDLE, PBOOL);
 
 static INSTALLSTATE (WINAPI *pMsiGetComponentPathA)
     (LPCSTR, LPCSTR, LPSTR, DWORD*);
@@ -57,6 +59,7 @@ static void init_functionpointers(void)
 {
     HMODULE hmsi = GetModuleHandleA("msi.dll");
     HMODULE hadvapi32 = GetModuleHandleA("advapi32.dll");
+    HMODULE hkernel32 = GetModuleHandleA("kernel32.dll");
 
 #define GET_PROC(dll, func) \
     p ## func = (void *)GetProcAddress(dll, #func); \
@@ -74,6 +77,8 @@ static void init_functionpointers(void)
     GET_PROC(hmsi, MsiGetPatchInfoExA)
 
     GET_PROC(hadvapi32, ConvertSidToStringSidA)
+    GET_PROC(hadvapi32, RegDeleteKeyExA)
+    GET_PROC(hkernel32, IsWow64Process)
 
 #undef GET_PROC
 }
@@ -223,6 +228,13 @@ static void test_usefeature(void)
     ok( r == INSTALLSTATE_INVALIDARG, "wrong return val\n");
 }
 
+static LONG delete_key( HKEY key, LPCSTR subkey, REGSAM access )
+{
+    if (pRegDeleteKeyExA)
+        return pRegDeleteKeyExA( key, subkey, access, 0 );
+    return RegDeleteKeyA( key, subkey );
+}
+
 static void test_null(void)
 {
     MSIHANDLE hpkg;
@@ -231,6 +243,11 @@ static void test_null(void)
     DWORD dwType, cbData;
     LPBYTE lpData = NULL;
     INSTALLSTATE state;
+    REGSAM access = KEY_ALL_ACCESS;
+    BOOL wow64;
+
+    if (pIsWow64Process && pIsWow64Process(GetCurrentProcess(), &wow64) && wow64)
+        access |= KEY_WOW64_64KEY;
 
     r = pMsiOpenPackageExW(NULL, 0, &hpkg);
     ok( r == ERROR_INVALID_PARAMETER,"wrong error\n");
@@ -247,17 +264,22 @@ static void test_null(void)
     r = MsiConfigureFeatureA("{00000000-0000-0000-0000-000000000000}", NULL, 0);
     ok( r == ERROR_INVALID_PARAMETER, "wrong error\n");
 
-    r = MsiConfigureFeatureA("{00000000-0000-0000-0000-000000000000}", "foo", 0);
+    r = MsiConfigureFeatureA("{00000000-0000-0000-0000-000000000001}", "foo", 0);
     ok( r == ERROR_INVALID_PARAMETER, "wrong error %d\n", r);
 
-    r = MsiConfigureFeatureA("{00000000-0000-0000-0000-000000000000}", "foo", INSTALLSTATE_DEFAULT);
+    r = MsiConfigureFeatureA("{00000000-0000-0000-0000-000000000002}", "foo", INSTALLSTATE_DEFAULT);
     ok( r == ERROR_UNKNOWN_PRODUCT, "wrong error %d\n", r);
 
     /* make sure empty string to MsiGetProductInfo is not a handle to default registry value, saving and restoring the
      * necessary registry values */
 
     /* empty product string */
-    r = RegOpenKeyA(HKEY_LOCAL_MACHINE, "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall", &hkey);
+    r = RegOpenKeyExA(HKEY_LOCAL_MACHINE, "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall", 0, access, &hkey);
+    if (r == ERROR_ACCESS_DENIED)
+    {
+        skip("Not enough rights to perform tests\n");
+        return;
+    }
     ok( r == ERROR_SUCCESS, "wrong error %d\n", r);
 
     r = RegQueryValueExA(hkey, NULL, 0, &dwType, lpData, &cbData);
@@ -297,7 +319,8 @@ static void test_null(void)
     ok( r == ERROR_SUCCESS, "wrong error %d\n", r);
 
     /* empty attribute */
-    r = RegCreateKeyA(HKEY_LOCAL_MACHINE, "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{F1C3AF50-8B56-4A69-A00C-00773FE42F30}", &hkey);
+    r = RegCreateKeyExA(HKEY_LOCAL_MACHINE, "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{F1C3AF50-8B56-4A69-A00C-00773FE42F30}",
+                        0, NULL, 0, access, NULL, &hkey, NULL);
     ok( r == ERROR_SUCCESS, "wrong error %d\n", r);
 
     r = RegSetValueA(hkey, NULL, REG_SZ, "test", strlen("test"));
@@ -309,7 +332,8 @@ static void test_null(void)
     r = RegCloseKey(hkey);
     ok( r == ERROR_SUCCESS, "wrong error %d\n", r);
 
-    r = RegDeleteKeyA(HKEY_LOCAL_MACHINE, "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{F1C3AF50-8B56-4A69-A00C-00773FE42F30}");
+    r = delete_key(HKEY_LOCAL_MACHINE, "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{F1C3AF50-8B56-4A69-A00C-00773FE42F30}",
+                   access & KEY_WOW64_64KEY);
     ok( r == ERROR_SUCCESS, "wrong error %d\n", r);
 }
 
@@ -543,9 +567,14 @@ static void test_MsiQueryProductState(void)
     HKEY userkey, localkey, props;
     HKEY prodkey;
     DWORD data;
+    REGSAM access = KEY_ALL_ACCESS;
+    BOOL wow64;
 
     create_test_guid(prodcode, prod_squashed);
     get_user_sid(&usersid);
+
+    if (pIsWow64Process && pIsWow64Process(GetCurrentProcess(), &wow64) && wow64)
+        access |= KEY_WOW64_64KEY;
 
     /* NULL prodcode */
     state = MsiQueryProductStateA(NULL);
@@ -589,7 +618,14 @@ static void test_MsiQueryProductState(void)
     lstrcpyA(keypath, "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\");
     lstrcatA(keypath, prodcode);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &localkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &localkey, NULL);
+    if (res == ERROR_ACCESS_DENIED)
+    {
+        skip("Not enough rights to perform tests\n");
+        RegDeleteKeyA(userkey, "");
+        LocalFree(usersid);
+        return;
+    }
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* local uninstall key exists */
@@ -605,21 +641,21 @@ static void test_MsiQueryProductState(void)
     ok(state == INSTALLSTATE_ADVERTISED, "Expected INSTALLSTATE_ADVERTISED, got %d\n", state);
 
     RegDeleteValueA(localkey, "WindowsInstaller");
-    RegDeleteKeyA(localkey, "");
+    delete_key(localkey, "", access & KEY_WOW64_64KEY);
 
     lstrcpyA(keypath, "Software\\Microsoft\\Windows\\CurrentVersion\\Installer\\UserData\\");
     lstrcatA(keypath, usersid);
     lstrcatA(keypath, "\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &localkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &localkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* local product key exists */
     state = MsiQueryProductStateA(prodcode);
     ok(state == INSTALLSTATE_ADVERTISED, "Expected INSTALLSTATE_ADVERTISED, got %d\n", state);
 
-    res = RegCreateKeyA(localkey, "InstallProperties", &props);
+    res = RegCreateKeyExA(localkey, "InstallProperties", 0, NULL, 0, access, NULL, &props, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* install properties key exists */
@@ -649,9 +685,9 @@ static void test_MsiQueryProductState(void)
     ok(state == INSTALLSTATE_ABSENT, "Expected INSTALLSTATE_ABSENT, got %d\n", state);
 
     RegDeleteValueA(props, "WindowsInstaller");
-    RegDeleteKeyA(props, "");
+    delete_key(props, "", access & KEY_WOW64_64KEY);
     RegCloseKey(props);
-    RegDeleteKeyA(localkey, "");
+    delete_key(localkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(localkey);
     RegDeleteKeyA(userkey, "");
     RegCloseKey(userkey);
@@ -663,7 +699,7 @@ static void test_MsiQueryProductState(void)
     lstrcatA(keypath, "\\Installer\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &prodkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &prodkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     state = MsiQueryProductStateA(prodcode);
@@ -675,14 +711,14 @@ static void test_MsiQueryProductState(void)
     lstrcatA(keypath, "\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &localkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &localkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     state = MsiQueryProductStateA(prodcode);
     ok(state == INSTALLSTATE_ADVERTISED,
        "Expected INSTALLSTATE_ADVERTISED, got %d\n", state);
 
-    res = RegCreateKeyA(localkey, "InstallProperties", &props);
+    res = RegCreateKeyExA(localkey, "InstallProperties", 0, NULL, 0, access, NULL, &props, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     state = MsiQueryProductStateA(prodcode);
@@ -698,11 +734,11 @@ static void test_MsiQueryProductState(void)
     ok(state == INSTALLSTATE_DEFAULT, "Expected INSTALLSTATE_DEFAULT, got %d\n", state);
 
     RegDeleteValueA(props, "WindowsInstaller");
-    RegDeleteKeyA(props, "");
+    delete_key(props, "", access & KEY_WOW64_64KEY);
     RegCloseKey(props);
-    RegDeleteKeyA(localkey, "");
+    delete_key(localkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(localkey);
-    RegDeleteKeyA(prodkey, "");
+    delete_key(prodkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(prodkey);
 
     /* MSIINSTALLCONTEXT_MACHINE */
@@ -710,7 +746,7 @@ static void test_MsiQueryProductState(void)
     lstrcpyA(keypath, "Software\\Classes\\Installer\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &prodkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &prodkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     state = MsiQueryProductStateA(prodcode);
@@ -720,14 +756,14 @@ static void test_MsiQueryProductState(void)
     lstrcatA(keypath, "S-1-5-18\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &localkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &localkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     state = MsiQueryProductStateA(prodcode);
     ok(state == INSTALLSTATE_ADVERTISED,
        "Expected INSTALLSTATE_ADVERTISED, got %d\n", state);
 
-    res = RegCreateKeyA(localkey, "InstallProperties", &props);
+    res = RegCreateKeyExA(localkey, "InstallProperties", 0, NULL, 0, access, NULL, &props, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     state = MsiQueryProductStateA(prodcode);
@@ -743,11 +779,11 @@ static void test_MsiQueryProductState(void)
     ok(state == INSTALLSTATE_DEFAULT, "Expected INSTALLSTATE_DEFAULT, got %d\n", state);
 
     RegDeleteValueA(props, "WindowsInstaller");
-    RegDeleteKeyA(props, "");
+    delete_key(props, "", access & KEY_WOW64_64KEY);
     RegCloseKey(props);
-    RegDeleteKeyA(localkey, "");
+    delete_key(localkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(localkey);
-    RegDeleteKeyA(prodkey, "");
+    delete_key(prodkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(prodkey);
 
     LocalFree(usersid);
@@ -817,11 +853,16 @@ static void test_MsiQueryFeatureState(void)
     INSTALLSTATE state;
     LPSTR usersid;
     LONG res;
+    REGSAM access = KEY_ALL_ACCESS;
+    BOOL wow64;
 
     create_test_guid(prodcode, prod_squashed);
     compose_base85_guid(component, comp_base85, comp_squashed);
     compose_base85_guid(component, comp_base85 + 20, comp_squashed2);
     get_user_sid(&usersid);
+
+    if (pIsWow64Process && pIsWow64Process(GetCurrentProcess(), &wow64) && wow64)
+        access |= KEY_WOW64_64KEY;
 
     /* NULL prodcode */
     state = MsiQueryFeatureStateA(NULL, "feature");
@@ -884,7 +925,15 @@ static void test_MsiQueryFeatureState(void)
     lstrcatA(keypath, prod_squashed);
     lstrcatA(keypath, "\\Features");
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &localkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &localkey, NULL);
+    if (res == ERROR_ACCESS_DENIED)
+    {
+        skip("Not enough rights to perform tests\n");
+        RegDeleteKeyA(userkey, "");
+        RegCloseKey(userkey);
+        LocalFree(usersid);
+        return;
+    }
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* userdata features key exists */
@@ -920,7 +969,7 @@ static void test_MsiQueryFeatureState(void)
     lstrcatA(keypath, "\\Components\\");
     lstrcatA(keypath, comp_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &compkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &compkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     lstrcpyA(keypath, "Software\\Microsoft\\Windows\\CurrentVersion\\Installer\\UserData\\");
@@ -928,7 +977,7 @@ static void test_MsiQueryFeatureState(void)
     lstrcatA(keypath, "\\Components\\");
     lstrcatA(keypath, comp_squashed2);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &compkey2);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &compkey2, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     state = MsiQueryFeatureStateA(prodcode, "feature");
@@ -983,8 +1032,8 @@ static void test_MsiQueryFeatureState(void)
 
     RegDeleteValueA(compkey, prod_squashed);
     RegDeleteValueA(compkey2, prod_squashed);
-    RegDeleteKeyA(compkey, "");
-    RegDeleteKeyA(compkey2, "");
+    delete_key(compkey, "", access & KEY_WOW64_64KEY);
+    delete_key(compkey2, "", access & KEY_WOW64_64KEY);
     RegDeleteValueA(localkey, "feature");
     RegDeleteValueA(userkey, "feature");
     RegDeleteKeyA(userkey, "");
@@ -1000,7 +1049,7 @@ static void test_MsiQueryFeatureState(void)
     lstrcatA(keypath, "\\Installer\\Features\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &userkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &userkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* feature key exists */
@@ -1020,7 +1069,7 @@ static void test_MsiQueryFeatureState(void)
     lstrcatA(keypath, prod_squashed);
     lstrcatA(keypath, "\\Features");
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &localkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &localkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* userdata features key exists */
@@ -1056,7 +1105,7 @@ static void test_MsiQueryFeatureState(void)
     lstrcatA(keypath, "\\Components\\");
     lstrcatA(keypath, comp_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &compkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &compkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     lstrcpyA(keypath, "Software\\Microsoft\\Windows\\CurrentVersion\\Installer\\UserData\\");
@@ -1064,7 +1113,7 @@ static void test_MsiQueryFeatureState(void)
     lstrcatA(keypath, "\\Components\\");
     lstrcatA(keypath, comp_squashed2);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &compkey2);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &compkey2, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     state = MsiQueryFeatureStateA(prodcode, "feature");
@@ -1090,11 +1139,11 @@ static void test_MsiQueryFeatureState(void)
 
     RegDeleteValueA(compkey, prod_squashed);
     RegDeleteValueA(compkey2, prod_squashed);
-    RegDeleteKeyA(compkey, "");
-    RegDeleteKeyA(compkey2, "");
+    delete_key(compkey, "", access & KEY_WOW64_64KEY);
+    delete_key(compkey2, "", access & KEY_WOW64_64KEY);
     RegDeleteValueA(localkey, "feature");
     RegDeleteValueA(userkey, "feature");
-    RegDeleteKeyA(userkey, "");
+    delete_key(userkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(compkey);
     RegCloseKey(compkey2);
     RegCloseKey(localkey);
@@ -1105,7 +1154,7 @@ static void test_MsiQueryFeatureState(void)
     lstrcpyA(keypath, "Software\\Classes\\Installer\\Features\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &userkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &userkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* feature key exists */
@@ -1124,7 +1173,7 @@ static void test_MsiQueryFeatureState(void)
     lstrcatA(keypath, prod_squashed);
     lstrcatA(keypath, "\\Features");
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &localkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &localkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* userdata features key exists */
@@ -1159,14 +1208,14 @@ static void test_MsiQueryFeatureState(void)
     lstrcatA(keypath, "S-1-5-18\\Components\\");
     lstrcatA(keypath, comp_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &compkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &compkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     lstrcpyA(keypath, "Software\\Microsoft\\Windows\\CurrentVersion\\Installer\\UserData\\");
     lstrcatA(keypath, "S-1-5-18\\Components\\");
     lstrcatA(keypath, comp_squashed2);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &compkey2);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &compkey2, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     state = MsiQueryFeatureStateA(prodcode, "feature");
@@ -1192,11 +1241,11 @@ static void test_MsiQueryFeatureState(void)
 
     RegDeleteValueA(compkey, prod_squashed);
     RegDeleteValueA(compkey2, prod_squashed);
-    RegDeleteKeyA(compkey, "");
-    RegDeleteKeyA(compkey2, "");
+    delete_key(compkey, "", access & KEY_WOW64_64KEY);
+    delete_key(compkey2, "", access & KEY_WOW64_64KEY);
     RegDeleteValueA(localkey, "feature");
     RegDeleteValueA(userkey, "feature");
-    RegDeleteKeyA(userkey, "");
+    delete_key(userkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(compkey);
     RegCloseKey(compkey2);
     RegCloseKey(localkey);
@@ -1217,6 +1266,8 @@ static void test_MsiQueryComponentState(void)
     LPSTR usersid;
     LONG res;
     UINT r;
+    REGSAM access = KEY_ALL_ACCESS;
+    BOOL wow64;
 
     static const INSTALLSTATE MAGIC_ERROR = 0xdeadbeef;
 
@@ -1229,6 +1280,9 @@ static void test_MsiQueryComponentState(void)
     create_test_guid(prodcode, prod_squashed);
     compose_base85_guid(component, comp_base85, comp_squashed);
     get_user_sid(&usersid);
+
+    if (pIsWow64Process && pIsWow64Process(GetCurrentProcess(), &wow64) && wow64)
+        access |= KEY_WOW64_64KEY;
 
     /* NULL szProductCode */
     state = MAGIC_ERROR;
@@ -1274,7 +1328,13 @@ static void test_MsiQueryComponentState(void)
     lstrcpyA(keypath, "Software\\Classes\\Installer\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &prodkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &prodkey, NULL);
+    if (res == ERROR_ACCESS_DENIED)
+    {
+        skip("Not enough rights to perform tests\n");
+        LocalFree(usersid);
+        return;
+    }
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     state = MAGIC_ERROR;
@@ -1282,7 +1342,7 @@ static void test_MsiQueryComponentState(void)
     ok(r == ERROR_UNKNOWN_COMPONENT, "Expected ERROR_UNKNOWN_COMPONENT, got %d\n", r);
     ok(state == INSTALLSTATE_UNKNOWN, "Expected INSTALLSTATE_UNKNOWN, got %d\n", state);
 
-    RegDeleteKeyA(prodkey, "");
+    delete_key(prodkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(prodkey);
 
     /* create local system product key */
@@ -1290,7 +1350,7 @@ static void test_MsiQueryComponentState(void)
     lstrcatA(keypath, prod_squashed);
     lstrcatA(keypath, "\\InstallProperties");
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &prodkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &prodkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* local system product key exists */
@@ -1311,7 +1371,7 @@ static void test_MsiQueryComponentState(void)
     lstrcpyA(keypath, "Software\\Microsoft\\Windows\\CurrentVersion\\Installer\\UserData\\S-1-5-18\\Components\\");
     lstrcatA(keypath, comp_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &compkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &compkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* component key exists */
@@ -1382,9 +1442,9 @@ static void test_MsiQueryComponentState(void)
     ok(state == INSTALLSTATE_LOCAL, "Expected INSTALLSTATE_LOCAL, got %d\n", state);
 
     RegDeleteValueA(prodkey, "LocalPackage");
-    RegDeleteKeyA(prodkey, "");
+    delete_key(prodkey, "", access & KEY_WOW64_64KEY);
     RegDeleteValueA(compkey, prod_squashed);
-    RegDeleteKeyA(prodkey, "");
+    delete_key(prodkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(prodkey);
     RegCloseKey(compkey);
 
@@ -1415,7 +1475,7 @@ static void test_MsiQueryComponentState(void)
     lstrcatA(keypath, prod_squashed);
     lstrcatA(keypath, "\\InstallProperties");
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &prodkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &prodkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     res = RegSetValueExA(prodkey, "LocalPackage", 0, REG_SZ, (const BYTE *)"msitest.msi", 11);
@@ -1433,7 +1493,7 @@ static void test_MsiQueryComponentState(void)
     lstrcatA(keypath, "\\Components\\");
     lstrcatA(keypath, comp_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &compkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &compkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* component key exists */
@@ -1486,7 +1546,7 @@ static void test_MsiQueryComponentState(void)
     lstrcatA(keypath, "\\Installer\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &prodkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &prodkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     state = MAGIC_ERROR;
@@ -1494,7 +1554,7 @@ static void test_MsiQueryComponentState(void)
     ok(r == ERROR_UNKNOWN_COMPONENT, "Expected ERROR_UNKNOWN_COMPONENT, got %d\n", r);
     ok(state == INSTALLSTATE_UNKNOWN, "Expected INSTALLSTATE_UNKNOWN, got %d\n", state);
 
-    RegDeleteKeyA(prodkey, "");
+    delete_key(prodkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(prodkey);
 
     lstrcpyA(keypath, "Software\\Microsoft\\Windows\\CurrentVersion\\Installer\\UserData\\");
@@ -1503,7 +1563,7 @@ static void test_MsiQueryComponentState(void)
     lstrcatA(keypath, prod_squashed);
     lstrcatA(keypath, "\\InstallProperties");
 
-    res = RegOpenKeyA(HKEY_LOCAL_MACHINE, keypath, &prodkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &prodkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     res = RegSetValueExA(prodkey, "ManagedLocalPackage", 0, REG_SZ, (const BYTE *)"msitest.msi", 11);
@@ -1516,9 +1576,9 @@ static void test_MsiQueryComponentState(void)
 
     RegDeleteValueA(prodkey, "LocalPackage");
     RegDeleteValueA(prodkey, "ManagedLocalPackage");
-    RegDeleteKeyA(prodkey, "");
+    delete_key(prodkey, "", access & KEY_WOW64_64KEY);
     RegDeleteValueA(compkey, prod_squashed);
-    RegDeleteKeyA(compkey, "");
+    delete_key(compkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(prodkey);
     RegCloseKey(compkey);
     LocalFree(usersid);
@@ -1537,11 +1597,16 @@ static void test_MsiGetComponentPath(void)
     INSTALLSTATE state;
     LPSTR usersid;
     DWORD size, val;
+    REGSAM access = KEY_ALL_ACCESS;
+    BOOL wow64;
     LONG res;
 
     create_test_guid(prodcode, prod_squashed);
     compose_base85_guid(component, comp_base85, comp_squashed);
     get_user_sid(&usersid);
+
+    if (pIsWow64Process && pIsWow64Process(GetCurrentProcess(), &wow64) && wow64)
+        access |= KEY_WOW64_64KEY;
 
     /* NULL szProduct */
     size = MAX_PATH;
@@ -1555,9 +1620,19 @@ static void test_MsiGetComponentPath(void)
     ok(state == INSTALLSTATE_INVALIDARG, "Expected INSTALLSTATE_INVALIDARG, got %d\n", state);
     ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
 
+    size = MAX_PATH;
+    state = MsiLocateComponentA(NULL, path, &size);
+    ok(state == INSTALLSTATE_INVALIDARG, "Expected INSTALLSTATE_INVALIDARG, got %d\n", state);
+    ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
+
     /* NULL lpPathBuf */
     size = MAX_PATH;
     state = MsiGetComponentPathA(prodcode, component, NULL, &size);
+    ok(state == INSTALLSTATE_UNKNOWN, "Expected INSTALLSTATE_UNKNOWN, got %d\n", state);
+    ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
+
+    size = MAX_PATH;
+    state = MsiLocateComponentA(component, NULL, &size);
     ok(state == INSTALLSTATE_UNKNOWN, "Expected INSTALLSTATE_UNKNOWN, got %d\n", state);
     ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
 
@@ -1567,9 +1642,19 @@ static void test_MsiGetComponentPath(void)
     ok(state == INSTALLSTATE_INVALIDARG, "Expected INSTALLSTATE_INVALIDARG, got %d\n", state);
     ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
 
+    size = MAX_PATH;
+    state = MsiLocateComponentA(component, path, NULL);
+    ok(state == INSTALLSTATE_INVALIDARG, "Expected INSTALLSTATE_INVALIDARG, got %d\n", state);
+    ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
+
     /* all params valid */
     size = MAX_PATH;
     state = MsiGetComponentPathA(prodcode, component, path, &size);
+    ok(state == INSTALLSTATE_UNKNOWN, "Expected INSTALLSTATE_UNKNOWN, got %d\n", state);
+    ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
+
+    size = MAX_PATH;
+    state = MsiLocateComponentA(component, path, &size);
     ok(state == INSTALLSTATE_UNKNOWN, "Expected INSTALLSTATE_UNKNOWN, got %d\n", state);
     ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
 
@@ -1577,7 +1662,13 @@ static void test_MsiGetComponentPath(void)
     lstrcatA(keypath, "Installer\\UserData\\S-1-5-18\\Components\\");
     lstrcatA(keypath, comp_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &compkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &compkey, NULL);
+    if (res == ERROR_ACCESS_DENIED)
+    {
+        skip("Not enough rights to perform tests\n");
+        LocalFree(usersid);
+        return;
+    }
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* local system component key exists */
@@ -1586,12 +1677,25 @@ static void test_MsiGetComponentPath(void)
     ok(state == INSTALLSTATE_UNKNOWN, "Expected INSTALLSTATE_UNKNOWN, got %d\n", state);
     ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
 
+    size = MAX_PATH;
+    state = MsiLocateComponentA(component, path, &size);
+    ok(state == INSTALLSTATE_UNKNOWN, "Expected INSTALLSTATE_UNKNOWN, got %d\n", state);
+    ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
+
     res = RegSetValueExA(compkey, prod_squashed, 0, REG_SZ, (const BYTE *)"C:\\imapath", 10);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* product value exists */
+    path[0] = 0;
     size = MAX_PATH;
     state = MsiGetComponentPathA(prodcode, component, path, &size);
+    ok(state == INSTALLSTATE_ABSENT, "Expected INSTALLSTATE_ABSENT, got %d\n", state);
+    ok(!lstrcmpA(path, "C:\\imapath"), "Expected C:\\imapath, got %s\n", path);
+    ok(size == 10, "Expected 10, got %d\n", size);
+
+    path[0] = 0;
+    size = MAX_PATH;
+    state = MsiLocateComponentA(component, path, &size);
     ok(state == INSTALLSTATE_ABSENT, "Expected INSTALLSTATE_ABSENT, got %d\n", state);
     ok(!lstrcmpA(path, "C:\\imapath"), "Expected C:\\imapath, got %s\n", path);
     ok(size == 10, "Expected 10, got %d\n", size);
@@ -1601,7 +1705,7 @@ static void test_MsiGetComponentPath(void)
     lstrcatA(keypath, prod_squashed);
     lstrcatA(keypath, "\\InstallProperties");
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &installprop);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &installprop, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     val = 1;
@@ -1609,8 +1713,16 @@ static void test_MsiGetComponentPath(void)
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* install properties key exists */
+    path[0] = 0;
     size = MAX_PATH;
     state = MsiGetComponentPathA(prodcode, component, path, &size);
+    ok(state == INSTALLSTATE_ABSENT, "Expected INSTALLSTATE_ABSENT, got %d\n", state);
+    ok(!lstrcmpA(path, "C:\\imapath"), "Expected C:\\imapath, got %s\n", path);
+    ok(size == 10, "Expected 10, got %d\n", size);
+
+    path[0] = 0;
+    size = MAX_PATH;
+    state = MsiLocateComponentA(component, path, &size);
     ok(state == INSTALLSTATE_ABSENT, "Expected INSTALLSTATE_ABSENT, got %d\n", state);
     ok(!lstrcmpA(path, "C:\\imapath"), "Expected C:\\imapath, got %s\n", path);
     ok(size == 10, "Expected 10, got %d\n", size);
@@ -1618,16 +1730,24 @@ static void test_MsiGetComponentPath(void)
     create_file("C:\\imapath", "C:\\imapath", 11);
 
     /* file exists */
+    path[0] = 0;
     size = MAX_PATH;
     state = MsiGetComponentPathA(prodcode, component, path, &size);
     ok(state == INSTALLSTATE_LOCAL, "Expected INSTALLSTATE_LOCAL, got %d\n", state);
     ok(!lstrcmpA(path, "C:\\imapath"), "Expected C:\\imapath, got %s\n", path);
     ok(size == 10, "Expected 10, got %d\n", size);
 
+    path[0] = 0;
+    size = MAX_PATH;
+    state = MsiLocateComponentA(component, path, &size);
+    ok(state == INSTALLSTATE_LOCAL, "Expected INSTALLSTATE_LOCAL, got %d\n", state);
+    ok(!lstrcmpA(path, "C:\\imapath"), "Expected C:\\imapath, got %s\n", path);
+    ok(size == 10, "Expected 10, got %d\n", size);
+
     RegDeleteValueA(compkey, prod_squashed);
-    RegDeleteKeyA(compkey, "");
+    delete_key(compkey, "", access & KEY_WOW64_64KEY);
     RegDeleteValueA(installprop, "WindowsInstaller");
-    RegDeleteKeyA(installprop, "");
+    delete_key(installprop, "", access & KEY_WOW64_64KEY);
     RegCloseKey(compkey);
     RegCloseKey(installprop);
     DeleteFileA("C:\\imapath");
@@ -1638,7 +1758,7 @@ static void test_MsiGetComponentPath(void)
     lstrcatA(keypath, "\\Components\\");
     lstrcatA(keypath, comp_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &compkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &compkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* user managed component key exists */
@@ -1647,12 +1767,25 @@ static void test_MsiGetComponentPath(void)
     ok(state == INSTALLSTATE_UNKNOWN, "Expected INSTALLSTATE_UNKNOWN, got %d\n", state);
     ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
 
+    size = MAX_PATH;
+    state = MsiLocateComponentA(component, path, &size);
+    ok(state == INSTALLSTATE_UNKNOWN, "Expected INSTALLSTATE_UNKNOWN, got %d\n", state);
+    ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
+
     res = RegSetValueExA(compkey, prod_squashed, 0, REG_SZ, (const BYTE *)"C:\\imapath", 10);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* product value exists */
+    path[0] = 0;
     size = MAX_PATH;
     state = MsiGetComponentPathA(prodcode, component, path, &size);
+    ok(state == INSTALLSTATE_ABSENT, "Expected INSTALLSTATE_ABSENT, got %d\n", state);
+    ok(!lstrcmpA(path, "C:\\imapath"), "Expected C:\\imapath, got %s\n", path);
+    ok(size == 10, "Expected 10, got %d\n", size);
+
+    path[0] = 0;
+    size = MAX_PATH;
+    state = MsiLocateComponentA(component, path, &size);
     ok(state == INSTALLSTATE_ABSENT, "Expected INSTALLSTATE_ABSENT, got %d\n", state);
     ok(!lstrcmpA(path, "C:\\imapath"), "Expected C:\\imapath, got %s\n", path);
     ok(size == 10, "Expected 10, got %d\n", size);
@@ -1662,7 +1795,7 @@ static void test_MsiGetComponentPath(void)
     lstrcatA(keypath, prod_squashed);
     lstrcatA(keypath, "\\InstallProperties");
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &installprop);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &installprop, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     val = 1;
@@ -1670,8 +1803,16 @@ static void test_MsiGetComponentPath(void)
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* install properties key exists */
+    path[0] = 0;
     size = MAX_PATH;
     state = MsiGetComponentPathA(prodcode, component, path, &size);
+    ok(state == INSTALLSTATE_ABSENT, "Expected INSTALLSTATE_ABSENT, got %d\n", state);
+    ok(!lstrcmpA(path, "C:\\imapath"), "Expected C:\\imapath, got %s\n", path);
+    ok(size == 10, "Expected 10, got %d\n", size);
+
+    path[0] = 0;
+    size = MAX_PATH;
+    state = MsiLocateComponentA(component, path, &size);
     ok(state == INSTALLSTATE_ABSENT, "Expected INSTALLSTATE_ABSENT, got %d\n", state);
     ok(!lstrcmpA(path, "C:\\imapath"), "Expected C:\\imapath, got %s\n", path);
     ok(size == 10, "Expected 10, got %d\n", size);
@@ -1679,16 +1820,24 @@ static void test_MsiGetComponentPath(void)
     create_file("C:\\imapath", "C:\\imapath", 11);
 
     /* file exists */
+    path[0] = 0;
     size = MAX_PATH;
     state = MsiGetComponentPathA(prodcode, component, path, &size);
     ok(state == INSTALLSTATE_LOCAL, "Expected INSTALLSTATE_LOCAL, got %d\n", state);
     ok(!lstrcmpA(path, "C:\\imapath"), "Expected C:\\imapath, got %s\n", path);
     ok(size == 10, "Expected 10, got %d\n", size);
 
+    path[0] = 0;
+    size = MAX_PATH;
+    state = MsiLocateComponentA(component, path, &size);
+    ok(state == INSTALLSTATE_LOCAL, "Expected INSTALLSTATE_LOCAL, got %d\n", state);
+    ok(!lstrcmpA(path, "C:\\imapath"), "Expected C:\\imapath, got %s\n", path);
+    ok(size == 10, "Expected 10, got %d\n", size);
+
     RegDeleteValueA(compkey, prod_squashed);
-    RegDeleteKeyA(compkey, "");
+    delete_key(compkey, "", access & KEY_WOW64_64KEY);
     RegDeleteValueA(installprop, "WindowsInstaller");
-    RegDeleteKeyA(installprop, "");
+    delete_key(installprop, "", access & KEY_WOW64_64KEY);
     RegCloseKey(compkey);
     RegCloseKey(installprop);
     DeleteFileA("C:\\imapath");
@@ -1699,12 +1848,17 @@ static void test_MsiGetComponentPath(void)
     lstrcatA(keypath, "\\Installer\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &prodkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &prodkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* user managed product key exists */
     size = MAX_PATH;
     state = MsiGetComponentPathA(prodcode, component, path, &size);
+    ok(state == INSTALLSTATE_UNKNOWN, "Expected INSTALLSTATE_UNKNOWN, got %d\n", state);
+    ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
+
+    size = MAX_PATH;
+    state = MsiLocateComponentA(component, path, &size);
     ok(state == INSTALLSTATE_UNKNOWN, "Expected INSTALLSTATE_UNKNOWN, got %d\n", state);
     ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
 
@@ -1714,7 +1868,7 @@ static void test_MsiGetComponentPath(void)
     lstrcatA(keypath, "\\Components\\");
     lstrcatA(keypath, comp_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &compkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &compkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* user managed component key exists */
@@ -1723,12 +1877,25 @@ static void test_MsiGetComponentPath(void)
     ok(state == INSTALLSTATE_UNKNOWN, "Expected INSTALLSTATE_UNKNOWN, got %d\n", state);
     ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
 
+    size = MAX_PATH;
+    state = MsiLocateComponentA(component, path, &size);
+    ok(state == INSTALLSTATE_UNKNOWN, "Expected INSTALLSTATE_UNKNOWN, got %d\n", state);
+    ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
+
     res = RegSetValueExA(compkey, prod_squashed, 0, REG_SZ, (const BYTE *)"C:\\imapath", 10);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* product value exists */
+    path[0] = 0;
     size = MAX_PATH;
     state = MsiGetComponentPathA(prodcode, component, path, &size);
+    ok(state == INSTALLSTATE_ABSENT, "Expected INSTALLSTATE_ABSENT, got %d\n", state);
+    ok(!lstrcmpA(path, "C:\\imapath"), "Expected C:\\imapath, got %s\n", path);
+    ok(size == 10, "Expected 10, got %d\n", size);
+
+    path[0] = 0;
+    size = MAX_PATH;
+    state = MsiLocateComponentA(component, path, &size);
     ok(state == INSTALLSTATE_ABSENT, "Expected INSTALLSTATE_ABSENT, got %d\n", state);
     ok(!lstrcmpA(path, "C:\\imapath"), "Expected C:\\imapath, got %s\n", path);
     ok(size == 10, "Expected 10, got %d\n", size);
@@ -1738,7 +1905,7 @@ static void test_MsiGetComponentPath(void)
     lstrcatA(keypath, prod_squashed);
     lstrcatA(keypath, "\\InstallProperties");
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &installprop);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &installprop, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     val = 1;
@@ -1746,8 +1913,16 @@ static void test_MsiGetComponentPath(void)
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* install properties key exists */
+    path[0] = 0;
     size = MAX_PATH;
     state = MsiGetComponentPathA(prodcode, component, path, &size);
+    ok(state == INSTALLSTATE_ABSENT, "Expected INSTALLSTATE_ABSENT, got %d\n", state);
+    ok(!lstrcmpA(path, "C:\\imapath"), "Expected C:\\imapath, got %s\n", path);
+    ok(size == 10, "Expected 10, got %d\n", size);
+
+    path[0] = 0;
+    size = MAX_PATH;
+    state = MsiLocateComponentA(component, path, &size);
     ok(state == INSTALLSTATE_ABSENT, "Expected INSTALLSTATE_ABSENT, got %d\n", state);
     ok(!lstrcmpA(path, "C:\\imapath"), "Expected C:\\imapath, got %s\n", path);
     ok(size == 10, "Expected 10, got %d\n", size);
@@ -1755,17 +1930,25 @@ static void test_MsiGetComponentPath(void)
     create_file("C:\\imapath", "C:\\imapath", 11);
 
     /* file exists */
+    path[0] = 0;
     size = MAX_PATH;
     state = MsiGetComponentPathA(prodcode, component, path, &size);
     ok(state == INSTALLSTATE_LOCAL, "Expected INSTALLSTATE_LOCAL, got %d\n", state);
     ok(!lstrcmpA(path, "C:\\imapath"), "Expected C:\\imapath, got %s\n", path);
     ok(size == 10, "Expected 10, got %d\n", size);
 
+    path[0] = 0;
+    size = MAX_PATH;
+    state = MsiLocateComponentA(component, path, &size);
+    ok(state == INSTALLSTATE_LOCAL, "Expected INSTALLSTATE_LOCAL, got %d\n", state);
+    ok(!lstrcmpA(path, "C:\\imapath"), "Expected C:\\imapath, got %s\n", path);
+    ok(size == 10, "Expected 10, got %d\n", size);
+
     RegDeleteValueA(compkey, prod_squashed);
-    RegDeleteKeyA(prodkey, "");
-    RegDeleteKeyA(compkey, "");
+    delete_key(prodkey, "", access & KEY_WOW64_64KEY);
+    delete_key(compkey, "", access & KEY_WOW64_64KEY);
     RegDeleteValueA(installprop, "WindowsInstaller");
-    RegDeleteKeyA(installprop, "");
+    delete_key(installprop, "", access & KEY_WOW64_64KEY);
     RegCloseKey(prodkey);
     RegCloseKey(compkey);
     RegCloseKey(installprop);
@@ -1783,13 +1966,18 @@ static void test_MsiGetComponentPath(void)
     ok(state == INSTALLSTATE_UNKNOWN, "Expected INSTALLSTATE_UNKNOWN, got %d\n", state);
     ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
 
+    size = MAX_PATH;
+    state = MsiLocateComponentA(component, path, &size);
+    ok(state == INSTALLSTATE_UNKNOWN, "Expected INSTALLSTATE_UNKNOWN, got %d\n", state);
+    ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
+
     lstrcpyA(keypath, "Software\\Microsoft\\Windows\\CurrentVersion\\");
     lstrcatA(keypath, "Installer\\UserData\\");
     lstrcatA(keypath, usersid);
     lstrcatA(keypath, "\\Components\\");
     lstrcatA(keypath, comp_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &compkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &compkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* user unmanaged component key exists */
@@ -1798,12 +1986,25 @@ static void test_MsiGetComponentPath(void)
     ok(state == INSTALLSTATE_UNKNOWN, "Expected INSTALLSTATE_UNKNOWN, got %d\n", state);
     ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
 
+    size = MAX_PATH;
+    state = MsiLocateComponentA(component, path, &size);
+    ok(state == INSTALLSTATE_UNKNOWN, "Expected INSTALLSTATE_UNKNOWN, got %d\n", state);
+    ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
+
     res = RegSetValueExA(compkey, prod_squashed, 0, REG_SZ, (const BYTE *)"C:\\imapath", 10);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* product value exists */
+    path[0] = 0;
     size = MAX_PATH;
     state = MsiGetComponentPathA(prodcode, component, path, &size);
+    ok(state == INSTALLSTATE_ABSENT, "Expected INSTALLSTATE_ABSENT, got %d\n", state);
+    ok(!lstrcmpA(path, "C:\\imapath"), "Expected C:\\imapath, got %s\n", path);
+    ok(size == 10, "Expected 10, got %d\n", size);
+
+    path[0] = 0;
+    size = MAX_PATH;
+    state = MsiLocateComponentA(component, path, &size);
     ok(state == INSTALLSTATE_ABSENT, "Expected INSTALLSTATE_ABSENT, got %d\n", state);
     ok(!lstrcmpA(path, "C:\\imapath"), "Expected C:\\imapath, got %s\n", path);
     ok(size == 10, "Expected 10, got %d\n", size);
@@ -1811,15 +2012,23 @@ static void test_MsiGetComponentPath(void)
     create_file("C:\\imapath", "C:\\imapath", 11);
 
     /* file exists */
+    path[0] = 0;
     size = MAX_PATH;
     state = MsiGetComponentPathA(prodcode, component, path, &size);
     ok(state == INSTALLSTATE_LOCAL, "Expected INSTALLSTATE_LOCAL, got %d\n", state);
     ok(!lstrcmpA(path, "C:\\imapath"), "Expected C:\\imapath, got %s\n", path);
     ok(size == 10, "Expected 10, got %d\n", size);
 
+    path[0] = 0;
+    size = MAX_PATH;
+    state = MsiLocateComponentA(component, path, &size);
+    ok(state == INSTALLSTATE_LOCAL, "Expected INSTALLSTATE_LOCAL, got %d\n", state);
+    ok(!lstrcmpA(path, "C:\\imapath"), "Expected C:\\imapath, got %s\n", path);
+    ok(size == 10, "Expected 10, got %d\n", size);
+
     RegDeleteValueA(compkey, prod_squashed);
     RegDeleteKeyA(prodkey, "");
-    RegDeleteKeyA(compkey, "");
+    delete_key(compkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(prodkey);
     RegCloseKey(compkey);
     DeleteFileA("C:\\imapath");
@@ -1827,7 +2036,7 @@ static void test_MsiGetComponentPath(void)
     lstrcpyA(keypath, "Software\\Classes\\Installer\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &prodkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &prodkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* local classes product key exists */
@@ -1836,11 +2045,16 @@ static void test_MsiGetComponentPath(void)
     ok(state == INSTALLSTATE_UNKNOWN, "Expected INSTALLSTATE_UNKNOWN, got %d\n", state);
     ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
 
+    size = MAX_PATH;
+    state = MsiLocateComponentA(component, path, &size);
+    ok(state == INSTALLSTATE_UNKNOWN, "Expected INSTALLSTATE_UNKNOWN, got %d\n", state);
+    ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
+
     lstrcpyA(keypath, "Software\\Microsoft\\Windows\\CurrentVersion\\");
     lstrcatA(keypath, "Installer\\UserData\\S-1-5-18\\Components\\");
     lstrcatA(keypath, comp_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &compkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &compkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* local user component key exists */
@@ -1849,12 +2063,25 @@ static void test_MsiGetComponentPath(void)
     ok(state == INSTALLSTATE_UNKNOWN, "Expected INSTALLSTATE_UNKNOWN, got %d\n", state);
     ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
 
+    size = MAX_PATH;
+    state = MsiLocateComponentA(component, path, &size);
+    ok(state == INSTALLSTATE_UNKNOWN, "Expected INSTALLSTATE_UNKNOWN, got %d\n", state);
+    ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
+
     res = RegSetValueExA(compkey, prod_squashed, 0, REG_SZ, (const BYTE *)"C:\\imapath", 10);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* product value exists */
+    path[0] = 0;
     size = MAX_PATH;
     state = MsiGetComponentPathA(prodcode, component, path, &size);
+    ok(state == INSTALLSTATE_ABSENT, "Expected INSTALLSTATE_ABSENT, got %d\n", state);
+    ok(!lstrcmpA(path, "C:\\imapath"), "Expected C:\\imapath, got %s\n", path);
+    ok(size == 10, "Expected 10, got %d\n", size);
+
+    path[0] = 0;
+    size = MAX_PATH;
+    state = MsiLocateComponentA(component, path, &size);
     ok(state == INSTALLSTATE_ABSENT, "Expected INSTALLSTATE_ABSENT, got %d\n", state);
     ok(!lstrcmpA(path, "C:\\imapath"), "Expected C:\\imapath, got %s\n", path);
     ok(size == 10, "Expected 10, got %d\n", size);
@@ -1862,15 +2089,23 @@ static void test_MsiGetComponentPath(void)
     create_file("C:\\imapath", "C:\\imapath", 11);
 
     /* file exists */
+    path[0] = 0;
     size = MAX_PATH;
     state = MsiGetComponentPathA(prodcode, component, path, &size);
     ok(state == INSTALLSTATE_LOCAL, "Expected INSTALLSTATE_LOCAL, got %d\n", state);
     ok(!lstrcmpA(path, "C:\\imapath"), "Expected C:\\imapath, got %s\n", path);
     ok(size == 10, "Expected 10, got %d\n", size);
 
+    path[0] = 0;
+    size = MAX_PATH;
+    state = MsiLocateComponentA(component, path, &size);
+    ok(state == INSTALLSTATE_LOCAL, "Expected INSTALLSTATE_LOCAL, got %d\n", state);
+    ok(!lstrcmpA(path, "C:\\imapath"), "Expected C:\\imapath, got %s\n", path);
+    ok(size == 10, "Expected 10, got %d\n", size);
+
     RegDeleteValueA(compkey, prod_squashed);
-    RegDeleteKeyA(prodkey, "");
-    RegDeleteKeyA(compkey, "");
+    delete_key(prodkey, "", access & KEY_WOW64_64KEY);
+    delete_key(compkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(prodkey);
     RegCloseKey(compkey);
     DeleteFileA("C:\\imapath");
@@ -1892,11 +2127,16 @@ static void test_MsiGetProductCode(void)
     LPSTR usersid;
     LONG res;
     UINT r;
+    REGSAM access = KEY_ALL_ACCESS;
+    BOOL wow64;
 
     create_test_guid(prodcode, prod_squashed);
     create_test_guid(prodcode2, prod2_squashed);
     compose_base85_guid(component, comp_base85, comp_squashed);
     get_user_sid(&usersid);
+
+    if (pIsWow64Process && pIsWow64Process(GetCurrentProcess(), &wow64) && wow64)
+        access |= KEY_WOW64_64KEY;
 
     /* szComponent is NULL */
     lstrcpyA(product, "prod");
@@ -1946,7 +2186,13 @@ static void test_MsiGetProductCode(void)
     lstrcatA(keypath, "\\Components\\");
     lstrcatA(keypath, comp_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &compkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &compkey, NULL);
+    if (res == ERROR_ACCESS_DENIED)
+    {
+        skip("Not enough rights to perform tests\n");
+        LocalFree(usersid);
+        return;
+    }
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* user unmanaged component key exists */
@@ -1973,7 +2219,7 @@ static void test_MsiGetProductCode(void)
     lstrcatA(keypath, "\\Installer\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &prodkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &prodkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* user managed product key of first product exists */
@@ -1982,7 +2228,7 @@ static void test_MsiGetProductCode(void)
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
     ok(!lstrcmpA(product, prodcode), "Expected %s, got %s\n", prodcode, product);
 
-    RegDeleteKeyA(prodkey, "");
+    delete_key(prodkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(prodkey);
 
     lstrcpyA(keypath, "Software\\Microsoft\\Installer\\Products\\");
@@ -2003,7 +2249,7 @@ static void test_MsiGetProductCode(void)
     lstrcpyA(keypath, "Software\\Classes\\Installer\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &prodkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &prodkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* local classes product key exists */
@@ -2012,7 +2258,7 @@ static void test_MsiGetProductCode(void)
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
     ok(!lstrcmpA(product, prodcode), "Expected %s, got %s\n", prodcode, product);
 
-    RegDeleteKeyA(prodkey, "");
+    delete_key(prodkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(prodkey);
 
     lstrcpyA(keypath, "Software\\Microsoft\\Windows\\CurrentVersion\\");
@@ -2021,7 +2267,7 @@ static void test_MsiGetProductCode(void)
     lstrcatA(keypath, "\\Installer\\Products\\");
     lstrcatA(keypath, prod2_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &prodkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &prodkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* user managed product key of second product exists */
@@ -2030,18 +2276,18 @@ static void test_MsiGetProductCode(void)
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
     ok(!lstrcmpA(product, prodcode2), "Expected %s, got %s\n", prodcode2, product);
 
-    RegDeleteKeyA(prodkey, "");
+    delete_key(prodkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(prodkey);
     RegDeleteValueA(compkey, prod_squashed);
     RegDeleteValueA(compkey, prod2_squashed);
-    RegDeleteKeyA(compkey, "");
+    delete_key(compkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(compkey);
 
     lstrcpyA(keypath, "Software\\Microsoft\\Windows\\CurrentVersion\\");
     lstrcatA(keypath, "Installer\\UserData\\S-1-5-18\\Components\\");
     lstrcatA(keypath, comp_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &compkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &compkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* local user component key exists */
@@ -2068,7 +2314,7 @@ static void test_MsiGetProductCode(void)
     lstrcatA(keypath, "\\Installer\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &prodkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &prodkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* user managed product key of first product exists */
@@ -2077,7 +2323,7 @@ static void test_MsiGetProductCode(void)
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
     ok(!lstrcmpA(product, prodcode), "Expected %s, got %s\n", prodcode, product);
 
-    RegDeleteKeyA(prodkey, "");
+    delete_key(prodkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(prodkey);
 
     lstrcpyA(keypath, "Software\\Microsoft\\Installer\\Products\\");
@@ -2098,7 +2344,7 @@ static void test_MsiGetProductCode(void)
     lstrcpyA(keypath, "Software\\Classes\\Installer\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &prodkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &prodkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* local classes product key exists */
@@ -2107,7 +2353,7 @@ static void test_MsiGetProductCode(void)
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
     ok(!lstrcmpA(product, prodcode), "Expected %s, got %s\n", prodcode, product);
 
-    RegDeleteKeyA(prodkey, "");
+    delete_key(prodkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(prodkey);
 
     lstrcpyA(keypath, "Software\\Microsoft\\Windows\\CurrentVersion\\");
@@ -2116,7 +2362,7 @@ static void test_MsiGetProductCode(void)
     lstrcatA(keypath, "\\Installer\\Products\\");
     lstrcatA(keypath, prod2_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &prodkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &prodkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* user managed product key of second product exists */
@@ -2125,11 +2371,11 @@ static void test_MsiGetProductCode(void)
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
     ok(!lstrcmpA(product, prodcode2), "Expected %s, got %s\n", prodcode2, product);
 
-    RegDeleteKeyA(prodkey, "");
+    delete_key(prodkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(prodkey);
     RegDeleteValueA(compkey, prod_squashed);
     RegDeleteValueA(compkey, prod2_squashed);
-    RegDeleteKeyA(compkey, "");
+    delete_key(compkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(compkey);
     LocalFree(usersid);
 }
@@ -2149,11 +2395,16 @@ static void test_MsiEnumClients(void)
     LPSTR usersid;
     LONG res;
     UINT r;
+    REGSAM access = KEY_ALL_ACCESS;
+    BOOL wow64;
 
     create_test_guid(prodcode, prod_squashed);
     create_test_guid(prodcode2, prod2_squashed);
     compose_base85_guid(component, comp_base85, comp_squashed);
     get_user_sid(&usersid);
+
+    if (pIsWow64Process && pIsWow64Process(GetCurrentProcess(), &wow64) && wow64)
+        access |= KEY_WOW64_64KEY;
 
     /* NULL szComponent */
     product[0] = '\0';
@@ -2183,7 +2434,13 @@ static void test_MsiEnumClients(void)
     lstrcatA(keypath, "\\Components\\");
     lstrcatA(keypath, comp_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &compkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &compkey, NULL);
+    if (res == ERROR_ACCESS_DENIED)
+    {
+        skip("Not enough rights to perform tests\n");
+        LocalFree(usersid);
+        return;
+    }
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* user unmanaged component key exists */
@@ -2246,14 +2503,14 @@ static void test_MsiEnumClients(void)
 
     RegDeleteValueA(compkey, prod_squashed);
     RegDeleteValueA(compkey, prod2_squashed);
-    RegDeleteKeyA(compkey, "");
+    delete_key(compkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(compkey);
 
     lstrcpyA(keypath, "Software\\Microsoft\\Windows\\CurrentVersion\\");
     lstrcatA(keypath, "Installer\\UserData\\S-1-5-18\\Components\\");
     lstrcatA(keypath, comp_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &compkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &compkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* user local component key exists */
@@ -2316,7 +2573,7 @@ static void test_MsiEnumClients(void)
 
     RegDeleteValueA(compkey, prod_squashed);
     RegDeleteValueA(compkey, prod2_squashed);
-    RegDeleteKeyA(compkey, "");
+    delete_key(compkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(compkey);
     LocalFree(usersid);
 }
@@ -2589,10 +2846,15 @@ static void test_MsiGetProductInfo(void)
     CHAR keypath[MAX_PATH];
     LPSTR usersid;
     DWORD sz, val = 42;
+    REGSAM access = KEY_ALL_ACCESS;
+    BOOL wow64;
 
     create_test_guid(prodcode, prod_squashed);
     create_test_guid(packcode, pack_squashed);
     get_user_sid(&usersid);
+
+    if (pIsWow64Process && pIsWow64Process(GetCurrentProcess(), &wow64) && wow64)
+        access |= KEY_WOW64_64KEY;
 
     /* NULL szProduct */
     sz = MAX_PATH;
@@ -2692,7 +2954,13 @@ static void test_MsiGetProductInfo(void)
     lstrcatA(keypath, "\\Installer\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &prodkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &prodkey, NULL);
+    if (res == ERROR_ACCESS_DENIED)
+    {
+        skip("Not enough rights to perform tests\n");
+        LocalFree(usersid);
+        return;
+    }
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* managed product code exists */
@@ -2704,7 +2972,7 @@ static void test_MsiGetProductInfo(void)
     ok(!lstrcmpA(buf, "apple"), "Expected buf to be unchanged, got %s\n", buf);
     ok(sz == MAX_PATH, "Expected MAX_PATH, got %d\n", sz);
 
-    RegDeleteKeyA(prodkey, "");
+    delete_key(prodkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(prodkey);
 
     lstrcpyA(keypath, "Software\\Microsoft\\Windows\\CurrentVersion\\Installer\\UserData\\");
@@ -2712,7 +2980,7 @@ static void test_MsiGetProductInfo(void)
     lstrcatA(keypath, "\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &localkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &localkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* local user product code exists */
@@ -2729,7 +2997,7 @@ static void test_MsiGetProductInfo(void)
     lstrcatA(keypath, "\\Installer\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &prodkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &prodkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* both local and managed product code exist */
@@ -2741,7 +3009,7 @@ static void test_MsiGetProductInfo(void)
     ok(!lstrcmpA(buf, "apple"), "Expected buf to be unchanged, got %s\n", buf);
     ok(sz == MAX_PATH, "Expected MAX_PATH, got %d\n", sz);
 
-    res = RegCreateKeyA(localkey, "InstallProperties", &propkey);
+    res = RegCreateKeyExA(localkey, "InstallProperties", 0, NULL, 0, access, NULL, &propkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* InstallProperties key exists */
@@ -2810,9 +3078,9 @@ static void test_MsiGetProductInfo(void)
 
     RegDeleteValueA(propkey, "IMadeThis");
     RegDeleteValueA(propkey, "HelpLink");
-    RegDeleteKeyA(propkey, "");
-    RegDeleteKeyA(localkey, "");
-    RegDeleteKeyA(prodkey, "");
+    delete_key(propkey, "", access & KEY_WOW64_64KEY);
+    delete_key(localkey, "", access & KEY_WOW64_64KEY);
+    delete_key(prodkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(propkey);
     RegCloseKey(localkey);
     RegCloseKey(prodkey);
@@ -2837,7 +3105,7 @@ static void test_MsiGetProductInfo(void)
     lstrcatA(keypath, "\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &localkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &localkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* local user product key exists */
@@ -2849,7 +3117,7 @@ static void test_MsiGetProductInfo(void)
     ok(!lstrcmpA(buf, "apple"), "Expected \"apple\", got \"%s\"\n", buf);
     ok(sz == MAX_PATH, "Expected MAX_PATH, got %d\n", sz);
 
-    res = RegCreateKeyA(localkey, "InstallProperties", &propkey);
+    res = RegCreateKeyExA(localkey, "InstallProperties", 0, NULL, 0, access, NULL, &propkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* InstallProperties key exists */
@@ -2872,8 +3140,8 @@ static void test_MsiGetProductInfo(void)
     ok(sz == 4, "Expected 4, got %d\n", sz);
 
     RegDeleteValueA(propkey, "HelpLink");
-    RegDeleteKeyA(propkey, "");
-    RegDeleteKeyA(localkey, "");
+    delete_key(propkey, "", access & KEY_WOW64_64KEY);
+    delete_key(localkey, "", access & KEY_WOW64_64KEY);
     RegDeleteKeyA(prodkey, "");
     RegCloseKey(propkey);
     RegCloseKey(localkey);
@@ -2882,7 +3150,7 @@ static void test_MsiGetProductInfo(void)
     lstrcpyA(keypath, "Software\\Classes\\Installer\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &prodkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &prodkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* classes product key exists */
@@ -2899,7 +3167,7 @@ static void test_MsiGetProductInfo(void)
     lstrcatA(keypath, "\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &localkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &localkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* local user product key exists */
@@ -2911,7 +3179,7 @@ static void test_MsiGetProductInfo(void)
     ok(!lstrcmpA(buf, "apple"), "Expected \"apple\", got \"%s\"\n", buf);
     ok(sz == MAX_PATH, "Expected MAX_PATH, got %d\n", sz);
 
-    res = RegCreateKeyA(localkey, "InstallProperties", &propkey);
+    res = RegCreateKeyExA(localkey, "InstallProperties", 0, NULL, 0, access, NULL, &propkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* InstallProperties key exists */
@@ -2923,8 +3191,8 @@ static void test_MsiGetProductInfo(void)
     ok(!lstrcmpA(buf, "apple"), "Expected \"apple\", got \"%s\"\n", buf);
     ok(sz == MAX_PATH, "Expected MAX_PATH, got %d\n", sz);
 
-    RegDeleteKeyA(propkey, "");
-    RegDeleteKeyA(localkey, "");
+    delete_key(propkey, "", access & KEY_WOW64_64KEY);
+    delete_key(localkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(propkey);
     RegCloseKey(localkey);
 
@@ -2932,7 +3200,7 @@ static void test_MsiGetProductInfo(void)
     lstrcatA(keypath, "S-1-5-18\\\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &localkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &localkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* Local System product key exists */
@@ -2944,7 +3212,7 @@ static void test_MsiGetProductInfo(void)
     ok(!lstrcmpA(buf, "apple"), "Expected \"apple\", got \"%s\"\n", buf);
     ok(sz == MAX_PATH, "Expected MAX_PATH, got %d\n", sz);
 
-    res = RegCreateKeyA(localkey, "InstallProperties", &propkey);
+    res = RegCreateKeyExA(localkey, "InstallProperties", 0, NULL, 0, access, NULL, &propkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* InstallProperties key exists */
@@ -3713,7 +3981,7 @@ static void test_MsiGetProductInfo(void)
        "Expected buf to be unchanged, got \"%s\"\n", buf);
     ok(sz == MAX_PATH, "Expected sz to be unchanged, got %d\n", sz);
 
-    res = RegCreateKeyA(prodkey, "SourceList", &source);
+    res = RegCreateKeyExA(prodkey, "SourceList", 0, NULL, 0, access, NULL, &source, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* SourceList key exists, but PackageName val does not exist */
@@ -3830,8 +4098,8 @@ static void test_MsiGetProductInfo(void)
     RegDeleteValueA(propkey, "Version");
     RegDeleteValueA(propkey, "ProductIcon");
     RegDeleteValueA(propkey, "AuthorizedLUAApp");
-    RegDeleteKeyA(propkey, "");
-    RegDeleteKeyA(localkey, "");
+    delete_key(propkey, "", access & KEY_WOW64_64KEY);
+    delete_key(localkey, "", access & KEY_WOW64_64KEY);
     RegDeleteValueA(prodkey, "InstanceType");
     RegDeleteValueA(prodkey, "Transforms");
     RegDeleteValueA(prodkey, "Language");
@@ -3842,8 +4110,8 @@ static void test_MsiGetProductInfo(void)
     RegDeleteValueA(prodkey, "ProductIcon");
     RegDeleteValueA(prodkey, "AuthorizedLUAApp");
     RegDeleteValueA(source, "PackageName");
-    RegDeleteKeyA(source, "");
-    RegDeleteKeyA(prodkey, "");
+    delete_key(source, "", access & KEY_WOW64_64KEY);
+    delete_key(prodkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(propkey);
     RegCloseKey(localkey);
     RegCloseKey(source);
@@ -3865,6 +4133,8 @@ static void test_MsiGetProductInfoEx(void)
     CHAR keypath[MAX_PATH];
     LPSTR usersid;
     DWORD sz;
+    REGSAM access = KEY_ALL_ACCESS;
+    BOOL wow64;
 
     if (!pMsiGetProductInfoExA)
     {
@@ -3875,6 +4145,9 @@ static void test_MsiGetProductInfoEx(void)
     create_test_guid(prodcode, prod_squashed);
     create_test_guid(packcode, pack_squashed);
     get_user_sid(&usersid);
+
+    if (pIsWow64Process && pIsWow64Process(GetCurrentProcess(), &wow64) && wow64)
+        access |= KEY_WOW64_64KEY;
 
     /* NULL szProductCode */
     sz = MAX_PATH;
@@ -3998,7 +4271,13 @@ static void test_MsiGetProductInfoEx(void)
     lstrcatA(keypath, "\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &localkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &localkey, NULL);
+    if (res == ERROR_ACCESS_DENIED)
+    {
+        skip("Not enough rights to perform tests\n");
+        LocalFree(usersid);
+        return;
+    }
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* local user product key exists */
@@ -4012,7 +4291,7 @@ static void test_MsiGetProductInfoEx(void)
     ok(!lstrcmpA(buf, "apple"), "Expected buf to be unchanged, got %s\n", buf);
     ok(sz == MAX_PATH, "Expected MAX_PATH, got %d\n", sz);
 
-    res = RegCreateKeyA(localkey, "InstallProperties", &propkey);
+    res = RegCreateKeyExA(localkey, "InstallProperties", 0, NULL, 0, access, NULL, &propkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* InstallProperties key exists */
@@ -4494,7 +4773,7 @@ static void test_MsiGetProductInfoEx(void)
     lstrcatA(keypath, "\\Installer\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &userkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &userkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* user product key exists */
@@ -4915,7 +5194,7 @@ static void test_MsiGetProductInfoEx(void)
     lstrcatA(keypath, "\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &localkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &localkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* local user product key exists */
@@ -4929,7 +5208,7 @@ static void test_MsiGetProductInfoEx(void)
     ok(!lstrcmpA(buf, "apple"), "Expected buf to be unchanged, got %s\n", buf);
     ok(sz == MAX_PATH, "Expected MAX_PATH, got %d\n", sz);
 
-    res = RegCreateKeyA(localkey, "InstallProperties", &propkey);
+    res = RegCreateKeyExA(localkey, "InstallProperties", 0, NULL, 0, access, NULL, &propkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* InstallProperties key exists */
@@ -5328,7 +5607,7 @@ static void test_MsiGetProductInfoEx(void)
     lstrcatA(keypath, "\\Installer\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &userkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &userkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* user product key exists */
@@ -5341,7 +5620,7 @@ static void test_MsiGetProductInfoEx(void)
     ok(!lstrcmpA(buf, "1"), "Expected \"1\", got \"%s\"\n", buf);
     ok(sz == 1, "Expected 1, got %d\n", sz);
 
-    RegDeleteKeyA(userkey, "");
+    delete_key(userkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(userkey);
 
     lstrcpyA(keypath, "Software\\Microsoft\\Installer\\Products\\");
@@ -5380,7 +5659,7 @@ static void test_MsiGetProductInfoEx(void)
     lstrcatA(keypath, "\\Installer\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &userkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &userkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     res = RegSetValueExA(userkey, "HelpLink", 0, REG_SZ, (LPBYTE)"link", 5);
@@ -5761,9 +6040,9 @@ static void test_MsiGetProductInfoEx(void)
     RegDeleteValueA(userkey, "InstallDate");
     RegDeleteValueA(userkey, "HelpTelephone");
     RegDeleteValueA(userkey, "HelpLink");
-    RegDeleteKeyA(userkey, "");
+    delete_key(userkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(userkey);
-    RegDeleteKeyA(prodkey, "");
+    delete_key(prodkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(prodkey);
 
     /* MSIINSTALLCONTEXT_MACHINE */
@@ -5782,7 +6061,7 @@ static void test_MsiGetProductInfoEx(void)
     lstrcpyA(keypath, "Software\\Microsoft\\Windows\\CurrentVersion\\Installer\\UserData\\S-1-5-18\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &localkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &localkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* local system product key exists */
@@ -5796,7 +6075,7 @@ static void test_MsiGetProductInfoEx(void)
     ok(!lstrcmpA(buf, "apple"), "Expected buf to be unchanged, got %s\n", buf);
     ok(sz == MAX_PATH, "Expected MAX_PATH, got %d\n", sz);
 
-    res = RegCreateKeyA(localkey, "InstallProperties", &propkey);
+    res = RegCreateKeyExA(localkey, "InstallProperties", 0, NULL, 0, access, NULL, &propkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* InstallProperties key exists */
@@ -6185,15 +6464,15 @@ static void test_MsiGetProductInfoEx(void)
     RegDeleteValueA(propkey, "HelpTelephone");
     RegDeleteValueA(propkey, "HelpLink");
     RegDeleteValueA(propkey, "LocalPackage");
-    RegDeleteKeyA(propkey, "");
+    delete_key(propkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(propkey);
-    RegDeleteKeyA(localkey, "");
+    delete_key(localkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(localkey);
 
     lstrcpyA(keypath, "Software\\Classes\\Installer\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &prodkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &prodkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* local classes product key exists */
@@ -6584,7 +6863,7 @@ static void test_MsiGetProductInfoEx(void)
     RegDeleteValueA(prodkey, "InstallDate");
     RegDeleteValueA(prodkey, "HelpTelephone");
     RegDeleteValueA(prodkey, "HelpLink");
-    RegDeleteKeyA(prodkey, "");
+    delete_key(prodkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(prodkey);
     LocalFree(usersid);
 }
@@ -6608,9 +6887,14 @@ static void test_MsiGetUserInfo(void)
     HKEY prodkey, userprod, props;
     LPSTR usersid;
     LONG res;
+    REGSAM access = KEY_ALL_ACCESS;
+    BOOL wow64;
 
     create_test_guid(prodcode, prod_squashed);
     get_user_sid(&usersid);
+
+    if (pIsWow64Process && pIsWow64Process(GetCurrentProcess(), &wow64) && wow64)
+        access |= KEY_WOW64_64KEY;
 
     /* NULL szProduct */
     INIT_USERINFO();
@@ -6778,7 +7062,13 @@ static void test_MsiGetUserInfo(void)
     lstrcatA(keypath, "\\Installer\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &prodkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &prodkey, NULL);
+    if (res == ERROR_ACCESS_DENIED)
+    {
+        skip("Not enough rights to perform tests\n");
+        LocalFree(usersid);
+        return;
+    }
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* managed product key exists */
@@ -6799,10 +7089,10 @@ static void test_MsiGetUserInfo(void)
     lstrcatA(keypath, "\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &userprod);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &userprod, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
-    res = RegCreateKeyA(userprod, "InstallProperties", &props);
+    res = RegCreateKeyExA(userprod, "InstallProperties", 0, NULL, 0, access, NULL, &props, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* InstallProperties key exists */
@@ -6925,11 +7215,11 @@ static void test_MsiGetUserInfo(void)
     RegDeleteValueA(props, "ProductID");
     RegDeleteValueA(props, "RegCompany");
     RegDeleteValueA(props, "RegOwner");
-    RegDeleteKeyA(props, "");
+    delete_key(props, "", access & KEY_WOW64_64KEY);
     RegCloseKey(props);
-    RegDeleteKeyA(userprod, "");
+    delete_key(userprod, "", access & KEY_WOW64_64KEY);
     RegCloseKey(userprod);
-    RegDeleteKeyA(prodkey, "");
+    delete_key(prodkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(prodkey);
 
     /* MSIINSTALLCONTEXT_USERUNMANAGED */
@@ -6959,10 +7249,10 @@ static void test_MsiGetUserInfo(void)
     lstrcatA(keypath, "\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &userprod);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &userprod, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
-    res = RegCreateKeyA(userprod, "InstallProperties", &props);
+    res = RegCreateKeyExA(userprod, "InstallProperties", 0, NULL, 0, access, NULL, &props, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* InstallProperties key exists */
@@ -7043,9 +7333,9 @@ static void test_MsiGetUserInfo(void)
     RegDeleteValueA(props, "ProductID");
     RegDeleteValueA(props, "RegCompany");
     RegDeleteValueA(props, "RegOwner");
-    RegDeleteKeyA(props, "");
+    delete_key(props, "", access & KEY_WOW64_64KEY);
     RegCloseKey(props);
-    RegDeleteKeyA(userprod, "");
+    delete_key(userprod, "", access & KEY_WOW64_64KEY);
     RegCloseKey(userprod);
     RegDeleteKeyA(prodkey, "");
     RegCloseKey(prodkey);
@@ -7056,7 +7346,7 @@ static void test_MsiGetUserInfo(void)
     lstrcpyA(keypath, "Software\\Classes\\Installer\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &prodkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &prodkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* product key exists */
@@ -7076,10 +7366,10 @@ static void test_MsiGetUserInfo(void)
     lstrcatA(keypath, "\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &userprod);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &userprod, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
-    res = RegCreateKeyA(userprod, "InstallProperties", &props);
+    res = RegCreateKeyExA(userprod, "InstallProperties", 0, NULL, 0, access, NULL, &props, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* InstallProperties key exists */
@@ -7160,11 +7450,11 @@ static void test_MsiGetUserInfo(void)
     RegDeleteValueA(props, "ProductID");
     RegDeleteValueA(props, "RegCompany");
     RegDeleteValueA(props, "RegOwner");
-    RegDeleteKeyA(props, "");
+    delete_key(props, "", access & KEY_WOW64_64KEY);
     RegCloseKey(props);
-    RegDeleteKeyA(userprod, "");
+    delete_key(userprod, "", access & KEY_WOW64_64KEY);
     RegCloseKey(userprod);
-    RegDeleteKeyA(prodkey, "");
+    delete_key(prodkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(prodkey);
     LocalFree(usersid);
 }
@@ -7182,12 +7472,17 @@ static void test_MsiOpenProduct(void)
     DWORD size;
     LONG res;
     UINT r;
+    REGSAM access = KEY_ALL_ACCESS;
+    BOOL wow64;
 
     GetCurrentDirectoryA(MAX_PATH, path);
     lstrcatA(path, "\\");
 
     create_test_guid(prodcode, prod_squashed);
     get_user_sid(&usersid);
+
+    if (pIsWow64Process && pIsWow64Process(GetCurrentProcess(), &wow64) && wow64)
+        access |= KEY_WOW64_64KEY;
 
     hdb = create_package_db(prodcode);
     MsiCloseHandle(hdb);
@@ -7249,7 +7544,13 @@ static void test_MsiOpenProduct(void)
     lstrcatA(keypath, "\\Installer\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &prodkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &prodkey, NULL);
+    if (res == ERROR_ACCESS_DENIED)
+    {
+        skip("Not enough rights to perform tests\n");
+        LocalFree(usersid);
+        return;
+    }
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* managed product key exists */
@@ -7265,7 +7566,7 @@ static void test_MsiOpenProduct(void)
     lstrcatA(keypath, "\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &userkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &userkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* user product key exists */
@@ -7275,7 +7576,7 @@ static void test_MsiOpenProduct(void)
        "Expected ERROR_UNKNOWN_PRODUCT, got %d\n", r);
     ok(hprod == 0xdeadbeef, "Expected hprod to be unchanged\n");
 
-    res = RegCreateKeyA(userkey, "InstallProperties", &props);
+    res = RegCreateKeyExA(userkey, "InstallProperties", 0, NULL, 0, access, NULL, &props, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* InstallProperties key exists */
@@ -7306,11 +7607,11 @@ static void test_MsiOpenProduct(void)
     MsiCloseHandle(hprod);
 
     RegDeleteValueA(props, "ManagedLocalPackage");
-    RegDeleteKeyA(props, "");
+    delete_key(props, "", access & KEY_WOW64_64KEY);
     RegCloseKey(props);
-    RegDeleteKeyA(userkey, "");
+    delete_key(userkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(userkey);
-    RegDeleteKeyA(prodkey, "");
+    delete_key(prodkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(prodkey);
 
     /* MSIINSTALLCONTEXT_USERUNMANAGED */
@@ -7334,7 +7635,7 @@ static void test_MsiOpenProduct(void)
     lstrcatA(keypath, "\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &userkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &userkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* user product key exists */
@@ -7344,7 +7645,7 @@ static void test_MsiOpenProduct(void)
        "Expected ERROR_UNKNOWN_PRODUCT, got %d\n", r);
     ok(hprod == 0xdeadbeef, "Expected hprod to be unchanged\n");
 
-    res = RegCreateKeyA(userkey, "InstallProperties", &props);
+    res = RegCreateKeyExA(userkey, "InstallProperties", 0, NULL, 0, access, NULL, &props, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* InstallProperties key exists */
@@ -7375,9 +7676,9 @@ static void test_MsiOpenProduct(void)
     MsiCloseHandle(hprod);
 
     RegDeleteValueA(props, "LocalPackage");
-    RegDeleteKeyA(props, "");
+    delete_key(props, "", access & KEY_WOW64_64KEY);
     RegCloseKey(props);
-    RegDeleteKeyA(userkey, "");
+    delete_key(userkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(userkey);
     RegDeleteKeyA(prodkey, "");
     RegCloseKey(prodkey);
@@ -7387,7 +7688,7 @@ static void test_MsiOpenProduct(void)
     lstrcpyA(keypath, "Software\\Classes\\Installer\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &prodkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &prodkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* managed product key exists */
@@ -7401,7 +7702,7 @@ static void test_MsiOpenProduct(void)
     lstrcatA(keypath, "Installer\\UserData\\S-1-5-18\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &userkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &userkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* user product key exists */
@@ -7411,7 +7712,7 @@ static void test_MsiOpenProduct(void)
        "Expected ERROR_UNKNOWN_PRODUCT, got %d\n", r);
     ok(hprod == 0xdeadbeef, "Expected hprod to be unchanged\n");
 
-    res = RegCreateKeyA(userkey, "InstallProperties", &props);
+    res = RegCreateKeyExA(userkey, "InstallProperties", 0, NULL, 0, access, NULL, &props, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* InstallProperties key exists */
@@ -7471,11 +7772,11 @@ static void test_MsiOpenProduct(void)
     ok(hprod == 0xdeadbeef, "Expected hprod to be unchanged\n");
 
     RegDeleteValueA(props, "LocalPackage");
-    RegDeleteKeyA(props, "");
+    delete_key(props, "", access & KEY_WOW64_64KEY);
     RegCloseKey(props);
-    RegDeleteKeyA(userkey, "");
+    delete_key(userkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(userkey);
-    RegDeleteKeyA(prodkey, "");
+    delete_key(prodkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(prodkey);
 
     DeleteFileA(msifile);
@@ -7493,9 +7794,14 @@ static void test_MsiEnumPatchesEx_usermanaged(LPCSTR usersid, LPCSTR expectedsid
     DWORD size, data;
     LONG res;
     UINT r;
+    REGSAM access = KEY_ALL_ACCESS;
+    BOOL wow64;
 
     create_test_guid(prodcode, prod_squashed);
     create_test_guid(patch, patch_squashed);
+
+    if (pIsWow64Process && pIsWow64Process(GetCurrentProcess(), &wow64) && wow64)
+        access |= KEY_WOW64_64KEY;
 
     /* MSIPATCHSTATE_APPLIED */
 
@@ -7507,6 +7813,11 @@ static void test_MsiEnumPatchesEx_usermanaged(LPCSTR usersid, LPCSTR expectedsid
     r = pMsiEnumPatchesExA(prodcode, usersid, MSIINSTALLCONTEXT_USERMANAGED,
                            MSIPATCHSTATE_APPLIED, 0, patchcode, targetprod,
                            &context, targetsid, &size);
+    if (r == ERROR_ACCESS_DENIED)
+    {
+        skip("Not enough rights to perform tests\n");
+        return;
+    }
     ok(r == ERROR_NO_MORE_ITEMS, "Expected ERROR_NO_MORE_ITEMS, got %d\n", r);
     ok(!lstrcmpA(patchcode, "apple"),
        "Expected patchcode to be unchanged, got %s\n", patchcode);
@@ -7523,7 +7834,12 @@ static void test_MsiEnumPatchesEx_usermanaged(LPCSTR usersid, LPCSTR expectedsid
     lstrcatA(keypath, "\\Installer\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &prodkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &prodkey, NULL);
+    if (res == ERROR_ACCESS_DENIED)
+    {
+        skip("Not enough rights to perform tests\n");
+        return;
+    }
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* managed product key exists */
@@ -7546,7 +7862,7 @@ static void test_MsiEnumPatchesEx_usermanaged(LPCSTR usersid, LPCSTR expectedsid
        "Expected targetsid to be unchanged, got %s\n", targetsid);
     ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
 
-    res = RegCreateKeyA(prodkey, "Patches", &patches);
+    res = RegCreateKeyExA(prodkey, "Patches", 0, NULL, 0, access, NULL, &patches, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* patches key exists */
@@ -7867,7 +8183,7 @@ static void test_MsiEnumPatchesEx_usermanaged(LPCSTR usersid, LPCSTR expectedsid
     lstrcatA(keypath, "\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &udprod);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &udprod, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* UserData product key exists */
@@ -7890,7 +8206,7 @@ static void test_MsiEnumPatchesEx_usermanaged(LPCSTR usersid, LPCSTR expectedsid
        "Expected targetsid to be unchanged, got %s\n", targetsid);
     ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
 
-    res = RegCreateKeyA(udprod, "Patches", &udpatch);
+    res = RegCreateKeyExA(udprod, "Patches", 0, NULL, 0, access, NULL, &udpatch, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* UserData patches key exists */
@@ -7913,7 +8229,7 @@ static void test_MsiEnumPatchesEx_usermanaged(LPCSTR usersid, LPCSTR expectedsid
        "Expected targetsid to be unchanged, got %s\n", targetsid);
     ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
 
-    res = RegCreateKeyA(udpatch, patch_squashed, &hpatch);
+    res = RegCreateKeyExA(udpatch, patch_squashed, 0, NULL, 0, access, NULL, &hpatch, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* specific UserData patch key exists */
@@ -8057,16 +8373,16 @@ static void test_MsiEnumPatchesEx_usermanaged(LPCSTR usersid, LPCSTR expectedsid
     ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
 
     RegDeleteValueA(hpatch, "State");
-    RegDeleteKeyA(hpatch, "");
+    delete_key(hpatch, "", access & KEY_WOW64_64KEY);
     RegCloseKey(hpatch);
-    RegDeleteKeyA(udpatch, "");
+    delete_key(udpatch, "", access & KEY_WOW64_64KEY);
     RegCloseKey(udpatch);
-    RegDeleteKeyA(udprod, "");
+    delete_key(udprod, "", access & KEY_WOW64_64KEY);
     RegCloseKey(udprod);
     RegDeleteValueA(patches, "Patches");
-    RegDeleteKeyA(patches, "");
+    delete_key(patches, "", access & KEY_WOW64_64KEY);
     RegCloseKey(patches);
-    RegDeleteKeyA(prodkey, "");
+    delete_key(prodkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(prodkey);
 }
 
@@ -8082,9 +8398,14 @@ static void test_MsiEnumPatchesEx_userunmanaged(LPCSTR usersid, LPCSTR expecteds
     DWORD size, data;
     LONG res;
     UINT r;
+    REGSAM access = KEY_ALL_ACCESS;
+    BOOL wow64;
 
     create_test_guid(prodcode, prod_squashed);
     create_test_guid(patch, patch_squashed);
+
+    if (pIsWow64Process && pIsWow64Process(GetCurrentProcess(), &wow64) && wow64)
+        access |= KEY_WOW64_64KEY;
 
     /* MSIPATCHSTATE_APPLIED */
 
@@ -8207,9 +8528,10 @@ static void test_MsiEnumPatchesEx_userunmanaged(LPCSTR usersid, LPCSTR expecteds
        "Expected targetsid to be unchanged, got %s\n", targetsid);
     ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
 
+    patch_squashed[lstrlenA(patch_squashed) + 1] = 0;
     res = RegSetValueExA(patches, "Patches", 0, REG_MULTI_SZ,
                          (const BYTE *)patch_squashed,
-                         lstrlenA(patch_squashed) + 1);
+                         lstrlenA(patch_squashed) + 2);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* Patches value exists */
@@ -8265,7 +8587,12 @@ static void test_MsiEnumPatchesEx_userunmanaged(LPCSTR usersid, LPCSTR expecteds
     lstrcatA(keypath, "\\Patches\\");
     lstrcatA(keypath, patch_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &userkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &userkey, NULL);
+    if (res == ERROR_ACCESS_DENIED)
+    {
+        skip("Not enough rights to perform tests\n");
+        goto error;
+    }
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* userdata patch key exists */
@@ -8315,7 +8642,7 @@ static void test_MsiEnumPatchesEx_userunmanaged(LPCSTR usersid, LPCSTR expecteds
     lstrcatA(keypath, "\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &udprod);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &udprod, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* UserData product key exists */
@@ -8338,7 +8665,7 @@ static void test_MsiEnumPatchesEx_userunmanaged(LPCSTR usersid, LPCSTR expecteds
        "Expected targetsid to be unchanged, got %s\n", targetsid);
     ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
 
-    res = RegCreateKeyA(udprod, "Patches", &udpatch);
+    res = RegCreateKeyExA(udprod, "Patches", 0, NULL, 0, access, NULL, &udpatch, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* UserData patches key exists */
@@ -8361,7 +8688,7 @@ static void test_MsiEnumPatchesEx_userunmanaged(LPCSTR usersid, LPCSTR expecteds
        "Expected targetsid to be unchanged, got %s\n", targetsid);
     ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
 
-    res = RegCreateKeyA(udpatch, patch_squashed, &hpatch);
+    res = RegCreateKeyExA(udpatch, patch_squashed, 0, NULL, 0, access, NULL, &hpatch, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* specific UserData patch key exists */
@@ -8505,16 +8832,18 @@ static void test_MsiEnumPatchesEx_userunmanaged(LPCSTR usersid, LPCSTR expecteds
     ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
 
     RegDeleteValueA(hpatch, "State");
-    RegDeleteKeyA(hpatch, "");
+    delete_key(hpatch, "", access & KEY_WOW64_64KEY);
     RegCloseKey(hpatch);
-    RegDeleteKeyA(udpatch, "");
+    delete_key(udpatch, "", access & KEY_WOW64_64KEY);
     RegCloseKey(udpatch);
-    RegDeleteKeyA(udprod, "");
+    delete_key(udprod, "", access & KEY_WOW64_64KEY);
     RegCloseKey(udprod);
-    RegDeleteKeyA(userkey, "");
+    delete_key(userkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(userkey);
     RegDeleteValueA(patches, patch_squashed);
     RegDeleteValueA(patches, "Patches");
+
+error:
     RegDeleteKeyA(patches, "");
     RegCloseKey(patches);
     RegDeleteKeyA(prodkey, "");
@@ -8533,9 +8862,14 @@ static void test_MsiEnumPatchesEx_machine(void)
     DWORD size, data;
     LONG res;
     UINT r;
+    REGSAM access = KEY_ALL_ACCESS;
+    BOOL wow64;
 
     create_test_guid(prodcode, prod_squashed);
     create_test_guid(patch, patch_squashed);
+
+    if (pIsWow64Process && pIsWow64Process(GetCurrentProcess(), &wow64) && wow64)
+        access |= KEY_WOW64_64KEY;
 
     /* MSIPATCHSTATE_APPLIED */
 
@@ -8561,7 +8895,12 @@ static void test_MsiEnumPatchesEx_machine(void)
     lstrcpyA(keypath, "Software\\Classes\\Installer\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &prodkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &prodkey, NULL);
+    if (res == ERROR_ACCESS_DENIED)
+    {
+        skip("Not enough rights to perform tests\n");
+        return;
+    }
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* local product key exists */
@@ -8584,7 +8923,7 @@ static void test_MsiEnumPatchesEx_machine(void)
        "Expected targetsid to be unchanged, got %s\n", targetsid);
     ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
 
-    res = RegCreateKeyA(prodkey, "Patches", &patches);
+    res = RegCreateKeyExA(prodkey, "Patches", 0, NULL, 0, access, NULL, &patches, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* Patches key exists */
@@ -8711,7 +9050,7 @@ static void test_MsiEnumPatchesEx_machine(void)
     lstrcatA(keypath, "Installer\\UserData\\S-1-5-18\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &udprod);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &udprod, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* local UserData product key exists */
@@ -8734,7 +9073,7 @@ static void test_MsiEnumPatchesEx_machine(void)
        "Expected \"\", got \"%s\"\n", targetsid);
     ok(size == 0, "Expected 0, got %d\n", size);
 
-    res = RegCreateKeyA(udprod, "Patches", &udpatch);
+    res = RegCreateKeyExA(udprod, "Patches", 0, NULL, 0, access, NULL, &udpatch, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* local UserData Patches key exists */
@@ -8757,7 +9096,7 @@ static void test_MsiEnumPatchesEx_machine(void)
        "Expected \"\", got \"%s\"\n", targetsid);
     ok(size == 0, "Expected 0, got %d\n", size);
 
-    res = RegCreateKeyA(udpatch, patch_squashed, &hpatch);
+    res = RegCreateKeyExA(udpatch, patch_squashed, 0, NULL, 0, access, NULL, &hpatch, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* local UserData Product patch key exists */
@@ -8941,16 +9280,16 @@ static void test_MsiEnumPatchesEx_machine(void)
 
     RegDeleteValueA(patches, patch_squashed);
     RegDeleteValueA(patches, "Patches");
-    RegDeleteKeyA(patches, "");
+    delete_key(patches, "", access & KEY_WOW64_64KEY);
     RegCloseKey(patches);
     RegDeleteValueA(hpatch, "State");
-    RegDeleteKeyA(hpatch, "");
+    delete_key(hpatch, "", access & KEY_WOW64_64KEY);
     RegCloseKey(hpatch);
-    RegDeleteKeyA(udpatch, "");
+    delete_key(udpatch, "", access & KEY_WOW64_64KEY);
     RegCloseKey(udpatch);
-    RegDeleteKeyA(udprod, "");
+    delete_key(udprod, "", access & KEY_WOW64_64KEY);
     RegCloseKey(udprod);
-    RegDeleteKeyA(prodkey, "");
+    delete_key(prodkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(prodkey);
 }
 
@@ -9228,10 +9567,15 @@ static void test_MsiEnumPatches(void)
     LPSTR usersid;
     LONG res;
     UINT r;
+    REGSAM access = KEY_ALL_ACCESS;
+    BOOL wow64;
 
     create_test_guid(prodcode, prod_squashed);
     create_test_guid(patchcode, patch_squashed);
     get_user_sid(&usersid);
+
+    if (pIsWow64Process && pIsWow64Process(GetCurrentProcess(), &wow64) && wow64)
+        access |= KEY_WOW64_64KEY;
 
     /* NULL szProduct */
     size = MAX_PATH;
@@ -9333,7 +9677,13 @@ static void test_MsiEnumPatches(void)
     lstrcatA(keypath, "\\Installer\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &prodkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &prodkey, NULL);
+    if (res == ERROR_ACCESS_DENIED)
+    {
+        skip("Not enough rights to perform tests\n");
+        LocalFree(usersid);
+        return;
+    }
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* managed product key exists */
@@ -9348,7 +9698,7 @@ static void test_MsiEnumPatches(void)
        "Expected lpTransformsBuf to be unchanged, got \"%s\"\n", transforms);
     ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
 
-    res = RegCreateKeyA(prodkey, "Patches", &patches);
+    res = RegCreateKeyExA(prodkey, "Patches", 0, NULL, 0, access, NULL, &patches, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* patches key exists */
@@ -9507,9 +9857,9 @@ static void test_MsiEnumPatches(void)
     ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
 
     RegDeleteValueA(patches, "Patches");
-    RegDeleteKeyA(patches, "");
+    delete_key(patches, "", access & KEY_WOW64_64KEY);
     RegCloseKey(patches);
-    RegDeleteKeyA(prodkey, "");
+    delete_key(prodkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(prodkey);
 
     /* MSIINSTALLCONTEXT_USERUNMANAGED */
@@ -9643,7 +9993,7 @@ static void test_MsiEnumPatches(void)
     lstrcatA(keypath, "\\Patches\\");
     lstrcatA(keypath, patch_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &userkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &userkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* userdata patch key exists */
@@ -9658,7 +10008,7 @@ static void test_MsiEnumPatches(void)
        "Expected \"whatever\", got \"%s\"\n", transforms);
     ok(size == 8 || size == MAX_PATH, "Expected 8 or MAX_PATH, got %d\n", size);
 
-    RegDeleteKeyA(userkey, "");
+    delete_key(userkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(userkey);
     RegDeleteValueA(patches, patch_squashed);
     RegDeleteValueA(patches, "Patches");
@@ -9684,7 +10034,7 @@ static void test_MsiEnumPatches(void)
     lstrcpyA(keypath, "Software\\Classes\\Installer\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &prodkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &prodkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* local product key exists */
@@ -9699,7 +10049,7 @@ static void test_MsiEnumPatches(void)
        "Expected lpTransformsBuf to be unchanged, got \"%s\"\n", transforms);
     ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
 
-    res = RegCreateKeyA(prodkey, "Patches", &patches);
+    res = RegCreateKeyExA(prodkey, "Patches", 0, NULL, 0, access, NULL, &patches, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* Patches key exists */
@@ -9793,7 +10143,7 @@ static void test_MsiEnumPatches(void)
     lstrcatA(keypath, "Installer\\UserData\\S-1-5-18\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &udprod);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &udprod, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* local UserData product key exists */
@@ -9808,7 +10158,7 @@ static void test_MsiEnumPatches(void)
        "Expected \"whatever\", got \"%s\"\n", transforms);
     ok(size == 8 || size == MAX_PATH, "Expected 8 or MAX_PATH, got %d\n", size);
 
-    res = RegCreateKeyA(udprod, "Patches", &udpatch);
+    res = RegCreateKeyExA(udprod, "Patches", 0, NULL, 0, access, NULL, &udpatch, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* local UserData Patches key exists */
@@ -9823,7 +10173,7 @@ static void test_MsiEnumPatches(void)
        "Expected \"whatever\", got \"%s\"\n", transforms);
     ok(size == 8 || size == MAX_PATH, "Expected 8 or MAX_PATH, got %d\n", size);
 
-    res = RegCreateKeyA(udpatch, patch_squashed, &hpatch);
+    res = RegCreateKeyExA(udpatch, patch_squashed, 0, NULL, 0, access, NULL, &hpatch, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* local UserData Product patch key exists */
@@ -9893,16 +10243,16 @@ static void test_MsiEnumPatches(void)
 
     RegDeleteValueA(patches, patch_squashed);
     RegDeleteValueA(patches, "Patches");
-    RegDeleteKeyA(patches, "");
+    delete_key(patches, "", access & KEY_WOW64_64KEY);
     RegCloseKey(patches);
     RegDeleteValueA(hpatch, "State");
-    RegDeleteKeyA(hpatch, "");
+    delete_key(hpatch, "", access & KEY_WOW64_64KEY);
     RegCloseKey(hpatch);
-    RegDeleteKeyA(udpatch, "");
+    delete_key(udpatch, "", access & KEY_WOW64_64KEY);
     RegCloseKey(udpatch);
-    RegDeleteKeyA(udprod, "");
+    delete_key(udprod, "", access & KEY_WOW64_64KEY);
     RegCloseKey(udprod);
-    RegDeleteKeyA(prodkey, "");
+    delete_key(prodkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(prodkey);
     LocalFree(usersid);
 }
@@ -9918,6 +10268,8 @@ static void test_MsiGetPatchInfoEx(void)
     DWORD size;
     LONG res;
     UINT r;
+    REGSAM access = KEY_ALL_ACCESS;
+    BOOL wow64;
 
     if (!pMsiGetPatchInfoExA)
     {
@@ -9928,6 +10280,9 @@ static void test_MsiGetPatchInfoEx(void)
     create_test_guid(prodcode, prod_squashed);
     create_test_guid(patchcode, patch_squashed);
     get_user_sid(&usersid);
+
+    if (pIsWow64Process && pIsWow64Process(GetCurrentProcess(), &wow64) && wow64)
+        access |= KEY_WOW64_64KEY;
 
     /* NULL szPatchCode */
     lstrcpyA(val, "apple");
@@ -10170,7 +10525,13 @@ static void test_MsiGetPatchInfoEx(void)
     lstrcatA(keypath, "\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &udprod);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &udprod, NULL);
+    if (res == ERROR_ACCESS_DENIED)
+    {
+        skip("Not enough rights to perform tests\n");
+        LocalFree(usersid);
+        return;
+    }
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* local UserData product key exists */
@@ -10185,7 +10546,7 @@ static void test_MsiGetPatchInfoEx(void)
        "Expected val to be unchanged, got \"%s\"\n", val);
     ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
 
-    res = RegCreateKeyA(udprod, "InstallProperties", &props);
+    res = RegCreateKeyExA(udprod, "InstallProperties", 0, NULL, 0, access, NULL, &props, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* InstallProperties key exists */
@@ -10199,7 +10560,7 @@ static void test_MsiGetPatchInfoEx(void)
        "Expected val to be unchanged, got \"%s\"\n", val);
     ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
 
-    res = RegCreateKeyA(udprod, "Patches", &patches);
+    res = RegCreateKeyExA(udprod, "Patches", 0, NULL, 0, access, NULL, &patches, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* Patches key exists */
@@ -10213,7 +10574,7 @@ static void test_MsiGetPatchInfoEx(void)
        "Expected val to be unchanged, got \"%s\"\n", val);
     ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
 
-    res = RegCreateKeyA(patches, patch_squashed, &hpatch);
+    res = RegCreateKeyExA(patches, patch_squashed, 0, NULL, 0, access, NULL, &hpatch, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* Patches key exists */
@@ -10232,7 +10593,7 @@ static void test_MsiGetPatchInfoEx(void)
     lstrcatA(keypath, "\\Installer\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &prodkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &prodkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* managed product key exists */
@@ -10246,7 +10607,7 @@ static void test_MsiGetPatchInfoEx(void)
        "Expected val to be unchanged, got \"%s\"\n", val);
     ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
 
-    res = RegCreateKeyA(prodkey, "Patches", &prodpatches);
+    res = RegCreateKeyExA(prodkey, "Patches", 0, NULL, 0, access, NULL, &prodpatches, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* Patches key exists */
@@ -10280,7 +10641,7 @@ static void test_MsiGetPatchInfoEx(void)
     lstrcatA(keypath, "\\Patches\\");
     lstrcatA(keypath, patch_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &udpatch);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &udpatch, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* UserData Patches key exists */
@@ -10466,9 +10827,9 @@ static void test_MsiGetPatchInfoEx(void)
     ok(size == 16, "Expected 16, got %d\n", size);
 
     RegDeleteValueA(prodpatches, patch_squashed);
-    RegDeleteKeyA(prodpatches, "");
+    delete_key(prodpatches, "", access & KEY_WOW64_64KEY);
     RegCloseKey(prodpatches);
-    RegDeleteKeyA(prodkey, "");
+    delete_key(prodkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(prodkey);
 
     /* UserData is sufficient for all properties
@@ -10501,15 +10862,15 @@ static void test_MsiGetPatchInfoEx(void)
     RegDeleteValueA(hpatch, "Uninstallable");
     RegDeleteValueA(hpatch, "Installed");
     RegDeleteValueA(udpatch, "ManagedLocalPackage");
-    RegDeleteKeyA(udpatch, "");
+    delete_key(udpatch, "", access & KEY_WOW64_64KEY);
     RegCloseKey(udpatch);
-    RegDeleteKeyA(hpatch, "");
+    delete_key(hpatch, "", access & KEY_WOW64_64KEY);
     RegCloseKey(hpatch);
-    RegDeleteKeyA(patches, "");
+    delete_key(patches, "", access & KEY_WOW64_64KEY);
     RegCloseKey(patches);
-    RegDeleteKeyA(props, "");
+    delete_key(props, "", access & KEY_WOW64_64KEY);
     RegCloseKey(props);
-    RegDeleteKeyA(udprod, "");
+    delete_key(udprod, "", access & KEY_WOW64_64KEY);
     RegCloseKey(udprod);
 
     /* MSIINSTALLCONTEXT_USERUNMANAGED */
@@ -10530,7 +10891,7 @@ static void test_MsiGetPatchInfoEx(void)
     lstrcatA(keypath, "\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &udprod);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &udprod, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* local UserData product key exists */
@@ -10545,7 +10906,7 @@ static void test_MsiGetPatchInfoEx(void)
        "Expected val to be unchanged, got \"%s\"\n", val);
     ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
 
-    res = RegCreateKeyA(udprod, "InstallProperties", &props);
+    res = RegCreateKeyExA(udprod, "InstallProperties", 0, NULL, 0, access, NULL, &props, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* InstallProperties key exists */
@@ -10559,7 +10920,7 @@ static void test_MsiGetPatchInfoEx(void)
        "Expected val to be unchanged, got \"%s\"\n", val);
     ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
 
-    res = RegCreateKeyA(udprod, "Patches", &patches);
+    res = RegCreateKeyExA(udprod, "Patches", 0, NULL, 0, access, NULL, &patches, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* Patches key exists */
@@ -10573,7 +10934,7 @@ static void test_MsiGetPatchInfoEx(void)
        "Expected val to be unchanged, got \"%s\"\n", val);
     ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
 
-    res = RegCreateKeyA(patches, patch_squashed, &hpatch);
+    res = RegCreateKeyExA(patches, patch_squashed, 0, NULL, 0, access, NULL, &hpatch, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* Patches key exists */
@@ -10638,7 +10999,7 @@ static void test_MsiGetPatchInfoEx(void)
     lstrcatA(keypath, "\\Patches\\");
     lstrcatA(keypath, patch_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &udpatch);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &udpatch, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* UserData Patches key exists */
@@ -10675,7 +11036,7 @@ static void test_MsiGetPatchInfoEx(void)
     ok(size == 10, "Expected 10, got %d\n", size);
 
     RegDeleteValueA(prodpatches, patch_squashed);
-    RegDeleteKeyA(prodpatches, "");
+    delete_key(prodpatches, "", access & KEY_WOW64_64KEY);
     RegCloseKey(prodpatches);
     RegDeleteKeyA(prodkey, "");
     RegCloseKey(prodkey);
@@ -10705,15 +11066,15 @@ static void test_MsiGetPatchInfoEx(void)
     ok(size == MAX_PATH, "Expected MAX_PATH, got %d\n", size);
 
     RegDeleteValueA(udpatch, "LocalPackage");
-    RegDeleteKeyA(udpatch, "");
+    delete_key(udpatch, "", access & KEY_WOW64_64KEY);
     RegCloseKey(udpatch);
-    RegDeleteKeyA(hpatch, "");
+    delete_key(hpatch, "", access & KEY_WOW64_64KEY);
     RegCloseKey(hpatch);
-    RegDeleteKeyA(patches, "");
+    delete_key(patches, "", access & KEY_WOW64_64KEY);
     RegCloseKey(patches);
-    RegDeleteKeyA(props, "");
+    delete_key(props, "", access & KEY_WOW64_64KEY);
     RegCloseKey(props);
-    RegDeleteKeyA(udprod, "");
+    delete_key(udprod, "", access & KEY_WOW64_64KEY);
     RegCloseKey(udprod);
 
     /* MSIINSTALLCONTEXT_MACHINE */
@@ -10733,7 +11094,7 @@ static void test_MsiGetPatchInfoEx(void)
     lstrcatA(keypath, "\\UserData\\S-1-5-18\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &udprod);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &udprod, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* local UserData product key exists */
@@ -10748,7 +11109,7 @@ static void test_MsiGetPatchInfoEx(void)
        "Expected val to be unchanged, got \"%s\"\n", val);
     ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
 
-    res = RegCreateKeyA(udprod, "InstallProperties", &props);
+    res = RegCreateKeyExA(udprod, "InstallProperties", 0, NULL, 0, access, NULL, &props, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* InstallProperties key exists */
@@ -10762,7 +11123,7 @@ static void test_MsiGetPatchInfoEx(void)
        "Expected val to be unchanged, got \"%s\"\n", val);
     ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
 
-    res = RegCreateKeyA(udprod, "Patches", &patches);
+    res = RegCreateKeyExA(udprod, "Patches", 0, NULL, 0, access, NULL, &patches, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* Patches key exists */
@@ -10776,7 +11137,7 @@ static void test_MsiGetPatchInfoEx(void)
        "Expected val to be unchanged, got \"%s\"\n", val);
     ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
 
-    res = RegCreateKeyA(patches, patch_squashed, &hpatch);
+    res = RegCreateKeyExA(patches, patch_squashed, 0, NULL, 0, access, NULL, &hpatch, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* Patches key exists */
@@ -10793,7 +11154,7 @@ static void test_MsiGetPatchInfoEx(void)
     lstrcpyA(keypath, "Software\\Classes\\Installer\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &prodkey);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &prodkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* local product key exists */
@@ -10807,7 +11168,7 @@ static void test_MsiGetPatchInfoEx(void)
        "Expected val to be unchanged, got \"%s\"\n", val);
     ok(size == MAX_PATH, "Expected size to be unchanged, got %d\n", size);
 
-    res = RegCreateKeyA(prodkey, "Patches", &prodpatches);
+    res = RegCreateKeyExA(prodkey, "Patches", 0, NULL, 0, access, NULL, &prodpatches, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* Patches key exists */
@@ -10840,7 +11201,7 @@ static void test_MsiGetPatchInfoEx(void)
     lstrcatA(keypath, "\\UserData\\S-1-5-18\\Patches\\");
     lstrcatA(keypath, patch_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &udpatch);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &udpatch, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* UserData Patches key exists */
@@ -10877,9 +11238,9 @@ static void test_MsiGetPatchInfoEx(void)
     ok(size == 10, "Expected 10, got %d\n", size);
 
     RegDeleteValueA(prodpatches, patch_squashed);
-    RegDeleteKeyA(prodpatches, "");
+    delete_key(prodpatches, "", access & KEY_WOW64_64KEY);
     RegCloseKey(prodpatches);
-    RegDeleteKeyA(prodkey, "");
+    delete_key(prodkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(prodkey);
 
     /* UserData is sufficient for all properties
@@ -10907,15 +11268,15 @@ static void test_MsiGetPatchInfoEx(void)
     ok(size == MAX_PATH, "Expected MAX_PATH, got %d\n", size);
 
     RegDeleteValueA(udpatch, "LocalPackage");
-    RegDeleteKeyA(udpatch, "");
+    delete_key(udpatch, "", access & KEY_WOW64_64KEY);
     RegCloseKey(udpatch);
-    RegDeleteKeyA(hpatch, "");
+    delete_key(hpatch, "", access & KEY_WOW64_64KEY);
     RegCloseKey(hpatch);
-    RegDeleteKeyA(patches, "");
+    delete_key(patches, "", access & KEY_WOW64_64KEY);
     RegCloseKey(patches);
-    RegDeleteKeyA(props, "");
+    delete_key(props, "", access & KEY_WOW64_64KEY);
     RegCloseKey(props);
-    RegDeleteKeyA(udprod, "");
+    delete_key(udprod, "", access & KEY_WOW64_64KEY);
     RegCloseKey(udprod);
     LocalFree(usersid);
 }
@@ -10930,10 +11291,15 @@ static void test_MsiGetPatchInfo(void)
     HKEY hkey_udpatch, hkey_udpatches, hkey_udproductpatches, hkey_udproductpatch;
     DWORD size;
     LONG res;
+    REGSAM access = KEY_ALL_ACCESS;
+    BOOL wow64;
 
     create_test_guid(patch_code, patch_squashed);
     create_test_guid(prod_code, prod_squashed);
     MultiByteToWideChar(CP_ACP, 0, patch_code, -1, patch_codeW, MAX_PATH);
+
+    if (pIsWow64Process && pIsWow64Process(GetCurrentProcess(), &wow64) && wow64)
+        access |= KEY_WOW64_64KEY;
 
     r = MsiGetPatchInfoA(NULL, NULL, NULL, NULL);
     ok(r == ERROR_INVALID_PARAMETER, "expected ERROR_INVALID_PARAMETER, got %u\n", r);
@@ -10954,7 +11320,12 @@ static void test_MsiGetPatchInfo(void)
     lstrcpyA(keypath, "Software\\Classes\\Installer\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &hkey_product);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &hkey_product, NULL);
+    if (res == ERROR_ACCESS_DENIED)
+    {
+        skip("Not enough rights to perform tests\n");
+        return;
+    }
     ok(res == ERROR_SUCCESS, "expected ERROR_SUCCESS got %d\n", res);
 
     /* product key exists */
@@ -10965,7 +11336,7 @@ static void test_MsiGetPatchInfo(void)
     ok(!lstrcmpA(val, "apple"), "expected val to be unchanged, got \"%s\"\n", val);
     ok(size == MAX_PATH, "expected size to be unchanged got %u\n", size);
 
-    res = RegCreateKeyA(hkey_product, "Patches", &hkey_patches);
+    res = RegCreateKeyExA(hkey_product, "Patches", 0, NULL, 0, access, NULL, &hkey_patches, NULL);
     ok(res == ERROR_SUCCESS, "expected ERROR_SUCCESS got %d\n", res);
 
     /* patches key exists */
@@ -10976,7 +11347,7 @@ static void test_MsiGetPatchInfo(void)
     ok(!lstrcmpA(val, "apple"), "expected val to be unchanged got \"%s\"\n", val);
     ok(size == MAX_PATH, "expected size to be unchanged got %u\n", size);
 
-    res = RegCreateKeyA(hkey_patches, patch_squashed, &hkey_patch);
+    res = RegCreateKeyExA(hkey_patches, patch_squashed, 0, NULL, 0, access, NULL, &hkey_patch, NULL);
     ok(res == ERROR_SUCCESS, "expected ERROR_SUCCESS got %d\n", res);
 
     /* patch key exists */
@@ -10991,7 +11362,7 @@ static void test_MsiGetPatchInfo(void)
     lstrcatA(keypath, "\\UserData\\S-1-5-18\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &hkey_udproduct);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &hkey_udproduct, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS got %d\n", res);
 
     /* UserData product key exists */
@@ -11002,7 +11373,7 @@ static void test_MsiGetPatchInfo(void)
     ok(!lstrcmpA(val, "apple"), "expected val to be unchanged got \"%s\"\n", val);
     ok(size == MAX_PATH, "expected size to be unchanged got %u\n", size);
 
-    res = RegCreateKeyA(hkey_udproduct, "InstallProperties", &hkey_udprops);
+    res = RegCreateKeyExA(hkey_udproduct, "InstallProperties", 0, NULL, 0, access, NULL, &hkey_udprops, NULL);
     ok(res == ERROR_SUCCESS, "expected ERROR_SUCCESS got %d\n", res);
 
     /* InstallProperties key exists */
@@ -11013,7 +11384,7 @@ static void test_MsiGetPatchInfo(void)
     ok(!lstrcmpA(val, "apple"), "expected val to be unchanged, got \"%s\"\n", val);
     ok(size == MAX_PATH, "expected size to be unchanged got %u\n", size);
 
-    res = RegCreateKeyA(hkey_udproduct, "Patches", &hkey_udpatches);
+    res = RegCreateKeyExA(hkey_udproduct, "Patches", 0, NULL, 0, access, NULL, &hkey_udpatches, NULL);
     ok(res == ERROR_SUCCESS, "expected ERROR_SUCCESS got %d\n", res);
 
     /* UserData Patches key exists */
@@ -11024,10 +11395,10 @@ static void test_MsiGetPatchInfo(void)
     ok(!lstrcmpA(val, "apple"), "expected val to be unchanged got \"%s\"\n", val);
     ok(size == MAX_PATH, "expected size to be unchanged got %u\n", size);
 
-    res = RegCreateKeyA(hkey_udproduct, "Patches", &hkey_udproductpatches);
+    res = RegCreateKeyExA(hkey_udproduct, "Patches", 0, NULL, 0, access, NULL, &hkey_udproductpatches, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
-    res = RegCreateKeyA(hkey_udproductpatches, patch_squashed, &hkey_udproductpatch);
+    res = RegCreateKeyExA(hkey_udproductpatches, patch_squashed, 0, NULL, 0, access, NULL, &hkey_udproductpatch, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* UserData product patch key exists */
@@ -11042,7 +11413,7 @@ static void test_MsiGetPatchInfo(void)
     lstrcatA(keypath, "\\UserData\\S-1-5-18\\Patches\\");
     lstrcatA(keypath, patch_squashed);
 
-    res = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath, &hkey_udpatch);
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &hkey_udpatch, NULL);
     ok(res == ERROR_SUCCESS, "expected ERROR_SUCCESS got %d\n", res);
 
     res = RegSetValueExA(hkey_udpatch, "LocalPackage", 0, REG_SZ, (const BYTE *)"c:\\test.msp", 12);
@@ -11077,23 +11448,23 @@ static void test_MsiGetPatchInfo(void)
     ok(valW[0], "expected > 0 got %u\n", valW[0]);
     ok(size == 11, "expected 11 got %u\n", size);
 
-    RegDeleteKeyA(hkey_udproductpatch, "");
+    delete_key(hkey_udproductpatch, "", access & KEY_WOW64_64KEY);
     RegCloseKey(hkey_udproductpatch);
-    RegDeleteKeyA(hkey_udproductpatches, "");
+    delete_key(hkey_udproductpatches, "", access & KEY_WOW64_64KEY);
     RegCloseKey(hkey_udproductpatches);
-    RegDeleteKeyA(hkey_udpatch, "");
+    delete_key(hkey_udpatch, "", access & KEY_WOW64_64KEY);
     RegCloseKey(hkey_udpatch);
-    RegDeleteKeyA(hkey_patches, "");
+    delete_key(hkey_patches, "", access & KEY_WOW64_64KEY);
     RegCloseKey(hkey_patches);
-    RegDeleteKeyA(hkey_product, "");
+    delete_key(hkey_product, "", access & KEY_WOW64_64KEY);
     RegCloseKey(hkey_product);
-    RegDeleteKeyA(hkey_patch, "");
+    delete_key(hkey_patch, "", access & KEY_WOW64_64KEY);
     RegCloseKey(hkey_patch);
-    RegDeleteKeyA(hkey_udpatches, "");
+    delete_key(hkey_udpatches, "", access & KEY_WOW64_64KEY);
     RegCloseKey(hkey_udpatches);
-    RegDeleteKeyA(hkey_udprops, "");
+    delete_key(hkey_udprops, "", access & KEY_WOW64_64KEY);
     RegCloseKey(hkey_udprops);
-    RegDeleteKeyA(hkey_udproduct, "");
+    delete_key(hkey_udproduct, "", access & KEY_WOW64_64KEY);
     RegCloseKey(hkey_udproduct);
 }
 
@@ -11107,16 +11478,27 @@ static void test_MsiEnumProducts(void)
     char keypath1[MAX_PATH], keypath2[MAX_PATH], keypath3[MAX_PATH];
     char *usersid;
     HKEY key1, key2, key3;
+    REGSAM access = KEY_ALL_ACCESS;
+    BOOL wow64;
 
     create_test_guid(product1, product_squashed1);
     create_test_guid(product2, product_squashed2);
     create_test_guid(product3, product_squashed3);
     get_user_sid(&usersid);
 
+    if (pIsWow64Process && pIsWow64Process(GetCurrentProcess(), &wow64) && wow64)
+        access |= KEY_WOW64_64KEY;
+
     strcpy(keypath1, "Software\\Classes\\Installer\\Products\\");
     strcat(keypath1, product_squashed1);
 
-    r = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath1, &key1);
+    r = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath1, 0, NULL, 0, access, NULL, &key1, NULL);
+    if (r == ERROR_ACCESS_DENIED)
+    {
+        skip("Not enough rights to perform tests\n");
+        LocalFree(usersid);
+        return;
+    }
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
 
     strcpy(keypath2, "Software\\Microsoft\\Windows\\CurrentVersion\\Installer\\Managed\\");
@@ -11124,7 +11506,7 @@ static void test_MsiEnumProducts(void)
     strcat(keypath2, "\\Installer\\Products\\");
     strcat(keypath2, product_squashed2);
 
-    r = RegCreateKeyA(HKEY_LOCAL_MACHINE, keypath2, &key2);
+    r = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath2, 0, NULL, 0, access, NULL, &key2, NULL);
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
 
     strcpy(keypath3, "Software\\Microsoft\\Installer\\Products\\");
@@ -11134,6 +11516,9 @@ static void test_MsiEnumProducts(void)
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
 
     index = 0;
+    r = MsiEnumProductsA(index, guid);
+    ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %u\n", r);
+
     r = MsiEnumProductsA(index, NULL);
     ok(r == ERROR_INVALID_PARAMETER, "Expected ERROR_INVALID_PARAMETER, got %u\n", r);
 
@@ -11158,8 +11543,8 @@ static void test_MsiEnumProducts(void)
     ok(found2, "product2 not found\n");
     ok(found3, "product3 not found\n");
 
-    RegDeleteKeyA(key1, "");
-    RegDeleteKeyA(key2, "");
+    delete_key(key1, "", access & KEY_WOW64_64KEY);
+    delete_key(key2, "", access & KEY_WOW64_64KEY);
     RegDeleteKeyA(key3, "");
     RegCloseKey(key1);
     RegCloseKey(key2);

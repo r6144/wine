@@ -143,11 +143,6 @@ struct IDirectDrawImpl
     /* The surface type to request */
     WINED3DSURFTYPE         ImplType;
 
-
-    /* Our private window class */
-    char classname[32];
-    WNDCLASSA wnd_class;
-
     /* Helpers for surface creation */
     IDirectDrawSurfaceImpl *tex_root;
     BOOL                    depthstencil;
@@ -164,6 +159,8 @@ struct IDirectDrawImpl
     struct FvfToDecl       *decls;
     UINT                    numConvertedDecls, declArraySize;
 };
+
+#define DDRAW_WINDOW_CLASS_NAME "ddraw_wc"
 
 /* Declare the VTables. They can be found ddraw.c */
 extern const IDirectDraw7Vtbl IDirectDraw7_Vtbl DECLSPEC_HIDDEN;
@@ -191,10 +188,9 @@ typedef struct EnumSurfacesCBS
 /* Utility functions */
 void DDRAW_Convert_DDSCAPS_1_To_2(const DDSCAPS *pIn, DDSCAPS2 *pOut) DECLSPEC_HIDDEN;
 void DDRAW_Convert_DDDEVICEIDENTIFIER_2_To_1(const DDDEVICEIDENTIFIER2 *pIn, DDDEVICEIDENTIFIER *pOut) DECLSPEC_HIDDEN;
-void IDirectDrawImpl_Destroy(IDirectDrawImpl *This) DECLSPEC_HIDDEN;
-HRESULT WINAPI IDirectDrawImpl_RecreateSurfacesCallback(IDirectDrawSurface7 *surf,
+HRESULT WINAPI ddraw_recreate_surfaces_cb(IDirectDrawSurface7 *surf,
         DDSURFACEDESC2 *desc, void *Context) DECLSPEC_HIDDEN;
-IWineD3DVertexDeclaration *IDirectDrawImpl_FindDecl(IDirectDrawImpl *This, DWORD fvf) DECLSPEC_HIDDEN;
+IWineD3DVertexDeclaration *ddraw_find_decl(IDirectDrawImpl *This, DWORD fvf) DECLSPEC_HIDDEN;
 
 static inline IDirectDrawImpl *ddraw_from_d3d1(IDirect3D *iface)
 {
@@ -214,26 +210,6 @@ static inline IDirectDrawImpl *ddraw_from_d3d3(IDirect3D3 *iface)
 static inline IDirectDrawImpl *ddraw_from_d3d7(IDirect3D7 *iface)
 {
     return (IDirectDrawImpl *)((char*)iface - FIELD_OFFSET(IDirectDrawImpl, IDirect3D7_vtbl));
-}
-
-static inline IDirectDrawImpl *ddraw_from_ddraw1(IDirectDraw *iface)
-{
-    return (IDirectDrawImpl *)((char*)iface - FIELD_OFFSET(IDirectDrawImpl, IDirectDraw_vtbl));
-}
-
-static inline IDirectDrawImpl *ddraw_from_ddraw2(IDirectDraw2 *iface)
-{
-    return (IDirectDrawImpl *)((char*)iface - FIELD_OFFSET(IDirectDrawImpl, IDirectDraw2_vtbl));
-}
-
-static inline IDirectDrawImpl *ddraw_from_ddraw3(IDirectDraw3 *iface)
-{
-    return (IDirectDrawImpl *)((char*)iface - FIELD_OFFSET(IDirectDrawImpl, IDirectDraw3_vtbl));
-}
-
-static inline IDirectDrawImpl *ddraw_from_ddraw4(IDirectDraw4 *iface)
-{
-    return (IDirectDrawImpl *)((char*)iface - FIELD_OFFSET(IDirectDrawImpl, IDirectDraw4_vtbl));
 }
 
 /* The default surface type */
@@ -306,9 +282,7 @@ extern const IDirectDrawGammaControlVtbl IDirectDrawGammaControl_Vtbl DECLSPEC_H
 extern const IDirect3DTexture2Vtbl IDirect3DTexture2_Vtbl DECLSPEC_HIDDEN;
 extern const IDirect3DTextureVtbl IDirect3DTexture1_Vtbl DECLSPEC_HIDDEN;
 
-HRESULT WINAPI IDirectDrawSurfaceImpl_AddAttachedSurface(IDirectDrawSurfaceImpl *This,
-        IDirectDrawSurfaceImpl *Surf) DECLSPEC_HIDDEN;
-void IDirectDrawSurfaceImpl_Destroy(IDirectDrawSurfaceImpl *This) DECLSPEC_HIDDEN;
+void ddraw_surface_destroy(IDirectDrawSurfaceImpl *surface) DECLSPEC_HIDDEN;
 
 static inline IDirectDrawSurfaceImpl *surface_from_texture1(IDirect3DTexture *iface)
 {
@@ -472,7 +446,7 @@ struct IDirectDrawClipperImpl
     LONG ref;
 
     IWineD3DClipper           *wineD3DClipper;
-    IDirectDrawImpl           *ddraw_owner;
+    BOOL initialized;
 };
 
 extern const IDirectDrawClipperVtbl IDirectDrawClipper_Vtbl DECLSPEC_HIDDEN;
@@ -492,7 +466,6 @@ struct IDirectDrawPaletteImpl
     IWineD3DPalette           *wineD3DPalette;
 
     /* IDirectDrawPalette fields */
-    IDirectDrawImpl           *ddraw_owner;
     IUnknown                  *ifaceToRelease;
 };
 extern const IDirectDrawPaletteVtbl IDirectDrawPalette_Vtbl DECLSPEC_HIDDEN;

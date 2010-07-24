@@ -4,7 +4,7 @@ SRCDIR    = @srcdir@
 VPATH     = @srcdir@
 MODULE    = msi.dll
 IMPORTLIB = msi
-IMPORTS   = uuid urlmon wininet comctl32 shell32 shlwapi cabinet oleaut32 ole32 version user32 gdi32 advapi32 kernel32 ntdll
+IMPORTS   = uuid urlmon wininet comctl32 shell32 shlwapi cabinet oleaut32 ole32 version user32 gdi32 advapi32
 DELAYIMPORTS = odbccp32
 
 C_SRCS = \
@@ -80,6 +80,7 @@ RC_SRCS = \
 	msi_Ro.rc \
 	msi_Ru.rc \
 	msi_Si.rc \
+	msi_Sr.rc \
 	msi_Sv.rc \
 	msi_Tr.rc \
 	msi_Uk.rc \

@@ -962,7 +962,7 @@ static int ALSA_AddUserSpecifiedDevice(const char *ctlname, const char *pcmname)
 **                          is a way to exactly specify the devices used by Wine.
 **
 */
-LONG ALSA_WaveInit(void)
+void ALSA_WaveInit(void)
 {
     DWORD rc;
     BOOL  AutoScanCards = TRUE;
@@ -971,12 +971,10 @@ LONG ALSA_WaveInit(void)
     DWORD DeviceCount = 0;
     HKEY  key = 0;
     int   i;
+    static int loaded;
 
-    if (!wine_dlopen("libasound.so.2", RTLD_LAZY|RTLD_GLOBAL, NULL, 0))
-    {
-        ERR("Error: ALSA lib needs to be loaded with flags RTLD_LAZY and RTLD_GLOBAL.\n");
-        return -1;
-    }
+    if (loaded++)
+        return;
 
     /* @@ Wine registry key: HKCU\Software\Wine\Alsa Driver */
     rc = RegOpenKeyExA(HKEY_CURRENT_USER, "Software\\Wine\\Alsa Driver", 0, KEY_QUERY_VALUE, &key);
@@ -989,7 +987,7 @@ LONG ALSA_WaveInit(void)
     }
 
     if (AutoScanCards)
-        rc = ALSA_PerformDefaultScan(UseDirectHW, AutoScanDevices);
+        ALSA_PerformDefaultScan(UseDirectHW, AutoScanDevices);
 
     for (i = 0; i < DeviceCount; i++)
     {
@@ -1011,8 +1009,6 @@ LONG ALSA_WaveInit(void)
 
     if (key)
         RegCloseKey(key);
-
-    return (rc);
 }
 
 #endif /* HAVE_ALSA */

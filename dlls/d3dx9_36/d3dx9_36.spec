@@ -5,7 +5,7 @@
 @ stdcall D3DXAssembleShaderFromResourceW(long wstr ptr ptr long ptr ptr)
 @ stdcall D3DXBoxBoundProbe(ptr ptr ptr ptr)
 @ stub D3DXCheckCubeTextureRequirements
-@ stub D3DXCheckTextureRequirements
+@ stdcall D3DXCheckTextureRequirements(ptr ptr ptr ptr long ptr ptr)
 @ stdcall D3DXCheckVersion(long long)
 @ stub D3DXCheckVolumeTextureRequirements
 @ stub D3DXCleanMesh
@@ -31,7 +31,7 @@
 @ stub D3DXConvertMeshSubsetToSingleStrip
 @ stub D3DXConvertMeshSubsetToStrips
 @ stub D3DXCreateAnimationController
-@ stub D3DXCreateBox
+@ stdcall D3DXCreateBox(ptr long long long ptr ptr)
 @ stdcall D3DXCreateBuffer(long ptr)
 @ stub D3DXCreateCompressedAnimationSet
 @ stub D3DXCreateCubeTexture
@@ -48,19 +48,19 @@
 @ stub D3DXCreateCylinder
 @ stdcall D3DXCreateEffect(ptr ptr long ptr ptr long ptr ptr ptr)
 @ stdcall D3DXCreateEffectCompiler(ptr long ptr ptr long ptr ptr)
-@ stub D3DXCreateEffectCompilerFromFileA
-@ stub D3DXCreateEffectCompilerFromFileW
-@ stub D3DXCreateEffectCompilerFromResourceA
-@ stub D3DXCreateEffectCompilerFromResourceW
-@ stub D3DXCreateEffectEx
-@ stub D3DXCreateEffectFromFileA
-@ stub D3DXCreateEffectFromFileExA
-@ stub D3DXCreateEffectFromFileExW
-@ stub D3DXCreateEffectFromFileW
-@ stub D3DXCreateEffectFromResourceA
-@ stub D3DXCreateEffectFromResourceExA
-@ stub D3DXCreateEffectFromResourceExW
-@ stub D3DXCreateEffectFromResourceW
+@ stdcall D3DXCreateEffectCompilerFromFileA(str ptr ptr long ptr ptr)
+@ stdcall D3DXCreateEffectCompilerFromFileW(wstr ptr ptr long ptr ptr)
+@ stdcall D3DXCreateEffectCompilerFromResourceA(long str ptr ptr long ptr ptr)
+@ stdcall D3DXCreateEffectCompilerFromResourceW(long wstr ptr ptr long ptr ptr)
+@ stdcall D3DXCreateEffectEx(ptr ptr long ptr ptr str long ptr ptr ptr)
+@ stdcall D3DXCreateEffectFromFileA(ptr str ptr ptr long ptr ptr ptr)
+@ stdcall D3DXCreateEffectFromFileExA(ptr str ptr ptr str long ptr ptr ptr)
+@ stdcall D3DXCreateEffectFromFileExW(ptr str ptr ptr str long ptr ptr ptr)
+@ stdcall D3DXCreateEffectFromFileW(ptr wstr ptr ptr long ptr ptr ptr)
+@ stdcall D3DXCreateEffectFromResourceA(ptr long str ptr ptr long ptr ptr ptr)
+@ stdcall D3DXCreateEffectFromResourceExA(ptr long str ptr ptr str long ptr ptr ptr)
+@ stdcall D3DXCreateEffectFromResourceExW(ptr long str ptr ptr str long ptr ptr ptr)
+@ stdcall D3DXCreateEffectFromResourceW(ptr long wstr ptr ptr long ptr ptr ptr)
 @ stdcall D3DXCreateEffectPool(ptr)
 @ stdcall D3DXCreateFontA(ptr long long long long long long long long long str ptr)
 @ stdcall D3DXCreateFontIndirectA(ptr ptr ptr)
@@ -69,7 +69,7 @@
 @ stub D3DXCreateFragmentLinker
 @ stub D3DXCreateFragmentLinkerEx
 @ stub D3DXCreateKeyframedAnimationSet
-@ stub D3DXCreateLine
+@ stdcall D3DXCreateLine(ptr ptr)
 @ stdcall D3DXCreateMatrixStack(long ptr)
 @ stub D3DXCreateMesh
 @ stub D3DXCreateMeshFVF
@@ -87,15 +87,15 @@
 @ stub D3DXCreateSkinInfo
 @ stub D3DXCreateSkinInfoFromBlendedMesh
 @ stub D3DXCreateSkinInfoFVF
-@ stub D3DXCreateSphere
+@ stdcall D3DXCreateSphere(ptr long long long ptr ptr)
 @ stdcall D3DXCreateSprite(ptr ptr)
 @ stub D3DXCreateTeapot
 @ stub D3DXCreateTextA
 @ stub D3DXCreateTextW
 @ stdcall D3DXCreateTexture(ptr long long long long long long ptr)
-@ stub D3DXCreateTextureFromFileA
+@ stdcall D3DXCreateTextureFromFileA(ptr ptr ptr)
 @ stub D3DXCreateTextureFromFileExA
-@ stub D3DXCreateTextureFromFileExW
+@ stdcall D3DXCreateTextureFromFileExW(ptr ptr long long long long long long long long long ptr ptr ptr)
 @ stub D3DXCreateTextureFromFileInMemory
 @ stdcall D3DXCreateTextureFromFileInMemoryEx(ptr ptr long long long long long long long long long long ptr ptr ptr)
 @ stub D3DXCreateTextureFromFileW
@@ -118,7 +118,7 @@
 @ stub D3DXCreateVolumeTextureFromResourceExW
 @ stub D3DXCreateVolumeTextureFromResourceW
 @ stdcall D3DXDebugMute(long)
-@ stub D3DXDeclaratorFromFVF
+@ stdcall D3DXDeclaratorFromFVF(long ptr)
 @ stub D3DXDisassembleEffect
 @ stub D3DXDisassembleShader
 @ stub D3DXFileCreate
@@ -192,7 +192,7 @@
 @ stub D3DXLoadVolumeFromFileA
 @ stub D3DXLoadVolumeFromFileInMemory
 @ stub D3DXLoadVolumeFromFileW
-@ stub D3DXLoadVolumeFromMemory
+@ stdcall D3DXLoadVolumeFromMemory(ptr ptr ptr ptr long long long ptr ptr long long)
 @ stub D3DXLoadVolumeFromResourceA
 @ stub D3DXLoadVolumeFromResourceW
 @ stub D3DXLoadVolumeFromVolume

@@ -129,18 +129,19 @@ static ULONG_PTR schan_alloc_handle(void *object, enum schan_handle_type type)
 
     if (schan_free_handles)
     {
+        DWORD index = schan_free_handles - schan_handle_table;
         /* Use a free handle */
         handle = schan_free_handles;
         if (handle->type != SCHAN_HANDLE_FREE)
         {
-            ERR("Handle %d(%p) is in the free list, but has type %#x.\n", (handle-schan_handle_table), handle, handle->type);
+            ERR("Handle %d(%p) is in the free list, but has type %#x.\n", index, handle, handle->type);
             return SCHAN_INVALID_HANDLE;
         }
         schan_free_handles = handle->object;
         handle->object = object;
         handle->type = type;
 
-        return handle - schan_handle_table;
+        return index;
     }
     if (!(schan_handle_count < schan_handle_table_size))
     {
@@ -1312,7 +1313,7 @@ void SECUR32_initSchannelSP(void)
      * even though the functions are missing, because the wrapper will
      * return SEC_E_UNSUPPORTED_FUNCTION if our function is NULL.
      */
-    static const long caps =
+    static const LONG caps =
         SECPKG_FLAG_INTEGRITY |
         SECPKG_FLAG_PRIVACY |
         SECPKG_FLAG_CONNECTION |
@@ -1322,7 +1323,7 @@ void SECUR32_initSchannelSP(void)
         SECPKG_FLAG_ACCEPT_WIN32_NAME |
         SECPKG_FLAG_STREAM;
     static const short version = 1;
-    static const long maxToken = 16384;
+    static const LONG maxToken = 16384;
     SEC_WCHAR *uniSPName = (SEC_WCHAR *)UNISP_NAME_W,
               *schannel = (SEC_WCHAR *)SCHANNEL_NAME_W;
     const SecPkgInfoW info[] = {

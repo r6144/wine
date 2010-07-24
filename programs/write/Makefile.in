@@ -5,13 +5,15 @@ SRCDIR    = @srcdir@
 VPATH     = @srcdir@
 MODULE    = write.exe
 APPMODE   = -mwindows
-IMPORTS   = user32 gdi32 kernel32
+IMPORTS   = user32 gdi32
 
 C_SRCS = write.c
 
 RC_SRCS = \
+	Da.rc \
 	De.rc \
 	En.rc \
+	Es.rc \
 	Fr.rc \
 	It.rc \
 	Ja.rc \

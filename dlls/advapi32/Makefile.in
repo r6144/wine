@@ -5,7 +5,7 @@ SRCDIR    = @srcdir@
 VPATH     = @srcdir@
 MODULE    = advapi32.dll
 IMPORTLIB = advapi32
-IMPORTS   = rpcrt4 kernel32 ntdll
+DELAYIMPORTS = rpcrt4
 EXTRALIBS = @SECURITYLIB@
 
 C_SRCS = \

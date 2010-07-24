@@ -4,7 +4,7 @@ SRCDIR    = @srcdir@
 VPATH     = @srcdir@
 MODULE    = oledlg.dll
 IMPORTLIB = oledlg
-IMPORTS   = ole32 comdlg32 user32 advapi32 kernel32
+IMPORTS   = ole32 comdlg32 user32 advapi32
 
 C_SRCS = \
 	insobjdlg.c \
@@ -27,10 +27,12 @@ RC_SRCS = \
 	oledlg_No.rc \
 	oledlg_Pl.rc \
 	oledlg_Pt.rc \
+	oledlg_Ro.rc \
 	oledlg_Ru.rc \
 	oledlg_Si.rc \
 	oledlg_Sv.rc \
 	oledlg_Tr.rc \
+	oledlg_Uk.rc \
 	oledlg_Zh.rc
 
 @MAKE_DLL_RULES@

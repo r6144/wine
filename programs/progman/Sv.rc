@@ -18,13 +18,15 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
-#pragma code_page(65001)
-
 #include "progman.h"
+
+LANGUAGE LANG_SWEDISH, SUBLANG_NEUTRAL
+
+#pragma code_page(65001)
 
 /* Menu */
 
-MAIN_MENU MENU LANGUAGE LANG_SWEDISH, SUBLANG_NEUTRAL
+MAIN_MENU MENU
 {
  POPUP "&Arkiv" {
    MENUITEM "&Ny...",              PM_NEW
@@ -56,19 +58,13 @@ POPUP "&Hjälp" {
    MENUITEM "&Hjälp om hjälp",     PM_HELPONHELP
    MENUITEM "&Guide",         PM_TUTORIAL
    MENUITEM SEPARATOR
-
-   POPUP "&Information..." {
-     MENUITEM "&Licens",        PM_LICENSE
-     MENUITEM "I&NGEN GARANTI",    PM_NO_WARRANTY
-     MENUITEM "&om Wine",     PM_ABOUT_WINE
-   }
+   MENUITEM "&om Wine",     PM_ABOUT_WINE
  }
 }
 
 /* Dialog `New' */
 
 DIALOG_NEW DIALOG 0, 0, 170, 65
-LANGUAGE LANG_SWEDISH, SUBLANG_NEUTRAL
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Ny"
 {
@@ -84,7 +80,6 @@ PUSHBUTTON    "&Hjälp",        PM_HELP,        105, 45,  60, 15, WS_TABSTOP
 /* Dialog `Move' */
 
 DIALOG_MOVE DIALOG 0, 0, 250, 65
-LANGUAGE LANG_SWEDISH, SUBLANG_NEUTRAL
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Flytta program"
 {
@@ -102,7 +97,6 @@ PUSHBUTTON    "&Hjälp",            PM_HELP,           185, 45,  60, 15, WS_TABS
 /* Dialog `Copy' */
 
 DIALOG_COPY DIALOG 0, 0, 250, 65
-LANGUAGE LANG_SWEDISH, SUBLANG_NEUTRAL
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Kopiera program"
 {
@@ -120,7 +114,6 @@ PUSHBUTTON    "&Hjälp",            PM_HELP,           185, 45,  60, 15, WS_TABS
 /* Dialog `Group attributes' */
 
 DIALOG_GROUP DIALOG 0, 0, 230, 65
-LANGUAGE LANG_SWEDISH, SUBLANG_NEUTRAL
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Programgruppsattribut"
 {
@@ -136,7 +129,6 @@ PUSHBUTTON    "&Hjälp",          PM_HELP,             155, 45,  60, 15, WS_TABS
 /* Dialog `Program attributes' */
 
 DIALOG_PROGRAM DIALOG 0, 0, 250, 105
-LANGUAGE LANG_SWEDISH, SUBLANG_NEUTRAL
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Programattribut"
 {
@@ -161,7 +153,6 @@ PUSHBUTTON    "&Hjälp",                 PM_HELP,             185, 85,  60, 15, 
 /* Dialog `Symbol' */
 
 DIALOG_SYMBOL DIALOG 0, 0, 200, 85
-LANGUAGE LANG_SWEDISH, SUBLANG_NEUTRAL
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Ändra ikon"
 {
@@ -179,7 +170,6 @@ PUSHBUTTON    "&Hjälp",       PM_HELP,           135, 65,  60, 15, WS_TABSTOP
 /* Dialog `Execute' */
 
 DIALOG_EXECUTE DIALOG 0, 0, 200, 85
-LANGUAGE LANG_SWEDISH, SUBLANG_NEUTRAL
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Kör program"
 {
@@ -195,7 +185,7 @@ PUSHBUTTON    "&Hjälp",             PM_HELP,   135, 65,  60, 15, WS_TABSTOP
 
 /* Strings */
 
-STRINGTABLE DISCARDABLE LANGUAGE LANG_SWEDISH, SUBLANG_NEUTRAL
+STRINGTABLE
 {
 IDS_PROGRAM_MANAGER,		"Programhanteraren"
 IDS_ERROR,			"FEL"
@@ -221,29 +211,4 @@ IDS_PROGRAMS,			"Program"
 IDS_LIBRARIES_DLL,		"Bibliotek (*.dll)"
 IDS_SYMBOL_FILES,		"Ikonfiler"
 IDS_SYMBOLS_ICO,		"Ikoner (*.ico)"
-}
-
-STRINGTABLE DISCARDABLE LANGUAGE LANG_SWEDISH, SUBLANG_NEUTRAL
-{
-IDS_LICENSE_CAPTION,            "LICENS"
-IDS_LICENSE,
-"Detta program är fri programvara. Du kan distribuera det och/eller modifiera \
-det under villkoren i GNU Lesser General Public License, publicerad \
-av Free Software Foundation, antingen version 2.1 eller (om du så vill) \
-någon senare version. Detta program distribueras i hopp om att det ska \
-vara användbart,men UTAN NÅGON SOM HELST GARANTI, även utan \
-underförstådd garanti om SÄLJBARHET eller LÄMPLIGHET FÖR NÅGOT \
-SPECIELLT ÄNDAMÅL. Se GNU Lesser General Public License för ytterligare \
-information.\
-Du bör ha fått en kopia av GNU Lesser General Public License tillsammans \
-med detta program. Om inte, skriv till Free Software Foundation, \
-Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA."
-
-IDS_WARRANTY_CAPTION, "INGEN GARANTI"
-IDS_WARRANTY,
-"Detta program distribueras i hopp om att det ska \
-vara användbart,men UTAN NÅGON SOM HELST GARANTI, även utan \
-underförstådd garanti om SÄLJBARHET eller LÄMPLIGHET FÖR NÅGOT \
-SPECIELLT ÄNDAMÅL. Se GNU Lesser General Public License för ytterligare \
-information."
 }

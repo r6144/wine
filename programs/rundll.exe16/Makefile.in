@@ -1,0 +1,10 @@
+TOPSRCDIR = @top_srcdir@
+TOPOBJDIR = ../..
+SRCDIR    = @srcdir@
+VPATH     = @srcdir@
+MODULE    = rundll.exe16
+APPMODE   = -m16
+
+C_SRCS = rundll.c
+
+@MAKE_PROG_RULES@

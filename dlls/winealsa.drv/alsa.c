@@ -2,6 +2,7 @@
  * Wine Driver for ALSA
  *
  * Copyright	2002 Eric Pouech
+ * Copyright	2006 Jaroslav Kysela
  * Copyright	2007 Maarten Lankhorst
  *
  * This file has a few shared generic subroutines shared among the alsa
@@ -357,10 +358,6 @@ void ALSA_copyFormat(LPWAVEFORMATEX wf1, LPWAVEFORMATPCMEX wf2)
         iLength = sizeof(WAVEFORMATPCMEX);
     else
         iLength = sizeof(WAVEFORMATEX) + wf1->cbSize;
-    if (iLength > sizeof(WAVEFORMATPCMEX)) {
-        ERR("calculated %u bytes, capping\n", iLength);
-        iLength = sizeof(WAVEFORMATPCMEX);
-    }
     memcpy(wf2, wf1, iLength);
 }
 
@@ -394,17 +391,6 @@ BOOL ALSA_supportedFormat(LPWAVEFORMATEX wf)
         } else
             WARN("only KSDATAFORMAT_SUBTYPE_PCM and KSDATAFORMAT_SUBTYPE_IEEE_FLOAT "
                  "supported\n");
-    } else if (wf->wFormatTag == WAVE_FORMAT_MULAW || wf->wFormatTag == WAVE_FORMAT_ALAW) {
-        if (wf->wBitsPerSample==8)
-            return TRUE;
-        else
-            ERR("WAVE_FORMAT_MULAW and WAVE_FORMAT_ALAW wBitsPerSample must = 8\n");
-
-    } else if (wf->wFormatTag == WAVE_FORMAT_ADPCM) {
-        if (wf->wBitsPerSample==4)
-            return TRUE;
-        else
-            ERR("WAVE_FORMAT_ADPCM wBitsPerSample must = 4\n");
     } else
         WARN("only WAVE_FORMAT_PCM and WAVE_FORMAT_EXTENSIBLE supported\n");
 
@@ -556,24 +542,42 @@ out:
 
 
 /**************************************************************************
- * 			ALSA_XRUNRecovery		[internal]
+ * 			wine_snd_pcm_recover		[internal]
  *
- * used to recovery from XRUN errors (buffer underflow/overflow)
+ * Code slightly modified from alsa-lib v1.0.23 snd_pcm_recover implementation.
+ * used to recover from XRUN errors (buffer underflow/overflow)
  */
-int ALSA_XRUNRecovery(WINE_WAVEDEV * wwo, int err)
+int wine_snd_pcm_recover(snd_pcm_t *pcm, int err, int silent)
 {
-    if (err == -EPIPE) {    /* under-run */
-        err = snd_pcm_prepare(wwo->pcm);
-        if (err < 0)
-             ERR( "underrun recovery failed. prepare failed: %s\n", snd_strerror(err));
+    if (err > 0)
+        err = -err;
+    if (err == -EINTR)	/* nothing to do, continue */
         return 0;
-    } else if (err == -ESTRPIPE) {
-        while ((err = snd_pcm_resume(wwo->pcm)) == -EAGAIN)
-            sleep(1);       /* wait until the suspend flag is released */
+    if (err == -EPIPE) {
+        const char *s;
+        if (snd_pcm_stream(pcm) == SND_PCM_STREAM_PLAYBACK)
+            s = "underrun";
+        else
+            s = "overrun";
+        if (!silent)
+            ERR("%s occurred\n", s);
+        err = snd_pcm_prepare(pcm);
         if (err < 0) {
-            err = snd_pcm_prepare(wwo->pcm);
-            if (err < 0)
-                ERR("recovery from suspend failed, prepare failed: %s\n", snd_strerror(err));
+            ERR("cannot recover from %s, prepare failed: %s\n", s, snd_strerror(err));
+            return err;
+        }
+        return 0;
+    }
+    if (err == -ESTRPIPE) {
+        while ((err = snd_pcm_resume(pcm)) == -EAGAIN)
+            /* wait until suspend flag is released */
+            poll(NULL, 0, 1000);
+        if (err < 0) {
+            err = snd_pcm_prepare(pcm);
+            if (err < 0) {
+                ERR("cannot recover from suspend, prepare failed: %s\n", snd_strerror(err));
+                return err;
+            }
         }
         return 0;
     }
@@ -725,20 +729,20 @@ LRESULT CALLBACK ALSA_DriverProc(DWORD_PTR dwDevID, HDRVR hDriv, UINT wMsg,
 
     switch(wMsg) {
 #ifdef HAVE_ALSA
-    case DRV_LOAD:		ALSA_WaveInit();
-				ALSA_MidiInit();
-				return 1;
-    case DRV_FREE:		return 1;
-    case DRV_OPEN:		return 1;
-    case DRV_CLOSE:		return 1;
-    case DRV_ENABLE:		return 1;
-    case DRV_DISABLE:		return 1;
-    case DRV_QUERYCONFIGURE:	return 1;
+    case DRV_LOAD:
+    case DRV_FREE:
+    case DRV_OPEN:
+    case DRV_CLOSE:
+    case DRV_ENABLE:
+    case DRV_DISABLE:
+    case DRV_QUERYCONFIGURE:
+        return 1;
     case DRV_CONFIGURE:		MessageBoxA(0, "ALSA MultiMedia Driver !", "ALSA Driver", MB_OK);	return 1;
-    case DRV_INSTALL:		return DRVCNF_RESTART;
-    case DRV_REMOVE:		return DRVCNF_RESTART;
+    case DRV_INSTALL:
+    case DRV_REMOVE:
+        return DRV_SUCCESS;
 #endif
     default:
-	return DefDriverProc(dwDevID, hDriv, wMsg, dwParam1, dwParam2);
+	return 0;
     }
 }

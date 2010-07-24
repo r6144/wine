@@ -873,6 +873,15 @@ static int solaris_sigaction( int sig, const struct sigaction *new, struct sigac
 
 typedef void (WINAPI *raise_func)( EXCEPTION_RECORD *rec, CONTEXT *context );
 
+extern void clear_alignment_flag(void);
+__ASM_GLOBAL_FUNC( clear_alignment_flag,
+                   "pushfl\n\t"
+                   __ASM_CFI(".cfi_adjust_cfa_offset 4\n\t")
+                   "andl $~0x40000,(%esp)\n\t"
+                   "popfl\n\t"
+                   __ASM_CFI(".cfi_adjust_cfa_offset -4\n\t")
+                   "ret" )
+
 
 /***********************************************************************
  *           init_handler
@@ -883,6 +892,8 @@ typedef void (WINAPI *raise_func)( EXCEPTION_RECORD *rec, CONTEXT *context );
 static inline void *init_handler( const SIGCONTEXT *sigcontext, WORD *fs, WORD *gs )
 {
     TEB *teb = get_current_teb();
+
+    clear_alignment_flag();
 
     /* get %fs and %gs at time of the fault */
 #ifdef FS_sig
@@ -2144,6 +2155,7 @@ void signal_free_thread( TEB *teb )
  */
 void signal_init_thread( TEB *teb )
 {
+    const WORD fpu_cw = 0x27f;
     struct ntdll_thread_data *thread_data = (struct ntdll_thread_data *)teb->SpareBytes1;
     LDT_ENTRY fs_entry;
     stack_t ss;
@@ -2166,6 +2178,12 @@ void signal_init_thread( TEB *teb )
     wine_ldt_set_flags( &fs_entry, WINE_LDT_FLAGS_DATA|WINE_LDT_FLAGS_32BIT );
     wine_ldt_init_fs( thread_data->fs, &fs_entry );
     thread_data->gs = wine_get_gs();
+
+#ifdef __GNUC__
+    __asm__ volatile ("fninit; fldcw %0" : : "m" (fpu_cw));
+#else
+    FIXME("FPU setup not implemented for this platform.\n");
+#endif
 }
 
 /**********************************************************************

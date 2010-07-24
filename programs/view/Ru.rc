@@ -68,7 +68,7 @@ END
  *
  */
 
-STRINGTABLE DISCARDABLE
+STRINGTABLE
 BEGIN
-    IDS_DESCRIPTION         "Просмоторщик обычных метафайлов"
+    IDS_DESCRIPTION         "Просмотрщик обычных метафайлов"
 END

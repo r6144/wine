@@ -128,6 +128,7 @@ typedef struct
     char *peek_msg;
     char *peek_msg_mem;
     size_t peek_len;
+    DWORD security_flags;
 } netconn_t;
 
 typedef struct

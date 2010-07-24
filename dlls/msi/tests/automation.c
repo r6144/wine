@@ -32,6 +32,9 @@
 
 #include "wine/test.h"
 
+static LONG (WINAPI *pRegDeleteKeyExA)(HKEY, LPCSTR, REGSAM, DWORD);
+static BOOL (WINAPI *pIsWow64Process)(HANDLE, PBOOL);
+
 DEFINE_GUID(GUID_NULL,0,0,0,0,0,0,0,0,0,0,0);
 
 static const char *msifile = "winetest-automation.msi";
@@ -199,6 +202,29 @@ static const msi_summary_info summary_info[] =
     ADD_INFO_FILETIME(PID_LASTPRINTED, &systemtime)
 };
 
+static void init_functionpointers(void)
+{
+    HMODULE hadvapi32 = GetModuleHandleA("advapi32.dll");
+    HMODULE hkernel32 = GetModuleHandleA("kernel32.dll");
+
+#define GET_PROC(dll, func) \
+    p ## func = (void *)GetProcAddress(dll, #func); \
+    if(!p ## func) \
+      trace("GetProcAddress(%s) failed\n", #func);
+
+    GET_PROC(hadvapi32, RegDeleteKeyExA)
+    GET_PROC(hkernel32, IsWow64Process)
+
+#undef GET_PROC
+}
+
+static LONG delete_key_portable( HKEY key, LPCSTR subkey, REGSAM access )
+{
+    if (pRegDeleteKeyExA)
+        return pRegDeleteKeyExA( key, subkey, access, 0 );
+    return RegDeleteKeyA( key, subkey );
+}
+
 /*
  * Database Helpers
  */
@@ -308,7 +334,8 @@ static BOOL get_program_files_dir(LPSTR buf)
         return FALSE;
 
     size = MAX_PATH;
-    if (RegQueryValueEx(hkey, "ProgramFilesDir", 0, &type, (LPBYTE)buf, &size))
+    if (RegQueryValueEx(hkey, "ProgramFilesDir (x86)", 0, &type, (LPBYTE)buf, &size) &&
+        RegQueryValueEx(hkey, "ProgramFilesDir", 0, &type, (LPBYTE)buf, &size))
         return FALSE;
 
     RegCloseKey(hkey);
@@ -732,6 +759,12 @@ static void test_dispatch(void)
     V_VT(&vararg[0]) = VT_BSTR;
     V_BSTR(&vararg[0]) = SysAllocString(path);
     hr = IDispatch_Invoke(pInstaller, dispid, &IID_NULL, LOCALE_NEUTRAL, DISPATCH_METHOD, &dispparams, &varresult, &excepinfo, NULL);
+    if (hr == DISP_E_EXCEPTION)
+    {
+        skip("OpenPackage failed, insufficient rights?\n");
+        DeleteFileW(path);
+        return;
+    }
     ok(hr == S_OK, "IDispatch::Invoke returned 0x%08x\n", hr);
     VariantClear(&vararg[0]);
     VariantClear(&varresult);
@@ -1078,6 +1111,20 @@ static HRESULT Installer_VersionGet(LPWSTR szVersion)
         memcpy(szVersion, V_BSTR(&varresult), (lstrlenW(V_BSTR(&varresult)) + 1) * sizeof(WCHAR));
     VariantClear(&varresult);
     return hr;
+}
+
+static HRESULT Installer_UILevelPut(int level)
+{
+    VARIANT varresult;
+    VARIANTARG vararg;
+    DISPID dispid = DISPID_PROPERTYPUT;
+    DISPPARAMS dispparams = {&vararg, &dispid, sizeof(vararg)/sizeof(VARIANTARG), 1};
+
+    VariantInit(&vararg);
+    V_VT(&vararg) = VT_I4;
+    V_I4(&vararg) = level;
+
+    return invoke(pInstaller, "UILevel", DISPATCH_PROPERTYPUT, &dispparams, &varresult, VT_EMPTY);
 }
 
 static HRESULT Session_Installer(IDispatch *pSession, IDispatch **pInst)
@@ -1815,6 +1862,7 @@ static void test_Session(IDispatch *pSession)
     BOOL bool;
     int myint;
     IDispatch *pDatabase = NULL, *pInst = NULL, *record = NULL;
+    ULONG refs_before, refs_after;
     HRESULT hr;
 
     /* Session::Installer */
@@ -1822,6 +1870,14 @@ static void test_Session(IDispatch *pSession)
     ok(hr == S_OK, "Session_Installer failed, hresult 0x%08x\n", hr);
     ok(pInst != NULL, "Session_Installer returned NULL IDispatch pointer\n");
     ok(pInst == pInstaller, "Session_Installer does not match Installer instance from CoCreateInstance\n");
+    refs_before = IDispatch_AddRef(pInst);
+
+    hr = Session_Installer(pSession, &pInst);
+    ok(hr == S_OK, "Session_Installer failed, hresult 0x%08x\n", hr);
+    ok(pInst != NULL, "Session_Installer returned NULL IDispatch pointer\n");
+    ok(pInst == pInstaller, "Session_Installer does not match Installer instance from CoCreateInstance\n");
+    refs_after = IDispatch_Release(pInst);
+    ok(refs_before == refs_after, "got %u and %u\n", refs_before, refs_after);
 
     /* Session::Property, get */
     memset(stringw, 0, sizeof(stringw));
@@ -2304,30 +2360,30 @@ static void test_Installer_Products(BOOL bProductInstalled)
 
 /* Delete a registry subkey, including all its subkeys (RegDeleteKey does not work on keys with subkeys without
  * deleting the subkeys first) */
-static UINT delete_registry_key(HKEY hkeyParent, LPCSTR subkey)
+static UINT delete_registry_key(HKEY hkeyParent, LPCSTR subkey, REGSAM access)
 {
     UINT ret;
     CHAR *string = NULL;
     HKEY hkey;
     DWORD dwSize;
 
-    ret = RegOpenKey(hkeyParent, subkey, &hkey);
+    ret = RegOpenKeyEx(hkeyParent, subkey, 0, access, &hkey);
     if (ret != ERROR_SUCCESS) return ret;
     ret = RegQueryInfoKeyA(hkey, NULL, NULL, NULL, NULL, &dwSize, NULL, NULL, NULL, NULL, NULL, NULL);
     if (ret != ERROR_SUCCESS) return ret;
     if (!(string = HeapAlloc(GetProcessHeap(), 0, ++dwSize))) return ERROR_NOT_ENOUGH_MEMORY;
 
     while (RegEnumKeyA(hkey, 0, string, dwSize) == ERROR_SUCCESS)
-        delete_registry_key(hkey, string);
+        delete_registry_key(hkey, string, access);
 
     RegCloseKey(hkey);
     HeapFree(GetProcessHeap(), 0, string);
-    RegDeleteKeyA(hkeyParent, subkey);
+    delete_key_portable(hkeyParent, subkey, access);
     return ERROR_SUCCESS;
 }
 
 /* Find a specific registry subkey at any depth within the given key and subkey and return its parent key. */
-static UINT find_registry_key(HKEY hkeyParent, LPCSTR subkey, LPCSTR findkey, HKEY *phkey)
+static UINT find_registry_key(HKEY hkeyParent, LPCSTR subkey, LPCSTR findkey, REGSAM access, HKEY *phkey)
 {
     UINT ret;
     CHAR *string = NULL;
@@ -2338,7 +2394,7 @@ static UINT find_registry_key(HKEY hkeyParent, LPCSTR subkey, LPCSTR findkey, HK
 
     *phkey = 0;
 
-    ret = RegOpenKey(hkeyParent, subkey, &hkey);
+    ret = RegOpenKeyEx(hkeyParent, subkey, 0, access, &hkey);
     if (ret != ERROR_SUCCESS) return ret;
     ret = RegQueryInfoKeyA(hkey, NULL, NULL, NULL, NULL, &dwSize, NULL, NULL, NULL, NULL, NULL, NULL);
     if (ret != ERROR_SUCCESS) return ret;
@@ -2352,7 +2408,7 @@ static UINT find_registry_key(HKEY hkeyParent, LPCSTR subkey, LPCSTR findkey, HK
             *phkey = hkey;
             found = TRUE;
         }
-        else if (find_registry_key(hkey, string, findkey, phkey) == ERROR_SUCCESS) found = TRUE;
+        else if (find_registry_key(hkey, string, findkey, access, phkey) == ERROR_SUCCESS) found = TRUE;
     }
 
     if (*phkey != hkey) RegCloseKey(hkey);
@@ -2370,14 +2426,23 @@ static void test_Installer_InstallProduct(void)
     DWORD num, size, type;
     int iValue, iCount;
     IDispatch *pStringList = NULL;
+    REGSAM access = KEY_ALL_ACCESS;
+    BOOL wow64;
+
+    if (pIsWow64Process && pIsWow64Process(GetCurrentProcess(), &wow64) && wow64)
+        access |= KEY_WOW64_64KEY;
 
     create_test_files();
+
+    /* Avoid an interactive dialog in case of insufficient privileges. */
+    hr = Installer_UILevelPut(INSTALLUILEVEL_NONE);
+    ok(hr == S_OK, "Expected UILevel propery put invoke to return S_OK, got 0x%08x\n", hr);
 
     /* Installer::InstallProduct */
     hr = Installer_InstallProduct(szMsifile, NULL);
     if (hr == DISP_E_EXCEPTION)
     {
-        skip("Installer object not supported.\n");
+        skip("InstallProduct failed, insufficient rights?\n");
         delete_test_files();
         return;
     }
@@ -2449,7 +2514,7 @@ static void test_Installer_InstallProduct(void)
     ok(delete_pf("msitest\\filename", TRUE), "File not installed\n");
     ok(delete_pf("msitest", FALSE), "File not installed\n");
 
-    res = RegOpenKey(HKEY_LOCAL_MACHINE, "SOFTWARE\\Wine\\msitest", &hkey);
+    res = RegOpenKeyEx(HKEY_LOCAL_MACHINE, "SOFTWARE\\Wine\\msitest", 0, access, &hkey);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     size = MAX_PATH;
@@ -2477,40 +2542,45 @@ static void test_Installer_InstallProduct(void)
 
     RegCloseKey(hkey);
 
-    res = RegDeleteKeyA(HKEY_LOCAL_MACHINE, "SOFTWARE\\Wine\\msitest");
+    res = delete_key_portable(HKEY_LOCAL_MACHINE, "SOFTWARE\\Wine\\msitest", access);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* Remove registry keys written by RegisterProduct standard action */
-    res = RegDeleteKeyA(HKEY_LOCAL_MACHINE, "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{F1C3AF50-8B56-4A69-A00C-00773FE42F30}");
+    res = delete_key_portable(HKEY_LOCAL_MACHINE,
+        "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{F1C3AF50-8B56-4A69-A00C-00773FE42F30}", access);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
-    res = RegDeleteKeyA(HKEY_LOCAL_MACHINE, "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Installer\\UpgradeCodes\\D8E760ECA1E276347B43E42BDBDA5656");
+    res = delete_key_portable(HKEY_LOCAL_MACHINE,
+        "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Installer\\UpgradeCodes\\D8E760ECA1E276347B43E42BDBDA5656", access);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
-    res = find_registry_key(HKEY_LOCAL_MACHINE, "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Installer\\UserData", "05FA3C1F65B896A40AC00077F34EF203", &hkey);
+    res = find_registry_key(HKEY_LOCAL_MACHINE,
+        "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Installer\\UserData", "05FA3C1F65B896A40AC00077F34EF203", access, &hkey);
     ok(res == ERROR_SUCCESS ||
        broken(res == ERROR_FILE_NOT_FOUND), /* win9x */
        "Expected ERROR_SUCCESS, got %d\n", res);
     if (res == ERROR_SUCCESS)
     {
-        res = delete_registry_key(hkey, "05FA3C1F65B896A40AC00077F34EF203");
+        res = delete_registry_key(hkey, "05FA3C1F65B896A40AC00077F34EF203", access);
         ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
         RegCloseKey(hkey);
 
-        res = RegDeleteKeyA(HKEY_LOCAL_MACHINE, "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Installer\\Products\\05FA3C1F65B896A40AC00077F34EF203");
+        res = delete_key_portable(HKEY_LOCAL_MACHINE,
+            "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Installer\\Products\\05FA3C1F65B896A40AC00077F34EF203", access);
         ok(res == ERROR_FILE_NOT_FOUND, "Expected ERROR_FILE_NOT_FOUND, got %d\n", res);
     }
     else
     {
         /* win9x defaults to a per-machine install. */
-        RegDeleteKeyA(HKEY_LOCAL_MACHINE, "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Installer\\Products\\05FA3C1F65B896A40AC00077F34EF203");
+        delete_key_portable(HKEY_LOCAL_MACHINE,
+            "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Installer\\Products\\05FA3C1F65B896A40AC00077F34EF203", access);
     }
 
     /* Remove registry keys written by PublishProduct standard action */
     res = RegOpenKey(HKEY_CURRENT_USER, "SOFTWARE\\Microsoft\\Installer", &hkey);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
-    res = delete_registry_key(hkey, "Products\\05FA3C1F65B896A40AC00077F34EF203");
+    res = delete_registry_key(hkey, "Products\\05FA3C1F65B896A40AC00077F34EF203", KEY_ALL_ACCESS);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     res = RegDeleteKeyA(hkey, "UpgradeCodes\\D8E760ECA1E276347B43E42BDBDA5656");
@@ -2582,6 +2652,12 @@ static void test_Installer(void)
 
     /* Installer::OpenPackage */
     hr = Installer_OpenPackage(szPath, 0, &pSession);
+    if (hr == DISP_E_EXCEPTION)
+    {
+        skip("OpenPackage failed, insufficient rights?\n");
+        DeleteFileW(szPath);
+        return;
+    }
     ok(hr == S_OK, "Installer_OpenPackage failed, hresult 0x%08x\n", hr);
     if (hr == S_OK)
     {
@@ -2653,6 +2729,7 @@ START_TEST(automation)
     CLSID clsid;
     IUnknown *pUnk;
 
+    init_functionpointers();
     GetSystemTimeAsFileTime(&systemtime);
 
     GetCurrentDirectoryA(MAX_PATH, prev_path);

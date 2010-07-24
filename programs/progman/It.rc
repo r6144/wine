@@ -23,12 +23,13 @@
 
 #include "progman.h"
 
-/*UTF-8*/
+LANGUAGE LANG_ITALIAN, SUBLANG_NEUTRAL
+
 #pragma code_page(65001)
 
 /* Menu */
 
-MAIN_MENU MENU LANGUAGE LANG_ITALIAN, SUBLANG_NEUTRAL
+MAIN_MENU MENU
 {
  POPUP "&File" {
    MENUITEM "&Nuovo...",              PM_NEW
@@ -60,19 +61,13 @@ POPUP "&Aiuto" {
    MENUITEM "&Aiuto sulla Guida",     PM_HELPONHELP
    MENUITEM "&Tutorial",         PM_TUTORIAL
    MENUITEM SEPARATOR
-
-   POPUP "&Informazioni sul Gestore Del Programma" {
-     MENUITEM "&Licenza",        PM_LICENSE
-     MENUITEM "&Garanzia",    PM_NO_WARRANTY
-     MENUITEM "&Informazioni su WINE",     PM_ABOUT_WINE
-   }
+   MENUITEM "&Informazioni su Wine",     PM_ABOUT_WINE
  }
 }
 
 /* Dialog `New' */
 
 DIALOG_NEW DIALOG 0, 0, 170, 65
-LANGUAGE LANG_ITALIAN, SUBLANG_NEUTRAL
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Nuovo"
 {
@@ -88,7 +83,6 @@ PUSHBUTTON    "&Aiuto",        PM_HELP,        105, 45,  60, 15, WS_TABSTOP
 /* Dialog `Move' */
 
 DIALOG_MOVE DIALOG 0, 0, 250, 65
-LANGUAGE LANG_ITALIAN, SUBLANG_NEUTRAL
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Sposta Programma"
 {
@@ -106,9 +100,8 @@ PUSHBUTTON    "&Aiuto",            PM_HELP,           185, 45,  60, 15, WS_TABST
 /* Dialog `Copy' */
 
 DIALOG_COPY DIALOG 0, 0, 250, 65
-LANGUAGE LANG_ITALIAN, SUBLANG_NEUTRAL
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "Copy Program"
+CAPTION "Copia Programma"
 {
 LTEXT         "Copia programma:",    -1,            5,  5,  90, 15
 LTEXT         "",                     PM_PROGRAM,         95,  5,  90, 15
@@ -124,7 +117,6 @@ PUSHBUTTON    "&Aiuto",            PM_HELP,           185, 45,  60, 15, WS_TABST
 /* Dialog `Group attributes' */
 
 DIALOG_GROUP DIALOG 0, 0, 230, 65
-LANGUAGE LANG_ITALIAN, SUBLANG_NEUTRAL
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Proprietà del gruppo di Programmi"
 {
@@ -140,7 +132,6 @@ PUSHBUTTON    "&Aiuto",          PM_HELP,             155, 45,  60, 15, WS_TABST
 /* Dialog `Program attributes' */
 
 DIALOG_PROGRAM DIALOG 0, 0, 250, 105
-LANGUAGE LANG_ITALIAN, SUBLANG_NEUTRAL
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Proprietà del programma"
 {
@@ -165,7 +156,6 @@ PUSHBUTTON    "&Aiuto",                 PM_HELP,             185, 85,  60, 15, W
 /* Dialog `Symbol' */
 
 DIALOG_SYMBOL DIALOG 0, 0, 200, 85
-LANGUAGE LANG_ITALIAN, SUBLANG_NEUTRAL
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Cambia icona"
 {
@@ -183,7 +173,6 @@ PUSHBUTTON    "&Aiuto",       PM_HELP,           135, 65,  60, 15, WS_TABSTOP
 /* Dialog `Execute' */
 
 DIALOG_EXECUTE DIALOG 0, 0, 200, 85
-LANGUAGE LANG_ITALIAN, SUBLANG_NEUTRAL
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Esegui programma"
 {
@@ -199,7 +188,7 @@ PUSHBUTTON    "&Aiuto",             PM_HELP,   135, 65,  60, 15, WS_TABSTOP
 
 /* Strings */
 
-STRINGTABLE DISCARDABLE LANGUAGE LANG_ITALIAN, SUBLANG_NEUTRAL
+STRINGTABLE
 {
 IDS_PROGRAM_MANAGER,		"Gestore Programma"
 IDS_ERROR,			"ERRORE"
@@ -225,28 +214,4 @@ IDS_PROGRAMS,			"Programmi"
 IDS_LIBRARIES_DLL,		"Librerie (*.dll)"
 IDS_SYMBOL_FILES,		"File icona"
 IDS_SYMBOLS_ICO,		"Icone (*.ico)"
-}
-
-STRINGTABLE DISCARDABLE LANGUAGE LANG_ITALIAN, SUBLANG_NEUTRAL
-{
-IDS_LICENSE_CAPTION,            "LICENZA"
-IDS_LICENSE,
-"Questo programma è software libero; puoi redistribuirlo e/o \
-modificarlo sotto i termini della GNU Lesser General Public \
-License come pubblicata dalla Free Software Foundation; sia la \
-versione 2.1 della LGPL, che (a tua scelta) una versione più nuova.\n\
-Questo programma è distribuito nella speranza che sarà utile, \
-ma SENZA ALCUNA GARANZIA; pure senza la garanzia implicita di \
-COMMERCIABILTÀ o ADEGUATEZZA PER UN PARTICOLARE SCOPO. Leggere la GNU \
-Lesser General Public License per più informazioni.\n\
-Dovresti aver ricevuto una copia della GNU Lesser General Public \
-License insieme a questo programma; sennò, scrivi alla Free Software \
-Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA"
-
-IDS_WARRANTY_CAPTION, "NESSUNA GARANZIA"
-IDS_WARRANTY,
-"Questo programma è distribuito nella speranza che sarà utile, \
-ma SENZA ALCUNA GARANZIA; pure senza la garanzia implicita di \
-COMMERCIABILTÀ o ADEGUATEZZA PER UN PARTICOLARE SCOPO. Leggere la GNU \
-Lesser General Public License per più informazioni."
 }

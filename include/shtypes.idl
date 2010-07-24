@@ -38,6 +38,9 @@ typedef LPITEMIDLIST PITEMID_CHILD;
 typedef const PITEMID_CHILD PCITEMID_CHILD;
 typedef LPCITEMIDLIST PCUITEMID_CHILD;
 typedef LPCITEMIDLIST *PCUITEMID_CHILD_ARRAY;
+typedef LPCITEMIDLIST PCUIDLIST_RELATIVE;
+typedef LPITEMIDLIST PIDLIST_ABSOLUTE;
+typedef LPCITEMIDLIST PCIDLIST_ABSOLUTE;
 cpp_quote("#include <poppack.h>")
 
 #ifndef MAX_PATH
@@ -76,6 +79,12 @@ typedef struct
     STRRET str;
 } SHELLDETAILS, *LPSHELLDETAILS;
 cpp_quote("#include <poppack.h>")
+
+typedef struct _COMDLG_FILTERSPEC
+{
+    [string] LPCWSTR pszName;
+    [string] LPCWSTR pszSpec;
+} COMDLG_FILTERSPEC;
 
 typedef [v1_enum] enum tagSHCOLSTATE
 {

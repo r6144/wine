@@ -59,6 +59,7 @@
 
 DEFINE_EXPECT(document_onclick);
 DEFINE_EXPECT(body_onclick);
+DEFINE_EXPECT(doc_onclick_attached);
 DEFINE_EXPECT(div_onclick);
 DEFINE_EXPECT(div_onclick_attached);
 DEFINE_EXPECT(timeout);
@@ -483,9 +484,7 @@ static void _test_event_x(unsigned line, IHTMLEventObj *event, LONG exl)
 
     hres = IHTMLEventObj_get_x(event, &l);
     ok_(__FILE__,line)(hres == S_OK, "get_x failed: %08x\n", hres);
-    if(exl == -10) /* don't test the exact value */
-        todo_wine ok_(__FILE__,line)(l > 0, "x = %d\n", l);
-    else
+    if(exl != -10) /* don't test the exact value */
         ok_(__FILE__,line)(l == exl, "x = %d, expected %d\n", l, exl);
 }
 
@@ -496,9 +495,7 @@ static void _test_event_y(unsigned line, IHTMLEventObj *event, LONG exl)
 
     hres = IHTMLEventObj_get_y(event, &l);
     ok_(__FILE__,line)(hres == S_OK, "get_y failed: %08x\n", hres);
-    if(exl == -10) /* don't test the exact value */
-        todo_wine ok_(__FILE__,line)(l > 0, "y = %d\n", l);
-    else
+    if(exl != -10) /* don't test the exact value */
         ok_(__FILE__,line)(l == exl, "y = %d, expected %d\n", l, exl);
 }
 
@@ -509,14 +506,8 @@ static void _test_event_clientx(unsigned line, IHTMLEventObj *event, LONG exl)
 
     hres = IHTMLEventObj_get_clientX(event, &l);
     ok_(__FILE__,line)(hres == S_OK, "get_clientX failed: %08x\n", hres);
-    if(exl == -10)  {/* don't test the exact value */
-        if(xy_todo)
-            todo_wine ok_(__FILE__,line)(l > 0, "clientX = %d\n", l);
-        else
-            ok_(__FILE__,line)(l > 0, "clientX = %d\n", l);
-    }else {
+    if(exl != -10) /* don't test the exact value */
         ok_(__FILE__,line)(l == exl, "clientX = %d, expected %d\n", l, exl);
-    }
 }
 
 static void _test_event_clienty(unsigned line, IHTMLEventObj *event, LONG exl)
@@ -526,14 +517,8 @@ static void _test_event_clienty(unsigned line, IHTMLEventObj *event, LONG exl)
 
     hres = IHTMLEventObj_get_clientY(event, &l);
     ok_(__FILE__,line)(hres == S_OK, "get_clientY failed: %08x\n", hres);
-    if(exl == -10)  {/* don't test the exact value */
-        if(xy_todo)
-            todo_wine ok_(__FILE__,line)(l > 0, "clientY = %d\n", l);
-        else
-            ok_(__FILE__,line)(l > 0, "clientY = %d\n", l);
-    }else {
+    if(exl != -10) /* don't test the exact value */
         ok_(__FILE__,line)(l == exl, "clientY = %d, expected %d\n", l, exl);
-    }
 }
 
 static void _test_event_offsetx(unsigned line, IHTMLEventObj *event, LONG exl)
@@ -543,9 +528,7 @@ static void _test_event_offsetx(unsigned line, IHTMLEventObj *event, LONG exl)
 
     hres = IHTMLEventObj_get_offsetX(event, &l);
     ok_(__FILE__,line)(hres == S_OK, "get_offsetX failed: %08x\n", hres);
-    if(exl == -10) /* don't test the exact value */
-        todo_wine ok_(__FILE__,line)(l > 0, "offsetX = %d\n", l);
-    else
+    if(exl != -10) /* don't test the exact value */
         ok_(__FILE__,line)(l == exl, "offsetX = %d, expected %d\n", l, exl);
 }
 
@@ -556,9 +539,7 @@ static void _test_event_offsety(unsigned line, IHTMLEventObj *event, LONG exl)
 
     hres = IHTMLEventObj_get_offsetY(event, &l);
     ok_(__FILE__,line)(hres == S_OK, "get_offsetY failed: %08x\n", hres);
-    if(exl == -10) /* don't test the exact value */
-        todo_wine ok_(__FILE__,line)(l > 0, "offsetY = %d\n", l);
-    else
+    if(exl != -10) /* don't test the exact value */
         ok_(__FILE__,line)(l == exl, "offsetY = %d, expected %d\n", l, exl);
 }
 
@@ -569,14 +550,8 @@ static void _test_event_screenx(unsigned line, IHTMLEventObj *event, LONG exl)
 
     hres = IHTMLEventObj_get_screenX(event, &l);
     ok_(__FILE__,line)(hres == S_OK, "get_screenX failed: %08x\n", hres);
-    if(exl == -10) { /* don't test the exact value */
-        if(xy_todo)
-            todo_wine ok_(__FILE__,line)(l > 0, "screenX = %d\n", l);
-        else
-            ok_(__FILE__,line)(l > 0, "screenX = %d\n", l);
-    }else {
+    if(exl != -10) /* don't test the exact value */
         ok_(__FILE__,line)(l == exl, "screenX = %d, expected %d\n", l, exl);
-    }
 }
 
 static void _test_event_screeny(unsigned line, IHTMLEventObj *event, LONG exl)
@@ -586,14 +561,8 @@ static void _test_event_screeny(unsigned line, IHTMLEventObj *event, LONG exl)
 
     hres = IHTMLEventObj_get_screenY(event, &l);
     ok_(__FILE__,line)(hres == S_OK, "get_screenY failed: %08x\n", hres);
-    if(exl == -10) { /* don't test the exact value */
-        if(xy_todo)
-            todo_wine ok_(__FILE__,line)(l > 0, "screenY = %d\n", l);
-        else
-            ok_(__FILE__,line)(l > 0, "screenY = %d\n", l);
-    }else {
+    if(exl != -10) /* don't test the exact value for -10 */
         ok_(__FILE__,line)(l == exl, "screenY = %d, expected %d\n", l, exl);
-    }
 }
 
 static void _test_event_type(unsigned line, IHTMLEventObj *event, const char *exstr)
@@ -690,6 +659,36 @@ static void _elem_detach_event(unsigned line, IUnknown *unk, const char *namea, 
     name = a2bstr(namea);
     hres = IHTMLElement2_detachEvent(elem, name, disp);
     IHTMLElement2_Release(elem);
+    SysFreeString(name);
+    ok_(__FILE__,line)(hres == S_OK, "detachEvent failed: %08x\n", hres);
+}
+
+#define doc_attach_event(a,b,c) _doc_attach_event(__LINE__,a,b,c)
+static void _doc_attach_event(unsigned line, IHTMLDocument2 *doc, const char *namea, IDispatch *disp)
+{
+    IHTMLDocument3 *doc3 = _get_doc3_iface(line, (IUnknown*)doc);
+    VARIANT_BOOL res;
+    BSTR name;
+    HRESULT hres;
+
+    name = a2bstr(namea);
+    hres = IHTMLDocument3_attachEvent(doc3, name, disp, &res);
+    IHTMLDocument3_Release(doc3);
+    SysFreeString(name);
+    ok_(__FILE__,line)(hres == S_OK, "attachEvent failed: %08x\n", hres);
+    ok_(__FILE__,line)(res == VARIANT_TRUE, "attachEvent returned %x\n", res);
+}
+
+#define doc_detach_event(a,b,c) _doc_detach_event(__LINE__,a,b,c)
+static void _doc_detach_event(unsigned line, IHTMLDocument2 *doc, const char *namea, IDispatch *disp)
+{
+    IHTMLDocument3 *doc3 = _get_doc3_iface(line, (IUnknown*)doc);
+    BSTR name;
+    HRESULT hres;
+
+    name = a2bstr(namea);
+    hres = IHTMLDocument3_detachEvent(doc3, name, disp);
+    IHTMLDocument3_Release(doc3);
     SysFreeString(name);
     ok_(__FILE__,line)(hres == S_OK, "detachEvent failed: %08x\n", hres);
 }
@@ -872,6 +871,18 @@ static HRESULT WINAPI div_onclick_attached(IDispatchEx *iface, DISPID id, LCID l
 }
 
 EVENT_HANDLER_FUNC_OBJ(div_onclick_attached);
+
+static HRESULT WINAPI doc_onclick_attached(IDispatchEx *iface, DISPID id, LCID lcid, WORD wFlags, DISPPARAMS *pdp,
+        VARIANT *pvarRes, EXCEPINFO *pei, IServiceProvider *pspCaller)
+{
+    CHECK_EXPECT(doc_onclick_attached);
+
+    test_attached_event_args(id, wFlags, pdp, pvarRes, pei);
+    test_event_src("DIV");
+    return S_OK;
+}
+
+EVENT_HANDLER_FUNC_OBJ(doc_onclick_attached);
 
 static HRESULT WINAPI body_onclick(IDispatchEx *iface, DISPID id, LCID lcid, WORD wFlags, DISPPARAMS *pdp,
         VARIANT *pvarRes, EXCEPINFO *pei, IServiceProvider *pspCaller)
@@ -1204,6 +1215,10 @@ static void test_onclick(IHTMLDocument2 *doc)
     hres = IHTMLElement_put_onclick(div, v);
     ok(hres == S_OK, "put_onclick failed: %08x\n", hres);
 
+    V_VT(&v) = VT_NULL;
+    hres = IHTMLElement_put_ondblclick(div, v);
+    ok(hres == S_OK, "put_ondblclick failed: %08x\n", hres);
+
     V_VT(&v) = VT_EMPTY;
     hres = IHTMLElement_get_onclick(div, &v);
     ok(hres == S_OK, "get_onclick failed: %08x\n", hres);
@@ -1277,12 +1292,14 @@ static void test_onclick(IHTMLDocument2 *doc)
 
     cp_cookie = register_cp((IUnknown*)doc, &DIID_HTMLDocumentEvents, (IUnknown*)&doccp_obj);
     elem_attach_event((IUnknown*)div, "onclick", (IDispatch*)&div_onclick_disp);
+    doc_attach_event(doc, "onclick", (IDispatch*)&doc_onclick_attached_obj);
 
     SET_EXPECT(div_onclick);
     SET_EXPECT(div_onclick_disp);
     SET_EXPECT(div_onclick_attached);
     SET_EXPECT(body_onclick);
     SET_EXPECT(document_onclick);
+    SET_EXPECT(doc_onclick_attached);
     SET_EXPECT(doccp_onclick);
 
     hres = IHTMLElement_click(div);
@@ -1293,6 +1310,7 @@ static void test_onclick(IHTMLDocument2 *doc)
     CHECK_CALLED(div_onclick_attached);
     CHECK_CALLED(body_onclick);
     CHECK_CALLED(document_onclick);
+    CHECK_CALLED(doc_onclick_attached);
     CHECK_CALLED(doccp_onclick);
 
     unregister_cp((IUnknown*)doc, &DIID_HTMLDocumentEvents, cp_cookie);
@@ -1308,6 +1326,7 @@ static void test_onclick(IHTMLDocument2 *doc)
     elem_detach_event((IUnknown*)div, "onclick", (IDispatch*)&div_onclick_disp);
     elem_detach_event((IUnknown*)div, "onclick", (IDispatch*)&div_onclick_disp);
     elem_detach_event((IUnknown*)div, "test", (IDispatch*)&div_onclick_disp);
+    doc_detach_event(doc, "onclick", (IDispatch*)&doc_onclick_attached_obj);
 
     SET_EXPECT(div_onclick_attached);
     SET_EXPECT(body_onclick);

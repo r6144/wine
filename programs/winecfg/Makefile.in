@@ -4,9 +4,10 @@ SRCDIR    = @srcdir@
 VPATH     = @srcdir@
 MODULE    = winecfg.exe
 APPMODE   = -mwindows
-IMPORTS   = uuid comdlg32 comctl32 shell32 ole32 winmm shlwapi uxtheme user32 gdi32 advapi32 kernel32
+IMPORTS   = uuid comdlg32 comctl32 shell32 ole32 winmm shlwapi uxtheme user32 gdi32 advapi32
 
 C_SRCS = \
+	about.c \
 	appdefaults.c \
 	audio.c \
 	drive.c \
@@ -41,7 +42,12 @@ RC_SRCS = \
 	Si.rc \
 	Sv.rc \
 	Tr.rc \
+	Uk.rc \
 	Zh.rc \
 	winecfg.rc
+
+SVG_SRCS = \
+	logo.svg \
+	winecfg.svg
 
 @MAKE_PROG_RULES@

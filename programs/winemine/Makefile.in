@@ -4,7 +4,7 @@ SRCDIR    = @srcdir@
 VPATH     = @srcdir@
 MODULE    = winemine.exe
 APPMODE   = -mwindows
-IMPORTS   = user32 gdi32 advapi32 kernel32
+IMPORTS   = user32 gdi32 advapi32
 DELAYIMPORTS = shell32
 
 C_SRCS = \
@@ -32,6 +32,7 @@ RC_SRCS = \
 	Si.rc \
 	Sv.rc \
 	Tr.rc \
+	Uk.rc \
 	Zh.rc \
 	rsrc.rc
 

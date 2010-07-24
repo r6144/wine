@@ -11,6 +11,7 @@
  *
  * Copyright 1998,1999 Francis Beaudet
  * Copyright 1998,1999 Thuy Nguyen
+ * Copyright 2010 Vincent Povirk for CodeWeavers
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -42,8 +43,12 @@
 /*
  * Definitions for the file format offsets.
  */
+static const ULONG OFFSET_MINORVERSION       = 0x00000018;
+static const ULONG OFFSET_MAJORVERSION       = 0x0000001a;
+static const ULONG OFFSET_BYTEORDERMARKER    = 0x0000001c;
 static const ULONG OFFSET_BIGBLOCKSIZEBITS   = 0x0000001e;
 static const ULONG OFFSET_SMALLBLOCKSIZEBITS = 0x00000020;
+static const ULONG OFFSET_DIRSECTORCOUNT     = 0x00000028;
 static const ULONG OFFSET_BBDEPOTCOUNT	     = 0x0000002C;
 static const ULONG OFFSET_ROOTSTARTBLOCK     = 0x00000030;
 static const ULONG OFFSET_SMALLBLOCKLIMIT    = 0x00000038;
@@ -66,6 +71,8 @@ static const ULONG OFFSET_PS_MTIMEHIGH       = 0x00000070;
 static const ULONG OFFSET_PS_STARTBLOCK	     = 0x00000074;
 static const ULONG OFFSET_PS_SIZE	     = 0x00000078;
 static const WORD  DEF_BIG_BLOCK_SIZE_BITS   = 0x0009;
+static const WORD  MIN_BIG_BLOCK_SIZE_BITS   = 0x0009;
+static const WORD  MAX_BIG_BLOCK_SIZE_BITS   = 0x000c;
 static const WORD  DEF_SMALL_BLOCK_SIZE_BITS = 0x0006;
 static const WORD  DEF_BIG_BLOCK_SIZE        = 0x0200;
 static const WORD  DEF_SMALL_BLOCK_SIZE      = 0x0040;
@@ -147,31 +154,7 @@ struct DirEntry
   ULARGE_INTEGER size;
 };
 
-/*************************************************************************
- * Big Block File support
- *
- * The big block file is an abstraction of a flat file separated in
- * same sized blocks. The implementation for the methods described in
- * this section appear in stg_bigblockfile.c
- */
-
-typedef struct BigBlockFile BigBlockFile,*LPBIGBLOCKFILE;
-
-/*
- * Declaration of the functions used to manipulate the BigBlockFile
- * data structure.
- */
-BigBlockFile*  BIGBLOCKFILE_Construct(HANDLE hFile,
-                                      ILockBytes* pLkByt,
-                                      DWORD openFlags,
-                                      BOOL fileBased);
-void           BIGBLOCKFILE_Destructor(LPBIGBLOCKFILE This);
-HRESULT        BIGBLOCKFILE_Expand(LPBIGBLOCKFILE This, ULARGE_INTEGER newSize);
-HRESULT        BIGBLOCKFILE_SetSize(LPBIGBLOCKFILE This, ULARGE_INTEGER newSize);
-HRESULT        BIGBLOCKFILE_ReadAt(LPBIGBLOCKFILE This, ULARGE_INTEGER offset,
-           void* buffer, ULONG size, ULONG* bytesRead);
-HRESULT        BIGBLOCKFILE_WriteAt(LPBIGBLOCKFILE This, ULARGE_INTEGER offset,
-           const void* buffer, ULONG size, ULONG* bytesRead);
+HRESULT FileLockBytesImpl_Construct(HANDLE hFile, DWORD openFlags, LPCWSTR pwcsName, ILockBytes **pLockBytes);
 
 /*************************************************************************
  * Ole Convert support
@@ -238,9 +221,6 @@ struct StorageBaseImpl
    */
   DWORD stateBits;
 
-  /* If set, this overrides the root storage name returned by IStorage_Stat */
-  LPCWSTR          filename;
-
   BOOL             create;     /* Was the storage created or opened.
                                   The behaviour of STGM_SIMPLE depends on this */
   /*
@@ -254,6 +234,8 @@ struct StorageBaseImpl
 struct StorageBaseImplVtbl {
   void (*Destroy)(StorageBaseImpl*);
   void (*Invalidate)(StorageBaseImpl*);
+  HRESULT (*Flush)(StorageBaseImpl*);
+  HRESULT (*GetFilename)(StorageBaseImpl*,LPWSTR*);
   HRESULT (*CreateDirEntry)(StorageBaseImpl*,const DirEntry*,DirRef*);
   HRESULT (*WriteDirEntry)(StorageBaseImpl*,DirRef,const DirEntry*);
   HRESULT (*ReadDirEntry)(StorageBaseImpl*,DirRef,DirEntry*);
@@ -261,6 +243,7 @@ struct StorageBaseImplVtbl {
   HRESULT (*StreamReadAt)(StorageBaseImpl*,DirRef,ULARGE_INTEGER,ULONG,void*,ULONG*);
   HRESULT (*StreamWriteAt)(StorageBaseImpl*,DirRef,ULARGE_INTEGER,ULONG,const void*,ULONG*);
   HRESULT (*StreamSetSize)(StorageBaseImpl*,DirRef,ULARGE_INTEGER);
+  HRESULT (*StreamLink)(StorageBaseImpl*,DirRef,DirRef);
 };
 
 static inline void StorageBaseImpl_Destroy(StorageBaseImpl *This)
@@ -271,6 +254,16 @@ static inline void StorageBaseImpl_Destroy(StorageBaseImpl *This)
 static inline void StorageBaseImpl_Invalidate(StorageBaseImpl *This)
 {
   This->baseVtbl->Invalidate(This);
+}
+
+static inline HRESULT StorageBaseImpl_Flush(StorageBaseImpl *This)
+{
+  return This->baseVtbl->Flush(This);
+}
+
+static inline HRESULT StorageBaseImpl_GetFilename(StorageBaseImpl *This, LPWSTR *result)
+{
+  return This->baseVtbl->GetFilename(This, result);
 }
 
 static inline HRESULT StorageBaseImpl_CreateDirEntry(StorageBaseImpl *This,
@@ -318,6 +311,16 @@ static inline HRESULT StorageBaseImpl_StreamSetSize(StorageBaseImpl *This,
   return This->baseVtbl->StreamSetSize(This, index, newsize);
 }
 
+/* Make dst point to the same stream that src points to. Other stream operations
+ * will not work properly for entries that point to the same stream, so this
+ * must be a very temporary state, and only one entry pointing to a given stream
+ * may be reachable at any given time. */
+static inline HRESULT StorageBaseImpl_StreamLink(StorageBaseImpl *This,
+  DirRef dst, DirRef src)
+{
+  return This->baseVtbl->StreamLink(This, dst, src);
+}
+
 /****************************************************************************
  * StorageBaseImpl stream list handlers
  */
@@ -337,13 +340,6 @@ void StorageBaseImpl_RemoveStream(StorageBaseImpl * stg, StgStreamImpl * strm);
 struct StorageImpl
 {
   struct StorageBaseImpl base;
-
-  /*
-   * The following data members are specific to the Storage32Impl
-   * class
-   */
-  HANDLE           hFile;      /* Physical support for the Docfile */
-  LPOLESTR         pwcsName;   /* Full path of the document file */
 
   /*
    * File header
@@ -378,10 +374,7 @@ struct StorageImpl
   BlockChainStream* blockChainCache[BLOCKCHAIN_CACHE_SIZE];
   UINT blockChainToEvict;
 
-  /*
-   * Pointer to the big block file abstraction
-   */
-  BigBlockFile* bigBlockFile;
+  ILockBytes* lockBytes;
 };
 
 HRESULT StorageImpl_ReadRawDirEntry(
@@ -511,13 +504,22 @@ void StorageUtl_CopyDirEntryToSTATSTG(StorageBaseImpl *storage,STATSTG* destinat
  * The BlockChainStream class is a utility class that is used to create an
  * abstraction of the big block chains in the storage file.
  */
+struct BlockChainRun
+{
+  /* This represents a range of blocks that happen reside in consecutive sectors. */
+  ULONG firstSector;
+  ULONG firstOffset;
+  ULONG lastOffset;
+};
+
 struct BlockChainStream
 {
   StorageImpl* parentStorage;
   ULONG*       headOfStreamPlaceHolder;
   DirRef       ownerDirEntry;
-  ULONG        lastBlockNoInSequence;
-  ULONG        lastBlockNoInSequenceIndex;
+  struct BlockChainRun* indexCache;
+  ULONG        indexCacheLen;
+  ULONG        indexCacheSize;
   ULONG        tailIndex;
   ULONG        numBlocks;
 };

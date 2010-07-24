@@ -3,7 +3,7 @@ TOPOBJDIR = ../../..
 SRCDIR    = @srcdir@
 VPATH     = @srcdir@
 TESTDLL   = shlwapi.dll
-IMPORTS   = shlwapi user32 ole32 oleaut32 advapi32 kernel32
+IMPORTS   = shlwapi user32 ole32 oleaut32 advapi32
 
 C_SRCS = \
 	assoc.c \
@@ -15,6 +15,7 @@ C_SRCS = \
 	path.c \
 	shreg.c \
 	string.c \
+	thread.c \
 	url.c
 
 @MAKE_TEST_RULES@

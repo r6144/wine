@@ -3,6 +3,7 @@
  *
  *  Copyright 1999-2001 Brian Palmer
  *  Copyright 2006 Mikolaj Zalewski
+ *  Copyright 2010 £ukasz Wojni³owicz
  *
  *
  * This library is free software; you can redistribute it and/or
@@ -28,7 +29,7 @@ LANGUAGE LANG_POLISH, SUBLANG_DEFAULT
  Menu
 */
 
-IDR_TASKMANAGER MENU DISCARDABLE
+IDR_TASKMANAGER MENU
 BEGIN
     POPUP "&Plik"
     BEGIN
@@ -56,7 +57,7 @@ BEGIN
             MENUITEM "&Normalna",                     ID_VIEW_UPDATESPEED_NORMAL
             , CHECKED
             MENUITEM "N&iska",                        ID_VIEW_UPDATESPEED_LOW
-            MENUITEM "&Zapauzowane",                     ID_VIEW_UPDATESPEED_PAUSED
+            MENUITEM "&Wstrzymana",                     ID_VIEW_UPDATESPEED_PAUSED
 
         END
         MENUITEM SEPARATOR
@@ -90,7 +91,7 @@ BEGIN
     END
 END
 
-IDR_WINDOWSMENU MENU DISCARDABLE
+IDR_WINDOWSMENU MENU
 BEGIN
     MENUITEM "&S¹siaduj¹co w poziomie",          ID_WINDOWS_TILEHORIZONTALLY
     MENUITEM "S¹s&iaduj¹co w poziomie",            ID_WINDOWS_TILEVERTICALLY
@@ -100,7 +101,7 @@ BEGIN
     MENUITEM "&Przesuñ na wierzch",             ID_WINDOWS_BRINGTOFRONT
 END
 
-IDR_APPLICATION_PAGE_CONTEXT1 MENU DISCARDABLE
+IDR_APPLICATION_PAGE_CONTEXT1 MENU
 BEGIN
     POPUP "DUMMY"
     BEGIN
@@ -112,7 +113,7 @@ BEGIN
     END
 END
 
-IDR_APPLICATION_PAGE_CONTEXT2 MENU DISCARDABLE
+IDR_APPLICATION_PAGE_CONTEXT2 MENU
 BEGIN
     POPUP "DUMMY"
     BEGIN
@@ -130,7 +131,7 @@ BEGIN
     END
 END
 
-IDR_TRAY_POPUP MENU DISCARDABLE
+IDR_TRAY_POPUP MENU
 BEGIN
     POPUP "DUMMY"
     BEGIN
@@ -141,7 +142,7 @@ BEGIN
     END
 END
 
-IDR_PROCESS_PAGE_CONTEXT MENU DISCARDABLE
+IDR_PROCESS_PAGE_CONTEXT MENU
 BEGIN
     POPUP "DUMMY"
     BEGIN
@@ -174,7 +175,7 @@ END
  Dialog
 */
 
-IDD_TASKMGR_DIALOG DIALOG DISCARDABLE  0, 0, 264, 246
+IDD_TASKMGR_DIALOG DIALOG  0, 0, 264, 246
 STYLE DS_CENTER | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_POPUP |
     WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_CAPTION | WS_SYSMENU |
     WS_THICKFRAME
@@ -185,7 +186,7 @@ BEGIN
     CONTROL         "Tab1",IDC_TAB,"SysTabControl32",WS_TABSTOP,3,3,257,228
 END
 
-IDD_APPLICATION_PAGE DIALOG DISCARDABLE  0, 0, 247, 210
+IDD_APPLICATION_PAGE DIALOG  0, 0, 247, 210
 STYLE DS_CONTROL | WS_CHILD | WS_CLIPCHILDREN
 FONT 8, "MS Shell Dlg"
 BEGIN
@@ -196,7 +197,7 @@ BEGIN
     PUSHBUTTON      "&Zakoñcz zadanie",IDC_ENDTASK,30,189,68,14,WS_DISABLED
 END
 
-IDD_PROCESS_PAGE DIALOG DISCARDABLE  0, 0, 247, 210
+IDD_PROCESS_PAGE DIALOG  0, 0, 247, 210
 STYLE DS_CONTROL | WS_CHILD | WS_CLIPCHILDREN
 FONT 8, "MS Shell Dlg"
 BEGIN
@@ -208,7 +209,7 @@ BEGIN
                     "Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,191,161,10
 END
 
-IDD_PERFORMANCE_PAGE DIALOGEX DISCARDABLE  0, 0, 247, 210
+IDD_PERFORMANCE_PAGE DIALOGEX  0, 0, 247, 210
 STYLE DS_CONTROL | WS_CHILD | WS_CLIPCHILDREN
 FONT 8, "MS Shell Dlg"
 BEGIN
@@ -266,7 +267,7 @@ BEGIN
                     153,37,0,WS_EX_CLIENTEDGE
 END
 
-IDD_DEBUG_CHANNELS_DIALOG DIALOG DISCARDABLE  0, 0, 247, 210
+IDD_DEBUG_CHANNELS_DIALOG DIALOG  0, 0, 247, 210
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Kana³y debugowania"
 FONT 8, "MS Shell Dlg"
@@ -277,7 +278,7 @@ BEGIN
     PUSHBUTTON      "Zamknij",IDOK,171,189,69,14
 END
 
-IDD_AFFINITY_DIALOG DIALOG DISCARDABLE  0, 0, 231, 154
+IDD_AFFINITY_DIALOG DIALOG  0, 0, 231, 154
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Koligacja procesora"
 FONT 8, "MS Shell Dlg"
@@ -352,7 +353,7 @@ BEGIN
                     WS_DISABLED | WS_TABSTOP,175,119,41,10
 END
 
-IDD_COLUMNS_DIALOG DIALOG DISCARDABLE  0, 0, 260, 199
+IDD_COLUMNS_DIALOG DIALOG  0, 0, 260, 199
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Wybierz kolumny"
 FONT 8, "MS Shell Dlg"
@@ -417,14 +418,14 @@ END
  String Table
 */
 
-STRINGTABLE DISCARDABLE
+STRINGTABLE
 BEGIN
     IDS_APP_TITLE           "Mened¿er zadañ"
     IDC_TASKMGR             "Mened¿er zadañ"
     IDS_RUNDLG_CAPTION      "Utwórz nowe zadanie"
 END
 
-STRINGTABLE DISCARDABLE
+STRINGTABLE
 BEGIN
     ID_FILE_NEW             "Uruchamia nowy program"
     ID_OPTIONS_ALWAYSONTOP  "Mened¿er zadañ bêdzie ponad innymi oknami (chyba, ¿e zminimalizowany)"
@@ -440,7 +441,7 @@ BEGIN
     ID_VIEW_UPDATESPEED_LOW "Odœwie¿a listê co cztery sekundy"
 END
 
-STRINGTABLE DISCARDABLE
+STRINGTABLE
 BEGIN
     ID_VIEW_UPDATESPEED_PAUSED "Bez automatycznego odœwie¿ania listy"
     ID_WINDOWS_TILEHORIZONTALLY
@@ -464,7 +465,7 @@ BEGIN
                             "Przesuwa zadanie na wierzch i prze³¹cza na nie"
 END
 
-STRINGTABLE DISCARDABLE
+STRINGTABLE
 BEGIN
     ID_ENDTASK              "Poleæ wybranym zadaniom zakoñczenie dzia³ania"
     ID_GOTOPROCESS          "Prze³¹cza na proces wybranego zadania"
@@ -485,4 +486,90 @@ BEGIN
     ID_PROCESS_PAGE_SETPRIORITY_BELOWNORMAL
                             "Ustala priorytet procesu na poni¿ej normalnego"
     ID_PROCESS_PAGE_SETPRIORITY_LOW "Ustala priorytet procesu na niski"
+    ID_PROCESS_PAGE_DEBUGCHANNELS
+                            "Kontroluj kana³y debugowania"
+END
+
+STRINGTABLE
+BEGIN
+    IDS_VIEW_LARGE                     "Du&¿e ikony"
+    IDS_VIEW_SMALL                     "M&a³e ikony"
+    IDS_VIEW_DETAILS                   "&Szczegó³y"
+    IDS_WINDOWS                        "&Okna"
+    IDS_VIEW_SELECTCOLUMNS             "&Wybierz kolumny..."
+    IDS_OPTIONS_SHOW16BITTASKS         "&Poka¿ zadania 16-bitowe"
+    IDS_VIEW_CPUHISTORY                "&Historia u¿ycia procesora CPU"
+    IDS_VIEW_CPUHISTORY_ONEGRAPHALL    "&Jeden wykres dla wszystkich procesorów CPU"
+    IDS_VIEW_CPUHISTORY_ONEGRAPHPERCPU "Jeden wykres dla ka¿dego procesora CPU"
+    IDS_VIEW_SHOWKERNELTIMES           "&Poka¿ czas j¹dra"
+    IDS_APPLICATIONS                   "Aplikacje"
+    IDS_PROCESSES                      "Procesy"
+    IDS_PERFORMANCE                    "Wydajnoœæ"
+    IDS_STATUS_BAR_CPU_USAGE           "U¿ycie procesora: %3d%%"
+    IDS_STATUS_BAR_PROCESSES           "Procesy: %d"
+    IDS_STATUS_BAR_MEMORY_USAGE        "Pam. zadeklar.: %dK / %dK"
+END
+
+STRINGTABLE
+BEGIN
+    IDS_IMAGENAME         "Nazwa obrazu"
+    IDS_PID               "PID (identyfikator procesu)"
+    IDS_CPUUSAGE          "U¿ycie procesora CPU"
+    IDS_CPUTIME           "Czas procesora CPU"
+    IDS_MEMORYUSAGE       "U¿ycie pamiêci"
+    IDS_MEMORYUSAGEDELTA  "Zmiana u¿ycia pamiêci"
+    IDS_PEAKMEMORYUSAGE   "Szczytowe u¿ycie pamiêci"
+    IDS_PAGEFAULTS        "B³êdy stron"
+    IDS_USEROBJECTS       "Obiekty USER"
+    IDS_IOREADS           "Odczyty We/Wy"
+    IDS_IOREADBYTES       "Odczyty We/Wy w bajtach"
+    IDS_SESSIONID         "Identyfikator sesji"
+    IDS_USERNAME          "Nazwa u¿ytkowinka"
+    IDS_PAGEFAULTSDELTA   "Zmiana b³êdów stron"
+    IDS_VIRTUALMEMORYSIZE "Rozmiar pamiêci wirtualnej"
+    IDS_PAGEDPOOL         "Pula stronnicowania"
+    IDS_NONPAGEDPOOL      "Pula niestronnicowania"
+    IDS_BASEPRIORITY      "Priorytet podstawowy"
+    IDS_HANDLECOUNT       "Liczba dojœæ"
+    IDS_THREADCOUNT       "Liczba w¹tków"
+    IDS_GDIOBJECTS        "Obiekty GDI"
+    IDS_IOWRITES          "Zapisy We/Wy"
+    IDS_IOWRITEBYTES      "Zapisy We/Wy w bajtach"
+    IDS_IOOTHER           "Inne We/Wy"
+    IDS_IOOTHERBYTES      "Inne We/Wy w bajtach"
+END
+
+STRINGTABLE
+BEGIN
+    IDS_WARNING_TITLE               "Ostrze¿enie menad¿era zadañ"
+    IDS_PRIORITY_CHANGE_MESSAGE     "OSTRZE¯ENIE: Zmiana priorytetu tego rprcesu mo¿e przynieœæ\n\
+                                     nieporz¹dane skutki, w tym równie¿ niestabilnoœæ systemu\n\
+                                     Czy na pewno chcesz zmieniæ priorytet?"
+    IDS_PRIORITY_UNABLE2CHANGE      "Nie mozna zmieniæ priorytetu"
+    IDS_TERMINATE_MESSAGE           "OSTRZE¯ENIE: Zakoñczenie procesu mo¿e przynieœæ\n\
+                                     nieporz¹dane skutki, w tym równie¿\n\
+                                     utratê danych i niestabilnoœæ systemu.\n\
+                                     Proces nie bêdzie mia³ szansy na zapisanie danych\n\
+                                     Czy na pewno chcesz zakoñczyæ?"
+    IDS_TERMINATE_UNABLE2TERMINATE  "Nie mo¿na zakoñczyæ procesu"
+    IDS_DEBUG_MESSAGE               "OSTRZE¯ENIE: Debugowanie tego procesu mo¿e spowodowaæ utratê tanych.\n\
+                                     Czy na pewno chcesz uruchomiæ debugera?"
+    IDS_DEBUG_UNABLE2DEBUG          "Nie mo¿na debugowaæ procesu"
+    IDS_AFFINITY_ERROR_MESSAGE      "Proces musi byæ skoligacony z co najmniej jednym procesorem"
+    IDS_AFFINITY_ERROR_TITLE        "Niew³aœciwa opcja"
+    IDS_AFFINITY_UNABLE2ACCESS      "Nie mo¿na uzyskaæ dostêpu lub ustawiæ koligacji procesu"
+END
+
+STRINGTABLE
+BEGIN
+    IDS_SYSTEM_IDLE_PROCESS            "System Idle Process"
+    IDS_APPLICATION_NOT_RESPONDING     "Nie odpowiada"
+    IDS_APPLICATION_RUNNING            "Uruchomiony"
+    IDS_APPLICATION_TASK               "Zadanie"
+    IDS_APPLICATION_STATUS             "Stan"
+    IDS_DEBUG_CHANNEL                  "Kana³y debugowania"
+    IDS_DEBUG_CHANNEL_FIXME            "Fixme"
+    IDS_DEBUG_CHANNEL_ERR              "Err"
+    IDS_DEBUG_CHANNEL_WARN             "Warn"
+    IDS_DEBUG_CHANNEL_TRACE            "Trace"
 END

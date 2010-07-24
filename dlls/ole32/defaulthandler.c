@@ -365,7 +365,7 @@ static HRESULT WINAPI DefaultHandler_SetClientSite(
   if (This->clientSite)
     IOleClientSite_AddRef(This->clientSite);
 
-  return S_OK;
+  return hr;
 }
 
 /************************************************************************
@@ -1146,14 +1146,11 @@ static HRESULT WINAPI DefaultHandler_EnumFormatEtc(
 	    DWORD            dwDirection,
 	    IEnumFORMATETC** ppenumFormatEtc)
 {
-  HRESULT hres;
   DefaultHandler *This = impl_from_IDataObject(iface);
 
   TRACE("(%p, %x, %p)\n", iface, dwDirection, ppenumFormatEtc);
 
-  hres = OleRegEnumFormatEtc(&This->clsid, dwDirection, ppenumFormatEtc);
-
-  return hres;
+  return OleRegEnumFormatEtc(&This->clsid, dwDirection, ppenumFormatEtc);
 }
 
 /************************************************************************

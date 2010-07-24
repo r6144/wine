@@ -21,11 +21,13 @@
 
 #include "winhelp_res.h"
 
+LANGUAGE LANG_ESPERANTO, SUBLANG_DEFAULT
+
 /* Cxapelitaj literoj estas en Latin-3 iso8859-3 */
 
 /* Menu */
 
-MAIN_MENU MENU LANGUAGE LANG_ESPERANTO, SUBLANG_DEFAULT
+MAIN_MENU MENU
 {
  POPUP "&Dosiero" {
   MENUITEM "&Malfermu", MNID_FILE_OPEN
@@ -71,7 +73,7 @@ MAIN_MENU MENU LANGUAGE LANG_ESPERANTO, SUBLANG_DEFAULT
 }
 
 /* Strings */
-STRINGTABLE DISCARDABLE LANGUAGE LANG_ESPERANTO, SUBLANG_DEFAULT
+STRINGTABLE
 {
 STID_WINE_HELP, 	"WINE Helpanto"
 STID_WHERROR, 		"ERARO"
@@ -86,5 +88,4 @@ STID_ALL_FILES, 	"Tutaj dosieroj (*.*)"
 STID_HELP_FILES_HLP, 	"Helpaj dosieroj (*.hlp)"
 STID_FILE_NOT_FOUND_s	"Cannot find '%s'. Do you want to find this file yourself?"
 STID_NO_RICHEDIT	"Cannot find a richedit implementation... Aborting"
-STID_PSH_INDEX,		"Help topics: "
 }

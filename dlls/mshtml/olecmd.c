@@ -616,9 +616,6 @@ static HRESULT exec_editmode(HTMLDocument *This, DWORD cmdexecopt, VARIANT *in, 
             IDocHostUIHandler_HideUI(This->doc_obj->hostui);
     }
 
-    if(This->doc_obj->nscontainer)
-        set_ns_editmode(This->doc_obj->nscontainer);
-
     if(This->doc_obj->ui_active) {
         RECT rcBorderWidths;
 
@@ -901,11 +898,9 @@ void show_context_menu(HTMLDocumentObj *This, DWORD dwID, POINT *ppt, IDispatch 
 {
     HMENU menu_res, menu;
     DWORD cmdid;
-    HRESULT hres;
 
-    hres = IDocHostUIHandler_ShowContextMenu(This->hostui, dwID, ppt,
-            (IUnknown*)CMDTARGET(&This->basedoc), elem);
-    if(hres == S_OK)
+    if(This->hostui && S_OK == IDocHostUIHandler_ShowContextMenu(This->hostui,
+            dwID, ppt, (IUnknown*)CMDTARGET(&This->basedoc), elem))
         return;
 
     menu_res = LoadMenuW(get_shdoclc(), MAKEINTRESOURCEW(IDR_BROWSE_CONTEXT_MENU));

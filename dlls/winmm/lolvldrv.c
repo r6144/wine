@@ -36,35 +36,41 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(winmm);
 
+/* Default set of drivers to be loaded */
+#define WINE_DEFAULT_WINMM_DRIVER "alsa,oss,coreaudio,esd"
+
 /* each known type of driver has an instance of this structure */
 typedef struct tagWINE_LLTYPE {
     /* those attributes depend on the specification of the type */
     LPCSTR		typestr;	/* name (for debugging) */
-    BOOL		bSupportMapper;	/* if type is allowed to support mapper */
     /* those attributes reflect the loaded/current situation for the type */
     UINT		wMaxId;		/* number of loaded devices (sum across all loaded drivers) */
     LPWINE_MLD		lpMlds;		/* "static" mlds to access the part though device IDs */
     int			nMapper;	/* index to mapper */
 } WINE_LLTYPE;
 
-static int		MMDrvsHi /* = 0 */;
+static WINE_LLTYPE llTypes[MMDRV_MAX] = {
+    { "Aux", 0, 0, -1 },
+    { "Mixer", 0, 0, -1 },
+    { "MidiIn", 0, 0, -1 },
+    { "MidiOut", 0, 0, -1 },
+    { "WaveIn", 0, 0, -1 },
+    { "WaveOut", 0, 0, -1 }
+};
+
+static int drivers_loaded, MMDrvsHi;
 static WINE_MM_DRIVER	MMDrvs[8];
 static LPWINE_MLD	MM_MLDrvs[40];
 #define MAX_MM_MLDRVS	(sizeof(MM_MLDrvs) / sizeof(MM_MLDrvs[0]))
 
-#define A(_x,_y) {#_y, _x, 0, NULL, -1}
-/* Note: the indices of this array must match the definitions
- *	 of the MMDRV_???? manifest constants
- */
-static WINE_LLTYPE	llTypes[MMDRV_MAX] = {
-    A(TRUE,  Aux),
-    A(FALSE, Mixer),
-    A(FALSE, MidiIn),
-    A(TRUE,  MidiOut),
-    A(TRUE,  WaveIn),
-    A(TRUE,  WaveOut),
-};
-#undef A
+static void MMDRV_Init(void);
+
+static void MMDRV_InitSingleType(UINT type) {
+    if (!drivers_loaded) {
+        drivers_loaded = 1;
+        MMDRV_Init();
+    }
+}
 
 /**************************************************************************
  * 			MMDRV_GetNum				[internal]
@@ -73,6 +79,7 @@ UINT	MMDRV_GetNum(UINT type)
 {
     TRACE("(%04x)\n", type);
     assert(type < MMDRV_MAX);
+    MMDRV_InitSingleType(type);
     return llTypes[type].wMaxId;
 }
 
@@ -86,41 +93,30 @@ DWORD  MMDRV_Message(LPWINE_MLD mld, UINT wMsg, DWORD_PTR dwParam1,
     DWORD			ret;
     WINE_MM_DRIVER_PART*	part;
     WINE_LLTYPE*		llType = &llTypes[mld->type];
-    int				devID;
 
-    TRACE("(%s %u %u 0x%08lx 0x%08lx 0x%08lx)\n",
+    TRACE("(%s %d %u 0x%08lx 0x%08lx 0x%08lx)\n",
 	  llTypes[mld->type].typestr, mld->uDeviceID, wMsg,
 	  mld->dwDriverInstance, dwParam1, dwParam2);
 
-    if (mld->uDeviceID == (UINT16)-1) {
-	if (!llType->bSupportMapper) {
-	    WARN("uDev=-1 requested on non-mappable ll type %s\n",
+    if ((UINT16)mld->uDeviceID == (UINT16)-1) {
+        if (llType->nMapper == -1) {
+	    WARN("uDev=-1 requested on non-mapped ll type %s\n",
 		 llTypes[mld->type].typestr);
 	    return MMSYSERR_BADDEVICEID;
-	}
-	devID = -1;
+        }
     } else {
 	if (mld->uDeviceID >= llType->wMaxId) {
 	    WARN("uDev(%u) requested >= max (%d)\n", mld->uDeviceID, llType->wMaxId);
 	    return MMSYSERR_BADDEVICEID;
 	}
-	devID = mld->uDeviceID;
     }
 
     lpDrv = &MMDrvs[mld->mmdIndex];
     part = &lpDrv->parts[mld->type];
 
-#if 0
-    /* some sanity checks */
-    if (!(part->nIDMin <= devID))
-	ERR("!(part->nIDMin(%d) <= devID(%d))\n", part->nIDMin, devID);
-    if (!(devID < part->nIDMax))
-	ERR("!(devID(%d) < part->nIDMax(%d))\n", devID, part->nIDMax);
-#endif
-
     assert(part->fnMessage32);
 
-    TRACE("Calling message(dev=%u msg=%u usr=0x%08lx p1=0x%08lx p2=0x%08lx)\n",
+    TRACE("Calling message(dev=%d msg=%u usr=0x%08lx p1=0x%08lx p2=0x%08lx)\n",
           mld->uDeviceID, wMsg, mld->dwDriverInstance, dwParam1, dwParam2);
     ret = part->fnMessage32(mld->uDeviceID, wMsg, mld->dwDriverInstance, dwParam1, dwParam2);
     TRACE("=> %s\n", WINMM_ErrorToString(ret));
@@ -201,26 +197,14 @@ DWORD MMDRV_Open(LPWINE_MLD mld, UINT wMsg, DWORD_PTR dwParam1, DWORD dwFlags)
     mld->dwDriverInstance = (DWORD_PTR)&dwInstance;
 
     if (mld->uDeviceID == (UINT)-1 || mld->uDeviceID == (UINT16)-1) {
-	TRACE("MAPPER mode requested !\n");
-	/* check if mapper is supported by type */
-	if (llType->bSupportMapper) {
-	    if (llType->nMapper == -1) {
-		/* no driver for mapper has been loaded, try a dumb implementation */
-		TRACE("No mapper loaded, doing it by hand\n");
-		for (mld->uDeviceID = 0; mld->uDeviceID < llType->wMaxId; mld->uDeviceID++) {
-		    if ((dwRet = MMDRV_Open(mld, wMsg, dwParam1, dwFlags)) == MMSYSERR_NOERROR) {
-			/* to share this function epilog */
-			dwInstance = mld->dwDriverInstance;
-			break;
-		    }
-		}
-	    } else {
-		mld->uDeviceID = (UINT16)-1;
-		mld->mmdIndex = llType->lpMlds[-1].mmdIndex;
-		TRACE("Setting mmdIndex to %u\n", mld->mmdIndex);
-		dwRet = MMDRV_Message(mld, wMsg, dwParam1, dwFlags);
-	    }
-	}
+        TRACE("MAPPER mode requested !\n");
+        if (llType->nMapper == -1) {
+            WARN("Mapper not supported for type %s\n", llTypes[mld->type].typestr);
+            return MMSYSERR_BADDEVICEID;
+        }
+        mld->mmdIndex = llType->lpMlds[-1].mmdIndex;
+        TRACE("Setting mmdIndex to %u\n", mld->mmdIndex);
+        dwRet = MMDRV_Message(mld, wMsg, dwParam1, dwFlags);
     } else {
 	if (mld->uDeviceID < llType->wMaxId) {
 	    mld->mmdIndex = llType->lpMlds[mld->uDeviceID].mmdIndex;
@@ -265,6 +249,7 @@ LPWINE_MLD	MMDRV_Get(HANDLE _hndl, UINT type, BOOL bCanBeID)
     TRACE("(%p, %04x, %c)\n", _hndl, type, bCanBeID ? 'Y' : 'N');
 
     assert(type < MMDRV_MAX);
+    MMDRV_InitSingleType(type);
 
     if (hndl >= llTypes[type].wMaxId &&
 	hndl != (UINT16)-1 && hndl != (UINT)-1) {
@@ -393,13 +378,7 @@ static  BOOL	MMDRV_InitPerType(LPWINE_MM_DRIVER lpDrv, UINT type, UINT wMsg)
 
     /* got some drivers */
     if (lpDrv->bIsMapper) {
-	/* it seems native mappers return 0 devices :-( */
-	if (llTypes[type].nMapper != -1)
-	    ERR("Two mappers for type %s (%d, %s)\n",
-		llTypes[type].typestr, llTypes[type].nMapper, lpDrv->drvname);
-	if (count > 1)
-	    ERR("Strange: mapper with %d > 1 devices\n", count);
-	llTypes[type].nMapper = MMDrvsHi;
+        llTypes[type].nMapper = MMDrvsHi;
     } else {
 	if (count == 0)
 	    return FALSE;
@@ -421,9 +400,9 @@ static  BOOL	MMDRV_InitPerType(LPWINE_MM_DRIVER lpDrv, UINT type, UINT wMsg)
 		    sizeof(WINE_MLD) * (llTypes[type].wMaxId + 1)) + 1;
 
     /* re-build the translation table */
-    if (llTypes[type].nMapper != -1) {
+    if (lpDrv->bIsMapper) {
 	TRACE("%s:Trans[%d] -> %s\n", llTypes[type].typestr, -1, MMDrvs[llTypes[type].nMapper].drvname);
-	llTypes[type].lpMlds[-1].uDeviceID = (UINT16)-1;
+	llTypes[type].lpMlds[-1].uDeviceID = (UINT)-1;
 	llTypes[type].lpMlds[-1].type = type;
 	llTypes[type].lpMlds[-1].mmdIndex = llTypes[type].nMapper;
 	llTypes[type].lpMlds[-1].dwDriverInstance = 0;
@@ -528,43 +507,36 @@ static	BOOL	MMDRV_Install(LPCSTR drvRegName, LPCSTR drvFileName, BOOL bIsMapper)
 /**************************************************************************
  * 				MMDRV_Init
  */
-BOOL	MMDRV_Init(void)
+static void MMDRV_Init(void)
 {
     HKEY	hKey;
     char	driver_buffer[256];
-    char	mapper_buffer[256];
-    char	midi_buffer[256];
-    char*	p;
-    DWORD	type, size;
-    BOOL	ret = FALSE;
+    char *p, *next;
     TRACE("()\n");
 
     strcpy(driver_buffer, WINE_DEFAULT_WINMM_DRIVER);
-    strcpy(mapper_buffer, WINE_DEFAULT_WINMM_MAPPER);
-    strcpy(midi_buffer, WINE_DEFAULT_WINMM_MIDI);
 
     /* @@ Wine registry key: HKCU\Software\Wine\Drivers */
     if (!RegOpenKeyA(HKEY_CURRENT_USER, "Software\\Wine\\Drivers", &hKey))
     {
-        size = sizeof(driver_buffer);
-        if (RegQueryValueExA(hKey, "Audio", 0, &type, (LPVOID)driver_buffer, &size))
+        DWORD size = sizeof(driver_buffer);
+        if (RegQueryValueExA(hKey, "Audio", 0, NULL, (BYTE*)driver_buffer, &size))
             strcpy(driver_buffer, WINE_DEFAULT_WINMM_DRIVER);
     }
 
-    p = driver_buffer;
-    while (p)
+    for (p = driver_buffer; p; p = next)
     {
         char filename[sizeof(driver_buffer)+10];
-        char *next = strchr(p, ',');
+        next = strchr(p, ',');
         if (next) *next++ = 0;
         sprintf( filename, "wine%s.drv", p );
-        if ((ret = MMDRV_Install( filename, filename, FALSE ))) break;
+        if (MMDRV_Install(filename, filename, FALSE))
+            break;
         p = next;
     }
 
-    ret |= MMDRV_Install("wavemapper", WINE_DEFAULT_WINMM_MAPPER, TRUE);
-    ret |= MMDRV_Install("midimapper", WINE_DEFAULT_WINMM_MIDI, TRUE);
-    return ret;
+    MMDRV_Install("wavemapper", "msacm32.drv", TRUE);
+    MMDRV_Install("midimapper", "midimap.dll", TRUE);
 }
 
 /******************************************************************
@@ -595,7 +567,7 @@ static  BOOL	MMDRV_ExitPerType(LPWINE_MM_DRIVER lpDrv, UINT type)
  *
  *
  */
-void    MMDRV_Exit(void)
+void MMDRV_Exit(void)
 {
     unsigned int i;
     TRACE("()\n");

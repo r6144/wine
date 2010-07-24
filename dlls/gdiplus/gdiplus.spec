@@ -262,7 +262,7 @@
 @ stub GdipGetEffectParameters
 @ stdcall GdipGetEmHeight(ptr long ptr)
 @ stub GdipGetEncoderParameterList
-@ stub GdipGetEncoderParameterListSize
+@ stdcall GdipGetEncoderParameterListSize(ptr ptr ptr)
 @ stdcall GdipGetFamily(ptr ptr)
 @ stdcall GdipGetFamilyName(ptr ptr long)
 @ stdcall GdipGetFontCollectionFamilyCount(ptr ptr)
@@ -309,16 +309,16 @@
 @ stdcall GdipGetLineRect(ptr ptr)
 @ stdcall GdipGetLineRectI(ptr ptr)
 @ stdcall GdipGetLineSpacing(ptr long ptr)
-@ stub GdipGetLineTransform
+@ stdcall GdipGetLineTransform(ptr ptr)
 @ stdcall GdipGetLineWrapMode(ptr ptr)
 @ stdcall GdipGetLogFontA(ptr ptr ptr)
 @ stdcall GdipGetLogFontW(ptr ptr ptr)
 @ stdcall GdipGetMatrixElements(ptr ptr)
 @ stub GdipGetMetafileDownLevelRasterizationLimit
-@ stub GdipGetMetafileHeaderFromEmf
-@ stub GdipGetMetafileHeaderFromFile
+@ stdcall GdipGetMetafileHeaderFromEmf(ptr ptr)
+@ stdcall GdipGetMetafileHeaderFromFile(wstr ptr)
 @ stdcall GdipGetMetafileHeaderFromMetafile(ptr ptr)
-@ stub GdipGetMetafileHeaderFromStream
+@ stdcall GdipGetMetafileHeaderFromStream(ptr ptr)
 @ stub GdipGetMetafileHeaderFromWmf
 @ stdcall GdipGetNearestColor(ptr ptr)
 @ stdcall GdipGetPageScale(ptr ptr)
@@ -327,7 +327,7 @@
 @ stdcall GdipGetPathFillMode(ptr ptr)
 @ stdcall GdipGetPathGradientBlend(ptr ptr ptr long)
 @ stdcall GdipGetPathGradientBlendCount(ptr ptr)
-@ stub GdipGetPathGradientCenterColor
+@ stdcall GdipGetPathGradientCenterColor(ptr ptr)
 @ stdcall GdipGetPathGradientCenterPoint(ptr ptr)
 @ stdcall GdipGetPathGradientCenterPointI(ptr ptr)
 @ stdcall GdipGetPathGradientFocusScales(ptr ptr ptr)
@@ -351,7 +351,7 @@
 @ stdcall GdipGetPenBrushFill(ptr ptr)
 @ stdcall GdipGetPenColor(ptr ptr)
 @ stub GdipGetPenCompoundArray
-@ stub GdipGetPenCompoundCount
+@ stdcall GdipGetPenCompoundCount(ptr ptr)
 @ stdcall GdipGetPenCustomEndCap(ptr ptr)
 @ stdcall GdipGetPenCustomStartCap(ptr ptr)
 @ stdcall GdipGetPenDashArray(ptr ptr long)
@@ -383,7 +383,7 @@
 @ stub GdipGetRegionScans
 @ stdcall GdipGetRegionScansCount(ptr ptr ptr)
 @ stub GdipGetRegionScansI
-@ stub GdipGetRenderingOrigin
+@ stdcall GdipGetRenderingOrigin(ptr ptr ptr)
 @ stdcall GdipGetSmoothingMode(ptr ptr)
 @ stdcall GdipGetSolidFillColor(ptr ptr)
 @ stdcall GdipGetStringFormatAlign(ptr ptr)
@@ -442,10 +442,10 @@
 @ stdcall GdipMeasureCharacterRanges(ptr wstr long ptr ptr ptr long ptr)
 @ stdcall GdipMeasureDriverString(ptr ptr long ptr ptr long ptr ptr)
 @ stdcall GdipMeasureString(ptr wstr long ptr ptr ptr ptr ptr ptr)
-@ stub GdipMultiplyLineTransform
+@ stdcall GdipMultiplyLineTransform(ptr ptr long)
 @ stdcall GdipMultiplyMatrix(ptr ptr long)
 @ stub GdipMultiplyPathGradientTransform
-@ stub GdipMultiplyPenTransform
+@ stdcall GdipMultiplyPenTransform(ptr ptr long)
 @ stdcall GdipMultiplyTextureTransform(ptr ptr long)
 @ stdcall GdipMultiplyWorldTransform(ptr ptr long)
 @ stdcall GdipNewInstalledFontCollection(ptr)
@@ -466,11 +466,11 @@
 @ stub GdipPlayTSClientRecord
 @ stdcall GdipPrivateAddFontFile(ptr wstr)
 @ stdcall GdipPrivateAddMemoryFont(ptr ptr long)
-@ stub GdipRecordMetafile
+@ stdcall GdipRecordMetafile(long long ptr long wstr ptr)
 @ stdcall GdipRecordMetafileFileName(wstr long long ptr long wstr ptr)
 @ stdcall GdipRecordMetafileFileNameI(wstr long long ptr long wstr ptr)
 @ stdcall GdipRecordMetafileI(long long ptr long wstr ptr)
-@ stub GdipRecordMetafileStream
+@ stdcall GdipRecordMetafileStream(ptr long long ptr long wstr ptr)
 @ stub GdipRecordMetafileStreamI
 @ stdcall GdipReleaseDC(ptr ptr)
 @ stdcall GdipRemovePropertyItem(ptr long)

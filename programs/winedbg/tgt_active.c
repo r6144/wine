@@ -46,8 +46,7 @@ static void dbg_init_current_thread(void* start)
 {
     if (start)
     {
-	if (dbg_curr_process->threads &&
-            !dbg_curr_process->threads->next && /* first thread ? */
+	if (list_count(&dbg_curr_process->threads) == 1 /* first thread ? */ &&
 	    DBG_IVAR(BreakAllThreadsStartup))
         {
 	    ADDRESS64   addr;
@@ -132,7 +131,8 @@ static unsigned dbg_exception_prolog(BOOL is_debug, BOOL first_chance, const EXC
         switch (addr.Mode)
         {
         case AddrModeFlat:
-            dbg_printf(" in 32-bit code (%s)",
+            dbg_printf(" in %d-bit code (%s)",
+                       be_cpu->pointer_size * 8,
                        memory_offset_to_string(hexbuf, addr.Offset, 0));
             break;
         case AddrModeReal:
@@ -142,7 +142,7 @@ static unsigned dbg_exception_prolog(BOOL is_debug, BOOL first_chance, const EXC
             dbg_printf(" in 16-bit code (%04x:%04x)", addr.Segment, (unsigned) addr.Offset);
             break;
         case AddrMode1632:
-            dbg_printf(" in 32-bit code (%04x:%08lx)", addr.Segment, (unsigned long) addr.Offset);
+            dbg_printf(" in segmented 32-bit code (%04x:%08lx)", addr.Segment, (unsigned long) addr.Offset);
             break;
         default: dbg_printf(" bad address");
         }
@@ -165,15 +165,14 @@ static unsigned dbg_exception_prolog(BOOL is_debug, BOOL first_chance, const EXC
     if (addr.Mode != dbg_curr_thread->addr_mode)
     {
         const char* name = NULL;
-        
+
         switch (addr.Mode)
         {
         case AddrMode1616: name = "16 bit";     break;
-        case AddrMode1632: name = "32 bit";     break;
+        case AddrMode1632: name = "segmented 32 bit"; break;
         case AddrModeReal: name = "vm86";       break;
-        case AddrModeFlat: name = "32 bit";     break;
+        case AddrModeFlat: name = be_cpu->pointer_size == 4 ? "32 bit" : "64 bit"; break;
         }
-        
         dbg_printf("In %s mode.\n", name);
         dbg_curr_thread->addr_mode = addr.Mode;
     }
@@ -183,7 +182,7 @@ static unsigned dbg_exception_prolog(BOOL is_debug, BOOL first_chance, const EXC
     {
 	/* This is a real crash, dump some info */
 	be_cpu->print_context(dbg_curr_thread->handle, &dbg_context, 0);
-	stack_info();
+	stack_info(-1);
         be_cpu->print_segment_info(dbg_curr_thread->handle, &dbg_context);
 	stack_backtrace(dbg_curr_tid);
     }

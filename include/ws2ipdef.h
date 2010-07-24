@@ -45,7 +45,7 @@ typedef union sockaddr_gen
 /* Structure to keep interface specific information */
 typedef struct _INTERFACE_INFO
 {
-    WS(u_long)        iiFlags;             /* Interface flags */
+    ULONG             iiFlags;             /* Interface flags */
     WS(sockaddr_gen)  iiAddress;           /* Interface address */
     WS(sockaddr_gen)  iiBroadcastAddress;  /* Broadcast address */
     WS(sockaddr_gen)  iiNetmask;           /* Network mask */
@@ -133,23 +133,23 @@ typedef struct WS(sockaddr_in6)
  * Multicast group information
  */
 
-struct WS(ip_mreq)
+typedef struct WS(ip_mreq)
 {
     struct WS(in_addr) imr_multiaddr;
     struct WS(in_addr) imr_interface;
 } WS(IP_MREQ), *WS(PIP_MREQ);
 
-struct WS(ip_mreq_source) {
+typedef struct WS(ip_mreq_source) {
     struct WS(in_addr) imr_multiaddr;
     struct WS(in_addr) imr_sourceaddr;
     struct WS(in_addr) imr_interface;
 } WS(IP_MREQ_SOURCE), *WS(PIP_MREQ_SOURCE);
 
-struct WS(ip_msfilter) {
+typedef struct WS(ip_msfilter) {
     struct WS(in_addr) imsf_multiaddr;
     struct WS(in_addr) imsf_interface;
-    WS(u_long)         imsf_fmode;
-    WS(u_long)         imsf_numsrc;
+    ULONG              imsf_fmode;
+    ULONG              imsf_numsrc;
     struct WS(in_addr) imsf_slist[1];
 } WS(IP_MSFILTER), *WS(PIP_MSFILTER);
 

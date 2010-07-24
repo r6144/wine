@@ -216,9 +216,9 @@ static BOOL Control_CreateListView (CPanel *panel)
 
     /* Create image lists for list view */
     panel->hImageListSmall = ImageList_Create(GetSystemMetrics(SM_CXSMICON),
-        GetSystemMetrics(SM_CYSMICON), ILC_MASK, 1, 1);
+        GetSystemMetrics(SM_CYSMICON), ILC_COLOR32 | ILC_MASK, 1, 1);
     panel->hImageListLarge = ImageList_Create(GetSystemMetrics(SM_CXICON),
-        GetSystemMetrics(SM_CYICON), ILC_MASK, 1, 1);
+        GetSystemMetrics(SM_CYICON), ILC_COLOR32 | ILC_MASK, 1, 1);
 
     SendMessageW(panel->hWndListView, LVM_SETIMAGELIST, LVSIL_SMALL, (LPARAM)panel->hImageListSmall);
     SendMessageW(panel->hWndListView, LVM_SETIMAGELIST, LVSIL_NORMAL, (LPARAM)panel->hImageListLarge);
@@ -475,10 +475,12 @@ static LRESULT WINAPI	Control_WndProc(HWND hWnd, UINT wMsg,
              case IDM_CPANEL_ABOUT:
                  {
                      WCHAR appName[MAX_STRING_LEN];
+                     HICON icon = LoadImageW(shell32_hInstance, MAKEINTRESOURCEW(IDI_SHELL_CONTROL_PANEL),
+                                             IMAGE_ICON, 48, 48, LR_SHARED);
 
                      LoadStringW(shell32_hInstance, IDS_CPANEL_TITLE, appName,
                          sizeof(appName) / sizeof(appName[0]));
-                     ShellAboutW(hWnd, appName, NULL, NULL);
+                     ShellAboutW(hWnd, appName, NULL, icon);
 
                      return 0;
                  }
@@ -612,7 +614,7 @@ static LRESULT WINAPI	Control_WndProc(HWND hWnd, UINT wMsg,
 
 static void    Control_DoInterface(CPanel* panel, HWND hWnd, HINSTANCE hInst)
 {
-    WNDCLASSW	wc;
+    WNDCLASSEXW wc;
     MSG		msg;
     WCHAR appName[MAX_STRING_LEN];
     const WCHAR className[] = {'S','h','e','l','l','_','C','o','n','t','r','o',
@@ -620,18 +622,21 @@ static void    Control_DoInterface(CPanel* panel, HWND hWnd, HINSTANCE hInst)
 
     LoadStringW(shell32_hInstance, IDS_CPANEL_TITLE, appName, sizeof(appName) / sizeof(appName[0]));
 
+    wc.cbSize = sizeof(wc);
     wc.style = CS_HREDRAW|CS_VREDRAW;
     wc.lpfnWndProc = Control_WndProc;
     wc.cbClsExtra = 0;
     wc.cbWndExtra = sizeof(CPlApplet*);
     wc.hInstance = panel->hInst = hInst;
-    wc.hIcon = 0;
+    wc.hIcon = LoadIconW( shell32_hInstance, MAKEINTRESOURCEW(IDI_SHELL_CONTROL_PANEL) );
     wc.hCursor = LoadCursorW( 0, (LPWSTR)IDC_ARROW );
     wc.hbrBackground = GetStockObject(WHITE_BRUSH);
     wc.lpszMenuName = NULL;
     wc.lpszClassName = className;
+    wc.hIconSm = LoadImageW( shell32_hInstance, MAKEINTRESOURCEW(IDI_SHELL_CONTROL_PANEL), IMAGE_ICON,
+                             GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_SHARED);
 
-    if (!RegisterClassW(&wc)) return;
+    if (!RegisterClassExW(&wc)) return;
 
     CreateWindowExW(0, wc.lpszClassName, appName,
 		    WS_OVERLAPPEDWINDOW | WS_VISIBLE,

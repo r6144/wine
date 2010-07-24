@@ -272,9 +272,23 @@
 276 stub MsiSourceListClearMediaDiskW
 277 stdcall MsiDetermineApplicablePatchesA(str long ptr)
 278 stdcall MsiDetermineApplicablePatchesW(wstr long ptr)
-279 stub MsiMessageBoxExA
-280 stub MsiMessageBoxExW
+279 stdcall MsiMessageBoxExA(long str str long long long long)
+280 stdcall MsiMessageBoxExW(long wstr wstr long long long long)
 281 stdcall MsiSetExternalUIRecord(ptr long ptr ptr)
+282 stub MsiGetPatchFileListA
+283 stub MsiGetPatchFileListW
+284 stub MsiBeginTransactionA
+285 stub MsiBeginTransactionW
+286 stub MsiEndTransaction
+287 stub MsiJoinTransaction
+288 stub MsiSetOfflineContextW
+289 stub MsiEnumComponentsExA
+290 stub MsiEnumComponentsExW
+291 stub MsiEnumClientsExA
+292 stub MsiEnumClientsExW
+293 stub MsiGetComponentPathExA
+294 stub MsiGetComponentPathExW
+295 stub QueryInstanceCount
 
 @ stdcall -private DllCanUnloadNow()
 @ stdcall -private DllGetClassObject(ptr ptr ptr)

@@ -704,6 +704,27 @@ tmp = arr.sort();
 ok(arr === tmp, "tmp !== arr");
 ok(arr[0]===1 && arr[1]==="aa" && arr[2]===undefined, "arr is sorted incorectly");
 
+tmp = [["bb","aa"],["ab","aa"]].sort().toString();
+ok(tmp === "ab,aa,bb,aa", "sort() = " + tmp);
+
+tmp = [["bb","aa"],"ab"].sort().toString();
+ok(tmp === "ab,bb,aa", "sort() = " + tmp);
+
+tmp = [["bb","aa"],"cc"].sort().toString();
+ok(tmp === "bb,aa,cc", "sort() = " + tmp);
+
+tmp = [2,"1"].sort().toString();
+ok(tmp === "1,2", "sort() = " + tmp);
+
+tmp = ["2",1].sort().toString();
+ok(tmp === "1,2", "sort() = " + tmp);
+
+tmp = [,,0,"z"].sort().toString();
+ok(tmp === "0,z,,", "sort() = " + tmp);
+
+tmp = ["a,b",["a","a"],["a","c"]].sort().toString();
+ok(tmp === "a,a,a,b,a,c", "sort() = " + tmp);
+
 arr = ["1", "2", "3"];
 arr.length = 1;
 ok(arr.length === 1, "arr.length = " + arr.length);
@@ -2129,7 +2150,7 @@ ok(ActiveXObject.length == 1, "ActiveXObject.length = " + ActiveXObject.length);
 ok(Array.length == 1, "Array.length = " + Array.length);
 ok(Boolean.length == 1, "Boolean.length = " + Boolean.length);
 ok(CollectGarbage.length == 0, "CollectGarbage.length = " + CollectGarbage.length);
-//ok(Date.length == 7, "Date.length = " + Date.length);
+ok(Date.length == 7, "Date.length = " + Date.length);
 ok(Enumerator.length == 7, "Enumerator.length = " + Enumerator.length);
 ok(Error.length == 1, "Error.length = " + Error.length);
 ok(EvalError.length == 1, "EvalError.length = " + EvalError.length);
@@ -2147,7 +2168,7 @@ ok(ScriptEngineMajorVersion.length == 0,
     "ScriptEngineMajorVersion.length = " + ScriptEngineMajorVersion.length);
 ok(ScriptEngineMinorVersion.length == 0,
     "ScriptEngineMinorVersion.length = " + ScriptEngineMinorVersion.length);
-//ok(String.length == 1, "String.length = " + String.length);
+ok(String.length == 1, "String.length = " + String.length);
 ok(SyntaxError.length == 1, "SyntaxError.length = " + SyntaxError.length);
 ok(TypeError.length == 1, "TypeError.length = " + TypeError.length);
 ok(URIError.length == 1, "URIError.length = " + URIError.length);
@@ -2163,5 +2184,8 @@ ok(isNaN.length == 1, "isNaN.length = " + isNaN.length);
 ok(parseFloat.length == 1, "parseFloat.length = " + parseFloat.length);
 ok(parseInt.length == 2, "parseInt.length = " + parseInt.length);
 ok(unescape.length == 1, "unescape.length = " + unescape.length);
+
+String.length = 3;
+ok(String.length == 1, "String.length = " + String.length);
 
 reportSuccess();

@@ -118,10 +118,15 @@ WINE_DEFAULT_DEBUG_CHANNEL(typelib2);
 /*================== Implementation Structures ===================================*/
 
 /* Used for storing cyclic list. Tail address is kept */
+enum tagCyclicListElementType {
+    CyclicListFunc,
+    CyclicListVar
+};
 typedef struct tagCyclicList {
     struct tagCyclicList *next;
     int indice;
     int name;
+    enum tagCyclicListElementType type;
 
     union {
         int val;
@@ -774,8 +779,8 @@ static int ctl2_alloc_importfile(
     encoded_string[0] |= 1;
 
     for (offset = 0; offset < This->typelib_segdir[MSFT_SEG_IMPORTFILES].length;
-	 offset += ((((This->typelib_segment_data[MSFT_SEG_IMPORTFILES][offset + 0xd] << 8) & 0xff)
-	     | (This->typelib_segment_data[MSFT_SEG_IMPORTFILES][offset + 0xc] & 0xff)) >> 2) + 0xc) {
+	 offset += ((((((This->typelib_segment_data[MSFT_SEG_IMPORTFILES][offset + 0xd] << 8) & 0xff00)
+	     | (This->typelib_segment_data[MSFT_SEG_IMPORTFILES][offset + 0xc] & 0xff)) >> 2) + 5) & 0xfffc) + 0xc) {
 	if (!memcmp(encoded_string, This->typelib_segment_data[MSFT_SEG_IMPORTFILES] + offset + 0xc, length)) return offset;
     }
 
@@ -792,386 +797,16 @@ static int ctl2_alloc_importfile(
 }
 
 /****************************************************************************
- *	ctl2_alloc_custdata
+ *      ctl2_encode_variant
  *
- *  Allocates and initializes a "custom data" value in a type library.
- *
- * RETURNS
- *
- *  Success: The offset of the new custdata.
- *  Failure:
- *
- *    -1: Out of memory.
- *    -2: Unable to encode VARIANT data (typically a bug).
- */
-static int ctl2_alloc_custdata(
-	ICreateTypeLib2Impl *This, /* [I] The type library in which to encode the value. */
-	VARIANT *pVarVal)          /* [I] The value to encode. */
-{
-    int offset;
-
-    TRACE("(%p,%p(%d))\n",This,pVarVal,V_VT(pVarVal));
-
-    switch (V_VT(pVarVal)) {
-    case VT_UI4:
-	offset = ctl2_alloc_segment(This, MSFT_SEG_CUSTDATA, 8, 0);
-	if (offset == -1) return offset;
-
-	*((unsigned short *)&This->typelib_segment_data[MSFT_SEG_CUSTDATA][offset]) = VT_UI4;
-	*((unsigned int *)&This->typelib_segment_data[MSFT_SEG_CUSTDATA][offset+2]) = V_UI4(pVarVal);
-	break;
-
-    default:
-	FIXME("Unknown variable encoding vt %d.\n", V_VT(pVarVal));
-	return -2;
-    }
-
-    return offset;
-}
-
-/****************************************************************************
- *	ctl2_set_custdata
- *
- *  Adds a custom data element to an object in a type library.
- *
- * RETURNS
- *
- *  Success: S_OK.
- *  Failure: One of E_INVALIDARG or E_OUTOFMEMORY.
- */
-static HRESULT ctl2_set_custdata(
-	ICreateTypeLib2Impl *This, /* [I] The type library to store the custom data in. */
-	REFGUID guid,              /* [I] The GUID used as a key to retrieve the custom data. */
-	VARIANT *pVarVal,          /* [I] The custom data itself. */
-	int *offset)               /* [I/O] The list of custom data to prepend to. */
-{
-    MSFT_GuidEntry guidentry;
-    int dataoffset;
-    int guidoffset;
-    int custoffset;
-    int *custdata;
-
-    guidentry.guid = *guid;
-
-    guidentry.hreftype = -1;
-    guidentry.next_hash = -1;
-
-    guidoffset = ctl2_alloc_guid(This, &guidentry);
-    if (guidoffset == -1) return E_OUTOFMEMORY;
-    dataoffset = ctl2_alloc_custdata(This, pVarVal);
-    if (dataoffset == -1) return E_OUTOFMEMORY;
-    if (dataoffset == -2) return E_INVALIDARG;
-
-    custoffset = ctl2_alloc_segment(This, MSFT_SEG_CUSTDATAGUID, 12, 0);
-    if (custoffset == -1) return E_OUTOFMEMORY;
-
-    custdata = (int *)&This->typelib_segment_data[MSFT_SEG_CUSTDATAGUID][custoffset];
-    custdata[0] = guidoffset;
-    custdata[1] = dataoffset;
-    custdata[2] = *offset;
-    *offset = custoffset;
-
-    return S_OK;
-}
-
-/****************************************************************************
- *	ctl2_encode_typedesc
- *
- *  Encodes a type description, storing information in the TYPEDESC and ARRAYDESC
- *  segments as needed.
- *
- * RETURNS
- *
- *  Success: 0.
- *  Failure: -1.
- */
-static int ctl2_encode_typedesc(
-	ICreateTypeLib2Impl *This, /* [I] The type library in which to encode the TYPEDESC. */
-	const TYPEDESC *tdesc,     /* [I] The type description to encode. */
-	int *encoded_tdesc,        /* [O] The encoded type description. */
-	int *width,                /* [O] The width of the type, or NULL. */
-	int *alignment,            /* [O] The alignment of the type, or NULL. */
-	int *decoded_size)         /* [O] The total size of the unencoded TYPEDESCs, including nested descs. */
-{
-    int default_tdesc;
-    int scratch;
-    int typeoffset;
-    int arrayoffset;
-    int *typedata;
-    int *arraydata;
-    int target_type;
-    int child_size;
-
-    default_tdesc = 0x80000000 | (tdesc->vt << 16) | tdesc->vt;
-    if (!width) width = &scratch;
-    if (!alignment) alignment = &scratch;
-    if (!decoded_size) decoded_size = &scratch;
-
-    *decoded_size = 0;
-
-    switch (tdesc->vt) {
-    case VT_UI1:
-    case VT_I1:
-	*encoded_tdesc = default_tdesc;
-	*width = 1;
-	*alignment = 1;
-	break;
-
-    case VT_INT:
-	*encoded_tdesc = 0x80000000 | (VT_I4 << 16) | VT_INT;
-	if ((This->typelib_header.varflags & 0x0f) == SYS_WIN16) {
-	    *width = 2;
-	    *alignment = 2;
-	} else {
-	    *width = 4;
-	    *alignment = 4;
-	}
-	break;
-
-    case VT_UINT:
-	*encoded_tdesc = 0x80000000 | (VT_UI4 << 16) | VT_UINT;
-	if ((This->typelib_header.varflags & 0x0f) == SYS_WIN16) {
-	    *width = 2;
-	    *alignment = 2;
-	} else {
-	    *width = 4;
-	    *alignment = 4;
-	}
-	break;
-
-    case VT_UI2:
-    case VT_I2:
-    case VT_BOOL:
-	*encoded_tdesc = default_tdesc;
-	*width = 2;
-	*alignment = 2;
-	break;
-
-    case VT_I4:
-    case VT_UI4:
-    case VT_R4:
-    case VT_ERROR:
-    case VT_BSTR:
-    case VT_HRESULT:
-	*encoded_tdesc = default_tdesc;
-	*width = 4;
-	*alignment = 4;
-	break;
-
-    case VT_CY:
-	*encoded_tdesc = default_tdesc;
-	*width = 8;
-	*alignment = 4; /* guess? */
-	break;
-
-    case VT_VOID:
-	*encoded_tdesc = 0x80000000 | (VT_EMPTY << 16) | tdesc->vt;
-	*width = 0;
-	*alignment = 1;
-	break;
-
-    case VT_PTR:
-	/* FIXME: Make with the error checking. */
-	FIXME("PTR vartype, may not work correctly.\n");
-
-	ctl2_encode_typedesc(This, tdesc->u.lptdesc, &target_type, NULL, NULL, &child_size);
-
-	for (typeoffset = 0; typeoffset < This->typelib_segdir[MSFT_SEG_TYPEDESC].length; typeoffset += 8) {
-	    typedata = (void *)&This->typelib_segment_data[MSFT_SEG_TYPEDESC][typeoffset];
-	    if (((typedata[0] & 0xffff) == VT_PTR) && (typedata[1] == target_type)) break;
-	}
-
-	if (typeoffset == This->typelib_segdir[MSFT_SEG_TYPEDESC].length) {
-	    int mix_field;
-	    
-	    if (target_type & 0x80000000) {
-		mix_field = ((target_type >> 16) & 0x3fff) | VT_BYREF;
-	    } else {
-		typedata = (void *)&This->typelib_segment_data[MSFT_SEG_TYPEDESC][target_type];
-		mix_field = ((typedata[0] >> 16) == 0x7fff)? 0x7fff: 0x7ffe;
-	    }
-
-	    typeoffset = ctl2_alloc_segment(This, MSFT_SEG_TYPEDESC, 8, 0);
-	    typedata = (void *)&This->typelib_segment_data[MSFT_SEG_TYPEDESC][typeoffset];
-
-	    typedata[0] = (mix_field << 16) | VT_PTR;
-	    typedata[1] = target_type;
-	}
-
-	*encoded_tdesc = typeoffset;
-
-	*width = 4;
-	*alignment = 4;
-	*decoded_size = sizeof(TYPEDESC) + child_size;
-	break;
-
-    case VT_SAFEARRAY:
-	/* FIXME: Make with the error checking. */
-	FIXME("SAFEARRAY vartype, may not work correctly.\n");
-
-	ctl2_encode_typedesc(This, tdesc->u.lptdesc, &target_type, NULL, NULL, &child_size);
-
-	for (typeoffset = 0; typeoffset < This->typelib_segdir[MSFT_SEG_TYPEDESC].length; typeoffset += 8) {
-	    typedata = (void *)&This->typelib_segment_data[MSFT_SEG_TYPEDESC][typeoffset];
-	    if (((typedata[0] & 0xffff) == VT_SAFEARRAY) && (typedata[1] == target_type)) break;
-	}
-
-	if (typeoffset == This->typelib_segdir[MSFT_SEG_TYPEDESC].length) {
-	    int mix_field;
-	    
-	    if (target_type & 0x80000000) {
-		mix_field = ((target_type >> 16) & VT_TYPEMASK) | VT_ARRAY;
-	    } else {
-		typedata = (void *)&This->typelib_segment_data[MSFT_SEG_TYPEDESC][target_type];
-		mix_field = ((typedata[0] >> 16) == 0x7fff)? 0x7fff: 0x7ffe;
-	    }
-
-	    typeoffset = ctl2_alloc_segment(This, MSFT_SEG_TYPEDESC, 8, 0);
-	    typedata = (void *)&This->typelib_segment_data[MSFT_SEG_TYPEDESC][typeoffset];
-
-	    typedata[0] = (mix_field << 16) | VT_SAFEARRAY;
-	    typedata[1] = target_type;
-	}
-
-	*encoded_tdesc = typeoffset;
-
-	*width = 4;
-	*alignment = 4;
-	*decoded_size = sizeof(TYPEDESC) + child_size;
-	break;
-
-    case VT_CARRAY:
-      {
-	/* FIXME: Make with the error checking. */
-        int num_dims = tdesc->u.lpadesc->cDims, elements = 1, dim;
-
-	ctl2_encode_typedesc(This, &tdesc->u.lpadesc->tdescElem, &target_type, width, alignment, NULL);
-	arrayoffset = ctl2_alloc_segment(This, MSFT_SEG_ARRAYDESC, (2 + 2 * num_dims) * sizeof(int), 0);
-	arraydata = (void *)&This->typelib_segment_data[MSFT_SEG_ARRAYDESC][arrayoffset];
-
-	arraydata[0] = target_type;
-	arraydata[1] = num_dims;
-        arraydata[1] |= ((num_dims * 2 * sizeof(int)) << 16);
-        arraydata += 2;
-
-        for(dim = 0; dim < num_dims; dim++) {
-            arraydata[0] = tdesc->u.lpadesc->rgbounds[dim].cElements;
-            arraydata[1] = tdesc->u.lpadesc->rgbounds[dim].lLbound;
-            elements *= tdesc->u.lpadesc->rgbounds[dim].cElements;
-            arraydata += 2;
-        }
-	typeoffset = ctl2_alloc_segment(This, MSFT_SEG_TYPEDESC, 8, 0);
-	typedata = (void *)&This->typelib_segment_data[MSFT_SEG_TYPEDESC][typeoffset];
-
-	typedata[0] = (0x7ffe << 16) | VT_CARRAY;
-	typedata[1] = arrayoffset;
-
-	*encoded_tdesc = typeoffset;
-	*width = *width * elements;
-	*decoded_size = sizeof(ARRAYDESC) + (num_dims - 1) * sizeof(SAFEARRAYBOUND);
-
-	break;
-      }
-    case VT_USERDEFINED:
-	TRACE("USERDEFINED.\n");
-	for (typeoffset = 0; typeoffset < This->typelib_segdir[MSFT_SEG_TYPEDESC].length; typeoffset += 8) {
-	    typedata = (void *)&This->typelib_segment_data[MSFT_SEG_TYPEDESC][typeoffset];
-	    if ((typedata[0] == ((0x7fff << 16) | VT_USERDEFINED)) && (typedata[1] == tdesc->u.hreftype)) break;
-	}
-
-	if (typeoffset == This->typelib_segdir[MSFT_SEG_TYPEDESC].length) {
-	    typeoffset = ctl2_alloc_segment(This, MSFT_SEG_TYPEDESC, 8, 0);
-	    typedata = (void *)&This->typelib_segment_data[MSFT_SEG_TYPEDESC][typeoffset];
-
-	    typedata[0] = (0x7fff << 16) | VT_USERDEFINED;
-	    typedata[1] = tdesc->u.hreftype;
-	}
-
-	*encoded_tdesc = typeoffset;
-	*width = 0;
-	*alignment = 1;
-	break;
-
-    default:
-	FIXME("Unrecognized type %d.\n", tdesc->vt);
-	*encoded_tdesc = default_tdesc;
-	*width = 0;
-	*alignment = 1;
-	break;
-    }
-
-    return 0;
-}
-
-/****************************************************************************
- *	ctl2_find_nth_reference
- *
- *  Finds a reference by index into the linked list of reference records.
- *
- * RETURNS
- *
- *  Success: Offset of the desired reference record.
- *  Failure: -1.
- */
-static int ctl2_find_nth_reference(
-	ICreateTypeLib2Impl *This, /* [I] The type library in which to search. */
-	int offset,                /* [I] The starting offset of the reference list. */
-	int index)                 /* [I] The index of the reference to find. */
-{
-    MSFT_RefRecord *ref;
-
-    for (; index && (offset != -1); index--) {
-	ref = (MSFT_RefRecord *)&This->typelib_segment_data[MSFT_SEG_REFERENCES][offset];
-	offset = ref->onext;
-    }
-
-    return offset;
-}
-
-/****************************************************************************
- *	ctl2_find_typeinfo_from_offset
- *
- *  Finds an ITypeInfo given an offset into the TYPEINFO segment.
- *
- * RETURNS
- *
- *  Success: S_OK.
- *  Failure: TYPE_E_ELEMENTNOTFOUND.
- */
-static HRESULT ctl2_find_typeinfo_from_offset(
-	ICreateTypeLib2Impl *This, /* [I] The typelib to find the typeinfo in. */
-	int offset,                /* [I] The offset of the desired typeinfo. */
-	ITypeInfo **ppTinfo)       /* [I] The typeinfo found. */
-{
-    void *typeinfodata;
-    ICreateTypeInfo2Impl *typeinfo;
-
-    typeinfodata = &This->typelib_segment_data[MSFT_SEG_TYPEINFO][offset];
-
-    for (typeinfo = This->typeinfos; typeinfo; typeinfo = typeinfo->next_typeinfo) {
-	if (typeinfo->typeinfo == typeinfodata) {
-	    *ppTinfo = (ITypeInfo *)&typeinfo->lpVtblTypeInfo2;
-	    ITypeInfo2_AddRef(*ppTinfo);
-	    return S_OK;
-	}
-    }
-
-    ERR("Failed to find typeinfo, invariant varied.\n");
-
-    return TYPE_E_ELEMENTNOTFOUND;
-}
-
-/****************************************************************************
- *      ctl2_add_default_value
- *
- *  Adds default value of an argument
+ *  Encodes a variant, inline if possible or in custom data segment
  *
  * RETURNS
  *
  *  Success: S_OK
  *  Failure: Error code from winerror.h
  */
-static HRESULT ctl2_add_default_value(
+static HRESULT ctl2_encode_variant(
         ICreateTypeLib2Impl *This, /* [I] The typelib to allocate data in */
         int *encoded_value,        /* [O] The encoded default value or data offset */
         VARIANT *value,            /* [I] Default value to be encoded */
@@ -1284,6 +919,420 @@ static HRESULT ctl2_add_default_value(
         FIXME("Argument type not yet handled\n");
         return E_NOTIMPL;
     }
+}
+
+/****************************************************************************
+ *	ctl2_set_custdata
+ *
+ *  Adds a custom data element to an object in a type library.
+ *
+ * RETURNS
+ *
+ *  Success: S_OK.
+ *  Failure: One of E_INVALIDARG or E_OUTOFMEMORY.
+ */
+static HRESULT ctl2_set_custdata(
+	ICreateTypeLib2Impl *This, /* [I] The type library to store the custom data in. */
+	REFGUID guid,              /* [I] The GUID used as a key to retrieve the custom data. */
+	VARIANT *pVarVal,          /* [I] The custom data itself. */
+	int *offset)               /* [I/O] The list of custom data to prepend to. */
+{
+    MSFT_GuidEntry guidentry;
+    HRESULT status;
+    int dataoffset;
+    int guidoffset;
+    int custoffset;
+    int *custdata;
+
+    switch(V_VT(pVarVal))
+    {
+    case VT_I4:
+    case VT_R4:
+    case VT_UI4:
+    case VT_INT:
+    case VT_UINT:
+    case VT_HRESULT:
+    case VT_BSTR:
+	/* empty */
+	break;
+    default:
+	return DISP_E_BADVARTYPE;
+    }
+
+    guidentry.guid = *guid;
+
+    guidentry.hreftype = -1;
+    guidentry.next_hash = -1;
+
+    guidoffset = ctl2_alloc_guid(This, &guidentry);
+    if (guidoffset == -1) return E_OUTOFMEMORY;
+
+    status = ctl2_encode_variant(This, &dataoffset, pVarVal, V_VT(pVarVal));
+    if (status)
+	return status;
+
+    custoffset = ctl2_alloc_segment(This, MSFT_SEG_CUSTDATAGUID, 12, 0);
+    if (custoffset == -1) return E_OUTOFMEMORY;
+
+    custdata = (int *)&This->typelib_segment_data[MSFT_SEG_CUSTDATAGUID][custoffset];
+    custdata[0] = guidoffset;
+    custdata[1] = dataoffset;
+    custdata[2] = *offset;
+    *offset = custoffset;
+
+    return S_OK;
+}
+
+/****************************************************************************
+ *	ctl2_encode_typedesc
+ *
+ *  Encodes a type description, storing information in the TYPEDESC and ARRAYDESC
+ *  segments as needed.
+ *
+ * RETURNS
+ *
+ *  Success: 0.
+ *  Failure: -1.
+ */
+static int ctl2_encode_typedesc(
+	ICreateTypeLib2Impl *This, /* [I] The type library in which to encode the TYPEDESC. */
+	const TYPEDESC *tdesc,     /* [I] The type description to encode. */
+	int *encoded_tdesc,        /* [O] The encoded type description. */
+	int *width,                /* [O] The width of the type, or NULL. */
+	int *alignment,            /* [O] The alignment of the type, or NULL. */
+	int *decoded_size)         /* [O] The total size of the unencoded TYPEDESCs, including nested descs. */
+{
+    int default_tdesc;
+    int scratch;
+    int typeoffset;
+    int arrayoffset;
+    int *typedata;
+    int *arraydata;
+    int target_type;
+    int child_size;
+
+    default_tdesc = 0x80000000 | (tdesc->vt << 16) | tdesc->vt;
+    if (!width) width = &scratch;
+    if (!alignment) alignment = &scratch;
+    if (!decoded_size) decoded_size = &scratch;
+
+    *decoded_size = 0;
+
+    switch (tdesc->vt) {
+    case VT_UI1:
+    case VT_I1:
+	*encoded_tdesc = default_tdesc;
+	*width = 1;
+	*alignment = 1;
+	break;
+
+    case VT_INT:
+	*encoded_tdesc = 0x80000000 | (VT_I4 << 16) | VT_INT;
+	if ((This->typelib_header.varflags & 0x0f) == SYS_WIN16) {
+	    *width = 2;
+	    *alignment = 2;
+	} else {
+	    *width = 4;
+	    *alignment = 4;
+	}
+	break;
+
+    case VT_UINT:
+	*encoded_tdesc = 0x80000000 | (VT_UI4 << 16) | VT_UINT;
+	if ((This->typelib_header.varflags & 0x0f) == SYS_WIN16) {
+	    *width = 2;
+	    *alignment = 2;
+	} else {
+	    *width = 4;
+	    *alignment = 4;
+	}
+	break;
+
+    case VT_UI2:
+    case VT_I2:
+    case VT_BOOL:
+	*encoded_tdesc = default_tdesc;
+	*width = 2;
+	*alignment = 2;
+	break;
+
+    case VT_I4:
+    case VT_UI4:
+    case VT_R4:
+    case VT_ERROR:
+    case VT_BSTR:
+    case VT_HRESULT:
+	*encoded_tdesc = default_tdesc;
+	*width = 4;
+	*alignment = 4;
+	break;
+
+    case VT_CY:
+	*encoded_tdesc = default_tdesc;
+	*width = 8;
+	*alignment = 4; /* guess? */
+	break;
+
+    case VT_VOID:
+	*encoded_tdesc = 0x80000000 | (VT_EMPTY << 16) | tdesc->vt;
+	*width = 0;
+	*alignment = 1;
+	break;
+
+    case VT_PTR:
+    case VT_SAFEARRAY:
+	/* FIXME: Make with the error checking. */
+	FIXME("PTR or SAFEARRAY vartype, may not work correctly.\n");
+
+	ctl2_encode_typedesc(This, tdesc->u.lptdesc, &target_type, NULL, NULL, &child_size);
+
+	for (typeoffset = 0; typeoffset < This->typelib_segdir[MSFT_SEG_TYPEDESC].length; typeoffset += 8) {
+	    typedata = (void *)&This->typelib_segment_data[MSFT_SEG_TYPEDESC][typeoffset];
+	    if (((typedata[0] & 0xffff) == tdesc->vt) && (typedata[1] == target_type)) break;
+	}
+
+	if (typeoffset == This->typelib_segdir[MSFT_SEG_TYPEDESC].length) {
+	    int mix_field;
+	    
+	    if (target_type & 0x80000000) {
+		mix_field = (target_type >> 16) & VT_TYPEMASK;
+	    } else {
+		typedata = (void *)&This->typelib_segment_data[MSFT_SEG_TYPEDESC][target_type];
+		switch((typedata[0]>>16) & ~VT_ARRAY)
+		{
+		    case VT_UI1:
+		    case VT_I1:
+		    case VT_UI2:
+		    case VT_I2:
+		    case VT_I4:
+		    case VT_UI4:
+			mix_field = typedata[0]>>16;
+			break;
+		    default:
+			mix_field = 0x7fff;
+			break;
+		}
+	    }
+
+	    if (tdesc->vt == VT_PTR)
+		mix_field |= VT_BYREF;
+	    else if (tdesc->vt == VT_SAFEARRAY)
+		mix_field |= VT_ARRAY;
+
+	    typeoffset = ctl2_alloc_segment(This, MSFT_SEG_TYPEDESC, 8, 0);
+	    typedata = (void *)&This->typelib_segment_data[MSFT_SEG_TYPEDESC][typeoffset];
+
+	    typedata[0] = (mix_field << 16) | tdesc->vt;
+	    typedata[1] = target_type;
+	}
+
+	*encoded_tdesc = typeoffset;
+
+	*width = 4;
+	*alignment = 4;
+	*decoded_size = sizeof(TYPEDESC) + child_size;
+	break;
+
+    case VT_CARRAY:
+      {
+	/* FIXME: Make with the error checking. */
+        int num_dims = tdesc->u.lpadesc->cDims, elements = 1, dim;
+
+	ctl2_encode_typedesc(This, &tdesc->u.lpadesc->tdescElem, &target_type, width, alignment, NULL);
+	arrayoffset = ctl2_alloc_segment(This, MSFT_SEG_ARRAYDESC, (2 + 2 * num_dims) * sizeof(int), 0);
+	arraydata = (void *)&This->typelib_segment_data[MSFT_SEG_ARRAYDESC][arrayoffset];
+
+	arraydata[0] = target_type;
+	arraydata[1] = num_dims;
+        arraydata[1] |= ((num_dims * 2 * sizeof(int)) << 16);
+        arraydata += 2;
+
+        for(dim = 0; dim < num_dims; dim++) {
+            arraydata[0] = tdesc->u.lpadesc->rgbounds[dim].cElements;
+            arraydata[1] = tdesc->u.lpadesc->rgbounds[dim].lLbound;
+            elements *= tdesc->u.lpadesc->rgbounds[dim].cElements;
+            arraydata += 2;
+        }
+	typeoffset = ctl2_alloc_segment(This, MSFT_SEG_TYPEDESC, 8, 0);
+	typedata = (void *)&This->typelib_segment_data[MSFT_SEG_TYPEDESC][typeoffset];
+
+	typedata[0] = (0x7ffe << 16) | VT_CARRAY;
+	typedata[1] = arrayoffset;
+
+	*encoded_tdesc = typeoffset;
+	*width = *width * elements;
+	*decoded_size = sizeof(ARRAYDESC) + (num_dims - 1) * sizeof(SAFEARRAYBOUND);
+
+	break;
+      }
+    case VT_USERDEFINED:
+      {
+	const MSFT_TypeInfoBase *basetype;
+	INT basevt = 0x7fff;
+
+	TRACE("USERDEFINED.\n");
+	if (tdesc->u.hreftype % sizeof(*basetype) == 0 && tdesc->u.hreftype < This->typelib_segdir[MSFT_SEG_TYPEINFO].length)
+	{
+	    basetype = (MSFT_TypeInfoBase*)&(This->typelib_segment_data[MSFT_SEG_TYPEINFO][tdesc->u.hreftype]);
+	    switch(basetype->typekind & 0xf)
+	    {
+		case TKIND_ENUM:
+		    basevt = VT_I4;
+		    break;
+		default:
+		    FIXME("USERDEFINED basetype %d not handled\n", basetype->typekind & 0xf);
+		    break;
+	    }
+	}
+	for (typeoffset = 0; typeoffset < This->typelib_segdir[MSFT_SEG_TYPEDESC].length; typeoffset += 8) {
+	    typedata = (void *)&This->typelib_segment_data[MSFT_SEG_TYPEDESC][typeoffset];
+	    if ((typedata[0] == ((basevt << 16) | VT_USERDEFINED)) && (typedata[1] == tdesc->u.hreftype)) break;
+	}
+
+	if (typeoffset == This->typelib_segdir[MSFT_SEG_TYPEDESC].length) {
+	    typeoffset = ctl2_alloc_segment(This, MSFT_SEG_TYPEDESC, 8, 0);
+	    typedata = (void *)&This->typelib_segment_data[MSFT_SEG_TYPEDESC][typeoffset];
+
+	    typedata[0] = (basevt << 16) | VT_USERDEFINED;
+	    typedata[1] = tdesc->u.hreftype;
+	}
+
+	*encoded_tdesc = typeoffset;
+	*width = 0;
+	*alignment = 1;
+	break;
+      }
+
+    default:
+	FIXME("Unrecognized type %d.\n", tdesc->vt);
+	*encoded_tdesc = default_tdesc;
+	*width = 0;
+	*alignment = 1;
+	break;
+    }
+
+    return 0;
+}
+
+/****************************************************************************
+ *	ctl2_find_nth_reference
+ *
+ *  Finds a reference by index into the linked list of reference records.
+ *
+ * RETURNS
+ *
+ *  Success: Offset of the desired reference record.
+ *  Failure: -1.
+ */
+static int ctl2_find_nth_reference(
+	ICreateTypeLib2Impl *This, /* [I] The type library in which to search. */
+	int offset,                /* [I] The starting offset of the reference list. */
+	int index)                 /* [I] The index of the reference to find. */
+{
+    MSFT_RefRecord *ref;
+
+    for (; index && (offset != -1); index--) {
+	ref = (MSFT_RefRecord *)&This->typelib_segment_data[MSFT_SEG_REFERENCES][offset];
+	offset = ref->onext;
+    }
+
+    return offset;
+}
+
+/****************************************************************************
+ *	ctl2_find_typeinfo_from_offset
+ *
+ *  Finds an ITypeInfo given an offset into the TYPEINFO segment.
+ *
+ * RETURNS
+ *
+ *  Success: S_OK.
+ *  Failure: TYPE_E_ELEMENTNOTFOUND.
+ */
+static HRESULT ctl2_find_typeinfo_from_offset(
+	ICreateTypeLib2Impl *This, /* [I] The typelib to find the typeinfo in. */
+	int offset,                /* [I] The offset of the desired typeinfo. */
+	ITypeInfo **ppTinfo)       /* [I] The typeinfo found. */
+{
+    void *typeinfodata;
+    ICreateTypeInfo2Impl *typeinfo;
+
+    typeinfodata = &This->typelib_segment_data[MSFT_SEG_TYPEINFO][offset];
+
+    for (typeinfo = This->typeinfos; typeinfo; typeinfo = typeinfo->next_typeinfo) {
+	if (typeinfo->typeinfo == typeinfodata) {
+	    *ppTinfo = (ITypeInfo *)&typeinfo->lpVtblTypeInfo2;
+	    ITypeInfo2_AddRef(*ppTinfo);
+	    return S_OK;
+	}
+    }
+
+    ERR("Failed to find typeinfo, invariant varied.\n");
+
+    return TYPE_E_ELEMENTNOTFOUND;
+}
+
+/****************************************************************************
+ *      funcrecord_reallochdr
+ *
+ *  Ensure FuncRecord data block contains header of required size
+ *
+ *  PARAMS
+ *
+ *   typedata [IO] - reference to pointer to data block
+ *   need     [I]  - required size of block in bytes
+ *
+ * RETURNS
+ *
+ *  Number of additionally allocated bytes
+ */
+static INT funcrecord_reallochdr(INT **typedata, int need)
+{
+    int tail = (*typedata)[5]*((*typedata)[4]&0x1000?16:12);
+    int hdr = (*typedata)[0] - tail;
+    int i;
+
+    if (hdr >= need)
+        return 0;
+
+    *typedata = HeapReAlloc(GetProcessHeap(), 0, *typedata, need + tail);
+    if (!*typedata)
+        return -1;
+
+    if (tail)
+        memmove((char*)*typedata + need, (const char*)*typedata + hdr, tail);
+    (*typedata)[0] = need + tail;
+
+    /* fill in default values */
+    for(i = (hdr+3)/4; (i+1)*4 <= need; i++)
+    {
+        switch(i)
+        {
+            case 2:
+                (*typedata)[i] = 0;
+                break;
+            case 7:
+                (*typedata)[i] = -1;
+                break;
+            case 8:
+                (*typedata)[i] = -1;
+                break;
+            case 9:
+                (*typedata)[i] = -1;
+                break;
+            case 10:
+                (*typedata)[i] = -1;
+                break;
+            case 11:
+                (*typedata)[i] = 0;
+                break;
+            case 12:
+                (*typedata)[i] = -1;
+                break;
+        }
+    }
+
+    return need - hdr;
 }
 
 /*================== ICreateTypeInfo2 Implementation ===================================*/
@@ -1583,7 +1632,7 @@ static HRESULT WINAPI ICreateTypeInfo2_fnAddRefTypeInfo(
         }
 
         guid.guid = tlibattr->guid;
-        guid.hreftype = This->typelib->typelib_guids*12+2;
+        guid.hreftype = This->typelib->typelib_segdir[MSFT_SEG_IMPORTFILES].length+2;
         guid.next_hash = -1;
 
         guid_offset = ctl2_alloc_guid(This->typelib, &guid);
@@ -1668,7 +1717,7 @@ static HRESULT WINAPI ICreateTypeInfo2_fnAddFuncDesc(
 
     CyclicList *iter, *insert;
     int *typedata;
-    int i, num_defaults = 0;
+    int i, num_defaults = 0, num_retval = 0;
     int decoded_size;
     HRESULT hres;
 
@@ -1708,9 +1757,12 @@ static HRESULT WINAPI ICreateTypeInfo2_fnAddFuncDesc(
         return TYPE_E_INCONSISTENTPROPFUNCS;
 
     /* get number of arguments with default values specified */
-    for (i = 0; i < pFuncDesc->cParams; i++)
+    for (i = 0; i < pFuncDesc->cParams; i++) {
         if(pFuncDesc->lprgelemdescParam[i].u.paramdesc.wParamFlags & PARAMFLAG_FHASDEFAULT)
             num_defaults++;
+        if(pFuncDesc->lprgelemdescParam[i].u.paramdesc.wParamFlags & PARAMFLAG_FRETVAL)
+            num_retval++;
+    }
 
     if (!This->typedata) {
         This->typedata = HeapAlloc(GetProcessHeap(), 0, sizeof(CyclicList));
@@ -1742,6 +1794,7 @@ static HRESULT WINAPI ICreateTypeInfo2_fnAddFuncDesc(
     typedata[3] = ((sizeof(FUNCDESC) + decoded_size) << 16) | (unsigned short)(pFuncDesc->oVft?pFuncDesc->oVft+1:0);
     typedata[4] = (pFuncDesc->callconv << 8) | (pFuncDesc->invkind << 3) | pFuncDesc->funckind;
     if(num_defaults) typedata[4] |= 0x1000;
+    if (num_retval) typedata[4] |= 0x4000;
     typedata[5] = pFuncDesc->cParams;
 
     /* NOTE: High word of typedata[3] is total size of FUNCDESC + size of all ELEMDESCs for params + TYPEDESCs for pointer params and return types. */
@@ -1753,7 +1806,7 @@ static HRESULT WINAPI ICreateTypeInfo2_fnAddFuncDesc(
     if(num_defaults) {
         for (i = 0; i < pFuncDesc->cParams; i++)
             if(pFuncDesc->lprgelemdescParam[i].u.paramdesc.wParamFlags & PARAMFLAG_FHASDEFAULT) {
-                hres = ctl2_add_default_value(This->typelib, typedata+6+i,
+                hres = ctl2_encode_variant(This->typelib, typedata+6+i,
                         &pFuncDesc->lprgelemdescParam[i].u.paramdesc.pparamdescex->varDefaultValue,
                         pFuncDesc->lprgelemdescParam[i].tdesc.vt);
 
@@ -1780,6 +1833,7 @@ static HRESULT WINAPI ICreateTypeInfo2_fnAddFuncDesc(
     /* update the index data */
     insert->indice = pFuncDesc->memid;
     insert->name = -1;
+    insert->type = CyclicListFunc;
 
     /* insert type data to list */
     if(index == This->typeinfo->cElement) {
@@ -1974,6 +2028,7 @@ static HRESULT WINAPI ICreateTypeInfo2_fnAddVarDesc(
 {
     ICreateTypeInfo2Impl *This = (ICreateTypeInfo2Impl *)iface;
 
+    HRESULT status = S_OK;
     CyclicList *insert;
     INT *typedata;
     int var_datawidth;
@@ -2027,55 +2082,64 @@ static HRESULT WINAPI ICreateTypeInfo2_fnAddVarDesc(
     /* fill out the basic type information */
     typedata[0] = 0x14 | (index << 16);
     typedata[2] = pVarDesc->wVarFlags;
-    typedata[3] = (sizeof(VARDESC) << 16) | 0;
+    typedata[3] = (sizeof(VARDESC) << 16) | pVarDesc->varkind;
 
     /* update the index data */
     insert->indice = 0x40000000 + index;
     insert->name = -1;
+    insert->type = CyclicListVar;
 
     /* figure out type widths and whatnot */
     ctl2_encode_typedesc(This->typelib, &pVarDesc->elemdescVar.tdesc,
 			 &typedata[1], &var_datawidth, &var_alignment,
 			 &var_type_size);
 
-    /* pad out starting position to data width */
-    This->datawidth += var_alignment - 1;
-    This->datawidth &= ~(var_alignment - 1);
-    typedata[4] = This->datawidth;
-    
-    /* add the new variable to the total data width */
-    This->datawidth += var_datawidth;
-    if(This->dual)
-        This->dual->datawidth = This->datawidth;
+    if (pVarDesc->varkind != VAR_CONST)
+    {
+	/* pad out starting position to data width */
+	This->datawidth += var_alignment - 1;
+	This->datawidth &= ~(var_alignment - 1);
+	typedata[4] = This->datawidth;
 
-    /* add type description size to total required allocation */
-    typedata[3] += var_type_size << 16;
+	/* add the new variable to the total data width */
+	This->datawidth += var_datawidth;
+	if(This->dual)
+	    This->dual->datawidth = This->datawidth;
 
-    /* fix type alignment */
-    alignment = (This->typeinfo->typekind >> 11) & 0x1f;
-    if (alignment < var_alignment) {
-	alignment = var_alignment;
-	This->typeinfo->typekind &= ~0xf800;
-	This->typeinfo->typekind |= alignment << 11;
+	/* add type description size to total required allocation */
+	typedata[3] += var_type_size << 16;
+
+	/* fix type alignment */
+	alignment = (This->typeinfo->typekind >> 11) & 0x1f;
+	if (alignment < var_alignment) {
+	    alignment = var_alignment;
+	    This->typeinfo->typekind &= ~0xf800;
+	    This->typeinfo->typekind |= alignment << 11;
+	}
+
+	/* ??? */
+	if (!This->typeinfo->res2) This->typeinfo->res2 = 0x1a;
+	if ((index == 0) || (index == 1) || (index == 2) || (index == 4) || (index == 9)) {
+	    This->typeinfo->res2 <<= 1;
+	}
+
+	/* ??? */
+	if (This->typeinfo->res3 == -1) This->typeinfo->res3 = 0;
+	This->typeinfo->res3 += 0x2c;
+
+	/* pad data width to alignment */
+	This->typeinfo->size = (This->datawidth + (alignment - 1)) & ~(alignment - 1);
+    } else {
+	VARIANT *value = pVarDesc->DUMMYUNIONNAME.lpvarValue;
+	status = ctl2_encode_variant(This->typelib, typedata+4, value, V_VT(value));
+        /* ??? native sets size 0x34 */
+	typedata[3] += 0x10 << 16;
     }
-
-    /* ??? */
-    if (!This->typeinfo->res2) This->typeinfo->res2 = 0x1a;
-    if ((index == 0) || (index == 1) || (index == 2) || (index == 4) || (index == 9)) {
-	This->typeinfo->res2 <<= 1;
-    }
-
-    /* ??? */
-    if (This->typeinfo->res3 == -1) This->typeinfo->res3 = 0;
-    This->typeinfo->res3 += 0x2c;
 
     /* increment the number of variable elements */
     This->typeinfo->cElement += 0x10000;
 
-    /* pad data width to alignment */
-    This->typeinfo->size = (This->datawidth + (alignment - 1)) & ~(alignment - 1);
-
-    return S_OK;
+    return status;
 }
 
 /******************************************************************************
@@ -2099,23 +2163,34 @@ static HRESULT WINAPI ICreateTypeInfo2_fnSetFuncAndParamNames(
     if(!rgszNames)
         return E_INVALIDARG;
 
-    if(index >= This->typeinfo->cElement || !cNames)
+    if(index >= (This->typeinfo->cElement&0xFFFF) || !cNames)
         return TYPE_E_ELEMENTNOTFOUND;
 
-    len = ctl2_encode_name(This->typelib, rgszNames[0], &namedata);
-    for(iter2=This->typedata->next->next; iter2!=This->typedata->next; iter2=iter2->next) {
-        if(i == index)
-            iter = iter2;
-        else if(iter2->name!=-1 && !memcmp(namedata,
-                    This->typelib->typelib_segment_data[MSFT_SEG_NAME]+iter2->name+8, len))
-            return TYPE_E_AMBIGUOUSNAME;
-
-        i++;
-    }
+    for(iter=This->typedata->next->next, i=0; /* empty */; iter=iter->next)
+        if (iter->type == CyclicListFunc)
+            if (i++ >= index)
+                break;
 
     /* cNames == cParams for put or putref accessor, cParams+1 otherwise */
     if(cNames != iter->u.data[5] + ((iter->u.data[4]>>3)&(INVOKE_PROPERTYPUT|INVOKE_PROPERTYPUTREF) ? 0 : 1))
         return TYPE_E_ELEMENTNOTFOUND;
+
+    len = ctl2_encode_name(This->typelib, rgszNames[0], &namedata);
+    for(iter2=This->typedata->next->next; iter2!=This->typedata->next; iter2=iter2->next) {
+        if(iter2->name!=-1 && !memcmp(namedata,
+                    This->typelib->typelib_segment_data[MSFT_SEG_NAME]+iter2->name+8, len)) {
+            /* getters/setters can have a same name */
+            if (iter2->type == CyclicListFunc) {
+                INT inv1 = iter2->u.data[4] >> 3;
+                INT inv2 = iter->u.data[4] >> 3;
+                if (((inv1&(INVOKE_PROPERTYPUT|INVOKE_PROPERTYPUTREF)) && (inv2&INVOKE_PROPERTYGET)) ||
+                    ((inv2&(INVOKE_PROPERTYPUT|INVOKE_PROPERTYPUTREF)) && (inv1&INVOKE_PROPERTYGET)))
+                    continue;
+            }
+
+            return TYPE_E_AMBIGUOUSNAME;
+        }
+    }
 
     offset = ctl2_alloc_name(This->typelib, rgszNames[0]);
     if(offset == -1)
@@ -2124,16 +2199,14 @@ static HRESULT WINAPI ICreateTypeInfo2_fnSetFuncAndParamNames(
     iter->name = offset;
 
     namedata = This->typelib->typelib_segment_data[MSFT_SEG_NAME] + offset;
-    *((INT *)namedata) = This->typelib->typelib_typeinfo_offsets[This->typeinfo->typekind >> 16];
+    if (*((INT*)namedata) == -1)
+	    *((INT *)namedata) = This->typelib->typelib_typeinfo_offsets[This->typeinfo->typekind >> 16];
 
-    if(iter->u.data[4]&0x1000)
-        len = iter->u.data[5];
-    else
-        len = 0;
+    len = iter->u.data[0]/4 - iter->u.data[5]*3;
 
     for (i = 1; i < cNames; i++) {
 	offset = ctl2_alloc_name(This->typelib, rgszNames[i]);
-	iter->u.data[(i*3) + 4 + len] = offset;
+	iter->u.data[len + ((i-1)*3) + 1] = offset;
     }
 
     return S_OK;
@@ -2173,9 +2246,10 @@ static HRESULT WINAPI ICreateTypeInfo2_fnSetVarName(
 	namedata[9] |= 0x20;
     }
 
-    iter = This->typedata->next->next;
-    for(i=0; i<index; i++)
-        iter = iter->next;
+    for(iter = This->typedata->next->next, i = 0; /* empty */; iter = iter->next)
+        if (iter->type == CyclicListVar)
+            if (i++ >= index)
+                break;
 
     iter->name = offset;
     return S_OK;
@@ -2271,39 +2345,25 @@ static HRESULT WINAPI ICreateTypeInfo2_fnSetFuncHelpContext(
 {
     ICreateTypeInfo2Impl *This = (ICreateTypeInfo2Impl *)iface;
     CyclicList *func;
-    int *typedata;
-    int size;
 
     TRACE("(%p,%d,%d)\n", iface, index, dwHelpContext);
 
     if(This->typeinfo->cElement<index)
         return TYPE_E_ELEMENTNOTFOUND;
 
-    if(This->typeinfo->cElement == index)
+    if(This->typeinfo->cElement == index && This->typedata->type == CyclicListFunc)
         func = This->typedata;
     else
         for(func=This->typedata->next->next; func!=This->typedata; func=func->next)
-            if(index-- == 0)
-                break;
+            if (func->type == CyclicListFunc)
+                if(index-- == 0)
+                    break;
 
-    typedata = func->u.data;
+    This->typedata->next->u.val += funcrecord_reallochdr(&func->u.data, 7*sizeof(int));
+    if(!func->u.data)
+        return E_OUTOFMEMORY;
 
-    /* Compute func size without arguments */
-    size = typedata[0] - typedata[5]*(typedata[4]&0x1000?16:12);
-
-    /* Allocate memory for HelpContext if needed */
-    if(size < 7*sizeof(int)) {
-        typedata = HeapReAlloc(GetProcessHeap(), 0, typedata, typedata[0]+sizeof(int));
-        if(!typedata)
-            return E_OUTOFMEMORY;
-
-        memmove(&typedata[7], &typedata[6], typedata[0]-sizeof(int)*6);
-        typedata[0] += sizeof(int);
-        This->typedata->next->u.val += sizeof(int);
-        func->u.data = typedata;
-    }
-
-    typedata[6] = dwHelpContext;
+    func->u.data[6] = dwHelpContext;
     return S_OK;
 }
 
@@ -2357,7 +2417,7 @@ static HRESULT WINAPI ICreateTypeInfo2_fnLayOut(
 	ICreateTypeInfo2* iface)
 {
     ICreateTypeInfo2Impl *This = (ICreateTypeInfo2Impl *)iface;
-    CyclicList *iter, *iter2, **typedata;
+    CyclicList *iter, *iter2, *last = NULL, **typedata;
     HREFTYPE hreftype;
     HRESULT hres;
     unsigned user_vft = 0;
@@ -2456,7 +2516,7 @@ static HRESULT WINAPI ICreateTypeInfo2_fnLayOut(
             return hres;
         }
 
-        This->typeinfo->cbSizeVft = typeattr->cbSizeVft;
+        This->typeinfo->cbSizeVft = typeattr->cbSizeVft * 4 / sizeof(void *);
 
         ITypeInfo_ReleaseTypeAttr(inherited, typeattr);
         ITypeInfo_Release(inherited);
@@ -2471,10 +2531,14 @@ static HRESULT WINAPI ICreateTypeInfo2_fnLayOut(
         return E_OUTOFMEMORY;
 
     /* Assign IDs and VTBL entries */
-    i = 0;
-    if(This->typedata->u.data[3]&1)
-        user_vft = This->typedata->u.data[3]&0xffff;
+    for(iter=This->typedata->next->next; iter!=This->typedata->next; iter=iter->next)
+        if (iter->type == CyclicListFunc)
+            last = iter;
 
+    if(last && last->u.data[3]&1)
+        user_vft = last->u.data[3]&0xffff;
+
+    i = 0;
     for(iter=This->typedata->next->next; iter!=This->typedata->next; iter=iter->next) {
         /* Assign MEMBERID if MEMBERID_NIL was specified */
         if(iter->indice == MEMBERID_NIL) {
@@ -2497,6 +2561,9 @@ static HRESULT WINAPI ICreateTypeInfo2_fnLayOut(
                 }
             }
         }
+
+        if (iter->type != CyclicListFunc)
+            continue;
 
         typedata[i] = iter;
 
@@ -2679,8 +2746,14 @@ static HRESULT WINAPI ICreateTypeInfo2_fnSetCustData(
         REFGUID guid,            /* [I] The GUID used as a key to retrieve the custom data. */
         VARIANT* pVarVal)        /* [I] The custom data. */
 {
-    FIXME("(%p,%s,%p), stub!\n", iface, debugstr_guid(guid), pVarVal);
-    return E_OUTOFMEMORY;
+    ICreateTypeInfo2Impl *This = (ICreateTypeInfo2Impl *)iface;
+
+    TRACE("(%p,%s,%p)!\n", iface, debugstr_guid(guid), pVarVal);
+
+    if (!pVarVal)
+	    return E_INVALIDARG;
+
+    return ctl2_set_custdata(This->typelib, guid, pVarVal, &This->typeinfo->oCustData);
 }
 
 /******************************************************************************
@@ -2699,8 +2772,25 @@ static HRESULT WINAPI ICreateTypeInfo2_fnSetFuncCustData(
         REFGUID guid,            /* [I] The GUID used as a key to retrieve the custom data. */
         VARIANT* pVarVal)        /* [I] The custom data. */
 {
-    FIXME("(%p,%d,%s,%p), stub!\n", iface, index, debugstr_guid(guid), pVarVal);
-    return E_OUTOFMEMORY;
+    ICreateTypeInfo2Impl *This = (ICreateTypeInfo2Impl *)iface;
+    CyclicList *iter;
+
+    TRACE("(%p,%d,%s,%p)\n", iface, index, debugstr_guid(guid), pVarVal);
+
+    if(index >= (This->typeinfo->cElement&0xFFFF))
+        return TYPE_E_ELEMENTNOTFOUND;
+
+    for(iter=This->typedata->next->next; /* empty */; iter=iter->next)
+        if (iter->type == CyclicListFunc)
+            if (index-- == 0)
+                break;
+
+    This->typedata->next->u.val += funcrecord_reallochdr(&iter->u.data, 13*sizeof(int));
+    if(!iter->u.data)
+        return E_OUTOFMEMORY;
+
+    iter->u.data[4] |= 0x80;
+    return ctl2_set_custdata(This->typelib, guid, pVarVal, &iter->u.data[12]);
 }
 
 /******************************************************************************
@@ -2928,7 +3018,7 @@ static HRESULT WINAPI ITypeInfo2_fnGetTypeAttr(
         (*ppTypeAttr)->cFuncs += 7;
     (*ppTypeAttr)->cVars = This->typeinfo->cElement>>16;
     (*ppTypeAttr)->cImplTypes = This->typeinfo->cImplTypes;
-    (*ppTypeAttr)->cbSizeVft = This->typekind==TKIND_DISPATCH ? 28 : This->typeinfo->cbSizeVft;
+    (*ppTypeAttr)->cbSizeVft = This->typekind==TKIND_DISPATCH ? 7 * sizeof(void*) : This->typeinfo->cbSizeVft;
     (*ppTypeAttr)->cbAlignment = (This->typeinfo->typekind>>11) & 0x1f;
     (*ppTypeAttr)->wTypeFlags = This->typeinfo->flags;
     (*ppTypeAttr)->wMajorVerNum = This->typeinfo->version&0xffff;
@@ -3127,8 +3217,88 @@ static HRESULT WINAPI ITypeInfo2_fnGetDocumentation(
         DWORD* pdwHelpContext,
         BSTR* pBstrHelpFile)
 {
-    FIXME("(%p,%d,%p,%p,%p,%p), stub!\n", iface, memid, pBstrName, pBstrDocString, pdwHelpContext, pBstrHelpFile);
-    return E_OUTOFMEMORY;
+    ICreateTypeInfo2Impl *This = impl_from_ITypeInfo2(iface);
+    HRESULT status = TYPE_E_ELEMENTNOTFOUND;
+    INT nameoffset, docstringoffset, helpcontext;
+
+    TRACE("(%p,%d,%p,%p,%p,%p)\n", iface, memid, pBstrName, pBstrDocString, pdwHelpContext, pBstrHelpFile);
+
+    if (memid == -1)
+    {
+        nameoffset = This->typeinfo->NameOffset;
+        docstringoffset = This->typeinfo->docstringoffs;
+        helpcontext = This->typeinfo->helpcontext;
+        status = S_OK;
+    } else {
+        CyclicList *iter;
+        if (This->typedata) {
+            for(iter=This->typedata->next->next; iter!=This->typedata->next; iter=iter->next) {
+                if (iter->indice == memid) {
+                    if (iter->type == CyclicListFunc) {
+                        const int *typedata = iter->u.data;
+                        int   size = typedata[0] - typedata[5]*(typedata[4]&0x1000?16:12);
+
+                        nameoffset = iter->name;
+                        /* FIXME implement this once SetFuncDocString is implemented */
+                        docstringoffset = -1;
+                        helpcontext = (size < 7*sizeof(int)) ? 0 : typedata[6];
+
+                        status = S_OK;
+                    } else {
+                        FIXME("Not implemented for variable members\n");
+                    }
+
+                    break;
+                }
+            }
+        }
+    }
+
+    if (!status) {
+        WCHAR *string;
+        if (pBstrName) {
+            if (nameoffset == -1)
+                *pBstrName = NULL;
+            else {
+                MSFT_NameIntro *name = (MSFT_NameIntro*)&This->typelib->
+                        typelib_segment_data[MSFT_SEG_NAME][nameoffset];
+                ctl2_decode_name((char*)&name->namelen, &string);
+                *pBstrName = SysAllocString(string);
+                if(!*pBstrName)
+                    return E_OUTOFMEMORY;
+            }
+        }
+
+        if (pBstrDocString) {
+            if (docstringoffset == -1)
+                *pBstrDocString = NULL;
+            else {
+                MSFT_NameIntro *name = (MSFT_NameIntro*)&This->typelib->
+                        typelib_segment_data[MSFT_SEG_NAME][docstringoffset];
+                ctl2_decode_name((char*)&name->namelen, &string);
+                *pBstrDocString = SysAllocString(string);
+                if(!*pBstrDocString) {
+                    if (pBstrName) SysFreeString(*pBstrName);
+                    return E_OUTOFMEMORY;
+                }
+            }
+        }
+
+        if (pdwHelpContext) {
+            *pdwHelpContext = helpcontext;
+        }
+
+        if (pBstrHelpFile) {
+            status = ITypeLib_GetDocumentation((ITypeLib*)&This->typelib->lpVtblTypeLib2,
+                    -1, NULL, NULL, NULL, pBstrHelpFile);
+            if (status) {
+                if (pBstrName) SysFreeString(*pBstrName);
+                if (pBstrDocString) SysFreeString(*pBstrDocString);
+            }
+        }
+    }
+
+    return status;
 }
 
 /******************************************************************************
@@ -4513,7 +4683,7 @@ static HRESULT WINAPI ITypeLib2_fnGetDocumentation(
         if(!iter)
             return TYPE_E_ELEMENTNOTFOUND;
 
-        return ITypeInfo_GetDocumentation((ITypeInfo*)iter->lpVtblTypeInfo2,
+        return ITypeInfo_GetDocumentation((ITypeInfo*)&iter->lpVtblTypeInfo2,
                 -1, pBstrName, pBstrDocString, pdwHelpContext, pBstrHelpFile);
     }
 

@@ -707,7 +707,7 @@ REBAR_CalcHorzBand (const REBAR_INFO *infoPtr, UINT rstart, UINT rend)
      /* *** Supports only Horizontal bars. ***                   */
 {
     REBAR_BAND *lpBand;
-    UINT i, xoff, yoff;
+    UINT i, xoff;
     RECT work;
 
     for(i=rstart; i<rend; i++){
@@ -770,12 +770,24 @@ REBAR_CalcHorzBand (const REBAR_INFO *infoPtr, UINT rstart, UINT rend)
       }
 
       /* set initial child window rectangle if there is a child */
-      if (lpBand->hwndChild != NULL) {
-          int cyBand = lpBand->rcBand.bottom - lpBand->rcBand.top;
-          yoff = (cyBand - lpBand->cyChild) / 2;
-	  SetRect (&lpBand->rcChild,
-                   lpBand->rcBand.left + lpBand->cxHeader, lpBand->rcBand.top + yoff,
-                   lpBand->rcBand.right - REBAR_POST_CHILD, lpBand->rcBand.top + yoff + lpBand->cyChild);
+      if (lpBand->hwndChild) {
+
+          lpBand->rcChild.left  = lpBand->rcBand.left + lpBand->cxHeader;
+          lpBand->rcChild.right = lpBand->rcBand.right - REBAR_POST_CHILD;
+
+          if (lpBand->cyChild > 0) {
+
+              UINT yoff = (lpBand->rcBand.bottom - lpBand->rcBand.top - lpBand->cyChild) / 2;
+
+              /* center child if height is known */
+              lpBand->rcChild.top = lpBand->rcBand.top + yoff;
+              lpBand->rcChild.bottom = lpBand->rcBand.top + yoff + lpBand->cyChild;
+          }
+          else {
+              lpBand->rcChild.top = lpBand->rcBand.top;
+              lpBand->rcChild.bottom = lpBand->rcBand.bottom;
+          }
+
 	  if ((lpBand->fStyle & RBBS_USECHEVRON) && (lpBand->rcChild.right - lpBand->rcChild.left < lpBand->cxIdeal))
 	  {
 	      lpBand->rcChild.right -= CHEVRON_WIDTH;
@@ -2440,7 +2452,7 @@ REBAR_InsertBandT(REBAR_INFO *infoPtr, INT iIndex, LPREBARBANDINFOW lprbbi, BOOL
     REBAR_DumpBand (infoPtr);
 
     REBAR_Layout(infoPtr);
-    InvalidateRect(infoPtr->hwndSelf, 0, TRUE);
+    InvalidateRect(infoPtr->hwndSelf, NULL, TRUE);
 
     return TRUE;
 }
@@ -2641,7 +2653,7 @@ REBAR_SetBandInfoT(REBAR_INFO *infoPtr, INT iBand, LPREBARBANDINFOW lprbbi, BOOL
 
     if (uChanged & (RBBIM_CHILDSIZE | RBBIM_SIZE | RBBIM_STYLE | RBBIM_IMAGE)) {
 	  REBAR_Layout(infoPtr);
-	  InvalidateRect(infoPtr->hwndSelf, 0, 1);
+	  InvalidateRect(infoPtr->hwndSelf, NULL, TRUE);
     }
 
     return TRUE;
@@ -2767,7 +2779,7 @@ REBAR_ShowBand (REBAR_INFO *infoPtr, INT iBand, BOOL show)
 {
     REBAR_BAND *lpBand;
 
-    if (iBand < 0 || iBand > infoPtr->uNumBands)
+    if (iBand < 0 || iBand >= infoPtr->uNumBands)
 	return FALSE;
 
     lpBand = REBAR_GetBand(infoPtr, iBand);
@@ -2786,7 +2798,7 @@ REBAR_ShowBand (REBAR_INFO *infoPtr, INT iBand, BOOL show)
     }
 
     REBAR_Layout(infoPtr);
-    InvalidateRect(infoPtr->hwndSelf, 0, 1);
+    InvalidateRect(infoPtr->hwndSelf, NULL, TRUE);
 
     return TRUE;
 }
@@ -3387,7 +3399,7 @@ REBAR_SetRedraw (REBAR_INFO *infoPtr, BOOL redraw)
 	if (infoPtr->fStatus & BAND_NEEDS_REDRAW) {
 	    REBAR_MoveChildWindows (infoPtr, 0, infoPtr->uNumBands);
 	    REBAR_ForceResize (infoPtr);
-	    InvalidateRect (infoPtr->hwndSelf, 0, TRUE);
+	    InvalidateRect (infoPtr->hwndSelf, NULL, TRUE);
 	}
 	infoPtr->fStatus &= ~BAND_NEEDS_REDRAW;
     }

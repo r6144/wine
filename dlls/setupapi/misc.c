@@ -1456,26 +1456,29 @@ static DWORD decompress_file_lz( LPCWSTR source, LPCWSTR target )
     return ret;
 }
 
+struct callback_context
+{
+    int has_extracted;
+    LPCWSTR target;
+};
+
 static UINT CALLBACK decompress_or_copy_callback( PVOID context, UINT notification, UINT_PTR param1, UINT_PTR param2 )
 {
+    struct callback_context *context_info = context;
     FILE_IN_CABINET_INFO_W *info = (FILE_IN_CABINET_INFO_W *)param1;
 
     switch (notification)
     {
     case SPFILENOTIFY_FILEINCABINET:
     {
-        LPCWSTR filename, targetname = context;
-        WCHAR *p;
+        if (context_info->has_extracted)
+            return FILEOP_ABORT;
 
-        if ((p = strrchrW( targetname, '\\' ))) filename = p + 1;
-        else filename = targetname;
-
-        if (!lstrcmpiW( filename, info->NameInCabinet ))
-        {
-            strcpyW( info->FullTargetName, targetname );
-            return FILEOP_DOIT;
-        }
-        return FILEOP_SKIP;
+        TRACE("Requesting extraction of cabinet file %s\n",
+              wine_dbgstr_w(info->NameInCabinet));
+        strcpyW( info->FullTargetName, context_info->target );
+        context_info->has_extracted = 1;
+        return FILEOP_DOIT;
     }
     default: return NO_ERROR;
     }
@@ -1483,9 +1486,10 @@ static UINT CALLBACK decompress_or_copy_callback( PVOID context, UINT notificati
 
 static DWORD decompress_file_cab( LPCWSTR source, LPCWSTR target )
 {
+    struct callback_context context = {0, target};
     BOOL ret;
 
-    ret = SetupIterateCabinetW( source, 0, decompress_or_copy_callback, (PVOID)target );
+    ret = SetupIterateCabinetW( source, 0, decompress_or_copy_callback, &context );
 
     if (ret) return ERROR_SUCCESS;
     else return GetLastError();
@@ -1535,10 +1539,20 @@ DWORD WINAPI SetupDecompressOrCopyFileW( PCWSTR source, PCWSTR target, PUINT typ
     UINT comp;
     DWORD ret = ERROR_INVALID_PARAMETER;
 
+    TRACE("(%s, %s, %p)\n", debugstr_w(source), debugstr_w(target), type);
+
     if (!source || !target) return ERROR_INVALID_PARAMETER;
 
-    if (!type) comp = detect_compression_type( source );
-    else comp = *type;
+    if (!type)
+    {
+        comp = detect_compression_type( source );
+        TRACE("Detected compression type %u\n", comp);
+    }
+    else
+    {
+        comp = *type;
+        TRACE("Using specified compression type %u\n", comp);
+    }
 
     switch (comp)
     {
@@ -1559,5 +1573,29 @@ DWORD WINAPI SetupDecompressOrCopyFileW( PCWSTR source, PCWSTR target, PUINT typ
     }
 
     TRACE("%s -> %s %d\n", debugstr_w(source), debugstr_w(target), comp);
+    return ret;
+}
+
+static BOOL non_interactive_mode;
+
+/***********************************************************************
+ *              SetupGetNonInteractiveMode  (SETUPAPI.@)
+ */
+BOOL WINAPI SetupGetNonInteractiveMode( void )
+{
+    FIXME("\n");
+    return non_interactive_mode;
+}
+
+/***********************************************************************
+ *              SetupSetNonInteractiveMode  (SETUPAPI.@)
+ */
+BOOL WINAPI SetupSetNonInteractiveMode( BOOL flag )
+{
+    BOOL ret = non_interactive_mode;
+
+    FIXME("%d\n", flag);
+
+    non_interactive_mode = flag;
     return ret;
 }

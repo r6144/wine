@@ -3,7 +3,6 @@ TOPOBJDIR = ../..
 SRCDIR    = @srcdir@
 VPATH     = @srcdir@
 MODULE    = shdoclc.dll
-IMPORTS   = kernel32
 
 RC_SRCS = \
 	Bg.rc \
@@ -14,10 +13,13 @@ RC_SRCS = \
 	Fi.rc \
 	Fr.rc \
 	Hu.rc \
+	It.rc \
+	Ja.rc \
 	Ko.rc \
 	Lt.rc \
 	Nl.rc \
 	No.rc \
+	Pl.rc \
 	Pt.rc \
 	Ro.rc \
 	Ru.rc \

@@ -66,8 +66,6 @@ typedef int Status;
 
 #define WINE_XDND_VERSION 4
 
-struct tagCURSORICONINFO;
-
 extern void CDECL wine_tsx11_lock(void);
 extern void CDECL wine_tsx11_unlock(void);
 
@@ -168,6 +166,15 @@ typedef struct
     int           gl_copy;
     struct xrender_info *xrender;
 } X11DRV_PDEVICE;
+
+struct bitblt_coords
+{
+    int  x;      /* original position and width */
+    int  y;
+    int  width;
+    int  height;
+    RECT visrect;   /* rectangle clipped to the visible part */
+};
 
 
 extern X_PHYSBITMAP BITMAP_stock_phys_bitmap;  /* phys bitmap for the default stock bitmap */
@@ -290,13 +297,14 @@ extern void X11DRV_XRender_CopyBrush(X11DRV_PDEVICE *physDev, X_PHYSBITMAP *phys
 extern BOOL X11DRV_XRender_ExtTextOut(X11DRV_PDEVICE *physDev, INT x, INT y, UINT flags,
 				      const RECT *lprect, LPCWSTR wstr,
 				      UINT count, const INT *lpDx);
-extern BOOL X11DRV_XRender_SetPhysBitmapDepth(X_PHYSBITMAP *physBitmap, const DIBSECTION *dib);
+extern BOOL X11DRV_XRender_SetPhysBitmapDepth(X_PHYSBITMAP *physBitmap, int bits_pixel, const DIBSECTION *dib);
 BOOL X11DRV_XRender_GetSrcAreaStretch(X11DRV_PDEVICE *physDevSrc, X11DRV_PDEVICE *physDevDst,
                                       Pixmap pixmap, GC gc,
-                                      INT widthSrc, INT heightSrc,
-                                      INT widthDst, INT heightDst,
-                                      RECT *visRectSrc, RECT *visRectDst);
+                                      const struct bitblt_coords *src, const struct bitblt_coords *dst );
 extern void X11DRV_XRender_UpdateDrawable(X11DRV_PDEVICE *physDev);
+extern BOOL XRender_AlphaBlend( X11DRV_PDEVICE *devDst, X11DRV_PDEVICE *devSrc,
+                                struct bitblt_coords *dst, struct bitblt_coords *src,
+                                BLENDFUNCTION blendfn );
 
 extern Drawable get_glxdrawable(X11DRV_PDEVICE *physDev);
 extern BOOL destroy_glxpixmap(Display *display, XID glxpixmap);
@@ -547,8 +555,6 @@ struct x11drv_thread_data
 {
     Display *display;
     XEvent  *current_event;        /* event currently being processed */
-    Cursor   cursor;               /* current cursor */
-    Window   cursor_window;        /* current window that contains the cursor */
     Window   grab_window;          /* window that currently grabs the mouse */
     HWND     last_focus;           /* last window that had focus */
     XIM      xim;                  /* input method */
@@ -640,6 +646,7 @@ enum x11drv_atoms
     XATOM__NET_SUPPORTED,
     XATOM__NET_SYSTEM_TRAY_OPCODE,
     XATOM__NET_SYSTEM_TRAY_S0,
+    XATOM__NET_WM_ICON,
     XATOM__NET_WM_MOVERESIZE,
     XATOM__NET_WM_NAME,
     XATOM__NET_WM_PID,
@@ -651,6 +658,8 @@ enum x11drv_atoms
     XATOM__NET_WM_STATE_MAXIMIZED_VERT,
     XATOM__NET_WM_STATE_SKIP_PAGER,
     XATOM__NET_WM_STATE_SKIP_TASKBAR,
+    XATOM__NET_WM_USER_TIME,
+    XATOM__NET_WM_USER_TIME_WINDOW,
     XATOM__NET_WM_WINDOW_OPACITY,
     XATOM__NET_WM_WINDOW_TYPE,
     XATOM__NET_WM_WINDOW_TYPE_DIALOG,
@@ -715,7 +724,8 @@ enum x11drv_window_messages
     WM_X11DRV_ACQUIRE_SELECTION = 0x80001000,
     WM_X11DRV_SET_WIN_FORMAT,
     WM_X11DRV_SET_WIN_REGION,
-    WM_X11DRV_RESIZE_DESKTOP
+    WM_X11DRV_RESIZE_DESKTOP,
+    WM_X11DRV_SET_CURSOR
 };
 
 /* _NET_WM_STATE properties that we keep track of */
@@ -745,6 +755,7 @@ struct x11drv_win_data
     RECT        whole_rect;     /* X window rectangle for the whole window relative to parent */
     RECT        client_rect;    /* client area relative to parent */
     XIC         xic;            /* X input context */
+    HCURSOR     cursor;         /* current cursor */
     XWMHints   *wm_hints;       /* window manager hints */
     BOOL        managed : 1;    /* is window managed? */
     BOOL        mapped : 1;     /* is window mapped? (in either normal or iconic state) */
@@ -770,6 +781,7 @@ extern Drawable create_glxpixmap( Display *display, XVisualInfo *vis, Pixmap par
 extern void flush_gl_drawable( X11DRV_PDEVICE *physDev );
 
 extern void wait_for_withdrawn_state( Display *display, struct x11drv_win_data *data, BOOL set );
+extern void update_user_time( Time time );
 extern void update_net_wm_states( Display *display, struct x11drv_win_data *data );
 extern void make_window_embedded( Display *display, struct x11drv_win_data *data );
 
@@ -781,8 +793,7 @@ extern int CDECL X11DRV_AcquireClipboard(HWND hWndClipWindow);
 extern void X11DRV_Clipboard_Cleanup(void);
 extern void X11DRV_ResetSelectionOwner(void);
 extern void CDECL X11DRV_SetFocus( HWND hwnd );
-extern Cursor X11DRV_GetCursor( Display *display, struct tagCURSORICONINFO *ptr );
-extern void CDECL X11DRV_SetCursor( struct tagCURSORICONINFO *lpCursor );
+extern void set_window_cursor( HWND hwnd, HCURSOR handle );
 extern BOOL CDECL X11DRV_ClipCursor( LPCRECT clip );
 extern void X11DRV_InitKeyboard( Display *display );
 extern void X11DRV_send_keyboard_input( WORD wVk, WORD wScan, DWORD dwFlags, DWORD time,

@@ -56,12 +56,7 @@ POPUP "A&yuda" {
    MENUITEM "&Ayuda sobre la ayuda",		PM_HELPONHELP
    MENUITEM "&Tutorial",			PM_TUTORIAL
    MENUITEM SEPARATOR
-
-   POPUP "&Info..." {
-     MENUITEM "&Licencia",			PM_LICENSE
-     MENUITEM "&SIN GARANTÍA",			PM_NO_WARRANTY
-     MENUITEM "&Acerca de WINE",		PM_ABOUT_WINE
-   }
+   MENUITEM "&Acerca de Wine",		PM_ABOUT_WINE
  }
 }
 
@@ -188,7 +183,7 @@ PUSHBUTTON    "A&yuda",                  PM_HELP,   135, 65,  60, 15, WS_TABSTOP
 
 /* Strings */
 
-STRINGTABLE DISCARDABLE
+STRINGTABLE
 {
 IDS_PROGRAM_MANAGER,		"Gestor de programas"
 IDS_ERROR,			"ERROR"
@@ -214,28 +209,4 @@ IDS_PROGRAMS,			"Programas"
 IDS_LIBRARIES_DLL,		"Librarías (*.dll)"
 IDS_SYMBOL_FILES,		"Archivos de iconos"
 IDS_SYMBOLS_ICO,		"Iconos (*.ico)"
-}
-
-STRINGTABLE DISCARDABLE
-{
-IDS_LICENSE_CAPTION,            "LICENCIA"
-IDS_LICENSE,
-"This program is free software; you can redistribute it and/or \
-modify it under the terms of the GNU Lesser General Public \
-License as published by the Free Software Foundation; either \
-version 2.1 of the License, or (at your option) any later version.\n\
-This program is distributed in the hope that it will be useful, \
-but WITHOUT ANY WARRANTY; without even the implied warranty of \
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU \
-Lesser General Public License for more details.\n\
-You should have received a copy of the GNU Lesser General Public \
-License along with this program; if not, write to the Free Software \
-Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA"
-
-IDS_WARRANTY_CAPTION,           "SIN GARANTÍA"
-IDS_WARRANTY,
-"This program is distributed in the hope that it will be useful, \
-but WITHOUT ANY WARRANTY; without even the implied warranty of \
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU \
-Lesser General Public License for more details."
 }

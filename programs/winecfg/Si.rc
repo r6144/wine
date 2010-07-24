@@ -27,7 +27,7 @@
 
 LANGUAGE LANG_SLOVENIAN, SUBLANG_DEFAULT
 
-IDR_WINECFG MENU DISCARDABLE
+IDR_WINECFG MENU
 BEGIN
     POPUP ""
     BEGIN
@@ -35,38 +35,39 @@ BEGIN
     END
 END
 
-IDD_ABOUTCFG DIALOGEX 0, 0, 260, 270
+IDD_ABOUTCFG DIALOGEX 0, 0, 260, 220
 STYLE WS_CHILD
 FONT 8, "MS Shell Dlg"
 BEGIN
-    LTEXT           PACKAGE_STRING,IDC_STATIC,119,17,120,8
-    CONTROL         IDB_WINE,IDC_STATIC,"Static",SS_BITMAP ,15,17,157,111
-    LTEXT           "http://www.winehq.org/",IDC_STATIC,119,31,106,8
+    CONTROL         "", IDC_ABT_PANEL, "STATIC", SS_OWNERDRAW, 0, 0, 260, 140
+    LTEXT           PACKAGE_NAME,IDC_ABT_TITLE_TEXT,105,30,55,30
+    LTEXT           PACKAGE_VERSION,IDC_ABT_PANEL_TEXT,160,43,140,8
+    CONTROL         "",IDC_ABT_WEB_LINK,"SysLink", LWS_TRANSPARENT, 105,53,106,8
     LTEXT           "This program is free software; you can redistribute it and/or modify it under the terms of the GNU Lesser General Public License as published by the Free Software Foundation; either version 2.1 of the License, or (at your option) any later version.",
-                    IDC_STATIC,119,44,124,72
-    GROUPBOX        " Podatki o registraciji Oken ", IDC_STATIC, 15, 110, 230, 55
-    LTEXT           "Lastnik:", IDC_STATIC, 22, 126, 40, 20
-    EDITTEXT        IDC_ABT_OWNER, 75, 126, 160, 13, ES_AUTOHSCROLL | WS_TABSTOP
-    LTEXT           "Organizacija:", IDC_STATIC, 22, 140, 50, 20
-    EDITTEXT        IDC_ABT_ORG, 75, 140, 160, 13, ES_AUTOHSCROLL | WS_TABSTOP
+                    IDC_ABT_LICENSE_TEXT,105,64,145,60
+    GROUPBOX        " Podatki o registraciji Oken ", IDC_STATIC, 15, 155, 230, 55
+    LTEXT           "Lastnik:", IDC_STATIC, 22, 171, 40, 20
+    EDITTEXT        IDC_ABT_OWNER, 75, 171, 160, 13, ES_AUTOHSCROLL | WS_TABSTOP
+    LTEXT           "Organizacija:", IDC_STATIC, 22, 185, 50, 20
+    EDITTEXT        IDC_ABT_ORG, 75, 185, 160, 13, ES_AUTOHSCROLL | WS_TABSTOP
 END
 
-IDD_APPCFG DIALOG DISCARDABLE  0, 0, 260, 250
+IDD_APPCFG DIALOG  0, 0, 260, 220
 STYLE WS_CHILD | WS_DISABLED
 FONT 8, "MS Shell Dlg"
 BEGIN
-    GROUPBOX        " Nastavitve programov ",IDC_STATIC, 8,4,244,240
+    GROUPBOX        " Nastavitve programov ",IDC_STATIC, 8,4,244,210
     LTEXT           "Wine je sposoben oponašanja različnih različic Oken za vsak program posebej. Ta zavihek je povezan z zavihkoma Knjižnice in Grafika, kar omogoča spreminjanje nastavitev v teh dveh zavihkih tako za ves sistem kot za posamezne programe.",
                     IDC_STATIC,15,20,227,40
     CONTROL         "Programi",IDC_APP_LISTVIEW,"SysListView32",WS_BORDER | WS_TABSTOP | LVS_LIST | LVS_SINGLESEL | LVS_SHOWSELALWAYS,
-                    15,60,230,140
-    PUSHBUTTON	    "&Dodaj program ...",IDC_APP_ADDAPP, 90,204,75,14
-    PUSHBUTTON	    "&Odstrani program",IDC_APP_REMOVEAPP, 170,204,75,14
-    LTEXT           "&Različica Oken:",IDC_STATIC,17,226,58,8
-    COMBOBOX        IDC_WINVER,83,224,163,56,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+                    15,60,230,110
+    PUSHBUTTON	    "&Dodaj program ...",IDC_APP_ADDAPP, 90,174,75,14
+    PUSHBUTTON	    "&Odstrani program",IDC_APP_REMOVEAPP, 170,174,75,14
+    LTEXT           "&Različica Oken:",IDC_STATIC,17,196,58,8
+    COMBOBOX        IDC_WINVER,83,194,163,56,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
 END
 
-IDD_GRAPHCFG DIALOG DISCARDABLE  0, 0, 260, 250
+IDD_GRAPHCFG DIALOG  0, 0, 260, 220
 STYLE WS_CHILD | WS_DISABLED
 FONT 8, "MS Shell Dlg"
 BEGIN
@@ -86,30 +87,30 @@ BEGIN
     COMBOBOX    IDC_D3D_VSHADER_MODE,100,108,145,70,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
     CONTROL     "Omogoči &Pixel Shader (če to omogoča strojna oprema)",IDC_D3D_PSHADER_MODE,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,15,126,230,10
 
-    GROUPBOX    " Ločljivost &zaslona ",IDC_STATIC,8,151,244,93
+    GROUPBOX    " Ločljivost &zaslona ",IDC_STATIC,8,151,244,63
     CONTROL     "", IDC_RES_TRACKBAR, "msctls_trackbar32",WS_TABSTOP,12,161,187,15
     EDITTEXT    IDC_RES_DPIEDIT,204,161,23,13,ES_NUMBER|WS_TABSTOP
     LTEXT       "dpi",IDC_STATIC,235,163,10,8
-    LTEXT       "Vzorčno besedilo, napisano s pisavo Tahoma velikosti 10 točk",IDC_RES_FONT_PREVIEW,15,181,230,55
+    LTEXT       "Vzorčno besedilo, napisano s pisavo Tahoma velikosti 10 točk",IDC_RES_FONT_PREVIEW,15,181,230,28
 END
 
-IDD_DLLCFG DIALOG DISCARDABLE  0, 0, 260, 250
+IDD_DLLCFG DIALOG  0, 0, 260, 220
 STYLE WS_CHILD | WS_DISABLED
 FONT 8, "MS Shell Dlg"
 BEGIN
-    GROUPBOX        " Nastavitve DLL knjižnic ",IDC_STATIC,8,4,244,240
+    GROUPBOX        " Nastavitve DLL knjižnic ",IDC_STATIC,8,4,244,210
     LTEXT           "Vsaka DLL knjižnica (Dinamic Link Library) je lahko določena kot bodisi vgrajena ('builtin'; del Wine-a) oziroma izvirna ('native'; vzeta iz Oken ali nameščena skupaj s programom za Okna)."
                     ,IDC_STATIC,16,16,220,32
     LTEXT           "&Nova nastavitev knjižnice:",IDC_STATIC,16,58,100,8
     COMBOBOX        IDC_DLLCOMBO,16,68,140,14,CBS_DROPDOWN | WS_VSCROLL | WS_TABSTOP | CBS_SORT | CBS_LOWERCASE
-    PUSHBUTTON      "&Dodaj",IDC_DLLS_ADDDLL, 164,68,82,13,BS_DEFPUSHBUTTON
+    PUSHBUTTON      "&Dodaj",IDC_DLLS_ADDDLL, 164,68,82,13
     LTEXT           "Obstoječe n&astavitve:",IDC_STATIC,16,86,100,8
-    LISTBOX         IDC_DLLS_LIST,16,96,140,140,WS_BORDER | WS_TABSTOP | WS_VSCROLL
+    LISTBOX         IDC_DLLS_LIST,16,96,140,112,WS_BORDER | WS_TABSTOP | WS_VSCROLL
     PUSHBUTTON      "&Uredi",IDC_DLLS_EDITDLL,164,96,82,14
     PUSHBUTTON      "&Odstrani",IDC_DLLS_REMOVEDLL,164,114,82,14
 END
 
-IDD_LOADORDER DIALOG DISCARDABLE 80, 90, 110, 92
+IDD_LOADORDER DIALOG 80, 90, 110, 92
 STYLE DS_MODALFRAME | WS_CAPTION | WS_SYSMENU
 CAPTION "Urejanje nastavitve"
 FONT 8, "MS Shell Dlg"
@@ -124,12 +125,22 @@ BEGIN
     PUSHBUTTON      "Prekliči",IDCANCEL,57,74,45,14,WS_GROUP
 END
 
-IDD_DRIVECFG DIALOG DISCARDABLE  0, 0, 260, 250
+IDD_DRIVECHOOSE DIALOG  60, 70, 170, 60
+STYLE DS_MODALFRAME | WS_CAPTION | WS_SYSMENU
+CAPTION "Izberi črko pogona"
+FONT 8, "MS Shell Dlg"
+BEGIN
+    COMBOBOX IDC_DRIVESA2Z,15,10,75,230,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    DEFPUSHBUTTON   "V redu",IDOK,105,10,45,14,WS_GROUP
+    PUSHBUTTON      "Prekliči",IDCANCEL,105,30,45,14,WS_GROUP
+END
+
+IDD_DRIVECFG DIALOG  0, 0, 260, 220
 STYLE WS_CHILD | WS_DISABLED
 FONT 8, "MS Shell Dlg"
 BEGIN
-    GROUPBOX        " Preslikave &pogonov ",IDC_STATIC,8,4,244,240
-    LTEXT           "Napaka pri povezovanju z upravljalnikom priklopov (mount manager); nastavitev pogonov ne bo mogoče urejati.", IDC_STATIC_MOUNTMGR_ERROR, 15,30,220,76
+    GROUPBOX        " Preslikave &pogonov ",IDC_STATIC,8,4,244,195
+    LTEXT           "Napaka pri povezovanju z upravljalnikom priklopov (mount manager); nastavitev pogonov ne bo mogoče urejati.", IDC_STATIC_MOUNTMGR_ERROR, 15,30,190,76
     CONTROL         "Listview",IDC_LIST_DRIVES,"SysListView32",LVS_REPORT | LVS_AUTOARRANGE | LVS_ALIGNLEFT |
                     LVS_SINGLESEL | WS_BORDER | WS_TABSTOP, 15,18,232,76
     PUSHBUTTON      "&Dodaj ...",IDC_BUTTON_ADD,15,98,37,14
@@ -144,43 +155,38 @@ BEGIN
     LTEXT           "&Vrsta:",IDC_STATIC_TYPE,15,138,21,10
     COMBOBOX        IDC_COMBO_TYPE,41,135,77,60,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
 
-    LTEXT           "Oznaka in serijska številka",IDC_LABELSERIAL_STATIC,15,155,95,10
+    PUSHBUTTON      "Pokaži &napredno",IDC_BUTTON_SHOW_HIDE_ADVANCED,186,135,60,13
+    LTEXT           "De&vice:",IDC_STATIC_DEVICE,15,153,26,9
+    EDITTEXT        IDC_EDIT_DEVICE,41,150,160,13,ES_AUTOHSCROLL | WS_TABSTOP
+    PUSHBUTTON      "&Brskaj ...",IDC_BUTTON_BROWSE_DEVICE,206,150,40,13
 
-    PUSHBUTTON      "Pokaži &napredno",IDC_BUTTON_SHOW_HIDE_ADVANCED,186,136,60,13
-    CONTROL         "Samozaznaj &z naprave:",IDC_RADIO_AUTODETECT,"Button",
-                    BS_AUTORADIOBUTTON,15,166,93,10
-    EDITTEXT        IDC_EDIT_DEVICE,27,176,174,13,ES_AUTOHSCROLL
-    PUSHBUTTON      "&Brskaj ...",IDC_BUTTON_BROWSE_DEVICE,206,176,40,13
-    CONTROL         "&Ročno dodeli:",IDC_RADIO_ASSIGN,"Button",
-                    BS_AUTORADIOBUTTON,15,195,69,10
+    LTEXT           "&Oznaka:",IDC_STATIC_LABEL,15,168,39,12
+    EDITTEXT        IDC_EDIT_LABEL,55,165,68,13,ES_AUTOHSCROLL | WS_TABSTOP
+    LTEXT           "S&erijska št.:",IDC_STATIC_SERIAL,15,183,39,12
+    EDITTEXT        IDC_EDIT_SERIAL,55,180,68,13,ES_AUTOHSCROLL | WS_TABSTOP
 
-    LTEXT           "&Oznaka:",IDC_STATIC_LABEL,33,208,39,12
-    EDITTEXT        IDC_EDIT_LABEL,73,205,68,13,ES_AUTOHSCROLL | WS_TABSTOP
-    LTEXT           "S&erijska št.:",IDC_STATIC_SERIAL,33,225,39,12
-    EDITTEXT        IDC_EDIT_SERIAL,73,221,68,13,ES_AUTOHSCROLL | WS_TABSTOP
-
-    CONTROL         "Pokaži &datoteke s piko",IDC_SHOW_DOT_FILES,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,8,260,230,8
+    CONTROL         "Pokaži &datoteke s piko",IDC_SHOW_DOT_FILES,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,8,205,230,8
 END
 
-IDD_AUDIOCFG DIALOG DISCARDABLE  0, 0, 260, 250
+IDD_AUDIOCFG DIALOG  0, 0, 260, 220
 STYLE WS_CHILD | WS_DISABLED
 FONT 8, "MS Shell Dlg"
 BEGIN
-    GROUPBOX        " Izbira gonilnika ",IDC_STATIC,8,4,244,210
+    GROUPBOX        " Izbira gonilnika ",IDC_STATIC,8,4,244,160
     LTEXT           "Omogočite želeni zvočni gonilnik tako, da ga obkljukate. Zvočni gonilniki, ki niso izbrani, bodo onemogočeni. Izbira več zvočnih gonilnikov ni priporočljiva. Če želite urediti nastavitve zvočnega gonilnika, kliknite nanj z desnim gumbom.",IDC_STATIC,15,20,227,40
-    CONTROL         "Naprave",IDC_AUDIO_TREE,"SysTreeView32",WS_BORDER | WS_TABSTOP,15,60,140,145
+    CONTROL         "Naprave",IDC_AUDIO_TREE,"SysTreeView32",WS_BORDER | WS_TABSTOP,15,60,140,95
     PUSHBUTTON      "&Preizkusi zvok",IDC_AUDIO_TEST,170,60,59,14
     PUSHBUTTON	    "&Nadzorna plošča",IDC_AUDIO_CONTROL_PANEL,170,80,59,14
-    GROUPBOX        " DirectSound ",IDC_STATIC,8,220,244,45
-    LTEXT	    "&Strojno pospeševanje: ",IDC_STATIC,15,230,90,10
-    COMBOBOX	    IDC_DSOUND_HW_ACCEL,100,228,150,70,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
-    LTEXT           "&Frekvenca vzorčenja:",IDC_STATIC,15,247,70,8
-    COMBOBOX        IDC_DSOUND_RATES,90,245,42,76,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
-    LTEXT           "Število &bitov na vzorec:",IDC_STATIC,137,247,80,8
-    COMBOBOX        IDC_DSOUND_BITS,220,245,30,56,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    GROUPBOX        " DirectSound ",IDC_STATIC,8,170,244,45
+    LTEXT	    "&Strojno pospeševanje: ",IDC_STATIC,15,180,90,10
+    COMBOBOX	    IDC_DSOUND_HW_ACCEL,100,178,150,70,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "&Frekvenca vzorčenja:",IDC_STATIC,15,197,70,8
+    COMBOBOX        IDC_DSOUND_RATES,90,195,42,76,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "Število &bitov na vzorec:",IDC_STATIC,137,197,80,8
+    COMBOBOX        IDC_DSOUND_BITS,220,195,30,56,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
 END
 
-IDD_DESKTOP_INTEGRATION DIALOG DISCARDABLE  0, 0, 260, 250
+IDD_DESKTOP_INTEGRATION DIALOG  0, 0, 260, 220
 STYLE WS_CHILD | WS_DISABLED
 FONT 8, "MS Shell Dlg"
 BEGIN
@@ -208,7 +214,7 @@ BEGIN
     PUSHBUTTON      "B&rskaj",IDC_BROWSE_SFPATH,215,195,30,13,WS_DISABLED
 END
 
-STRINGTABLE DISCARDABLE
+STRINGTABLE
 BEGIN
     IDS_TAB_APPLICATIONS    "Programi"
     IDS_TAB_DLLS            "Knjižnice"
@@ -230,7 +236,7 @@ BEGIN
     IDS_LINKS_TO            "Povezano z"
 END
 
-STRINGTABLE DISCARDABLE
+STRINGTABLE
 BEGIN
     IDS_DLL_WARNING         "Spreminjanje vrstnega reda nalaganja za to knjižnico ni priporočljivo.\nAli ste prepričani, da ga želite spremeniti?"
     IDS_DLL_WARNING_CAPTION "Opozorilo: sistemska knjižnica"
@@ -245,13 +251,13 @@ BEGIN
     IDS_SELECT_EXECUTABLE   "Izberite izvršljivo datoteko"
 END
 
-STRINGTABLE DISCARDABLE
+STRINGTABLE
 BEGIN
     IDS_SHADER_MODE_HARDWARE    "Strojno"
     IDS_SHADER_MODE_NONE        "Brez"
 END
 
-STRINGTABLE DISCARDABLE
+STRINGTABLE
 BEGIN
     IDS_DRIVE_UNKNOWN           "Samozaznaj"
     IDS_DRIVE_FIXED             "Lokalen trdi disk"
@@ -266,7 +272,7 @@ BEGIN
     IDS_NO_DRIVE_C              "Nimate določenega pogona C, kar zna biti problematično.\n\nČe ga želite dodati, uporabite gumb Dodaj v zavihku Pogoni!\n"
 END
 
-STRINGTABLE DISCARDABLE
+STRINGTABLE
 BEGIN
     IDS_ACCEL_FULL              "Polno"
     IDS_ACCEL_STANDARD          "Standardno"
@@ -291,7 +297,7 @@ BEGIN
     IDS_WARNING                 "Opozorilo"
 END
 
-STRINGTABLE DISCARDABLE
+STRINGTABLE
 BEGIN
     IDC_SYSPARAMS_BUTTON            "Kontrole: ozadje"
     IDC_SYSPARAMS_BUTTON_TEXT       "Kontrole: besedilo"

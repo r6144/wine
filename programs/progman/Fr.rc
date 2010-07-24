@@ -23,10 +23,9 @@
 
 #include "progman.h"
 
-/* UTF-8 */
-#pragma code_page(65001)
-
 LANGUAGE LANG_FRENCH, SUBLANG_NEUTRAL
+
+#pragma code_page(65001)
 
 /* Menu */
 
@@ -62,12 +61,7 @@ MAIN_MENU MENU
    MENUITEM "&Utiliser l'aide",     PM_HELPONHELP
    MENUITEM "Didacticiel &Windows",         PM_TUTORIAL
    MENUITEM SEPARATOR
-
-   POPUP "&Info..." {
-     MENUITEM "&Licence",        PM_LICENSE
-     MENUITEM "AUCUNE &GARANTIE",    PM_NO_WARRANTY
-     MENUITEM "À &propos de Wine",     PM_ABOUT_WINE
-   }
+   MENUITEM "À &propos de Wine",     PM_ABOUT_WINE
  }
 }
 
@@ -194,7 +188,7 @@ PUSHBUTTON    "Aid&e",             PM_HELP,   135, 65,  60, 15, WS_TABSTOP
 
 /* Strings */
 
-STRINGTABLE DISCARDABLE
+STRINGTABLE
 {
 IDS_PROGRAM_MANAGER,		"Gestionnaire de programmes"
 IDS_ERROR,			"ERREUR"
@@ -221,29 +215,4 @@ IDS_PROGRAMS,			"Programmes"
 IDS_LIBRARIES_DLL,		"Bibliothèques (*.dll)"
 IDS_SYMBOL_FILES,		"Icônes"
 IDS_SYMBOLS_ICO,		"Icônes (*.ico)"
-}
-
-STRINGTABLE DISCARDABLE LANGUAGE LANG_FRENCH, SUBLANG_NEUTRAL
-{
-IDS_LICENSE_CAPTION,            "LICENCE"
-IDS_LICENSE,
-"Ce programme est un logiciel libre ; vous pouvez le redistribuer et/ou \
-le modifier suivant les termes de la Licence Générale Publique Limitée GNU \
-telle que publiée par la Free Software Foundation ; soit la version 2.1 \
-de la Licence, soit (à votre gré) toute version ultérieure.\n\
-Ce programme est distribué dans l'espoir qu'il sera utile, mais \
-SANS AUCUNE GARANTIE : sans même la garantie implicite de \
-COMMERCIALISABILITÉ ou d'ADÉQUATION À UN OBJECTIF PARTICULIER. Consultez \
-la Licence Générale Publique Limitée pour plus de détails.\n\
-Vous devriez avoir reçu une copie de la Licence Générale Publique Limitée \
-GNU avec ce programme ; si ce n'est pas le cas, écrivez à la : \
-Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, \
-MA 02110-1301, USA."
-
-IDS_WARRANTY_CAPTION, "AUCUNE GARANTIE"
-IDS_WARRANTY,
-"Ce programme est distribué dans l'espoir qu'il sera utile, mais \
-SANS AUCUNE GARANTIE : sans même la garantie implicite de \
-COMMERCIALISABILITÉ ou d'ADÉQUATION À UN OBJECTIF PARTICULIER. Consultez \
-la Licence Générale Publique Limitée pour plus de détails."
 }

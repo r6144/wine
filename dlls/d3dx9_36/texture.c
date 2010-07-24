@@ -21,6 +21,19 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(d3dx);
 
+HRESULT WINAPI D3DXCheckTextureRequirements(LPDIRECT3DDEVICE9 device,
+                                            UINT* width,
+                                            UINT* height,
+                                            UINT* miplevels,
+                                            DWORD usage,
+                                            D3DFORMAT* format,
+                                            D3DPOOL pool)
+{
+    FIXME("(%p, %p, %p, %p, %u, %p, %u): stub\n", device, width, height, miplevels, usage, format, pool);
+
+    return E_NOTIMPL;
+}
+
 HRESULT WINAPI D3DXCreateTexture(LPDIRECT3DDEVICE9 pDevice,
                                  UINT width,
                                  UINT height,
@@ -54,6 +67,52 @@ HRESULT WINAPI D3DXCreateTextureFromFileInMemoryEx(LPDIRECT3DDEVICE9 device,
 {
     FIXME("(%p, %p, %u, %u, %u, %u, %x, %x, %x, %u, %u, %x, %p, %p, %p): stub\n", device, srcdata, srcdatasize, width,
         height, miplevels, usage, format, pool, filter, mipfilter, colorkey, srcinfo, palette, texture);
+
+    return E_NOTIMPL;
+}
+
+HRESULT WINAPI D3DXCreateTextureFromFileExW(LPDIRECT3DDEVICE9 device,
+                                            LPCWSTR srcfile,
+                                            UINT width,
+                                            UINT height,
+                                            UINT miplevels,
+                                            DWORD usage,
+                                            D3DFORMAT format,
+                                            D3DPOOL pool,
+                                            DWORD filter,
+                                            DWORD mipfilter,
+                                            D3DCOLOR colorkey,
+                                            D3DXIMAGE_INFO *srcinfo,
+                                            PALETTEENTRY *palette,
+                                            LPDIRECT3DTEXTURE9 *texture)
+{
+    HRESULT hr;
+    DWORD size;
+    LPVOID buffer;
+
+    TRACE("(%p, %p, %u, %u, %u, %x, %x, %x, %u, %u, %x, %p, %p, %p): relay\n", device, debugstr_w(srcfile), width,
+        height, miplevels, usage, format, pool, filter, mipfilter, colorkey, srcinfo, palette, texture);
+
+    if (!srcfile)
+        return D3DERR_INVALIDCALL;
+
+    hr = map_view_of_file(srcfile, &buffer, &size);
+    if (FAILED(hr))
+        return D3DXERR_INVALIDDATA;
+
+    hr = D3DXCreateTextureFromFileInMemoryEx(device, buffer, size, width, height, miplevels, usage, format, pool,
+        filter, mipfilter, colorkey, srcinfo, palette, texture);
+
+    UnmapViewOfFile(buffer);
+
+    return hr;
+}
+
+HRESULT WINAPI D3DXCreateTextureFromFileA(LPDIRECT3DDEVICE9 device,
+                                          LPCSTR srcfile,
+                                          LPDIRECT3DTEXTURE9 *texture)
+{
+    FIXME("(%p, %s, %p): stub\n", device, debugstr_a(srcfile), texture);
 
     return E_NOTIMPL;
 }

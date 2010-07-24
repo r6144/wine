@@ -2347,7 +2347,7 @@ static void test_VarMod(void)
   static const WCHAR szNum1[] = {'1','0','\0'};
   int l, r;
   BOOL lFound, rFound;
-  BOOL lValid, rValid;
+  BOOL lValid;
   BSTR strNum0, strNum1;
 
   CHECKPTR(VarMod);
@@ -2531,7 +2531,6 @@ static void test_VarMod(void)
 	}
 
       rFound = TRUE;
-      rValid = TRUE;
       switch(r)
 	{
 	case VT_EMPTY:
@@ -2558,7 +2557,6 @@ static void test_VarMod(void)
 	case VT_VARIANT:
 	case VT_UNKNOWN:
 	case VT_RECORD:
-	  rValid = FALSE;
 	  break;
 	default:
 	  rFound = FALSE;
@@ -7130,7 +7128,7 @@ static void test_VarDiv(void)
     VARIANT left, right, exp, result, cy, dec;
     BSTR num1_str, num2_str;
     VARTYPE i;
-    HRESULT hres, expectedhres;
+    HRESULT hres;
     double r;
 
     num1_str = SysAllocString(str1);
@@ -7170,7 +7168,6 @@ static void test_VarDiv(void)
                 V_VT(&right) = rightvt | ExtraFlags[i];
                 V_VT(&result) = VT_EMPTY;
                 resvt = VT_EMPTY;
-                expectedhres = S_OK;
 
                 if (leftvt == VT_BSTR)
                     V_BSTR(&left) = num2_str;

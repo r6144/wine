@@ -41,13 +41,23 @@ LPWSTR build_icon_path(MSIPACKAGE *package, LPCWSTR icon_name )
 {
     LPWSTR SystemFolder, dest, FilePath;
 
+    static const WCHAR szMicrosoft[] =
+        {'M','i','c','r','o','s','o','f','t','\\',0};
     static const WCHAR szInstaller[] = 
-        {'M','i','c','r','o','s','o','f','t','\\',
-         'I','n','s','t','a','l','l','e','r','\\',0};
-    static const WCHAR szFolder[] =
+        {'I','n','s','t','a','l','l','e','r','\\',0};
+    static const WCHAR szADFolder[] =
         {'A','p','p','D','a','t','a','F','o','l','d','e','r',0};
+    static const WCHAR szWFolder[] =
+        {'W','i','n','d','o','w','s','F','o','l','d','e','r',0};
 
-    SystemFolder = msi_dup_property( package, szFolder );
+    if(package->Context == MSIINSTALLCONTEXT_MACHINE)
+        SystemFolder = msi_dup_property( package->db, szWFolder );
+    else
+    {
+        LPWSTR ADTgt = msi_dup_property( package->db, szADFolder );
+        SystemFolder = build_directory_name(2, ADTgt, szMicrosoft);
+        msi_free(ADTgt);
+    }
 
     dest = build_directory_name(3, SystemFolder, szInstaller, package->ProductCode);
 
@@ -160,11 +170,11 @@ static LPWSTR get_source_root( MSIPACKAGE *package )
 {
     LPWSTR path, p;
 
-    path = msi_dup_property( package, cszSourceDir );
+    path = msi_dup_property( package->db, cszSourceDir );
     if (path)
         return path;
 
-    path = msi_dup_property( package, cszDatabase );
+    path = msi_dup_property( package->db, cszDatabase );
     if (path)
     {
         p = strrchrW(path,'\\');
@@ -265,19 +275,19 @@ LPWSTR resolve_folder(MSIPACKAGE *package, LPCWSTR name, BOOL source,
         if (!f->ResolvedTarget && !f->Property)
         {
             LPWSTR check_path;
-            check_path = msi_dup_property( package, cszTargetDir );
+            check_path = msi_dup_property( package->db, cszTargetDir );
             if (!check_path)
             {
-                check_path = msi_dup_property( package, cszRootDrive );
+                check_path = msi_dup_property( package->db, cszRootDrive );
                 if (set_prop)
-                    MSI_SetPropertyW(package,cszTargetDir,check_path);
+                    msi_set_property( package->db, cszTargetDir, check_path );
             }
 
             /* correct misbuilt target dir */
             path = build_directory_name(2, check_path, NULL);
             clean_spaces_from_path( path );
             if (strcmpiW(path,check_path)!=0)
-                MSI_SetPropertyW(package,cszTargetDir,path);
+                msi_set_property( package->db, cszTargetDir, path );
             msi_free(check_path);
 
             f->ResolvedTarget = path;
@@ -310,11 +320,11 @@ LPWSTR resolve_folder(MSIPACKAGE *package, LPCWSTR name, BOOL source,
 
         TRACE("   internally set to %s\n",debugstr_w(path));
         if (set_prop)
-            MSI_SetPropertyW( package, name, path );
+            msi_set_property( package->db, name, path );
         return path;
     }
 
-    if (!source && load_prop && (path = msi_dup_property( package, name )))
+    if (!source && load_prop && (path = msi_dup_property( package->db, name )))
     {
         f->ResolvedTarget = strdupW( path );
         TRACE("   property set to %s\n", debugstr_w(path));
@@ -338,7 +348,7 @@ LPWSTR resolve_folder(MSIPACKAGE *package, LPCWSTR name, BOOL source,
         f->ResolvedTarget = strdupW( path );
         TRACE("target -> %s\n", debugstr_w(path));
         if (set_prop)
-            MSI_SetPropertyW(package,name,path);
+            msi_set_property( package->db, name, path );
     }
     else
     {

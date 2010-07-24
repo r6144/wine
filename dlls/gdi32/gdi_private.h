@@ -355,8 +355,8 @@ typedef struct tagBITMAPOBJ
 #define WINE_GCPW_DIR_MASK 3
 #define WINE_GCPW_LOOSE_MASK 2
 
-extern BOOL BIDI_Reorder( LPCWSTR lpString, INT uCount, DWORD dwFlags, DWORD dwWineGCP_Flags,
-                          LPWSTR lpOutString, INT uCountOut, UINT *lpOrder ) DECLSPEC_HIDDEN;
+extern BOOL BIDI_Reorder( HDC hDC, LPCWSTR lpString, INT uCount, DWORD dwFlags, DWORD dwWineGCP_Flags,
+                          LPWSTR lpOutString, INT uCountOut, UINT *lpOrder, WORD **lpGlyphs, INT* cGlyphs ) DECLSPEC_HIDDEN;
 
 /* bitmap.c */
 extern HBITMAP BITMAP_CopyBitmap( HBITMAP hbitmap ) DECLSPEC_HIDDEN;
@@ -385,9 +385,8 @@ extern int DIB_GetBitmapInfo( const BITMAPINFOHEADER *header, LONG *width,
                               LONG *height, WORD *planes, WORD *bpp, DWORD *compr, DWORD *size ) DECLSPEC_HIDDEN;
 
 /* driver.c */
+extern const DC_FUNCTIONS *DRIVER_get_display_driver(void) DECLSPEC_HIDDEN;
 extern const DC_FUNCTIONS *DRIVER_load_driver( LPCWSTR name ) DECLSPEC_HIDDEN;
-extern const DC_FUNCTIONS *DRIVER_get_driver( const DC_FUNCTIONS *funcs ) DECLSPEC_HIDDEN;
-extern void DRIVER_release_driver( const DC_FUNCTIONS *funcs ) DECLSPEC_HIDDEN;
 extern BOOL DRIVER_GetDriverName( LPCWSTR device, LPWSTR driver, DWORD size ) DECLSPEC_HIDDEN;
 
 /* enhmetafile.c */

@@ -4,7 +4,7 @@ SRCDIR    = @srcdir@
 VPATH     = @srcdir@
 MODULE    = comdlg32.dll
 IMPORTLIB = comdlg32
-IMPORTS   = uuid shell32 shlwapi comctl32 winspool user32 gdi32 advapi32 kernel32 ntdll
+IMPORTS   = uuid shell32 shlwapi comctl32 winspool user32 gdi32 advapi32
 DELAYIMPORTS = ole32
 
 C_SRCS = \
@@ -42,6 +42,7 @@ RC_SRCS = \
 	cdlg_Ru.rc \
 	cdlg_Si.rc \
 	cdlg_Sk.rc \
+	cdlg_Sr.rc \
 	cdlg_Sv.rc \
 	cdlg_Th.rc \
 	cdlg_Tr.rc \
@@ -49,5 +50,11 @@ RC_SRCS = \
 	cdlg_Wa.rc \
 	cdlg_Zh.rc \
 	cdlg_xx.rc
+
+SVG_SRCS = \
+	pd32_collate.svg \
+	pd32_landscape.svg \
+	pd32_nocollate.svg \
+	pd32_portrait.svg
 
 @MAKE_DLL_RULES@

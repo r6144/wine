@@ -24,6 +24,8 @@
 
 #include "winreg.h"
 #include "shlwapi.h"
+#include "hlink.h"
+#include "shellapi.h"
 
 #include "wine/debug.h"
 
@@ -513,6 +515,12 @@ HRESULT WINAPI CreateURLMonikerEx(IMoniker *pmkContext, LPCWSTR szURL, IMoniker 
 
     TRACE("(%p, %s, %p, %08x)\n", pmkContext, debugstr_w(szURL), ppmk, dwFlags);
 
+    if (ppmk)
+        *ppmk = NULL;
+
+    if (!szURL || !ppmk)
+        return E_INVALIDARG;
+
     if (dwFlags & URL_MK_UNIFORM) FIXME("ignoring flag URL_MK_UNIFORM\n");
 
     if(!(obj = alloc_moniker()))
@@ -619,6 +627,9 @@ HRESULT WINAPI MkParseDisplayNameEx(IBindCtx *pbc, LPCWSTR szDisplayName, ULONG 
 {
     TRACE("(%p %s %p %p)\n", pbc, debugstr_w(szDisplayName), pchEaten, ppmk);
 
+    if (!pbc || !szDisplayName || !*szDisplayName || !pchEaten || !ppmk)
+        return E_INVALIDARG;
+
     if(is_registered_protocol(szDisplayName)) {
         HRESULT hres;
 
@@ -722,8 +733,18 @@ HRESULT WINAPI HlinkSimpleNavigateToMoniker(IMoniker *pmkTarget,
     LPCWSTR szLocation, LPCWSTR szTargetFrameName, IUnknown *pUnk,
     IBindCtx *pbc, IBindStatusCallback *pbsc, DWORD grfHLNF, DWORD dwReserved)
 {
-    FIXME("stub\n");
-    return E_NOTIMPL;
+    LPWSTR target;
+    HRESULT hres;
+
+    TRACE("\n");
+
+    hres = IMoniker_GetDisplayName(pmkTarget, pbc, 0, &target);
+    if(hres == S_OK)
+        hres = HlinkSimpleNavigateToString( target, szLocation, szTargetFrameName,
+                                            pUnk, pbc, pbsc, grfHLNF, dwReserved );
+    CoTaskMemFree(target);
+
+    return hres;
 }
 
 /***********************************************************************
@@ -733,7 +754,27 @@ HRESULT WINAPI HlinkSimpleNavigateToString( LPCWSTR szTarget,
     LPCWSTR szLocation, LPCWSTR szTargetFrameName, IUnknown *pUnk,
     IBindCtx *pbc, IBindStatusCallback *pbsc, DWORD grfHLNF, DWORD dwReserved)
 {
-    FIXME("%s\n", debugstr_w( szTarget ) );
+    FIXME("%s %s %s %p %p %p %u %u partial stub\n", debugstr_w( szTarget ), debugstr_w( szLocation ),
+          debugstr_w( szTargetFrameName ), pUnk, pbc, pbsc, grfHLNF, dwReserved);
+
+    /* undocumented: 0 means HLNF_OPENINNEWWINDOW*/
+    if (!grfHLNF) grfHLNF = HLNF_OPENINNEWWINDOW;
+
+    if (grfHLNF == HLNF_OPENINNEWWINDOW)
+    {
+        SHELLEXECUTEINFOW sei;
+        static const WCHAR openW[] = { 'o', 'p', 'e', 'n', 0 };
+
+        memset(&sei, 0, sizeof(sei));
+        sei.cbSize = sizeof(sei);
+        sei.lpVerb = openW;
+        sei.nShow = SW_SHOWNORMAL;
+        sei.fMask = SEE_MASK_FLAG_NO_UI | SEE_MASK_NO_CONSOLE;
+        sei.lpFile = szTarget;
+
+        if (ShellExecuteExW(&sei)) return S_OK;
+    }
+
     return E_NOTIMPL;
 }
 

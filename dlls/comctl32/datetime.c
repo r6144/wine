@@ -614,7 +614,7 @@ DATETIME_ReturnFieldWidth (const DATETIME_INFO *infoPtr, HDC hdc, int count, SHO
 		    lctype = LOCALE_SABBREVMONTHNAME1;
 		    max_count = 12;
 		    break;
-		case FULLMONTH:
+		default: /* FULLMONTH */
 		    fall   = fld_mon;
 		    lctype = LOCALE_SMONTHNAME1;
 		    max_count = 12;
@@ -759,11 +759,10 @@ static LRESULT
 DATETIME_LButtonDown (DATETIME_INFO *infoPtr, INT x, INT y)
 {
     POINT pt;
-    int old, new;
+    int new;
 
     pt.x = x;
     pt.y = y;
-    old = infoPtr->select;
     new = DATETIME_HitTest (infoPtr, pt);
 
     SetFocus(infoPtr->hwndSelf);

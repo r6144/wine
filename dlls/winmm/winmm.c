@@ -155,10 +155,6 @@ BOOL WINAPI DllMain(HINSTANCE hInstDLL, DWORD fdwReason, LPVOID fImpLoad)
 
 	if (!WINMM_CreateIData(hInstDLL))
 	    return FALSE;
-        if (!MMDRV_Init()) {
-            WINMM_DeleteIData();
-            return FALSE;
-	}
 	break;
     case DLL_PROCESS_DETACH:
         /* close all opened MCI drivers */
@@ -914,6 +910,13 @@ UINT WINAPI midiOutOpen(LPHMIDIOUT lphMidiOut, UINT uDeviceID,
 	  lphMidiOut, uDeviceID, dwCallback, dwInstance, dwFlags);
 
     if (lphMidiOut != NULL) *lphMidiOut = 0;
+
+    switch (dwFlags & CALLBACK_TYPEMASK) {
+    case CALLBACK_WINDOW:
+        if (dwCallback && !IsWindow((HWND)dwCallback))
+            return MMSYSERR_INVALPARAM;
+        break;
+    }
 
     lpwm = MIDI_OutAlloc(&hMidiOut, &dwCallback, &dwInstance, &dwFlags, 0, NULL);
 
@@ -1758,6 +1761,13 @@ MMRESULT WINAPI midiStreamOpen(HMIDISTRM* lphMidiStrm, LPUINT lpuDeviceID,
     if (cMidi != 1 || lphMidiStrm == NULL || lpuDeviceID == NULL)
 	return MMSYSERR_INVALPARAM;
 
+    switch (fdwOpen & CALLBACK_TYPEMASK) {
+    case CALLBACK_WINDOW:
+        if (dwCallback && !IsWindow((HWND)dwCallback))
+            return MMSYSERR_INVALPARAM;
+        break;
+    }
+
     lpMidiStrm = HeapAlloc(GetProcessHeap(), 0, sizeof(WINE_MIDIStream));
     if (!lpMidiStrm)
 	return MMSYSERR_NOMEM;
@@ -1820,7 +1830,8 @@ MMRESULT WINAPI midiStreamOut(HMIDISTRM hMidiStrm, LPMIDIHDR lpMidiHdr,
     TRACE("(%p, %p, %u)!\n", hMidiStrm, lpMidiHdr, cbMidiHdr);
 
     if (cbMidiHdr < offsetof(MIDIHDR,dwOffset) || !lpMidiHdr || !lpMidiHdr->lpData
-	|| lpMidiHdr->dwBufferLength < lpMidiHdr->dwBytesRecorded)
+	|| lpMidiHdr->dwBufferLength < lpMidiHdr->dwBytesRecorded
+	|| lpMidiHdr->dwBytesRecorded % 4 /* player expects DWORD padding */)
 	return MMSYSERR_INVALPARAM;
     /* FIXME: Native additionally checks if the MIDIEVENTs in lpData
      * exactly fit dwBytesRecorded. */

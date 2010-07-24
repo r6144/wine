@@ -33,7 +33,10 @@ typedef union {
       MCI_STATUS_PARMS    status;
       MCI_WAVE_SET_PARMS  set;
       MCI_WAVE_OPEN_PARMS open;
+      MCI_GETDEVCAPS_PARMS caps;
+      MCI_SYSINFO_PARMS   sys;
       MCI_SEEK_PARMS      seek;
+      MCI_GENERIC_PARMS   gen;
     } MCI_PARMS_UNION;
 
 static const char* dbg_mcierr(MCIERROR err)
@@ -162,18 +165,31 @@ static void test_notification_dbg(HWND hwnd, const char* command, WPARAM type, i
 static void test_openCloseWAVE(HWND hwnd)
 {
     MCIERROR err;
-    MCI_GENERIC_PARMS parm;
+    MCI_PARMS_UNION parm;
     const char command_open[] = "open new type waveaudio alias mysound notify";
     const char command_close_my[] = "close mysound notify";
     const char command_close_all[] = "close all notify";
     const char command_sysinfo[] = "sysinfo waveaudio quantity open";
     char buf[1024];
+    DWORD intbuf[3] = { 0xDEADF00D, 99, 0xABADCAFE };
     memset(buf, 0, sizeof(buf));
     test_notification(hwnd, "-prior to any command-", 0);
 
+    /* Avoid Sysinfo quantity with notify because Win9x and newer differ. */
     err = mciSendString("sysinfo all quantity", buf, sizeof(buf), hwnd);
-    todo_wine ok(!err,"mci %s returned %s\n", command_open, dbg_mcierr(err));
+    ok(!err,"mci sysinfo all quantity returned %s\n", dbg_mcierr(err));
     if(!err) trace("[MCI] with %s drivers\n", buf);
+
+    parm.sys.lpstrReturn = (LPSTR)&intbuf[1];
+    parm.sys.dwRetSize = sizeof(DWORD);
+    parm.sys.wDeviceType = MCI_DEVTYPE_WAVEFORM_AUDIO; /* ignored */
+    err = mciSendCommand(MCI_ALL_DEVICE_ID, MCI_SYSINFO, MCI_SYSINFO_QUANTITY | MCI_WAIT, (DWORD_PTR)&parm);
+    ok(!err,"mciSendCommand(MCI_ALL_DEVICE_ID, MCI_SYSINFO QUANTITY, MCI_WAIT, 0) returned %s\n", dbg_mcierr(err));
+    if(!err) ok(atoi(buf)==intbuf[1],"sysinfo all quantity string and command differ\n");
+
+    parm.sys.dwRetSize = sizeof(DWORD)-1;
+    err = mciSendCommand(MCI_ALL_DEVICE_ID, MCI_SYSINFO, MCI_SYSINFO_QUANTITY, (DWORD_PTR)&parm);
+    ok(err==MCIERR_PARAM_OVERFLOW || broken(!err/* Win9x */),"mciSendCommand MCI_SYSINFO with too small buffer returned %s\n", dbg_mcierr(err));
 
     err = mciSendString("open new type waveaudio alias r shareable", buf, sizeof(buf), NULL);
     ok(err==MCIERR_UNSUPPORTED_FUNCTION,"mci open new shareable returned %s\n", dbg_mcierr(err));
@@ -196,6 +212,56 @@ static void test_openCloseWAVE(HWND hwnd)
         else trace("locale-dependent time format: %s (ms)\n", buf);
     }
 
+    memset(buf, 0, sizeof(buf));
+    parm.sys.dwNumber = 1;
+    parm.sys.wDeviceType = MCI_DEVTYPE_WAVEFORM_AUDIO; /* ignored */
+    parm.sys.lpstrReturn = buf;
+    parm.sys.dwRetSize = sizeof(buf);
+    parm.sys.dwCallback = (DWORD_PTR)hwnd;
+    err = mciSendCommand(MCI_ALL_DEVICE_ID, MCI_SYSINFO, MCI_SYSINFO_NAME | MCI_SYSINFO_OPEN | MCI_NOTIFY, (DWORD_PTR)&parm);
+    ok(!err,"mciCommand MCI_SYSINFO all name 1 open notify: %s\n", dbg_mcierr(err));
+    if(!err) ok(!strcmp(buf,"mysound"), "sysinfo name returned %s\n", buf);
+    test_notification(hwnd, "SYSINFO name notify\n", MCI_NOTIFY_SUCCESSFUL);
+
+    memset(buf, 0, sizeof(buf));
+    parm.sys.dwNumber = 1;
+    parm.sys.wDeviceType = MCI_DEVTYPE_WAVEFORM_AUDIO; /* ignored */
+    parm.sys.lpstrReturn = buf;
+    parm.sys.dwRetSize = 8; /* mysound\0 */
+    err = mciSendCommand(MCI_ALL_DEVICE_ID, MCI_SYSINFO, MCI_SYSINFO_NAME | MCI_SYSINFO_OPEN, (DWORD_PTR)&parm);
+    ok(!err,"mciCommand MCI_SYSINFO all name 1 open buffer[8]: %s\n", dbg_mcierr(err));
+    if(!err) ok(!strcmp(buf,"mysound"), "sysinfo name returned %s\n", buf);
+
+    /* dwRetSize counts characters, not bytes, despite what MSDN says. */
+    parm.sys.dwNumber = 1;
+    parm.sys.wDeviceType = MCI_DEVTYPE_WAVEFORM_AUDIO; /* ignored */
+    parm.sys.lpstrReturn = buf;
+    parm.sys.dwRetSize = 8; /* mysound\0 */
+    /* MCI_..._PARMSA and PARMSW share the same layout, use one for both tests. */
+    err = mciSendCommandW(MCI_ALL_DEVICE_ID, MCI_SYSINFO, MCI_SYSINFO_NAME | MCI_SYSINFO_OPEN, (DWORD_PTR)&parm);
+    ok(!err || broken(err==MMSYSERR_NOTSUPPORTED/* Win9x */), "mciCommandW MCI_SYSINFO all name 1 open buffer[8]: %s\n", dbg_mcierr(err));
+    /* TODO strcmpW((LPWSTR)buf,"mysound") */
+
+    parm.sys.dwNumber = 1;
+    parm.sys.wDeviceType = MCI_DEVTYPE_WAVEFORM_AUDIO; /* ignored */
+    parm.sys.lpstrReturn = buf;
+    parm.sys.dwRetSize = 7; /* too short for mysound\0 */
+    err = mciSendCommandW(MCI_ALL_DEVICE_ID, MCI_SYSINFO, MCI_SYSINFO_NAME | MCI_SYSINFO_OPEN, (DWORD_PTR)&parm);
+    ok(err==MCIERR_PARAM_OVERFLOW || broken(err==MMSYSERR_NOTSUPPORTED/* Win9x */), "mciCommandW MCI_SYSINFO all name 1 open too small: %s\n", dbg_mcierr(err));
+
+    /* Win9x overwrites the tiny buffer and returns success, newer versions signal overflow. */
+    memset(buf, 0, sizeof(buf));
+    parm.sys.dwNumber = 1;
+    parm.sys.wDeviceType = MCI_DEVTYPE_WAVEFORM_AUDIO; /* ignored */
+    parm.sys.lpstrReturn = buf;
+    parm.sys.dwRetSize = 2; /* too short for mysound\0 */
+    err = mciSendCommand(MCI_ALL_DEVICE_ID, MCI_SYSINFO, MCI_SYSINFO_NAME | MCI_SYSINFO_OPEN, (DWORD_PTR)&parm);
+    ok(err==MCIERR_PARAM_OVERFLOW || broken(!err /* Win9x */),"mciCommand MCI_SYSINFO all name 1 open too small: %s\n", dbg_mcierr(err));
+    if(!err) ok(!strcmp(buf,"mysound"), "sysinfo short name returned %s\n", buf);
+
+    err = mciGetDeviceID("all");
+    ok(MCI_ALL_DEVICE_ID==err || /* Win9x */(UINT16)MCI_ALL_DEVICE_ID==err,"mciGetDeviceID all returned %u, expected %d\n", err, MCI_ALL_DEVICE_ID);
+
     err = mciSendString(command_close_my, NULL, 0, hwnd);
     ok(!err,"mci %s returned %s\n", command_close_my, dbg_mcierr(err));
     test_notification(hwnd, command_close_my, MCI_NOTIFY_SUCCESSFUL);
@@ -217,11 +283,11 @@ static void test_openCloseWAVE(HWND hwnd)
     }
 
     err = mciSendString(command_close_all, NULL, 0, NULL);
-    todo_wine ok(!err,"mci %s (without buffer) returned %s\n", command_close_all, dbg_mcierr(err));
+    ok(!err,"mci %s (without buffer) returned %s\n", command_close_all, dbg_mcierr(err));
 
     memset(buf, 0, sizeof(buf));
     err = mciSendString(command_close_all, buf, sizeof(buf), hwnd);
-    todo_wine ok(!err,"mci %s (with output buffer) returned %s\n", command_close_all, dbg_mcierr(err));
+    ok(!err,"mci %s (with output buffer) returned %s\n", command_close_all, dbg_mcierr(err));
     ok(buf[0] == 0, "mci %s changed output buffer: %s\n", command_close_all, buf);
     /* No notification left, everything closed already */
     test_notification(hwnd, command_close_all, 0);
@@ -230,18 +296,34 @@ static void test_openCloseWAVE(HWND hwnd)
     memset(buf, 0, sizeof(buf));
     err = mciSendString(command_sysinfo, buf, sizeof(buf), NULL);
     ok(!err,"mci %s returned %s\n", command_sysinfo, dbg_mcierr(err));
-    todo_wine ok(buf[0] == '0' && buf[1] == 0, "mci %s, expected output buffer '0', got: '%s'\n", command_sysinfo, buf);
+    ok(buf[0] == '0' && buf[1] == 0, "mci %s, expected output buffer '0', got: '%s'\n", command_sysinfo, buf);
 
     err = mciSendString("open new type waveaudio", buf, sizeof(buf), NULL);
     ok(err==MCIERR_NEW_REQUIRES_ALIAS,"mci open new without alias returned %s\n", dbg_mcierr(err));
 
+    parm.open.lpstrDeviceType = (LPSTR)MCI_DEVTYPE_WAVEFORM_AUDIO;
+    err = mciSendCommand(0, MCI_OPEN,
+        MCI_OPEN_TYPE | MCI_OPEN_TYPE_ID,
+        (DWORD_PTR)&parm);
+    ok(!err,"mciCommand OPEN_TYPE_ID waveaudio: %s\n", dbg_mcierr(err));
+
+    if(!err) {
+        MCIDEVICEID wDeviceID = parm.open.wDeviceID;
+        parm.caps.dwItem = MCI_GETDEVCAPS_DEVICE_TYPE;
+        err = mciSendCommand(wDeviceID, MCI_GETDEVCAPS, MCI_GETDEVCAPS_ITEM, (DWORD_PTR)&parm);
+        ok(!err,"mciCommand MCI_GETDEVCAPS device type: %s\n", dbg_mcierr(err));
+        ok(MCI_DEVTYPE_WAVEFORM_AUDIO==parm.caps.dwReturn,"mciCommand GETDEVCAPS says %u, expected %u\n", parm.caps.dwReturn, MCI_DEVTYPE_WAVEFORM_AUDIO);
+    }
+
+    ok(0xDEADF00D==intbuf[0] && 0xABADCAFE==intbuf[2],"DWORD buffer corruption\n");
+
     err = mciSendCommand(MCI_ALL_DEVICE_ID, MCI_CLOSE, MCI_WAIT, 0); /* from MSDN */
-    ok(!err,"mciSendCommand(MCI_ALL_DEVICE_ID, MCI_CLOSE, MCI_NOTIFY, 0) returned %s\n", dbg_mcierr(err));
+    ok(!err,"mciSendCommand(MCI_ALL_DEVICE_ID, MCI_CLOSE, MCI_WAIT, 0) returned %s\n", dbg_mcierr(err));
 
     err = mciSendCommand(MCI_ALL_DEVICE_ID, MCI_CLOSE, MCI_NOTIFY, 0);
     ok(!err,"mciSendCommand(MCI_ALL_DEVICE_ID, MCI_CLOSE, MCI_NOTIFY, 0) returned %s\n", dbg_mcierr(err));
 
-    parm.dwCallback = (DWORD_PTR)hwnd;
+    parm.gen.dwCallback = (DWORD_PTR)hwnd;
     err = mciSendCommand(MCI_ALL_DEVICE_ID, MCI_CLOSE, MCI_NOTIFY, (DWORD_PTR)&parm);
     ok(!err,"mciSendCommand(MCI_ALL_DEVICE_ID, MCI_CLOSE, MCI_NOTIFY, hwnd) returned %s\n", dbg_mcierr(err));
     test_notification(hwnd, command_close_all, 0); /* None left */
@@ -270,9 +352,15 @@ static void test_recordWAVE(HWND hwnd)
     ok(!err,"mciCommand open new type waveaudio alias x notify: %s\n", dbg_mcierr(err));
     wDeviceID = parm.open.wDeviceID;
 
-    /* In Wine, both MCI_Open and the individual drivers send notifications. */
+    err = mciGetDeviceID("x");
+    ok(err==wDeviceID,"mciGetDeviceID x returned %u, expected %u\n", err, wDeviceID);
+
+    /* Only the alias is looked up. */
+    err = mciGetDeviceID("waveaudio");
+    todo_wine ok(err==0,"mciGetDeviceID waveaudio returned %u, expected 0\n", err);
+
     test_notification(hwnd, "open new", MCI_NOTIFY_SUCCESSFUL);
-    todo_wine test_notification(hwnd, "open new no #2", 0);
+    test_notification(hwnd, "open new no #2", 0);
 
     /* Do not query time format as string because result depends on locale! */
     parm.status.dwItem = MCI_STATUS_TIME_FORMAT;
@@ -329,6 +417,14 @@ static void test_recordWAVE(HWND hwnd)
         MCI_WAVE_SET_BITSPERSAMPLE | MCI_WAVE_SET_BLOCKALIGN |
         MCI_WAVE_SET_AVGBYTESPERSEC| MCI_WAVE_SET_FORMATTAG, (DWORD_PTR)&parm);
     ok(err==ok_pcm,"mciCommand set wave format: %s\n", dbg_mcierr(err));
+
+    parm.caps.dwItem = MCI_WAVE_GETDEVCAPS_INPUTS;
+    parm.caps.dwCallback = (DWORD_PTR)hwnd;
+    err = mciSendCommand(wDeviceID, MCI_GETDEVCAPS, MCI_GETDEVCAPS_ITEM | MCI_NOTIFY, (DWORD_PTR)&parm);
+    ok(!err,"mciCommand MCI_GETDEVCAPS inputs: %s\n", dbg_mcierr(err));
+    ok(parm.caps.dwReturn==ndevs,"mciCommand GETDEVCAPS claims %u inputs, expected %u\n", parm.caps.dwReturn, ndevs);
+    ok(!ok_pcm || !parm.caps.dwReturn,"No input device accepts PCM!?\n");
+    test_notification(hwnd, "GETDEVCAPS inputs", MCI_NOTIFY_SUCCESSFUL);
 
     /* A few ME machines pass all tests except set format tag pcm! */
     err = mciSendString("record x to 2000 wait", NULL, 0, hwnd);
@@ -532,7 +628,7 @@ static void test_asyncWAVE(HWND hwnd)
     char buf[1024];
     memset(buf, 0, sizeof(buf));
 
-    err = mciSendString("open tempfile.wav alias mysound notify", buf, sizeof(buf), hwnd);
+    err = mciSendString("open tempfile.wav alias mysound notify type waveaudio", buf, sizeof(buf), hwnd);
     ok(err==ok_saved,"mci open tempfile.wav returned %s\n", dbg_mcierr(err));
     if(err) {
         skip("Cannot open tempfile.wav for playing (%s), skipping\n", dbg_mcierr(err));
@@ -542,6 +638,16 @@ static void test_asyncWAVE(HWND hwnd)
     wDeviceID = atoi(buf);
     ok(wDeviceID,"mci open DeviceID: %d\n", wDeviceID);
     test_notification(hwnd,"open alias notify",MCI_NOTIFY_SUCCESSFUL);
+
+    err = mciGetDeviceID("mysound");
+    ok(err==wDeviceID,"mciGetDeviceID alias returned %u, expected %u\n", err, wDeviceID);
+
+    /* Only the alias is looked up. */
+    err = mciGetDeviceID("tempfile.wav");
+    todo_wine ok(err==0,"mciGetDeviceID element returned %u, expected 0\n", err);
+
+    err = mciGetDeviceID("waveaudio");
+    todo_wine ok(err==0,"mciGetDeviceID waveaudio returned %u, expected 0\n", err);
 
     err = mciSendString("status mysound mode", buf, sizeof(buf), hwnd);
     ok(!err,"mci status mode returned %s\n", dbg_mcierr(err));
@@ -714,8 +820,11 @@ static void test_AutoOpenWAVE(HWND hwnd)
     /* This test used(?) to cause intermittent crashes when Wine exits, after
      * fixme:winmm:MMDRV_Exit Closing while ll-driver open
      */
-    MCIERROR err, ok_snd = waveOutGetNumDevs() ? 0 : MCIERR_HARDWARE;
+    UINT ndevs = waveOutGetNumDevs();
+    MCIERROR err, ok_snd = ndevs ? 0 : MCIERR_HARDWARE;
+    MCI_PARMS_UNION parm;
     char buf[512], path[300], command[330];
+    DWORD intbuf[3] = { 0xDEADF00D, 99, 0xABADCAFE };
     memset(buf, 0, sizeof(buf)); memset(path, 0, sizeof(path));
 
     /* Do not crash on NULL buffer pointer */
@@ -724,7 +833,7 @@ static void test_AutoOpenWAVE(HWND hwnd)
 
     err = mciSendString("sysinfo waveaudio quantity open", buf, sizeof(buf), NULL);
     ok(!err,"mci sysinfo waveaudio quantity open returned %s\n", dbg_mcierr(err));
-    if(!err) todo_wine ok(!strcmp(buf,"0"), "sysinfo quantity open expected 0, got: %s, some more tests will fail.\n", buf);
+    if(!err) ok(!strcmp(buf,"0"), "sysinfo quantity open expected 0, got: %s, some more tests will fail.\n", buf);
 
     /* Who knows why some machines pass all tests but return MCIERR_HARDWARE here? */
     err = mciSendString("sound NoSuchSoundDefined wait", NULL, 0, NULL);
@@ -734,10 +843,12 @@ static void test_AutoOpenWAVE(HWND hwnd)
     todo_wine ok(err==ok_snd || broken(err==MCIERR_HARDWARE),"mci sound SystemExclamation returned %s\n", dbg_mcierr(err));
     test_notification(hwnd, "sound notify", err ? 0 : MCI_NOTIFY_SUCCESSFUL);
 
+    Sleep(16); /* time to auto-close makes sysinfo below return expected error */
     buf[0]=0;
-    err = mciSendString("sysinfo waveaudio name 1 open", buf, sizeof(buf), NULL);
-    todo_wine ok(err==MCIERR_OUTOFRANGE,"sysinfo waveaudio name 1 returned %s\n", dbg_mcierr(err));
+    err = mciSendString("sysinfo waveaudio notify name 1 open", buf, sizeof(buf), hwnd);
+    ok(err==MCIERR_OUTOFRANGE,"sysinfo waveaudio name 1 returned %s\n", dbg_mcierr(err));
     if(!err) trace("sysinfo dangling open alias: %s\n", buf);
+    test_notification(hwnd, "sysinfo name outofrange\n", err ? 0 : MCI_NOTIFY_SUCCESSFUL);
 
     err = mciSendString("play no-such-file-exists.wav notify", buf, sizeof(buf), NULL);
     if(err==MCIERR_FILE_NOT_FOUND) { /* a Wine detector */
@@ -745,6 +856,8 @@ static void test_AutoOpenWAVE(HWND hwnd)
         skip("Skipping auto-open tests in Wine\n");
         return;
     }
+
+    test_notification(hwnd, "-prior to auto-open-", 0);
 
     err = mciSendString("play tempfile.wav notify", buf, sizeof(buf), hwnd);
     todo_wine ok(err==MCIERR_NOTIFY_ON_AUTO_OPEN,"mci auto-open play notify returned %s\n", dbg_mcierr(err));
@@ -763,11 +876,19 @@ static void test_AutoOpenWAVE(HWND hwnd)
     ok(!err,"mci sysinfo waveaudio quantity after auto-open returned %s\n", dbg_mcierr(err));
     if(!err) todo_wine ok(!strcmp(buf,"1"), "sysinfo quantity open expected 1, got: %s\n", buf);
 
+    parm.sys.lpstrReturn = (LPSTR)&intbuf[1];
+    parm.sys.dwRetSize = 2*sizeof(DWORD); /* only one DWORD is used */
+    parm.sys.wDeviceType = MCI_DEVTYPE_WAVEFORM_AUDIO;
+    err = mciSendCommand(0, MCI_SYSINFO, MCI_SYSINFO_QUANTITY | MCI_SYSINFO_OPEN, (DWORD_PTR)&parm);
+    ok(!err,"mciSendCommand(0(WAVEAUDIO), MCI_SYSINFO, OPEN | MCI_NOTIFY) returned %s\n", dbg_mcierr(err));
+    if(!err) ok(atoi(buf)==intbuf[1],"sysinfo waveaudio quantity open string and command differ\n");
+
     buf[0]=0;
-    err = mciSendString("sysinfo waveaudio name 1 open", buf, sizeof(buf), NULL);
-    todo_wine ok(!err,"mci sysinfo waveaudio name after auto-open returned %s\n", dbg_mcierr(err));
+    err = mciSendString("sysinfo waveaudio name 1 open notify", buf, sizeof(buf), hwnd);
+    ok(!err,"mci sysinfo waveaudio name after auto-open returned %s\n", dbg_mcierr(err));
     /* This is the alias, not necessarily a file name. */
     if(!err) ok(!strcmp(buf,"tempfile.wav"), "sysinfo name 1 open: %s\n", buf);
+    test_notification(hwnd, "sysinfo name notify\n", MCI_NOTIFY_SUCCESSFUL);
 
     /* Save the full pathname to the file. */
     err = mciSendString("info tempfile.wav file", path, sizeof(path), NULL);
@@ -841,6 +962,12 @@ static void test_AutoOpenWAVE(HWND hwnd)
     ok(!err,"mci re-auto-open status mode returned %s\n", dbg_mcierr(err));
     if(!err) ok(!strcmp(buf,"stopped"), "mci re-auto-open status mode, got: %s\n", buf);
 
+    buf[0]=0; /* This uses auto-open as well. */
+    err = mciSendString("capability waveaudio outputs", buf, sizeof(buf), NULL);
+    ok(!err,"mci capability waveaudio outputs returned %s\n", dbg_mcierr(err));
+    /* Wine with no sound selected in winecfg's audio tab fails this test. */
+    if(!err) ok(atoi(buf)==ndevs,"Expected %d audio outputs, got %s\n", ndevs, buf);
+
     err = mciSendString("capability waveaudio device type", buf, sizeof(buf), hwnd);
     ok(!err,"mci capability device type returned %s\n", dbg_mcierr(err));
     if(!err) ok(!strcmp(buf,"waveaudio"), "mci capability device type response: %s\n", buf);
@@ -849,6 +976,8 @@ static void test_AutoOpenWAVE(HWND hwnd)
     sprintf(command,"pause \"%s\"",path);
     err = mciSendString(command, NULL, 0, hwnd);
     ok(err==MCIERR_NONAPPLICABLE_FUNCTION,"mci auto-open pause returned %s\n", dbg_mcierr(err));
+
+    ok(0xDEADF00D==intbuf[0] && 0xABADCAFE==intbuf[2],"DWORD buffer corruption\n");
 }
 
 START_TEST(mci)
@@ -864,7 +993,7 @@ START_TEST(mci)
     test_AutoOpenWAVE(hwnd);
     /* Win9X hangs when exiting with something still open. */
     err = mciSendString("close all", NULL, 0, hwnd);
-    todo_wine ok(!err,"final close all returned %s\n", dbg_mcierr(err));
+    ok(!err,"final close all returned %s\n", dbg_mcierr(err));
     ok(DeleteFile("tempfile.wav")||ok_saved,"Delete tempfile.wav (cause auto-open?)\n");
     DestroyWindow(hwnd);
 }

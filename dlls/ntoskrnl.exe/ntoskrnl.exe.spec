@@ -323,7 +323,7 @@
 @ stdcall IoBuildDeviceIoControlRequest(long ptr ptr long ptr long long ptr ptr)
 @ stub IoBuildPartialMdl
 @ stub IoBuildSynchronousFsdRequest
-@ stub IoCallDriver
+@ stdcall IoCallDriver(ptr ptr)
 @ stub IoCancelFileOpen
 @ stub IoCancelIrp
 @ stub IoCheckDesiredAccess
@@ -383,7 +383,7 @@
 @ stub IoGetDeviceInterfaceAlias
 @ stub IoGetDeviceInterfaces
 @ stdcall IoGetDeviceObjectPointer(ptr long ptr ptr)
-@ stub IoGetDeviceProperty
+@ stdcall IoGetDeviceProperty(ptr long long ptr ptr)
 @ stub IoGetDeviceToVerify
 @ stub IoGetDiskDeviceObject
 @ stub IoGetDmaAdapter
@@ -597,7 +597,7 @@
 @ stub KeRemoveQueue
 @ stub KeRemoveQueueDpc
 @ stub KeRemoveSystemServiceTable
-@ stub KeResetEvent
+@ stdcall KeResetEvent(ptr)
 @ stub KeRestoreFloatingPointState
 @ stub KeRevertToUserAffinityThread
 @ stub KeRundownQueue
@@ -607,7 +607,7 @@
 @ stub KeSetAffinityThread
 @ stub KeSetBasePriorityThread
 @ stub KeSetDmaIoCoherency
-@ stub KeSetEvent
+@ stdcall KeSetEvent(ptr long long)
 @ stub KeSetEventBoostPriority
 @ stub KeSetIdealProcessorThread
 @ stub KeSetImportanceDpc
@@ -656,7 +656,7 @@
 @ stub MmAdjustWorkingSetSize
 @ stub MmAdvanceMdl
 @ stdcall MmAllocateContiguousMemory(long double)
-@ stub MmAllocateContiguousMemorySpecifyCache
+@ stdcall MmAllocateContiguousMemorySpecifyCache(long double double double long)
 @ stub MmAllocateMappingAddress
 @ stdcall MmAllocateNonCachedMemory(long)
 @ stdcall MmAllocatePagesForMdl(double double double long)
@@ -688,7 +688,7 @@
 @ stub MmLockPagableDataSection
 @ stub MmLockPagableImageSection
 @ stub MmLockPagableSectionByHandle
-@ stub MmMapIoSpace
+@ stdcall MmMapIoSpace(long long long long)
 @ stub MmMapLockedPages
 @ stub MmMapLockedPagesSpecifyCache
 @ stub MmMapLockedPagesWithReservedMapping
@@ -718,7 +718,7 @@
 @ stub MmTrimAllSystemPagableMemory
 @ stub MmUnlockPagableImageSection
 @ stub MmUnlockPages
-@ stub MmUnmapIoSpace
+@ stdcall MmUnmapIoSpace(ptr long)
 @ stub MmUnmapLockedPages
 @ stub MmUnmapReservedMapping
 @ stub MmUnmapVideoDisplay
@@ -1406,9 +1406,9 @@
 @ stub _aulldvrm
 @ stdcall -private -ret64 _aullrem(double double) ntdll._aullrem
 @ stub _aullshr
-@ cdecl -private _except_handler2(ptr ptr ptr ptr) msvcrt._except_handler2
-@ cdecl -private _except_handler3(ptr ptr ptr ptr) msvcrt._except_handler3
-@ cdecl -private _global_unwind2(ptr) msvcrt._global_unwind2
+@ cdecl -private -i386 _except_handler2(ptr ptr ptr ptr) msvcrt._except_handler2
+@ cdecl -private -i386 _except_handler3(ptr ptr ptr ptr) msvcrt._except_handler3
+@ cdecl -private -i386 _global_unwind2(ptr) msvcrt._global_unwind2
 @ cdecl -private _itoa(long ptr long) msvcrt._itoa
 @ cdecl -private _itow(long ptr long) msvcrt._itow
 @ cdecl -private _local_unwind2(ptr long) msvcrt._local_unwind2

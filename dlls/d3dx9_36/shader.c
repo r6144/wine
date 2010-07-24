@@ -382,7 +382,7 @@ static int wpp_close_output(void)
     return 1;
 }
 
-HRESULT assemble_shader(const char *preprocShader, const char *preprocMessages,
+static HRESULT assemble_shader(const char *preprocShader, const char *preprocMessages,
                         LPD3DXBUFFER* ppShader, LPD3DXBUFFER* ppErrorMsgs)
 {
     struct bwriter_shader *shader;
@@ -411,25 +411,28 @@ HRESULT assemble_shader(const char *preprocShader, const char *preprocMessages,
         TRACE("Shader source:\n");
         TRACE("%s\n", debugstr_a(preprocShader));
 
-        size = (messages ? strlen(messages) : 0) +
-            (preprocMessages ? strlen(preprocMessages) : 0) + 1;
-        hr = D3DXCreateBuffer(size, &buffer);
-        if(FAILED(hr))
+        if(ppErrorMsgs)
         {
-            HeapFree(GetProcessHeap(), 0, messages);
-            if(shader) SlDeleteShader(shader);
-            return hr;
-        }
-        pos = ID3DXBuffer_GetBufferPointer(buffer);
-        if(preprocMessages)
-        {
-            CopyMemory(pos, preprocMessages, strlen(preprocMessages) + 1);
-            pos += strlen(preprocMessages);
-        }
-        if(messages)
-            CopyMemory(pos, messages, strlen(messages) + 1);
+            size = (messages ? strlen(messages) : 0) +
+                (preprocMessages ? strlen(preprocMessages) : 0) + 1;
+            hr = D3DXCreateBuffer(size, &buffer);
+            if(FAILED(hr))
+            {
+                HeapFree(GetProcessHeap(), 0, messages);
+                if(shader) SlDeleteShader(shader);
+                return hr;
+            }
+            pos = ID3DXBuffer_GetBufferPointer(buffer);
+            if(preprocMessages)
+            {
+                CopyMemory(pos, preprocMessages, strlen(preprocMessages) + 1);
+                pos += strlen(preprocMessages);
+            }
+            if(messages)
+                CopyMemory(pos, messages, strlen(messages) + 1);
 
-        *ppErrorMsgs = buffer;
+            *ppErrorMsgs = buffer;
+        }
 
         HeapFree(GetProcessHeap(), 0, messages);
     }
@@ -448,15 +451,18 @@ HRESULT assemble_shader(const char *preprocShader, const char *preprocMessages,
         return D3DXERR_INVALIDDATA;
     }
 
-    size = HeapSize(GetProcessHeap(), 0, res);
-    hr = D3DXCreateBuffer(size, &buffer);
-    if(FAILED(hr))
+    if(ppShader)
     {
-        HeapFree(GetProcessHeap(), 0, res);
-        return hr;
+        size = HeapSize(GetProcessHeap(), 0, res);
+        hr = D3DXCreateBuffer(size, &buffer);
+        if(FAILED(hr))
+        {
+            HeapFree(GetProcessHeap(), 0, res);
+            return hr;
+        }
+        CopyMemory(ID3DXBuffer_GetBufferPointer(buffer), res, size);
+        *ppShader = buffer;
     }
-    CopyMemory(ID3DXBuffer_GetBufferPointer(buffer), res, size);
-    *ppShader = buffer;
 
     HeapFree(GetProcessHeap(), 0, res);
 
@@ -500,7 +506,8 @@ HRESULT WINAPI D3DXAssembleShader(LPCSTR data,
     }
     current_include = include;
 
-    *shader = *error_messages = NULL;
+    if(shader) *shader = NULL;
+    if(error_messages) *error_messages = NULL;
     wpp_output_size = wpp_output_capacity = 0;
     wpp_output = NULL;
 
@@ -525,11 +532,14 @@ HRESULT WINAPI D3DXAssembleShader(LPCSTR data,
             TRACE("Preprocessor messages:\n");
             TRACE("%s", wpp_messages);
 
-            size = strlen(wpp_messages) + 1;
-            hr = D3DXCreateBuffer(size, &buffer);
-            if(FAILED(hr)) goto cleanup;
-            CopyMemory(ID3DXBuffer_GetBufferPointer(buffer), wpp_messages, size);
-            *error_messages = buffer;
+            if(error_messages)
+            {
+                size = strlen(wpp_messages) + 1;
+                hr = D3DXCreateBuffer(size, &buffer);
+                if(FAILED(hr)) goto cleanup;
+                CopyMemory(ID3DXBuffer_GetBufferPointer(buffer), wpp_messages, size);
+                *error_messages = buffer;
+            }
         }
         if(data)
         {
@@ -644,9 +654,13 @@ HRESULT WINAPI D3DXCompileShader(LPCSTR pSrcData,
                                  LPD3DXBUFFER* ppErrorMsgs,
                                  LPD3DXCONSTANTTABLE * ppConstantTable)
 {
-    FIXME("(%p, %d, %p, %p, %p, %p, %d, %p, %p, %p): stub\n",
-          pSrcData, srcDataLen, pDefines, pInclude, pFunctionName,
-          pProfile, Flags, ppShader, ppErrorMsgs, ppConstantTable);
+    FIXME("(%p, %d, %p, %p, %s, %s, %x, %p, %p, %p): stub\n",
+          pSrcData, srcDataLen, pDefines, pInclude, debugstr_a(pFunctionName),
+          debugstr_a(pProfile), Flags, ppShader, ppErrorMsgs, ppConstantTable);
+
+    TRACE("Shader source:\n");
+    TRACE("%s\n", debugstr_an(pSrcData, srcDataLen));
+
     return D3DERR_INVALIDCALL;
 }
 

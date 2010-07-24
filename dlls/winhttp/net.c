@@ -95,6 +95,7 @@ static SSL_METHOD *method;
 static SSL_CTX *ctx;
 static int hostname_idx;
 static int error_idx;
+static int conn_idx;
 
 #define MAKE_FUNCPTR(f) static typeof(f) * p##f
 
@@ -110,6 +111,7 @@ MAKE_FUNCPTR( SSL_connect );
 MAKE_FUNCPTR( SSL_shutdown );
 MAKE_FUNCPTR( SSL_write );
 MAKE_FUNCPTR( SSL_read );
+MAKE_FUNCPTR( SSL_get_error );
 MAKE_FUNCPTR( SSL_get_ex_new_index );
 MAKE_FUNCPTR( SSL_get_ex_data );
 MAKE_FUNCPTR( SSL_set_ex_data );
@@ -253,7 +255,7 @@ static PCCERT_CONTEXT X509_to_cert_context(X509 *cert)
 }
 
 static DWORD netconn_verify_cert( PCCERT_CONTEXT cert, HCERTSTORE store,
-                                  WCHAR *server )
+                                  WCHAR *server, DWORD security_flags )
 {
     BOOL ret;
     CERT_CHAIN_PARA chainPara = { sizeof(chainPara), { 0 } };
@@ -271,7 +273,10 @@ static DWORD netconn_verify_cert( PCCERT_CONTEXT cert, HCERTSTORE store,
         if (chain->TrustStatus.dwErrorStatus)
         {
             if (chain->TrustStatus.dwErrorStatus & CERT_TRUST_IS_NOT_TIME_VALID)
-                err = ERROR_WINHTTP_SECURE_CERT_DATE_INVALID;
+            {
+                if (!(security_flags & SECURITY_FLAG_IGNORE_CERT_DATE_INVALID))
+                    err = ERROR_WINHTTP_SECURE_CERT_DATE_INVALID;
+            }
             else if (chain->TrustStatus.dwErrorStatus &
                      CERT_TRUST_IS_UNTRUSTED_ROOT)
                 err = ERROR_WINHTTP_SECURE_INVALID_CA;
@@ -284,7 +289,10 @@ static DWORD netconn_verify_cert( PCCERT_CONTEXT cert, HCERTSTORE store,
                 err = ERROR_WINHTTP_SECURE_CERT_REVOKED;
             else if (chain->TrustStatus.dwErrorStatus &
                 CERT_TRUST_IS_NOT_VALID_FOR_USAGE)
-                err = ERROR_WINHTTP_SECURE_CERT_WRONG_USAGE;
+            {
+                if (!(security_flags & SECURITY_FLAG_IGNORE_CERT_WRONG_USAGE))
+                    err = ERROR_WINHTTP_SECURE_CERT_WRONG_USAGE;
+            }
             else
                 err = ERROR_WINHTTP_SECURE_INVALID_CERT;
         }
@@ -309,7 +317,10 @@ static DWORD netconn_verify_cert( PCCERT_CONTEXT cert, HCERTSTORE store,
             if (ret && policyStatus.dwError)
             {
                 if (policyStatus.dwError == CERT_E_CN_NO_MATCH)
-                    err = ERROR_WINHTTP_SECURE_CERT_CN_INVALID;
+                {
+                    if (!(security_flags & SECURITY_FLAG_IGNORE_CERT_CN_INVALID))
+                        err = ERROR_WINHTTP_SECURE_CERT_CN_INVALID;
+                }
                 else
                     err = ERROR_WINHTTP_SECURE_INVALID_CERT;
             }
@@ -327,9 +338,11 @@ static int netconn_secure_verify( int preverify_ok, X509_STORE_CTX *ctx )
     SSL *ssl;
     WCHAR *server;
     BOOL ret = FALSE;
+    netconn_t *conn;
 
     ssl = pX509_STORE_CTX_get_ex_data( ctx, pSSL_get_ex_data_X509_STORE_CTX_idx() );
     server = pSSL_get_ex_data( ssl, hostname_idx );
+    conn = pSSL_get_ex_data( ssl, conn_idx );
     if (preverify_ok)
     {
         HCERTSTORE store = CertOpenStore( CERT_STORE_PROV_MEMORY, 0, 0,
@@ -361,7 +374,8 @@ static int netconn_secure_verify( int preverify_ok, X509_STORE_CTX *ctx )
             if (!endCert) ret = FALSE;
             if (ret)
             {
-                DWORD_PTR err = netconn_verify_cert( endCert, store, server );
+                DWORD_PTR err = netconn_verify_cert( endCert, store, server,
+                                                     conn->security_flags );
 
                 if (err)
                 {
@@ -427,6 +441,7 @@ BOOL netconn_init( netconn_t *conn, BOOL secure )
     LOAD_FUNCPTR( SSL_shutdown );
     LOAD_FUNCPTR( SSL_write );
     LOAD_FUNCPTR( SSL_read );
+    LOAD_FUNCPTR( SSL_get_error );
     LOAD_FUNCPTR( SSL_get_ex_new_index );
     LOAD_FUNCPTR( SSL_get_ex_data );
     LOAD_FUNCPTR( SSL_set_ex_data );
@@ -479,6 +494,14 @@ BOOL netconn_init( netconn_t *conn, BOOL secure )
     }
     error_idx = pSSL_get_ex_new_index( 0, (void *)"error index", NULL, NULL, NULL );
     if (error_idx == -1)
+    {
+        ERR("SSL_get_ex_new_index failed: %s\n", pERR_error_string( pERR_get_error(), 0 ));
+        set_last_error( ERROR_OUTOFMEMORY );
+        LeaveCriticalSection( &init_ssl_cs );
+        return FALSE;
+    }
+    conn_idx = pSSL_get_ex_new_index( 0, (void *)"netconn index", NULL, NULL, NULL );
+    if (conn_idx == -1)
     {
         ERR("SSL_get_ex_new_index failed: %s\n", pERR_error_string( pERR_get_error(), 0 ));
         set_last_error( ERROR_OUTOFMEMORY );
@@ -631,6 +654,12 @@ BOOL netconn_secure_connect( netconn_t *conn, WCHAR *hostname )
         set_last_error( ERROR_WINHTTP_SECURE_CHANNEL_ERROR );
         goto fail;
     }
+    if (!pSSL_set_ex_data( conn->ssl_conn, conn_idx, conn ))
+    {
+        ERR("SSL_set_ex_data failed: %s\n", pERR_error_string( pERR_get_error(), 0 ));
+        set_last_error( ERROR_WINHTTP_SECURE_CHANNEL_ERROR );
+        return FALSE;
+    }
     if (!pSSL_set_fd( conn->ssl_conn, conn->socket ))
     {
         ERR("SSL_set_fd failed: %s\n", pERR_error_string( pERR_get_error(), 0 ));
@@ -686,6 +715,8 @@ BOOL netconn_send( netconn_t *conn, const void *msg, size_t len, int flags, int 
 
 BOOL netconn_recv( netconn_t *conn, void *buf, size_t len, int flags, int *recvd )
 {
+    int ret;
+
     *recvd = 0;
     if (!netconn_connected( conn )) return FALSE;
     if (!len) return TRUE;
@@ -724,19 +755,29 @@ BOOL netconn_recv( netconn_t *conn, void *buf, size_t len, int flags, int *recvd
             /* check if we have enough data from the peek buffer */
             if (!(flags & MSG_WAITALL) || (*recvd == len)) return TRUE;
         }
-        *recvd += pSSL_read( conn->ssl_conn, (char *)buf + *recvd, len - *recvd );
+        ret = pSSL_read( conn->ssl_conn, (char *)buf + *recvd, len - *recvd );
+        if (ret < 0)
+            return FALSE;
+
+        /* check if EOF was received */
+        if (!ret && (pSSL_get_error( conn->ssl_conn, ret ) == SSL_ERROR_ZERO_RETURN ||
+                     pSSL_get_error( conn->ssl_conn, ret ) == SSL_ERROR_SYSCALL ))
+        {
+            netconn_close( conn );
+            return TRUE;
+        }
         if (flags & MSG_PEEK) /* must copy into buffer */
         {
-            conn->peek_len = *recvd;
-            if (!*recvd)
+            conn->peek_len = ret;
+            if (!ret)
             {
                 heap_free( conn->peek_msg_mem );
                 conn->peek_msg_mem = NULL;
                 conn->peek_msg = NULL;
             }
-            else memcpy( conn->peek_msg, buf, *recvd );
+            else memcpy( conn->peek_msg, buf, ret );
         }
-        if (*recvd < 1 && len) return FALSE;
+        *recvd = ret;
         return TRUE;
 #else
         return FALSE;

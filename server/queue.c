@@ -1252,7 +1252,7 @@ static user_handle_t find_hardware_message_window( struct thread_input *input, s
     {
         if (!input || !(win = input->capture))
         {
-            if (!(win = msg->win) || !is_window_visible( win ))
+            if (!(win = msg->win) || !is_window_visible( win ) || is_window_transparent( win ))
             {
                 if (input) win = window_from_point( input->desktop, data->x, data->y );
             }
@@ -1262,12 +1262,11 @@ static user_handle_t find_hardware_message_window( struct thread_input *input, s
 }
 
 /* queue a hardware message into a given thread input */
-static void queue_hardware_message( struct msg_queue *queue, struct message *msg,
+static void queue_hardware_message( struct thread_input *input, struct message *msg,
                                     struct hardware_msg_data *data )
 {
     user_handle_t win;
     struct thread *thread;
-    struct thread_input *input = queue ? queue->input : foreground_input;
     unsigned int msg_code;
 
     last_input_time = get_tick_count();
@@ -1704,23 +1703,25 @@ DECL_HANDLER(send_message)
 DECL_HANDLER(send_hardware_message)
 {
     struct message *msg;
-    struct msg_queue *recv_queue = NULL;
     struct thread *thread = NULL;
     struct hardware_msg_data *data;
+    struct thread_input *input = foreground_input;
 
     if (req->id)
     {
         if (!(thread = get_thread_from_id( req->id ))) return;
+        if (!thread->queue)
+        {
+            set_error( STATUS_INVALID_PARAMETER );
+            release_object( thread );
+            return;
+        }
+        input = thread->queue->input;
+        reply->cursor = input->cursor;
+        reply->count  = input->cursor_count;
     }
 
-    if (thread && !(recv_queue = thread->queue))
-    {
-        set_error( STATUS_INVALID_PARAMETER );
-        release_object( thread );
-        return;
-    }
-
-    if (!(data = mem_alloc( sizeof(*data) )))
+    if (!req->msg || !(data = mem_alloc( sizeof(*data) )))
     {
         if (thread) release_object( thread );
         return;
@@ -1741,7 +1742,7 @@ DECL_HANDLER(send_hardware_message)
         msg->result    = NULL;
         msg->data      = data;
         msg->data_size = sizeof(*data);
-        queue_hardware_message( recv_queue, msg, data );
+        queue_hardware_message( input, msg, data );
     }
     else free( data );
 
@@ -2051,18 +2052,11 @@ DECL_HANDLER(get_thread_input)
         reply->menu_owner = input->menu_owner;
         reply->move_size  = input->move_size;
         reply->caret      = input->caret;
+        reply->cursor     = input->cursor;
+        reply->show_count = input->cursor_count;
         reply->rect       = input->caret_rect;
     }
-    else
-    {
-        reply->focus      = 0;
-        reply->capture    = 0;
-        reply->active     = 0;
-        reply->menu_owner = 0;
-        reply->move_size  = 0;
-        reply->caret      = 0;
-        reply->rect.left = reply->rect.top = reply->rect.right = reply->rect.bottom = 0;
-    }
+
     /* foreground window is active window of foreground thread */
     reply->foreground = foreground_input ? foreground_input->active : 0;
     if (thread) release_object( thread );

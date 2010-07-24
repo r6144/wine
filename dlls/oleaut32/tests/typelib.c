@@ -32,6 +32,8 @@
 #include "shlwapi.h"
 #include "tmarshal.h"
 
+#include "test_reg.h"
+
 #define expect_eq(expr, value, type, format) { type _ret = (expr); ok((value) == _ret, #expr " expected " format " got " format "\n", value, _ret); }
 #define expect_int(expr, value) expect_eq(expr, (int)(value), int, "%d")
 #define expect_hex(expr, value) expect_eq(expr, (int)(value), int, "0x%x")
@@ -105,6 +107,7 @@ static void test_TypeComp(void)
     static WCHAR wszOLE_COLOR[] = {'O','L','E','_','C','O','L','O','R',0};
     static WCHAR wszClone[] = {'C','l','o','n','e',0};
     static WCHAR wszclone[] = {'c','l','o','n','e',0};
+    static WCHAR wszJunk[] = {'J','u','n','k',0};
 
     hr = LoadTypeLib(wszStdOle2, &pTypeLib);
     ok_ole_success(hr, LoadTypeLib);
@@ -279,6 +282,17 @@ static void test_TypeComp(void)
     ok(bindptr.lpfuncdesc != NULL, "bindptr.lpfuncdesc should not have been set to NULL\n");
     ITypeInfo_ReleaseFuncDesc(pTypeInfo, bindptr.lpfuncdesc);
     ITypeInfo_Release(pTypeInfo);
+
+    /* tests non-existent members */
+    desckind = 0xdeadbeef;
+    bindptr.lptcomp = (ITypeComp*)0xdeadbeef;
+    pTypeInfo = (ITypeInfo*)0xdeadbeef;
+    ulHash = LHashValOfNameSys(SYS_WIN32, LOCALE_NEUTRAL, wszJunk);
+    hr = ITypeComp_Bind(pTypeComp, wszJunk, ulHash, 0, &pTypeInfo, &desckind, &bindptr);
+    ok_ole_success(hr, ITypeComp_Bind);
+    ok(desckind == DESCKIND_NONE, "desckind should have been DESCKIND_NONE, was: %d\n", desckind);
+    ok(pTypeInfo == NULL, "pTypeInfo should have been NULL, was: %p\n", pTypeInfo);
+    ok(bindptr.lptcomp == NULL, "bindptr should have been NULL, was: %p\n", bindptr.lptcomp);
 
     ITypeComp_Release(pTypeComp);
     ITypeInfo_Release(pFontTypeInfo);
@@ -474,31 +488,69 @@ static void test_TypeInfo(void)
        "ITypeInfo_GetIDsOfNames should have returned DISP_E_UNKNOWNNAME instead of 0x%08x\n",
        hr);
 
-    /* test invalid memberid */
-    dispparams.cNamedArgs = 0;
     dispparams.cArgs = 0;
     dispparams.rgdispidNamedArgs = NULL;
     dispparams.rgvarg = NULL;
+
+            /* test dispparams not NULL */
+
+    /* invalid member id -- wrong flags -- cNamedArgs not bigger than cArgs */
+    dispparams.cNamedArgs = 0;
+    hr = ITypeInfo_Invoke(pTypeInfo, (void *)0xdeadbeef, 0xdeadbeef, DISPATCH_PROPERTYGET, &dispparams, NULL, NULL, NULL);
+    ok(hr == DISP_E_MEMBERNOTFOUND, "ITypeInfo_Invoke should have returned DISP_E_MEMBERNOTFOUND instead of 0x%08x\n", hr);
+    /* invalid member id -- correct flags -- cNamedArgs not bigger than cArgs */
     hr = ITypeInfo_Invoke(pTypeInfo, (void *)0xdeadbeef, 0xdeadbeef, DISPATCH_METHOD, &dispparams, NULL, NULL, NULL);
     ok(hr == DISP_E_MEMBERNOTFOUND, "ITypeInfo_Invoke should have returned DISP_E_MEMBERNOTFOUND instead of 0x%08x\n", hr);
+
+    /* invalid member id -- wrong flags -- cNamedArgs bigger than cArgs */
+    dispparams.cNamedArgs = 1;
+    hr = ITypeInfo_Invoke(pTypeInfo, (void *)0xdeadbeef, 0xdeadbeef, DISPATCH_PROPERTYGET, &dispparams, NULL, NULL, NULL);
+    ok(hr == E_INVALIDARG, "ITypeInfo_Invoke should have returned E_INVALIDARG instead of 0x%08x\n", hr);
+    /* invalid member id -- correct flags -- cNamedArgs bigger than cArgs */
+    hr = ITypeInfo_Invoke(pTypeInfo, (void *)0xdeadbeef, 0xdeadbeef, DISPATCH_METHOD, &dispparams, NULL, NULL, NULL);
+    ok(hr == E_INVALIDARG, "ITypeInfo_Invoke should have returned E_INVALIDARG instead of 0x%08x\n", hr);
+
 
     hr = ITypeInfo_GetIDsOfNames(pTypeInfo, &pwszClone, 1, &dispidMember);
     ok_ole_success(hr, ITypeInfo_GetIDsOfNames);
 
-    /* test correct memberid, but wrong flags */
+    /* correct member id -- wrong flags -- cNamedArgs not bigger than cArgs */
+    dispparams.cNamedArgs = 0;
     hr = ITypeInfo_Invoke(pTypeInfo, (void *)0xdeadbeef, dispidMember, DISPATCH_PROPERTYGET, &dispparams, NULL, NULL, NULL);
     ok(hr == DISP_E_MEMBERNOTFOUND, "ITypeInfo_Invoke should have returned DISP_E_MEMBERNOTFOUND instead of 0x%08x\n", hr);
+    /* correct member id -- correct flags -- cNamedArgs not bigger than cArgs
+    hr = ITypeInfo_Invoke(pTypeInfo, (void *)0xdeadbeef, dispidMember, DISPATCH_METHOD, &dispparams, NULL, NULL, NULL);
+    ok(hr == 0x8002000e, "ITypeInfo_Invoke should have returned 0x8002000e instead of 0x%08x\n", hr); */
 
-    /* test NULL dispparams */
-    hr = ITypeInfo_Invoke(pTypeInfo, (void *)0xdeadbeef, dispidMember, DISPATCH_METHOD, NULL, NULL, NULL, NULL);
-    ok(hr == E_INVALIDARG, "ITypeInfo_Invoke should have returned E_INVALIDARG instead of 0x%08x\n", hr);
-
-    /* test dispparams->cNamedArgs being bigger than dispparams->cArgs */
+    /* correct member id -- wrong flags -- cNamedArgs bigger than cArgs */
     dispparams.cNamedArgs = 1;
+    hr = ITypeInfo_Invoke(pTypeInfo, (void *)0xdeadbeef, dispidMember, DISPATCH_PROPERTYGET, &dispparams, NULL, NULL, NULL);
+    ok(hr == E_INVALIDARG, "ITypeInfo_Invoke should have returned E_INVALIDARG instead of 0x%08x\n", hr);
+    /* correct member id -- correct flags -- cNamedArgs bigger than cArgs */
     hr = ITypeInfo_Invoke(pTypeInfo, (void *)0xdeadbeef, dispidMember, DISPATCH_METHOD, &dispparams, NULL, NULL, NULL);
     ok(hr == E_INVALIDARG, "ITypeInfo_Invoke should have returned E_INVALIDARG instead of 0x%08x\n", hr);
 
+            /* test NULL dispparams */
+
+    /* correct member id -- wrong flags -- cNamedArgs not bigger than cArgs */
+    dispparams.cNamedArgs = 0;
+    hr = ITypeInfo_Invoke(pTypeInfo, (void *)0xdeadbeef, dispidMember, DISPATCH_PROPERTYGET, NULL, NULL, NULL, NULL);
+    ok(hr == E_INVALIDARG, "ITypeInfo_Invoke should have returned E_INVALIDARG instead of 0x%08x\n", hr);
+    /* correct member id -- correct flags -- cNamedArgs not bigger than cArgs */
+    hr = ITypeInfo_Invoke(pTypeInfo, (void *)0xdeadbeef, dispidMember, DISPATCH_METHOD, NULL, NULL, NULL, NULL);
+    ok(hr == E_INVALIDARG, "ITypeInfo_Invoke should have returned E_INVALIDARG instead of 0x%08x\n", hr);
+
+    /* correct member id -- wrong flags -- cNamedArgs bigger than cArgs */
+    dispparams.cNamedArgs = 1;
+    hr = ITypeInfo_Invoke(pTypeInfo, (void *)0xdeadbeef, dispidMember, DISPATCH_PROPERTYGET, NULL, NULL, NULL, NULL);
+    ok(hr == E_INVALIDARG, "ITypeInfo_Invoke should have returned E_INVALIDARG instead of 0x%08x\n", hr);
+    /* correct member id -- correct flags -- cNamedArgs bigger than cArgs */
+    hr = ITypeInfo_Invoke(pTypeInfo, (void *)0xdeadbeef, dispidMember, DISPATCH_METHOD, NULL, NULL, NULL, NULL);
+    ok(hr == E_INVALIDARG, "ITypeInfo_Invoke should have returned E_INVALIDARG instead of 0x%08x\n", hr);
+
     ITypeInfo_Release(pTypeInfo);
+
+
 
     hr = ITypeLib_GetTypeInfoOfGuid(pTypeLib, &IID_IDispatch, &pTypeInfo);
     ok_ole_success(hr, ITypeLib_GetTypeInfoOfGuid); 
@@ -525,11 +577,41 @@ static void test_TypeInfo(void)
         VariantClear(&var);
     }
 
-    /* test invoking a method with a [restricted] keyword */
-    hr = ITypeInfo_Invoke(pTypeInfo, NULL, dispidMember, DISPATCH_METHOD, &dispparams, NULL, NULL, NULL);
-    todo_wine {
+            /* test invoking a method with a [restricted] keyword  */
+
+    /* correct member id -- wrong flags -- cNamedArgs not bigger than cArgs */
+    dispparams.cNamedArgs = 0;
+    hr = ITypeInfo_Invoke(pTypeInfo, (void *)0xdeadbeef, dispidMember, DISPATCH_PROPERTYGET, &dispparams, NULL, NULL, NULL);
     ok(hr == DISP_E_MEMBERNOTFOUND, "ITypeInfo_Invoke should have returned DISP_E_MEMBERNOTFOUND instead of 0x%08x\n", hr);
-    }
+    /* correct member id -- correct flags -- cNamedArgs not bigger than cArgs */
+    hr = ITypeInfo_Invoke(pTypeInfo, (void *)0xdeadbeef, dispidMember, DISPATCH_METHOD, &dispparams, NULL, NULL, NULL);
+    ok(hr == DISP_E_MEMBERNOTFOUND, "ITypeInfo_Invoke should have returned DISP_E_MEMBERNOTFOUND instead of 0x%08x\n", hr);
+
+    /* correct member id -- wrong flags -- cNamedArgs bigger than cArgs */
+    dispparams.cNamedArgs = 1;
+    hr = ITypeInfo_Invoke(pTypeInfo, (void *)0xdeadbeef, dispidMember, DISPATCH_PROPERTYGET, &dispparams, NULL, NULL, NULL);
+    ok(hr == DISP_E_MEMBERNOTFOUND, "ITypeInfo_Invoke should have returned DISP_E_MEMBERNOTFOUND instead of 0x%08x\n", hr);
+    /* correct member id -- correct flags -- cNamedArgs bigger than cArgs */
+    hr = ITypeInfo_Invoke(pTypeInfo, (void *)0xdeadbeef, dispidMember, DISPATCH_METHOD, &dispparams, NULL, NULL, NULL);
+    ok(hr == DISP_E_MEMBERNOTFOUND, "ITypeInfo_Invoke should have returned DISP_E_MEMBERNOTFOUND instead of 0x%08x\n", hr);
+
+            /* test NULL dispparams */
+
+    /* correct member id -- wrong flags -- cNamedArgs not bigger than cArgs */
+    dispparams.cNamedArgs = 0;
+    hr = ITypeInfo_Invoke(pTypeInfo, (void *)0xdeadbeef, dispidMember, DISPATCH_PROPERTYGET, NULL, NULL, NULL, NULL);
+    ok(hr == DISP_E_MEMBERNOTFOUND, "ITypeInfo_Invoke should have returned DISP_E_MEMBERNOTFOUND instead of 0x%08x\n", hr);
+    /* correct member id -- correct flags -- cNamedArgs not bigger than cArgs */
+    hr = ITypeInfo_Invoke(pTypeInfo, (void *)0xdeadbeef, dispidMember, DISPATCH_METHOD, NULL, NULL, NULL, NULL);
+    ok(hr == DISP_E_MEMBERNOTFOUND, "ITypeInfo_Invoke should have returned DISP_E_MEMBERNOTFOUND instead of 0x%08x\n", hr);
+
+    /* correct member id -- wrong flags -- cNamedArgs bigger than cArgs */
+    dispparams.cNamedArgs = 1;
+    hr = ITypeInfo_Invoke(pTypeInfo, (void *)0xdeadbeef, dispidMember, DISPATCH_PROPERTYGET, NULL, NULL, NULL, NULL);
+    ok(hr == DISP_E_MEMBERNOTFOUND, "ITypeInfo_Invoke should have returned DISP_E_MEMBERNOTFOUND instead of 0x%08x\n", hr);
+    /* correct member id -- correct flags -- cNamedArgs bigger than cArgs */
+    hr = ITypeInfo_Invoke(pTypeInfo, (void *)0xdeadbeef, dispidMember, DISPATCH_METHOD, NULL, NULL, NULL, NULL);
+    ok(hr == DISP_E_MEMBERNOTFOUND, "ITypeInfo_Invoke should have returned DISP_E_MEMBERNOTFOUND instead of 0x%08x\n", hr);
 
     ITypeInfo_Release(pTypeInfo);
     ITypeLib_Release(pTypeLib);
@@ -971,24 +1053,31 @@ if(use_midl_tlb) {
 static void test_CreateTypeLib(void) {
     static const WCHAR stdoleW[] = {'s','t','d','o','l','e','2','.','t','l','b',0};
     static OLECHAR typelibW[] = {'t','y','p','e','l','i','b',0};
+    static OLECHAR helpfileW[] = {'C',':','\\','b','o','g','u','s','.','h','l','p',0};
     static OLECHAR interface1W[] = {'i','n','t','e','r','f','a','c','e','1',0};
     static OLECHAR interface2W[] = {'i','n','t','e','r','f','a','c','e','2',0};
+    static OLECHAR interface3W[] = {'i','n','t','e','r','f','a','c','e','3',0};
     static OLECHAR dualW[] = {'d','u','a','l',0};
     static OLECHAR coclassW[] = {'c','o','c','l','a','s','s',0};
     static WCHAR defaultW[] = {'d','e','f','a','u','l','t',0x3213,0};
     static OLECHAR func1W[] = {'f','u','n','c','1',0};
     static OLECHAR func2W[] = {'f','u','n','c','2',0};
+    static OLECHAR prop1W[] = {'P','r','o','p','1',0};
     static OLECHAR param1W[] = {'p','a','r','a','m','1',0};
     static OLECHAR param2W[] = {'p','a','r','a','m','2',0};
     static OLECHAR *names1[] = {func1W, param1W, param2W};
     static OLECHAR *names2[] = {func2W, param1W, param2W};
+    static OLECHAR *propname[] = {prop1W, param1W};
+    static const GUID custguid = {0xbf611abe,0x5b38,0x11df,{0x91,0x5c,0x08,0x02,0x79,0x79,0x94,0x70}};
 
     char filename[MAX_PATH];
     WCHAR filenameW[MAX_PATH];
     ICreateTypeLib2 *createtl;
     ICreateTypeInfo *createti;
+    ICreateTypeInfo2 *createti2;
     ITypeLib *tl, *stdole;
     ITypeInfo *interface1, *interface2, *dual, *unknown, *dispatch, *ti;
+    ITypeInfo2 *ti2;
     FUNCDESC funcdesc;
     ELEMDESC elemdesc[5];
     PARAMDESCEX paramdescex;
@@ -999,6 +1088,7 @@ static void test_CreateTypeLib(void) {
     BSTR name, docstring, helpfile;
     DWORD helpcontext;
     int impltypeflags;
+    VARIANT cust_data;
     HRESULT hres;
 
     trace("CreateTypeLib tests\n");
@@ -1045,16 +1135,19 @@ static void test_CreateTypeLib(void) {
     hres = ICreateTypeLib_SetName(createtl, typelibW);
     ok(hres == S_OK, "got %08x\n", hres);
 
+    hres = ICreateTypeLib_SetHelpFileName(createtl, helpfileW);
+    ok(hres == S_OK, "got %08x\n", hres);
+
     hres = ITypeLib_GetDocumentation(tl, -1, NULL, NULL, NULL, NULL);
     ok(hres == S_OK, "got %08x\n", hres);
 
-    hres = ITypeLib_GetDocumentation(tl, -1, &name, NULL, NULL, NULL);
+    hres = ITypeLib_GetDocumentation(tl, -1, &name, NULL, NULL, &helpfile);
     ok(hres == S_OK, "got %08x\n", hres);
     ok(!memcmp(name, typelibW, sizeof(typelibW)), "name = %s\n", wine_dbgstr_w(name));
+    ok(!memcmp(helpfile, helpfileW, sizeof(helpfileW)), "helpfile = %s\n", wine_dbgstr_w(helpfile));
 
     SysFreeString(name);
-
-    ITypeLib_Release(tl);
+    SysFreeString(helpfile);
 
     hres = ICreateTypeLib_CreateTypeInfo(createtl, interface1W, TKIND_INTERFACE, &createti);
     ok(hres == S_OK, "got %08x\n", hres);
@@ -1062,8 +1155,32 @@ static void test_CreateTypeLib(void) {
     hres = ICreateTypeInfo_QueryInterface(createti, &IID_ITypeInfo, (void**)&interface1);
     ok(hres == S_OK, "got %08x\n", hres);
 
+    hres = ITypeLib_GetDocumentation(tl, 0, &name, NULL, NULL, NULL);
+    ok(hres == S_OK, "got %08x\n", hres);
+    ok(!memcmp(name, interface1W, sizeof(interface1W)), "name = %s\n", wine_dbgstr_w(name));
+
+    SysFreeString(name);
+
+    ITypeLib_Release(tl);
+
+    name = (BSTR)0xdeadbeef;
+    helpfile = (BSTR)0xdeadbeef;
+    hres = ITypeInfo_GetDocumentation(interface1, -1, &name, &docstring, &helpcontext, &helpfile);
+    ok(hres == S_OK, "got %08x\n", hres);
+    ok(!memcmp(name, interface1W, sizeof(interface1W)), "name = %s\n", wine_dbgstr_w(name));
+    ok(docstring == NULL, "docstring != NULL\n");
+    ok(helpcontext == 0, "helpcontext != 0\n");
+    ok(!memcmp(helpfile, helpfileW, sizeof(helpfileW)), "helpfile = %s\n", wine_dbgstr_w(helpfile));
+
+    SysFreeString(name);
+    SysFreeString(helpfile);
+
+    hres = ITypeInfo_GetDocumentation(interface1, 0, &name, NULL, NULL, NULL);
+    ok(hres == TYPE_E_ELEMENTNOTFOUND, "got %08x\n", hres);
+
     hres = ITypeInfo_GetRefTypeInfo(interface1, 0, NULL);
     ok(hres == E_INVALIDARG, "got %08x\n", hres);
+
 
     hres = ICreateTypeInfo_LayOut(createti);
     ok(hres == S_OK, "got %08x\n", hres);
@@ -1136,6 +1253,16 @@ static void test_CreateTypeLib(void) {
     hres = ICreateTypeInfo_SetFuncHelpContext(createti, 1, 0xabcdefab);
     ok(hres == S_OK, "got %08x\n", hres);
 
+    hres = ICreateTypeInfo_SetFuncAndParamNames(createti, 0, propname, 1);
+    ok(hres == S_OK, "got %08x\n", hres);
+
+    hres = ICreateTypeInfo_SetFuncAndParamNames(createti, 1, propname, 1);
+    ok(hres == S_OK, "got %08x\n", hres);
+
+    hres = ICreateTypeInfo_SetFuncAndParamNames(createti, 1, propname, 2);
+    ok(hres == TYPE_E_ELEMENTNOTFOUND, "got %08x\n", hres);
+
+
     funcdesc.invkind = INVOKE_PROPERTYPUTREF;
     hres = ICreateTypeInfo_AddFuncDesc(createti, 0, &funcdesc);
     ok(hres == S_OK, "got %08x\n", hres);
@@ -1205,6 +1332,15 @@ static void test_CreateTypeLib(void) {
     hres = ICreateTypeInfo_AddFuncDesc(createti, 3, &funcdesc);
     ok(hres == S_OK, "got %08x\n", hres);
 
+    hres = ITypeInfo_GetDocumentation(interface1, 0, &name, &docstring, &helpcontext, &helpfile);
+    ok(hres == S_OK, "got %08x\n", hres);
+    ok(name == NULL, "name != NULL\n");
+    ok(docstring == NULL, "docstring != NULL\n");
+    ok(helpcontext == 0x201, "helpcontext != 0x201\n");
+    ok(!memcmp(helpfile, helpfileW, sizeof(helpfileW)), "helpfile = %s\n", wine_dbgstr_w(helpfile));
+
+    SysFreeString(helpfile);
+
     hres = ICreateTypeInfo_SetFuncAndParamNames(createti, 1000, NULL, 1);
     ok(hres == E_INVALIDARG, "got %08x\n", hres);
 
@@ -1219,6 +1355,12 @@ static void test_CreateTypeLib(void) {
 
     hres = ICreateTypeInfo_SetFuncAndParamNames(createti, 0, names1, 1);
     ok(hres == S_OK, "got %08x\n", hres);
+
+    hres = ITypeInfo_GetDocumentation(interface1, 0, &name, NULL, NULL, NULL);
+    ok(hres == S_OK, "got %08x\n", hres);
+    ok(!memcmp(name, func1W, sizeof(func1W)), "name = %s\n", wine_dbgstr_w(name));
+
+    SysFreeString(name);
 
     hres = ICreateTypeInfo_SetFuncAndParamNames(createti, 3, names2, 3);
     ok(hres == S_OK, "got %08x\n", hres);
@@ -1277,6 +1419,78 @@ static void test_CreateTypeLib(void) {
     ok(hres == S_OK, "got %08x\n", hres);
     funcdesc.oVft = 0;
 
+    ICreateTypeInfo_Release(createti);
+
+    VariantInit(&cust_data);
+
+    hres = ICreateTypeLib_CreateTypeInfo(createtl, interface3W, TKIND_INTERFACE, &createti);
+    ok(hres == S_OK, "got %08x\n", hres);
+
+    hres = ICreateTypeInfo_QueryInterface(createti, &IID_ICreateTypeInfo2, (void**)&createti2);
+    ok(hres == S_OK, "got %08x\n", hres);
+
+    hres = ICreateTypeInfo2_QueryInterface(createti2, &IID_ITypeInfo2, (void**)&ti2);
+    ok(hres == S_OK, "got %08x\n", hres);
+
+    hres = ITypeInfo2_GetCustData(ti2, NULL, NULL);
+    todo_wine
+    ok(hres == E_INVALIDARG, "got %08x\n", hres);
+
+    hres = ITypeInfo2_GetCustData(ti2, &custguid, NULL);
+    todo_wine
+    ok(hres == E_INVALIDARG, "got %08x\n", hres);
+
+    hres = ITypeInfo2_GetCustData(ti2, &custguid, &cust_data);
+    todo_wine
+    ok(hres == S_OK, "got %08x\n", hres);
+
+    hres = ICreateTypeInfo2_SetCustData(createti2, NULL, NULL);
+    ok(hres == E_INVALIDARG, "got %08x\n", hres);
+
+    hres = ICreateTypeInfo2_SetCustData(createti2, &custguid, NULL);
+    ok(hres == E_INVALIDARG, "got %08x\n", hres);
+
+    hres = ICreateTypeInfo2_SetCustData(createti2, &custguid, &cust_data);
+    ok(hres == DISP_E_BADVARTYPE, "got %08x\n", hres);
+
+    V_VT(&cust_data) = VT_UI4;
+    V_I4(&cust_data) = 0xdeadbeef;
+
+    hres = ICreateTypeInfo2_SetCustData(createti2, &custguid, &cust_data);
+    ok(hres == S_OK, "got %08x\n", hres);
+
+    V_I4(&cust_data) = 0;
+    V_VT(&cust_data) = VT_EMPTY;
+
+    hres = ITypeInfo2_GetCustData(ti2, &custguid, &cust_data);
+    todo_wine
+    ok(hres == S_OK, "got %08x\n", hres);
+
+    todo_wine
+    ok(V_VT(&cust_data) == VT_UI4, "got %d\n", V_VT(&cust_data));
+    todo_wine
+    ok(V_I4(&cust_data) == 0xdeadbeef, "got 0x%08x\n", V_I4(&cust_data));
+
+    V_VT(&cust_data) = VT_UI4;
+    V_I4(&cust_data) = 12345678;
+
+    hres = ICreateTypeInfo2_SetCustData(createti2, &custguid, &cust_data);
+    ok(hres == S_OK, "got %08x\n", hres);
+
+    V_I4(&cust_data) = 0;
+    V_VT(&cust_data) = VT_EMPTY;
+
+    hres = ITypeInfo2_GetCustData(ti2, &custguid, &cust_data);
+    todo_wine
+    ok(hres == S_OK, "got %08x\n", hres);
+
+    todo_wine
+    ok(V_VT(&cust_data) == VT_UI4, "got %d\n", V_VT(&cust_data));
+    todo_wine
+    ok(V_I4(&cust_data) == 12345678, "got 0x%08x\n", V_I4(&cust_data));
+
+    ITypeInfo2_Release(ti2);
+    ICreateTypeInfo2_Release(createti2);
     ICreateTypeInfo_Release(createti);
 
     hres = ICreateTypeLib_CreateTypeInfo(createtl, coclassW, TKIND_COCLASS, &createti);
@@ -1371,7 +1585,8 @@ static void test_CreateTypeLib(void) {
     ok(typeattr->cFuncs == 1, "cFuncs = %d\n", typeattr->cFuncs);
     ok(typeattr->cVars == 0, "cVars = %d\n", typeattr->cVars);
     ok(typeattr->cImplTypes == 1, "cImplTypes = %d\n", typeattr->cImplTypes);
-    ok(typeattr->cbSizeVft == 32, "cbSizeVft = %d\n", typeattr->cbSizeVft);
+    ok(typeattr->cbSizeVft == 32 || broken(typeattr->cbSizeVft == 7 * sizeof(void *) + 4), /* xp64 */
+       "cbSizeVft = %d\n", typeattr->cbSizeVft);
     ok(typeattr->cbAlignment == 4, "cbAlignment = %d\n", typeattr->cbAlignment);
     ok(typeattr->wTypeFlags == (TYPEFLAG_FDISPATCHABLE|TYPEFLAG_FDUAL), "wTypeFlags = %d\n", typeattr->wTypeFlags);
     ok(typeattr->wMajorVerNum == 0, "wMajorVerNum = %d\n", typeattr->wMajorVerNum);
@@ -1393,7 +1608,7 @@ static void test_CreateTypeLib(void) {
     ok(typeattr->cFuncs == 8, "cFuncs = %d\n", typeattr->cFuncs);
     ok(typeattr->cVars == 0, "cVars = %d\n", typeattr->cVars);
     ok(typeattr->cImplTypes == 1, "cImplTypes = %d\n", typeattr->cImplTypes);
-    ok(typeattr->cbSizeVft == 28, "cbSizeVft = %d\n", typeattr->cbSizeVft);
+    ok(typeattr->cbSizeVft == 7 * sizeof(void *), "cbSizeVft = %d\n", typeattr->cbSizeVft);
     ok(typeattr->cbAlignment == 4, "cbAlignment = %d\n", typeattr->cbAlignment);
     ok(typeattr->wTypeFlags == (TYPEFLAG_FDISPATCHABLE|TYPEFLAG_FDUAL), "wTypeFlags = %d\n", typeattr->wTypeFlags);
     ok(typeattr->wMajorVerNum == 0, "wMajorVerNum = %d\n", typeattr->wMajorVerNum);
@@ -1412,7 +1627,8 @@ static void test_CreateTypeLib(void) {
     ok(typeattr->cFuncs == 11, "cFuncs = %d\n", typeattr->cFuncs);
     ok(typeattr->cVars == 0, "cVars = %d\n", typeattr->cVars);
     ok(typeattr->cImplTypes == 1, "cImplTypes = %d\n", typeattr->cImplTypes);
-    ok(typeattr->cbSizeVft == 56, "cbSizeVft = %d\n", typeattr->cbSizeVft);
+    ok(typeattr->cbSizeVft == 56 || broken(typeattr->cbSizeVft == 3 * sizeof(void *) + 44), /* xp64 */
+       "cbSizeVft = %d\n", typeattr->cbSizeVft);
     ok(typeattr->cbAlignment == 4, "cbAlignment = %d\n", typeattr->cbAlignment);
     ok(typeattr->wTypeFlags == 0, "wTypeFlags = %d\n", typeattr->wTypeFlags);
     ok(typeattr->wMajorVerNum == 0, "wMajorVerNum = %d\n", typeattr->wMajorVerNum);
@@ -1883,7 +2099,7 @@ static void test_dump_typelib(const char *name)
 
 #endif
 
-static const char *create_test_typelib(void)
+static const char *create_test_typelib(int res_no)
 {
     static char filename[MAX_PATH];
     HANDLE file;
@@ -1895,7 +2111,7 @@ static const char *create_test_typelib(void)
     file = CreateFile( filename, GENERIC_READ|GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, 0 );
     ok( file != INVALID_HANDLE_VALUE, "file creation failed\n" );
     if (file == INVALID_HANDLE_VALUE) return NULL;
-    res = FindResource( GetModuleHandle(0), MAKEINTRESOURCE(2), "TYPELIB" );
+    res = FindResource( GetModuleHandle(0), MAKEINTRESOURCE(res_no), "TYPELIB" );
     ok( res != 0, "couldn't find resource\n" );
     ptr = LockResource( LoadResource( GetModuleHandle(0), res ));
     WriteFile( file, ptr, SizeofResource( GetModuleHandle(0), res ), &written, NULL );
@@ -1956,6 +2172,113 @@ static void test_create_typelibs(void)
     test_create_typelib_lcid(0x407);
 }
 
+
+static void test_register_typelib(void)
+{
+    HRESULT hr;
+    WCHAR filename[MAX_PATH];
+    const char *filenameA;
+    ITypeLib *typelib;
+    WCHAR uuidW[40];
+    char key_name[MAX_PATH], uuid[40];
+    LONG ret, expect_ret;
+    UINT count, i;
+    HKEY hkey;
+    struct
+    {
+        TYPEKIND kind;
+        WORD flags;
+    } attrs[11] =
+    {
+        { TKIND_INTERFACE, 0 },
+        { TKIND_INTERFACE, TYPEFLAG_FDISPATCHABLE },
+        { TKIND_INTERFACE, TYPEFLAG_FOLEAUTOMATION },
+        { TKIND_INTERFACE, TYPEFLAG_FDISPATCHABLE | TYPEFLAG_FOLEAUTOMATION },
+        { TKIND_DISPATCH,  0 /* TYPEFLAG_FDUAL - widl clears this flag for non-IDispatch derived interfaces */ },
+        { TKIND_DISPATCH,  0 /* TYPEFLAG_FDUAL - widl clears this flag for non-IDispatch derived interfaces */ },
+        { TKIND_DISPATCH,  TYPEFLAG_FDISPATCHABLE | TYPEFLAG_FDUAL },
+        { TKIND_DISPATCH,  TYPEFLAG_FDISPATCHABLE | TYPEFLAG_FDUAL },
+        { TKIND_DISPATCH,  TYPEFLAG_FDISPATCHABLE },
+        { TKIND_DISPATCH,  TYPEFLAG_FDISPATCHABLE },
+        { TKIND_DISPATCH,  TYPEFLAG_FDISPATCHABLE }
+    };
+
+    filenameA = create_test_typelib(3);
+    MultiByteToWideChar(CP_ACP, 0, filenameA, -1, filename, MAX_PATH);
+
+    hr = LoadTypeLibEx(filename, REGKIND_NONE, &typelib);
+    ok(SUCCEEDED(hr), "got %08x\n", hr);
+
+    hr = RegisterTypeLib(typelib, filename, NULL);
+    ok(SUCCEEDED(hr), "got %08x\n", hr);
+
+    count = ITypeLib_GetTypeInfoCount(typelib);
+    ok(count == 11, "got %d\n", count);
+
+    for(i = 0; i < count; i++)
+    {
+        ITypeInfo *typeinfo;
+        TYPEATTR *attr;
+
+        hr = ITypeLib_GetTypeInfo(typelib, i, &typeinfo);
+        ok(SUCCEEDED(hr), "got %08x\n", hr);
+
+        hr = ITypeInfo_GetTypeAttr(typeinfo, &attr);
+        ok(SUCCEEDED(hr), "got %08x\n", hr);
+
+        ok(attr->typekind == attrs[i].kind, "%d: got kind %d\n", i, attr->typekind);
+        ok(attr->wTypeFlags == attrs[i].flags, "%d: got flags %04x\n", i, attr->wTypeFlags);
+
+        if(attr->typekind == TKIND_DISPATCH && (attr->wTypeFlags & TYPEFLAG_FDUAL))
+        {
+            HREFTYPE reftype;
+            ITypeInfo *dual_info;
+            TYPEATTR *dual_attr;
+
+            hr = ITypeInfo_GetRefTypeOfImplType(typeinfo, -1, &reftype);
+            ok(SUCCEEDED(hr), "got %08x\n", hr);
+
+            hr = ITypeInfo_GetRefTypeInfo(typeinfo, reftype, &dual_info);
+            ok(SUCCEEDED(hr), "got %08x\n", hr);
+
+            hr = ITypeInfo_GetTypeAttr(dual_info, &dual_attr);
+            ok(SUCCEEDED(hr), "got %08x\n", hr);
+
+            ok(dual_attr->typekind == TKIND_INTERFACE, "%d: got kind %d\n", i, dual_attr->typekind);
+            ok(dual_attr->wTypeFlags == (TYPEFLAG_FDISPATCHABLE | TYPEFLAG_FOLEAUTOMATION | TYPEFLAG_FDUAL), "%d: got flags %04x\n", i, dual_attr->wTypeFlags);
+
+            ITypeInfo_ReleaseTypeAttr(dual_info, dual_attr);
+            ITypeInfo_Release(dual_info);
+
+        }
+
+        StringFromGUID2(&attr->guid, uuidW, sizeof(uuidW) / sizeof(uuidW[0]));
+        WideCharToMultiByte(CP_ACP, 0, uuidW, -1, uuid, sizeof(uuid), NULL, NULL);
+        sprintf(key_name, "Interface\\%s", uuid);
+
+        /* All dispinterfaces will be registered (this includes dual interfaces) as well
+           as oleautomation interfaces */
+        if((attr->typekind == TKIND_INTERFACE && (attr->wTypeFlags & TYPEFLAG_FOLEAUTOMATION)) ||
+           attr->typekind == TKIND_DISPATCH)
+            expect_ret = ERROR_SUCCESS;
+        else
+            expect_ret = ERROR_FILE_NOT_FOUND;
+
+        ret = RegOpenKeyExA(HKEY_CLASSES_ROOT, key_name, 0, KEY_READ, &hkey);
+        ok(ret == expect_ret, "%d: got %d\n", i, ret);
+        if(ret == ERROR_SUCCESS) RegCloseKey(hkey);
+
+        ITypeInfo_ReleaseTypeAttr(typeinfo, attr);
+        ITypeInfo_Release(typeinfo);
+    }
+
+    hr = UnRegisterTypeLib(&LIBID_register_test, 1, 0, LOCALE_NEUTRAL, sizeof(void*) == 8 ? SYS_WIN64 : SYS_WIN32);
+    ok(SUCCEEDED(hr), "got %08x\n", hr);
+
+    ITypeLib_Release(typelib);
+    DeleteFileA( filenameA );
+}
+
 START_TEST(typelib)
 {
     const char *filename;
@@ -1968,12 +2291,13 @@ START_TEST(typelib)
     test_inheritance();
     test_CreateTypeLib();
 
-    if ((filename = create_test_typelib()))
+    if ((filename = create_test_typelib(2)))
     {
         test_dump_typelib( filename );
         DeleteFile( filename );
     }
 
+    test_register_typelib();
     test_create_typelibs();
 
 }

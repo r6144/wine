@@ -610,6 +610,30 @@ typedef struct
 DECL_WINELIB_TYPE_AW(ENUMLOGFONTEX)
 DECL_WINELIB_TYPE_AW(LPENUMLOGFONTEX)
 
+#define MM_MAX_NUMAXES    16
+
+typedef struct
+{
+  DWORD      dvReserved;
+  DWORD      dvNumAxes;
+  LONG       dvValues[MM_MAX_NUMAXES];
+} DESIGNVECTOR, *PDESIGNVECTOR;
+
+typedef struct
+{
+  ENUMLOGFONTEXA    elfEnumLogfontEx;
+  DESIGNVECTOR      elfDesignVector;
+} ENUMLOGFONTEXDVA, *PENUMLOGFONTEXDVA;
+
+typedef struct
+{
+  ENUMLOGFONTEXW    elfEnumLogfontEx;
+  DESIGNVECTOR      elfDesignVector;
+} ENUMLOGFONTEXDVW, *PENUMLOGFONTEXDVW;
+
+DECL_WINELIB_TYPE_AW(ENUMLOGFONTEXDV)
+DECL_WINELIB_TYPE_AW(PENUMLOGFONTEXDV)
+
 /*
  * The FONTSIGNATURE tells which Unicode ranges and which code pages
  * have glyphs in a font.
@@ -2941,6 +2965,8 @@ DECL_WINELIB_TYPE_AW(LPDEVMODE)
 #define DM_PAPERWIDTH		0x00000008L
 #define DM_SCALE		0x00000010L
 #define DM_POSITION             0x00000020L
+#define DM_NUP                  0x00000040L
+#define DM_DISPLAYORIENTATION   0x00000080L
 #define DM_COPIES		0x00000100L
 #define DM_DEFAULTSOURCE	0x00000200L
 #define DM_PRINTQUALITY		0x00000400L
@@ -3150,6 +3176,11 @@ DECL_WINELIB_TYPE_AW(LPDEVMODE)
 #define DMDITHER_GRAYSCALE      5
 #define DMDITHER_USER           256
 
+#define DMDO_DEFAULT            0
+#define DMDO_90                 1
+#define DMDO_180                2
+#define DMDO_270                3
+
 typedef struct
 {
     INT    cbSize;
@@ -3356,6 +3387,9 @@ WINGDIAPI HFONT       WINAPI CreateFontW(INT,INT,INT,INT,INT,DWORD,DWORD,DWORD,D
 WINGDIAPI HFONT       WINAPI CreateFontIndirectA(const LOGFONTA*);
 WINGDIAPI HFONT       WINAPI CreateFontIndirectW(const LOGFONTW*);
 #define                      CreateFontIndirect WINELIB_NAME_AW(CreateFontIndirect)
+WINGDIAPI HFONT       WINAPI CreateFontIndirectExA(const ENUMLOGFONTEXDVA*);
+WINGDIAPI HFONT       WINAPI CreateFontIndirectExW(const ENUMLOGFONTEXDVW*);
+#define                      CreateFontIndirectEx WINELIB_NAME_AW(CreateFontIndirectEx)
 WINGDIAPI HPALETTE    WINAPI CreateHalftonePalette(HDC);
 WINGDIAPI HBRUSH      WINAPI CreateHatchBrush(INT,COLORREF);
 WINGDIAPI HDC         WINAPI CreateICA(LPCSTR,LPCSTR,LPCSTR,const DEVMODEA*);

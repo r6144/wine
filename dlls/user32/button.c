@@ -503,9 +503,8 @@ LRESULT ButtonWndProc_common(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
         state = get_button_state( hWnd );
         if ((btn_type == BS_RADIOBUTTON) || (btn_type == BS_AUTORADIOBUTTON))
         {
-            if (wParam) style |= WS_TABSTOP;
-            else style &= ~WS_TABSTOP;
-            SetWindowLongW( hWnd, GWL_STYLE, style );
+            if (wParam) WIN_SetStyle( hWnd, WS_TABSTOP, 0 );
+            else WIN_SetStyle( hWnd, 0, WS_TABSTOP );
         }
         if ((state & 3) != wParam)
         {
@@ -522,15 +521,10 @@ LRESULT ButtonWndProc_common(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
     case BM_SETSTATE:
         state = get_button_state( hWnd );
         if (wParam)
-        {
-            if (state & BUTTON_HIGHLIGHTED) break;
             set_button_state( hWnd, state | BUTTON_HIGHLIGHTED );
-        }
         else
-        {
-            if (!(state & BUTTON_HIGHLIGHTED)) break;
             set_button_state( hWnd, state & ~BUTTON_HIGHLIGHTED );
-        }
+
         paint_button( hWnd, btn_type, ODA_SELECT );
         break;
 
@@ -769,7 +763,7 @@ static void BUTTON_DrawLabel(HWND hwnd, HDC hdc, UINT dtFlags, const RECT *rc)
  */
 static void PB_Paint( HWND hwnd, HDC hDC, UINT action )
 {
-    RECT     rc, focus_rect, r;
+    RECT     rc, r;
     UINT     dtFlags, uState;
     HPEN     hOldPen;
     HBRUSH   hOldBrush;
@@ -802,12 +796,10 @@ static void PB_Paint( HWND hwnd, HDC hDC, UINT action )
 	InflateRect( &rc, -1, -1 );
     }
 
-    focus_rect = rc;
-
     /* completely skip the drawing if only focus has changed */
     if (action == ODA_FOCUS) goto draw_focus;
 
-    uState = DFCS_BUTTONPUSH | DFCS_ADJUSTRECT;
+    uState = DFCS_BUTTONPUSH;
 
     if (style & BS_FLAT)
         uState |= DFCS_MONO;
@@ -834,8 +826,6 @@ static void PB_Paint( HWND hwnd, HDC hDC, UINT action )
     if (pushedState)
        OffsetRect(&r, 1, 1);
 
-    IntersectClipRect(hDC, rc.left, rc.top, rc.right, rc.bottom);
-
     oldTxtColor = SetTextColor( hDC, GetSysColor(COLOR_BTNTEXT) );
 
     BUTTON_DrawLabel(hwnd, hDC, dtFlags, &r);
@@ -843,12 +833,10 @@ static void PB_Paint( HWND hwnd, HDC hDC, UINT action )
     SetTextColor( hDC, oldTxtColor );
 
 draw_focus:
-    if ((action == ODA_FOCUS) ||
-        ((action == ODA_DRAWENTIRE) && (state & BUTTON_HASFOCUS)))
+    if (action == ODA_FOCUS || (state & BUTTON_HASFOCUS))
     {
-        InflateRect( &focus_rect, -1, -1 );
-        IntersectRect(&focus_rect, &focus_rect, &rc);
-        DrawFocusRect( hDC, &focus_rect );
+        InflateRect( &rc, -2, -2 );
+        DrawFocusRect( hDC, &rc );
     }
 
  cleanup:
@@ -974,8 +962,7 @@ static void CB_Paint( HWND hwnd, HDC hDC, UINT action )
 	BUTTON_DrawLabel(hwnd, hDC, dtFlags, &rtext);
 
     /* ... and focus */
-    if ((action == ODA_FOCUS) ||
-        ((action == ODA_DRAWENTIRE) && (state & BUTTON_HASFOCUS)))
+    if (action == ODA_FOCUS || (state & BUTTON_HASFOCUS))
     {
 	rtext.left--;
 	rtext.right++;
@@ -1071,8 +1058,6 @@ static void UB_Paint( HWND hwnd, HDC hDC, UINT action )
     LONG state = get_button_state( hwnd );
     HWND parent;
 
-    if (action == ODA_SELECT) return;
-
     GetClientRect( hwnd, &rc);
 
     if ((hFont = get_button_font( hwnd ))) SelectObject( hDC, hFont );
@@ -1085,11 +1070,23 @@ static void UB_Paint( HWND hwnd, HDC hDC, UINT action )
 					(WPARAM)hDC, (LPARAM)hwnd);
 
     FillRect( hDC, &rc, hBrush );
-    if ((action == ODA_FOCUS) ||
-        ((action == ODA_DRAWENTIRE) && (state & BUTTON_HASFOCUS)))
+    if (action == ODA_FOCUS || (state & BUTTON_HASFOCUS))
         DrawFocusRect( hDC, &rc );
 
-    BUTTON_NOTIFY_PARENT( hwnd, BN_PAINT );
+    switch (action)
+    {
+    case ODA_FOCUS:
+        BUTTON_NOTIFY_PARENT( hwnd, (state & BUTTON_HASFOCUS) ? BN_SETFOCUS : BN_KILLFOCUS );
+        break;
+
+    case ODA_SELECT:
+        BUTTON_NOTIFY_PARENT( hwnd, (state & BUTTON_HIGHLIGHTED) ? BN_HILITE : BN_UNHILITE );
+        break;
+
+    default:
+        BUTTON_NOTIFY_PARENT( hwnd, BN_PAINT );
+        break;
+    }
 }
 
 

@@ -1008,13 +1008,14 @@ static LRESULT WINAPI MainProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
 int WINAPI WinMain( HINSTANCE hInst, HINSTANCE hPrevInst, LPSTR cmdline, int cmdshow )
 {
     MSG msg;
-    WNDCLASS wc;
+    WNDCLASSEX wc;
     HWND hWnd;
     HACCEL haccel;
     char appname[20];
 
     LoadString( hInst, IDS_APPNAME, appname, sizeof(appname));
 
+    wc.cbSize = sizeof(wc);
     wc.style = 0;
     wc.lpfnWndProc = MainProc;
     wc.cbClsExtra = 0;
@@ -1025,8 +1026,10 @@ int WINAPI WinMain( HINSTANCE hInst, HINSTANCE hPrevInst, LPSTR cmdline, int cmd
     wc.hbrBackground = GetStockObject( BLACK_BRUSH );
     wc.lpszMenuName = "MENU_WINEMINE";
     wc.lpszClassName = appname;
+    wc.hIconSm = LoadImage( hInst, "WINEMINE", IMAGE_ICON,
+                            GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_SHARED );
 
-    if (!RegisterClass(&wc)) ExitProcess(1);
+    if (!RegisterClassEx(&wc)) ExitProcess(1);
     hWnd = CreateWindow( appname, appname,
 	wnd_style,
         CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,

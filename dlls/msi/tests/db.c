@@ -1933,7 +1933,7 @@ static void test_where(void)
     rec = 0;
     query = "SELECT * FROM `Media` WHERE `DiskPrompt` <> 'Cabinet'";
     r = do_query(hdb, query, &rec);
-    todo_wine ok( r == ERROR_SUCCESS, "query failed: %d\n", r );
+    ok( r == ERROR_SUCCESS, "query failed: %d\n", r );
     MsiCloseHandle( rec );
 
     rec = 0;
@@ -2923,27 +2923,31 @@ static MSIHANDLE create_package_db(LPCSTR filename)
     return hdb;
 }
 
-static MSIHANDLE package_from_db(MSIHANDLE hdb)
+static UINT package_from_db(MSIHANDLE hdb, MSIHANDLE *handle)
 {
     UINT res;
-    CHAR szPackage[10];
+    CHAR szPackage[12];
     MSIHANDLE hPackage;
 
-    sprintf(szPackage,"#%i",hdb);
-    res = MsiOpenPackage(szPackage,&hPackage);
+    sprintf(szPackage, "#%u", hdb);
+    res = MsiOpenPackage(szPackage, &hPackage);
     if (res != ERROR_SUCCESS)
-        return 0;
+        return res;
 
     res = MsiCloseHandle(hdb);
     if (res != ERROR_SUCCESS)
-        return 0;
+    {
+        MsiCloseHandle(hPackage);
+        return res;
+    }
 
-    return hPackage;
+    *handle = hPackage;
+    return ERROR_SUCCESS;
 }
 
 static void test_try_transform(void)
 {
-    MSIHANDLE hdb, hview, hrec, hpkg;
+    MSIHANDLE hdb, hview, hrec, hpkg = 0;
     LPCSTR query;
     UINT r;
     DWORD sz;
@@ -3117,8 +3121,13 @@ static void test_try_transform(void)
     MsiCloseHandle(hview);
 
     /* check that the property was added */
-    hpkg = package_from_db(hdb);
-    ok(hpkg != 0, "Expected non-NULL hpkg\n");
+    r = package_from_db(hdb, &hpkg);
+    if (r == ERROR_INSTALL_PACKAGE_REJECTED)
+    {
+        skip("Not enough rights to perform tests\n");
+        goto error;
+    }
+    ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %u\n", r);
 
     sz = MAX_PATH;
     r = MsiGetProperty(hpkg, "prop", buffer, &sz);
@@ -3126,8 +3135,9 @@ static void test_try_transform(void)
     ok(!lstrcmp(buffer, "val"), "Expected val, got %s\n", buffer);
 
     MsiCloseHandle(hpkg);
-    MsiCloseHandle(hdb);
 
+error:
+    MsiCloseHandle(hdb);
     DeleteFile(msifile);
     DeleteFile(mstfile);
 }
@@ -7172,8 +7182,7 @@ static void test_storages_table(void)
 static void test_dbtopackage(void)
 {
     MSIHANDLE hdb, hpkg;
-    CHAR package[10];
-    CHAR buf[MAX_PATH];
+    CHAR package[12], buf[MAX_PATH];
     DWORD size;
     UINT r;
 
@@ -7192,8 +7201,13 @@ static void test_dbtopackage(void)
     r = add_custom_action_entry(hdb, "'SetProp', 51, 'MYPROP', 'grape'");
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
 
-    sprintf(package, "#%i", hdb);
+    sprintf(package, "#%u", hdb);
     r = MsiOpenPackage(package, &hpkg);
+    if (r == ERROR_INSTALL_PACKAGE_REJECTED)
+    {
+        skip("Not enough rights to perform tests\n");
+        goto error;
+    }
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
 
     /* property is not set yet */
@@ -7251,7 +7265,7 @@ static void test_dbtopackage(void)
     r = add_custom_action_entry(hdb, "'SetProp', 51, 'MYPROP', 'grape'");
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
 
-    sprintf(package, "#%i", hdb);
+    sprintf(package, "#%u", hdb);
     r = MsiOpenPackage(package, &hpkg);
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
 
@@ -7292,8 +7306,10 @@ static void test_dbtopackage(void)
         ok(size == 0, "Expected 0, got %d\n", size);
     }
 
-    MsiCloseHandle(hdb);
     MsiCloseHandle(hpkg);
+
+error:
+    MsiCloseHandle(hdb);
     DeleteFileA(msifile);
 }
 
@@ -8845,6 +8861,116 @@ static void test_columnorder(void)
     DeleteFileA(msifile);
 }
 
+static void test_createtable(void)
+{
+    MSIHANDLE hdb, htab = 0, hrec = 0;
+    LPCSTR query;
+    UINT res;
+    DWORD size;
+    char buffer[0x20];
+
+    hdb = create_db();
+    ok(hdb, "failed to create db\n");
+
+    query = "CREATE TABLE `blah` (`foo` CHAR(72) NOT NULL PRIMARY KEY `foo`)";
+    res = MsiDatabaseOpenView( hdb, query, &htab );
+    ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
+    if(res == ERROR_SUCCESS )
+    {
+        res = MsiViewExecute( htab, hrec );
+        ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
+
+        res = MsiViewGetColumnInfo( htab, MSICOLINFO_NAMES, &hrec );
+        todo_wine ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
+
+        size = sizeof(buffer);
+        res = MsiRecordGetString(hrec, 1, buffer, &size );
+        todo_wine ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
+        MsiCloseHandle( hrec );
+
+        res = MsiViewClose( htab );
+        ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
+
+        res = MsiCloseHandle( htab );
+        ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
+    }
+
+    query = "CREATE TABLE `a` (`b` INT PRIMARY KEY `b`)";
+    res = MsiDatabaseOpenView( hdb, query, &htab );
+    ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
+    if(res == ERROR_SUCCESS )
+    {
+        res = MsiViewExecute( htab, 0 );
+        ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
+
+        res = MsiViewClose( htab );
+        ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
+
+        res = MsiCloseHandle( htab );
+        ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
+
+        query = "SELECT * FROM `a`";
+        res = MsiDatabaseOpenView( hdb, query, &htab );
+        ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
+
+        res = MsiViewGetColumnInfo( htab, MSICOLINFO_NAMES, &hrec );
+        ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
+
+        buffer[0] = 0;
+        size = sizeof(buffer);
+        res = MsiRecordGetString(hrec, 1, buffer, &size );
+        ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
+        ok(!strcmp(buffer,"b"), "b != %s\n", buffer);
+        MsiCloseHandle( hrec );
+
+        res = MsiViewClose( htab );
+        ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
+
+        res = MsiCloseHandle( htab );
+        ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
+
+        res = MsiDatabaseCommit(hdb);
+        ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
+
+        res = MsiCloseHandle(hdb);
+        ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
+
+        res = MsiOpenDatabase(msifile, MSIDBOPEN_TRANSACT, &hdb );
+        ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
+
+        query = "SELECT * FROM `a`";
+        res = MsiDatabaseOpenView( hdb, query, &htab );
+        ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
+
+        res = MsiViewGetColumnInfo( htab, MSICOLINFO_NAMES, &hrec );
+        ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
+
+        buffer[0] = 0;
+        size = sizeof(buffer);
+        res = MsiRecordGetString(hrec, 1, buffer, &size );
+        ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
+        todo_wine ok(!strcmp(buffer,"b"), "b != %s\n", buffer);
+
+        res = MsiCloseHandle( hrec );
+        ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
+
+        res = MsiViewClose( htab );
+        ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
+
+        res = MsiCloseHandle( htab );
+        ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
+    }
+
+    res = MsiDatabaseCommit(hdb);
+    ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
+
+    res = MsiCloseHandle(hdb);
+    ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
+
+    DeleteFileA(msifile);
+}
+
+
 START_TEST(db)
 {
     test_msidatabase();
@@ -8896,4 +9022,5 @@ START_TEST(db)
     test_insertorder();
     test_columnorder();
     test_suminfo_import();
+    test_createtable();
 }

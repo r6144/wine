@@ -37,8 +37,9 @@
 #include "cvconst.h"
 #include "objbase.h"
 #include "oaidl.h"
+#include <wine/list.h>
 
-#define ADDRSIZE        ((unsigned)sizeof(void*))
+#define ADDRSIZE        (be_cpu->pointer_size)
 #define ADDRWIDTH       (ADDRSIZE * 2)
 
 /* the debugger uses these exceptions for it's internal use */
@@ -139,7 +140,7 @@ struct dbg_breakpoint
     struct              /* only used for watchpoints */
     {
         BYTE		len : 2;
-        DWORD		oldval;
+        DWORD64		oldval;
     } w;
     struct expr*        condition;
 };
@@ -170,6 +171,7 @@ typedef struct tagTHREADNAME_INFO
 
 struct dbg_thread
 {
+    struct list                 entry;
     struct dbg_process* 	process;
     HANDLE			handle;
     DWORD			tid;
@@ -180,8 +182,6 @@ struct dbg_thread
     int                         stopped_xpoint; /* xpoint on which the thread has stopped (-1 if none) */
     struct dbg_breakpoint	step_over_bp;
     char                        name[9];
-    struct dbg_thread*   	next;
-    struct dbg_thread*   	prev;
     BOOL                        in_exception;   /* TRUE if thread stopped with an exception */
     EXCEPTION_RECORD            excpt_record;   /* only valid when in_exception is TRUE */
     struct
@@ -217,12 +217,13 @@ struct dbg_delayed_bp
 #define MAX_BREAKPOINTS 100
 struct dbg_process
 {
+    struct list                 entry;
     HANDLE			handle;
     DWORD			pid;
     const struct be_process_io* process_io;
     void*                       pio_data;
     const WCHAR*		imageName;
-    struct dbg_thread*  	threads;
+    struct list           	threads;
     unsigned			continue_on_first_exception : 1,
                                 active_debuggee : 1;
     struct dbg_breakpoint       bp[MAX_BREAKPOINTS];
@@ -234,8 +235,6 @@ struct dbg_process
     char                        source_current_file[MAX_PATH];
     int                         source_start_line;
     int                         source_end_line;
-    struct dbg_process* 	next;
-    struct dbg_process* 	prev;
 };
 
 /* describes the way the debugger interacts with a given process */
@@ -385,7 +384,7 @@ extern void             source_nuke_path(struct dbg_process* p);
 extern void             source_free_files(struct dbg_process* p);
 
   /* stack.c */
-extern void             stack_info(void);
+extern void             stack_info(int len);
 extern void             stack_backtrace(DWORD threadID);
 extern BOOL             stack_set_frame(int newframe);
 extern BOOL             stack_get_current_frame(IMAGEHLP_STACK_FRAME* ihsf);
@@ -434,7 +433,6 @@ extern int              print_types(void);
 extern long int         types_extract_as_integer(const struct dbg_lvalue*);
 extern LONGLONG         types_extract_as_longlong(const struct dbg_lvalue*, unsigned* psize);
 extern void             types_extract_as_address(const struct dbg_lvalue*, ADDRESS64*);
-extern BOOL             types_deref(const struct dbg_lvalue* value, struct dbg_lvalue* result);
 extern BOOL             types_udt_find_element(struct dbg_lvalue* value, const char* name, long int* tmpbuf);
 extern BOOL             types_array_index(const struct dbg_lvalue* value, int index, struct dbg_lvalue* result);
 extern BOOL             types_get_info(const struct dbg_type*, IMAGEHLP_SYMBOL_TYPE_INFO, void*);

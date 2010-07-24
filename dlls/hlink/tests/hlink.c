@@ -439,7 +439,7 @@ static void test_persist(void)
                                0, NULL, &IID_IHlink, (LPVOID*) &lnk);
     ok(hr == S_OK, "IHlinkCreateFromString failed with error 0x%08x\n", hr);
     if (!lnk) {
-        skip("Can't create lnk, skipping test_persist.  Was wineprefixcreate run properly?\n");
+        skip("Can't create lnk, skipping test_persist.\n");
         return;
     }
     test_persist_save_data("url only", lnk,
@@ -1093,7 +1093,8 @@ static void test_HlinkGetSetMonikerReference(void)
 
     /* invalid HLINKSETF flags */
     hres = IHlink_SetMonikerReference(hlink, 12, dummy2, two);
-    ok(hres == 12, "IHlink_SetMonikerReference should've failed with 0x%08x, failed with 0x%08x\n", 12, hres);
+    /* Windows returns garbage; on 32-bit it returns the flags probably because the compiler happened to store them in %eax at some point */
+    if (0) ok(hres == 12, "IHlink_SetMonikerReference should've failed with 0x%08x, failed with 0x%08x\n", 12, hres);
 
     hres = IHlink_GetMonikerReference(hlink, HLINKGETREF_DEFAULT, &found_trgt, &found_loc);
     ok(found_trgt == dummy, "Found target should've been %p, was: %p\n", dummy, found_trgt);
@@ -1244,10 +1245,11 @@ static void test_HlinkGetSetStringReference(void)
     CoTaskMemFree(fnd_loc);
 
     hres = IHlink_SetStringReference(link, 4, NULL, NULL);
-    ok(hres == 4, "IHlink_SetStringReference should have failed with 0x4, instead: 0x%08x\n", hres);
+    /* Windows returns garbage; on 32-bit it returns the flags probably because the compiler happened to store them in %eax at some point */
+    if (0) ok(hres == 4, "IHlink_SetStringReference should have failed with 0x4, instead: 0x%08x\n", hres);
 
     hres = IHlink_SetStringReference(link, -4, NULL, NULL);
-    ok(hres == -4, "IHlink_SetStringReference should have failed with 0xFFFFFFFC, instead: 0x%08x\n", hres);
+    if (0) ok(hres == -4, "IHlink_SetStringReference should have failed with 0xFFFFFFFC, instead: 0x%08x\n", hres);
 
     IHlink_Release(link);
 }

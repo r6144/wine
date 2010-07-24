@@ -2,6 +2,7 @@
  * Mesh operations specific to D3DX9.
  *
  * Copyright (C) 2009 David Adam
+ * Copyright (C) 2010 Tony Wasserka
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -57,13 +58,13 @@ done we've got an intersection of the ray with the box.
     div = 1.0f / praydirection->x;
     if ( div >= 0.0f )
     {
-     tmin = ( pmin->x - prayposition->x ) * div;
-     tmax = ( pmax->x - prayposition->x ) * div;
+        tmin = ( pmin->x - prayposition->x ) * div;
+        tmax = ( pmax->x - prayposition->x ) * div;
     }
     else
     {
-     tmin = ( pmax->x - prayposition->x ) * div;
-     tmax = ( pmin->x - prayposition->x ) * div;
+        tmin = ( pmax->x - prayposition->x ) * div;
+        tmax = ( pmin->x - prayposition->x ) * div;
     }
 
     if ( tmax < 0.0f ) return FALSE;
@@ -71,13 +72,13 @@ done we've got an intersection of the ray with the box.
     div = 1.0f / praydirection->y;
     if ( div >= 0.0f )
     {
-     tymin = ( pmin->y - prayposition->y ) * div;
-     tymax = ( pmax->y - prayposition->y ) * div;
+        tymin = ( pmin->y - prayposition->y ) * div;
+        tymax = ( pmax->y - prayposition->y ) * div;
     }
     else
     {
-     tymin = ( pmax->y - prayposition->y ) * div;
-     tymax = ( pmin->y - prayposition->y ) * div;
+        tymin = ( pmax->y - prayposition->y ) * div;
+        tymax = ( pmin->y - prayposition->y ) * div;
     }
 
     if ( ( tymax < 0.0f ) || ( tmin > tymax ) || ( tymin > tmax ) ) return FALSE;
@@ -88,13 +89,13 @@ done we've got an intersection of the ray with the box.
     div = 1.0f / praydirection->z;
     if ( div >= 0.0f )
     {
-     tzmin = ( pmin->z - prayposition->z ) * div;
-     tzmax = ( pmax->z - prayposition->z ) * div;
+        tzmin = ( pmin->z - prayposition->z ) * div;
+        tzmax = ( pmax->z - prayposition->z ) * div;
     }
     else
     {
-     tzmin = ( pmax->z - prayposition->z ) * div;
-     tzmax = ( pmin->z - prayposition->z ) * div;
+        tzmin = ( pmax->z - prayposition->z ) * div;
+        tzmax = ( pmin->z - prayposition->z ) * div;
     }
 
     if ( (tzmax < 0.0f ) || ( tmin > tzmax ) || ( tzmin > tmax ) ) return FALSE;
@@ -167,6 +168,16 @@ HRESULT WINAPI D3DXComputeBoundingSphere(CONST D3DXVECTOR3* pfirstposition, DWOR
 }
 
 /*************************************************************************
+ * D3DXDeclaratorFromFVF
+ */
+HRESULT WINAPI D3DXDeclaratorFromFVF(DWORD fvf, D3DVERTEXELEMENT9 Declaration[MAX_FVF_DECL_SIZE])
+{
+    FIXME("(%d, %p): stub\n", fvf, Declaration);
+
+    return E_NOTIMPL;
+}
+
+/*************************************************************************
  * D3DXGetFVFVertexSize
  */
 static UINT Get_TexCoord_Size_From_FVF(DWORD FVF, int tex_num)
@@ -180,7 +191,7 @@ UINT WINAPI D3DXGetFVFVertexSize(DWORD FVF)
     UINT i;
     UINT numTextures = (FVF & D3DFVF_TEXCOUNT_MASK) >> D3DFVF_TEXCOUNT_SHIFT;
 
-    if (FVF & D3DFVF_NORMAL) size +=  sizeof(D3DXVECTOR3);
+    if (FVF & D3DFVF_NORMAL) size += sizeof(D3DXVECTOR3);
     if (FVF & D3DFVF_DIFFUSE) size += sizeof(DWORD);
     if (FVF & D3DFVF_SPECULAR) size += sizeof(DWORD);
     if (FVF & D3DFVF_PSIZE) size += sizeof(DWORD);
@@ -315,4 +326,20 @@ BOOL WINAPI D3DXSphereBoundProbe(CONST D3DXVECTOR3 *pcenter, FLOAT radius, CONST
 
     if ( ( d <= 0.0f ) || ( sqrt(d) <= b ) ) return FALSE;
     return TRUE;
+}
+
+HRESULT WINAPI D3DXCreateBox(LPDIRECT3DDEVICE9 device, FLOAT width, FLOAT height,
+                             FLOAT depth, LPD3DXMESH* mesh, LPD3DXBUFFER* adjacency)
+{
+    FIXME("(%p, %f, %f, %f, %p, %p): stub\n", device, width, height, depth, mesh, adjacency);
+
+    return E_NOTIMPL;
+}
+
+HRESULT WINAPI D3DXCreateSphere(LPDIRECT3DDEVICE9 device, FLOAT radius, UINT slices,
+                                UINT stacks, LPD3DXMESH* mesh, LPD3DXBUFFER* adjacency)
+{
+    FIXME("(%p, %f, %d, %d, %p, %p): stub\n", device, radius, slices, stacks, mesh, adjacency);
+
+    return E_NOTIMPL;
 }

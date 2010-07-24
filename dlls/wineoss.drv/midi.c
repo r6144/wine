@@ -170,23 +170,23 @@ static	int 	MIDI_UnixToWindowsDeviceType(int type)
     }
 }
 
+static int MIDI_loadcount;
 /**************************************************************************
  * 			OSS_MidiInit				[internal]
  *
  * Initializes the MIDI devices information variables
  */
-LRESULT OSS_MidiInit(void)
+static LRESULT OSS_MidiInit(void)
 {
     int 		i, status, numsynthdevs = 255, nummididevs = 255;
     struct synth_info 	sinfo;
     struct midi_info 	minfo;
-    static	BOOL	bInitDone = FALSE;
 
-    if (bInitDone)
-	return 0;
+    TRACE("(%i)\n", MIDI_loadcount);
+    if (MIDI_loadcount++)
+        return 1;
 
     TRACE("Initializing the MIDI variables.\n");
-    bInitDone = TRUE;
 
     /* try to open device */
     if (midiOpenSeq() == -1) {
@@ -217,58 +217,60 @@ LRESULT OSS_MidiInit(void)
 	MidiOutDev[i].caps.wPid = 0x0001; 	/* FIXME Product ID  */
 	/* Product Version. We simply say "1" */
 	MidiOutDev[i].caps.vDriverVersion = 0x001;
+	/* The following are mandatory for MOD_MIDIPORT */
 	MidiOutDev[i].caps.wChannelMask   = 0xFFFF;
-
-	/* FIXME Do we have this information?
-	 * Assuming the soundcards can handle
-	 * MIDICAPS_VOLUME and MIDICAPS_LRVOLUME but
-	 * not MIDICAPS_CACHE.
-	 */
-	MidiOutDev[i].caps.dwSupport      = MIDICAPS_VOLUME|MIDICAPS_LRVOLUME;
+	MidiOutDev[i].caps.wVoices        = 0;
+	MidiOutDev[i].caps.wNotes         = 0;
+	MidiOutDev[i].caps.dwSupport      = 0;
 
 	sinfo.device = i;
 	status = ioctl(midiSeqFD, SNDCTL_SYNTH_INFO, &sinfo);
 	if (status == -1) {
-            static const WCHAR fmt[] = {'W','i','n','e',' ','O','S','S',' ','M','i','d','i',' ','O','u','t',' ','(','#','%','d',')',' ','d','i','s','a','b','l','e','d',0};
+            static const WCHAR fmt[] = {'W','i','n','e',' ','O','S','S',' ','M','i','d','i',' ','O','u','t',' ','#','%','d',' ','d','i','s','a','b','l','e','d',0};
 	    ERR("ioctl for synth info failed on %d, disabling it.\n", i);
 
             wsprintfW(MidiOutDev[i].caps.szPname, fmt, i);
 
             MidiOutDev[i].caps.wTechnology = MOD_MIDIPORT;
-            MidiOutDev[i].caps.wVoices     = 16;
-            MidiOutDev[i].caps.wNotes      = 16;
             MidiOutDev[i].bEnabled = FALSE;
 	} else {
             MultiByteToWideChar( CP_UNIXCP, 0, sinfo.name, -1,
                                  MidiOutDev[i].caps.szPname,
                                  sizeof(MidiOutDev[i].caps.szPname)/sizeof(WCHAR) );
-
             MidiOutDev[i].caps.wTechnology = MIDI_UnixToWindowsDeviceType(sinfo.synth_type);
-            MidiOutDev[i].caps.wVoices     = sinfo.nr_voices;
 
-            /* FIXME Is it possible to know the maximum
-             * number of simultaneous notes of a soundcard ?
-             * I believe we don't have this information, but
-             * it's probably equal or more than wVoices
-             */
-            MidiOutDev[i].caps.wNotes      = sinfo.nr_voices;
+            if (MOD_MIDIPORT != MidiOutDev[i].caps.wTechnology) {
+                /* FIXME Do we have this information?
+                 * Assuming the soundcards can handle
+                 * MIDICAPS_VOLUME and MIDICAPS_LRVOLUME but
+                 * not MIDICAPS_CACHE.
+                 */
+                MidiOutDev[i].caps.dwSupport = MIDICAPS_VOLUME|MIDICAPS_LRVOLUME;
+                MidiOutDev[i].caps.wVoices     = sinfo.nr_voices;
+
+                /* FIXME Is it possible to know the maximum
+                 * number of simultaneous notes of a soundcard ?
+                 * I believe we don't have this information, but
+                 * it's probably equal or more than wVoices
+                 */
+                MidiOutDev[i].caps.wNotes      = sinfo.nr_voices;
+            }
             MidiOutDev[i].bEnabled = TRUE;
+
+            /* We also have the information sinfo.synth_subtype, not used here
+             */
+            if (sinfo.capabilities & SYNTH_CAP_INPUT) {
+                FIXME("Synthesizer supports MIDI in. Not yet supported.\n");
+            }
+            TRACE("SynthOut[%d]\tOSS info: synth type=%d/%d capa=%lx\n",
+                  i, sinfo.synth_type, sinfo.synth_subtype, (long)sinfo.capabilities);
         }
 
-	/* We also have the information sinfo.synth_subtype, not used here
-	 */
-
-	if (sinfo.capabilities & SYNTH_CAP_INPUT) {
-	    FIXME("Synthesizer supports MIDI in. Not yet supported.\n");
-	}
-
-	TRACE("SynthOut[%d]\tname='%s' techn=%d voices=%d notes=%d chnMsk=%04x support=%d\n"
-              "\tOSS info: synth subtype=%d capa=%lx\n",
+        TRACE("SynthOut[%d]\tname='%s' techn=%d voices=%d notes=%d chnMsk=%04x support=%d\n",
 	      i, wine_dbgstr_w(MidiOutDev[i].caps.szPname), 
               MidiOutDev[i].caps.wTechnology, 
               MidiOutDev[i].caps.wVoices, MidiOutDev[i].caps.wNotes, 
-              MidiOutDev[i].caps.wChannelMask, MidiOutDev[i].caps.dwSupport,
-	      sinfo.synth_subtype, (long)sinfo.capabilities);
+              MidiOutDev[i].caps.wChannelMask, MidiOutDev[i].caps.dwSupport);
     }
 
     /* find how many MIDI devices are there in the system */
@@ -309,7 +311,7 @@ LRESULT OSS_MidiInit(void)
 	/* Product Version. We simply say "1" */
 	MidiOutDev[numsynthdevs + i].caps.vDriverVersion = 0x001;
         if (status == -1) {
-            static const WCHAR fmt[] = {'W','i','n','e',' ','O','S','S',' ','M','i','d','i',' ','O','u','t',' ','(','#','%','d',')',' ','d','i','s','a','b','l','e','d',0};
+            static const WCHAR fmt[] = {'W','i','n','e',' ','O','S','S',' ','M','i','d','i',' ','O','u','t',' ','#','%','d',' ','d','i','s','a','b','l','e','d',0};
             wsprintfW(MidiOutDev[numsynthdevs + i].caps.szPname, fmt, numsynthdevs + i);
             MidiOutDev[numsynthdevs + i].bEnabled = FALSE;
         } else {
@@ -318,15 +320,11 @@ LRESULT OSS_MidiInit(void)
                                 sizeof(MidiOutDev[numsynthdevs + i].caps.szPname) / sizeof(WCHAR));
             MidiOutDev[numsynthdevs + i].bEnabled = TRUE;
         }
-	MidiOutDev[numsynthdevs + i].caps.wTechnology = MOD_MIDIPORT; /* FIXME Is this right? */
-	/* Does it make any difference? */
-	MidiOutDev[numsynthdevs + i].caps.wVoices     = 16;
-	/* Does it make any difference? */
-	MidiOutDev[numsynthdevs + i].caps.wNotes      = 16;
+	MidiOutDev[numsynthdevs + i].caps.wTechnology = MOD_MIDIPORT;
+	MidiOutDev[numsynthdevs + i].caps.wVoices     = 0;
+	MidiOutDev[numsynthdevs + i].caps.wNotes      = 0;
 	MidiOutDev[numsynthdevs + i].caps.wChannelMask= 0xFFFF;
-
-	/* FIXME Does it make any difference? */
-	MidiOutDev[numsynthdevs + i].caps.dwSupport   = MIDICAPS_VOLUME|MIDICAPS_LRVOLUME;
+	MidiOutDev[numsynthdevs + i].caps.dwSupport   = 0;
 
 	/* This whole part is somewhat obscure to me. I'll keep trying to dig
 	   info about it. If you happen to know, please tell us. The very
@@ -340,7 +338,7 @@ LRESULT OSS_MidiInit(void)
 	/* Product Version. We simply say "1" */
 	MidiInDev[i].caps.vDriverVersion = 0x001;
         if (status == -1) {
-            static const WCHAR fmt[] = {'W','i','n','e',' ','O','S','S',' ','M','i','d','i',' ','I','n',' ','(','#','%','d',')',' ','d','i','s','a','b','l','e','d',0};
+            static const WCHAR fmt[] = {'W','i','n','e',' ','O','S','S',' ','M','i','d','i',' ','I','n',' ','#','%','d',' ','d','i','s','a','b','l','e','d',0};
             wsprintfW(MidiInDev[i].caps.szPname, fmt, numsynthdevs + i);
             MidiInDev[i].state = -1;
         } else {
@@ -349,18 +347,17 @@ LRESULT OSS_MidiInit(void)
                                 sizeof(MidiInDev[i].caps.szPname) / sizeof(WCHAR));
             MidiInDev[i].state = 0;
         }
-	/* FIXME : could we get better information than that ? */
-	MidiInDev[i].caps.dwSupport   = MIDICAPS_VOLUME|MIDICAPS_LRVOLUME;
+	MidiInDev[i].caps.dwSupport   = 0; /* mandatory with MIDIINCAPS */
 
-	TRACE("MidiOut[%d]\tname='%s' techn=%d voices=%d notes=%d chnMsk=%04x support=%d\n"
-              "MidiIn [%d]\tname='%s' support=%d\n"
-              "\tOSS info: midi dev-type=%d, capa=%lx\n",
-	      i, wine_dbgstr_w(MidiOutDev[numsynthdevs + i].caps.szPname), 
+        TRACE("OSS info: midi[%d] dev-type=%d capa=%lx\n"
+              "\tMidiOut[%d] name='%s' techn=%d voices=%d notes=%d chnMsk=%04x support=%d\n"
+              "\tMidiIn [%d] name='%s' support=%d\n",
+              i, minfo.dev_type, (long)minfo.capabilities,
+              numsynthdevs + i, wine_dbgstr_w(MidiOutDev[numsynthdevs + i].caps.szPname),
               MidiOutDev[numsynthdevs + i].caps.wTechnology,
 	      MidiOutDev[numsynthdevs + i].caps.wVoices, MidiOutDev[numsynthdevs + i].caps.wNotes,
 	      MidiOutDev[numsynthdevs + i].caps.wChannelMask, MidiOutDev[numsynthdevs + i].caps.dwSupport,
-	      i, wine_dbgstr_w(MidiInDev[i].caps.szPname), MidiInDev[i].caps.dwSupport,
-	      minfo.dev_type, (long)minfo.capabilities);
+              i, wine_dbgstr_w(MidiInDev[i].caps.szPname), MidiInDev[i].caps.dwSupport);
     }
 
  wrapup:
@@ -381,9 +378,12 @@ LRESULT OSS_MidiInit(void)
  *
  * Release the MIDI devices information variables
  */
-LRESULT OSS_MidiExit(void)
+static LRESULT OSS_MidiExit(void)
 {
-    TRACE("()\n");
+    TRACE("(%i)\n", MIDI_loadcount);
+
+    if (--MIDI_loadcount)
+        return 1;
 
     ZeroMemory(MidiInDev, sizeof(MidiInDev));
     ZeroMemory(MidiOutDev, sizeof(MidiOutDev));
@@ -1629,6 +1629,17 @@ static DWORD modUnprepare(WORD wDevID, LPMIDIHDR lpMidiHdr, DWORD dwSize)
 }
 
 /**************************************************************************
+ * 			modGetVolume				[internal]
+ */
+static DWORD modGetVolume(WORD wDevID, DWORD* lpdwVolume)
+{
+    if (!lpdwVolume) return MMSYSERR_INVALPARAM;
+    if (wDevID >= MODM_NumDevs) return MMSYSERR_BADDEVICEID;
+    *lpdwVolume = 0xFFFFFFFF;
+    return (MidiOutDev[wDevID].caps.dwSupport & MIDICAPS_VOLUME) ? 0 : MMSYSERR_NOTSUPPORTED;
+}
+
+/**************************************************************************
  * 			modReset				[internal]
  */
 static DWORD modReset(WORD wDevID)
@@ -1654,21 +1665,6 @@ static DWORD modReset(WORD wDevID)
     return MMSYSERR_NOERROR;
 }
 
-#else /* HAVE_OSS_MIDI */
-
-LRESULT OSS_MidiInit(void)
-{
-    TRACE("()\n");
-    return FALSE;
-}
-
-LRESULT OSS_MidiExit(void)
-{
-    TRACE("()\n");
-    return 0;
-}
-
-
 #endif /* HAVE_OSS_MIDI */
 
 /*======================================================================*
@@ -1686,7 +1682,9 @@ DWORD WINAPI OSS_midMessage(UINT wDevID, UINT wMsg, DWORD_PTR dwUser,
     switch (wMsg) {
 #ifdef HAVE_OSS_MIDI
     case DRVM_INIT:
+        return OSS_MidiInit();
     case DRVM_EXIT:
+        return OSS_MidiExit();
     case DRVM_ENABLE:
     case DRVM_DISABLE:
 	/* FIXME: Pretend this is supported */
@@ -1711,6 +1709,10 @@ DWORD WINAPI OSS_midMessage(UINT wDevID, UINT wMsg, DWORD_PTR dwUser,
 	return midStart(wDevID);
     case MIDM_STOP:
 	return midStop(wDevID);
+#else
+    case DRVM_INIT:
+    case MIDM_GETNUMDEVS:
+        return 0;
 #endif
     default:
 	TRACE("Unsupported message\n");
@@ -1730,7 +1732,9 @@ DWORD WINAPI OSS_modMessage(UINT wDevID, UINT wMsg, DWORD_PTR dwUser,
     switch (wMsg) {
 #ifdef HAVE_OSS_MIDI
     case DRVM_INIT:
+        return OSS_MidiInit();
     case DRVM_EXIT:
+        return OSS_MidiExit();
     case DRVM_ENABLE:
     case DRVM_DISABLE:
 	/* FIXME: Pretend this is supported */
@@ -1752,11 +1756,15 @@ DWORD WINAPI OSS_modMessage(UINT wDevID, UINT wMsg, DWORD_PTR dwUser,
     case MODM_GETNUMDEVS:
 	return MODM_NumDevs;
     case MODM_GETVOLUME:
-	return 0;
+	return modGetVolume(wDevID, (DWORD*)dwParam1);
     case MODM_SETVOLUME:
 	return 0;
     case MODM_RESET:
 	return modReset(wDevID);
+#else
+    case DRVM_INIT:
+    case MODM_GETNUMDEVS:
+        return 0;
 #endif
     default:
 	TRACE("Unsupported message\n");

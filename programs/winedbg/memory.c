@@ -121,9 +121,13 @@ BOOL memory_write_value(const struct dbg_lvalue* lvalue, DWORD size, void* value
     BOOL        ret = TRUE;
     DWORD64     os;
 
-    os = ~(DWORD64)size;
-    types_get_info(&lvalue->type, TI_GET_LENGTH, &os);
-    assert(size == os);
+    if (!types_get_info(&lvalue->type, TI_GET_LENGTH, &os)) return FALSE;
+    if (size != os)
+    {
+        dbg_printf("Size mismatch in memory_write_value, got %u from type while expecting %u\n",
+                   (DWORD)os, size);
+        return FALSE;
+    }
 
     /* FIXME: only works on little endian systems */
     if (lvalue->cookie == DLV_TARGET)
@@ -416,7 +420,7 @@ static void print_typed_basic(const struct dbg_lvalue* lvalue)
         }
         break;
     case SymTagPointerType:
-        if (!types_deref(lvalue, &sub_lvalue))
+        if (!types_array_index(lvalue, 0, &sub_lvalue))
         {
             dbg_printf("Internal symbol error: unable to access memory location %p",
                        memory_to_linear_addr(&lvalue->addr));

@@ -4,7 +4,7 @@ SRCDIR    = @srcdir@
 VPATH     = @srcdir@
 MODULE    = taskmgr.exe
 APPMODE   = -mwindows -mno-cygwin
-IMPORTS   = psapi shell32 comctl32 user32 gdi32 advapi32 kernel32
+IMPORTS   = psapi shell32 comctl32 user32 gdi32 advapi32
 EXTRAINCL = -I$(TOPSRCDIR)/include/msvcrt
 EXTRADEFS = -DNO_LIBWINE_PORT
 MODCFLAGS = @BUILTINFLAG@
@@ -34,6 +34,7 @@ RC_SRCS = \
 	De.rc \
 	En.rc \
 	Fr.rc \
+	It.rc \
 	Ja.rc \
 	Ko.rc \
 	Lt.rc \
@@ -41,11 +42,16 @@ RC_SRCS = \
 	No.rc \
 	Pl.rc \
 	Pt.rc \
+	Ro.rc \
 	Ru.rc \
 	Si.rc \
 	Sv.rc \
 	Tr.rc \
+	Uk.rc \
 	Zh.rc \
 	taskmgr.rc
+
+SVG_SRCS = \
+	taskmgr.svg
 
 @MAKE_PROG_RULES@

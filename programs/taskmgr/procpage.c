@@ -148,13 +148,10 @@ static void ProcessPageShowContextMenu(DWORD dwProcessId)
     DestroyMenu(hMenu);
 }
 
-static void ProcessPageOnNotify(WPARAM wParam, LPARAM lParam)
+static void ProcessPageOnNotify(LPARAM lParam)
 {
-    int                idctrl;
     LPNMHDR            pnmh;
-    LPNMLISTVIEW       pnmv;
     NMLVDISPINFOW*     pnmdi;
-    LPNMHEADERW        pnmhdr;
     LVITEM             lvitem;
     ULONG              Index;
     ULONG              ColumnIndex;
@@ -164,11 +161,8 @@ static void ProcessPageOnNotify(WPARAM wParam, LPARAM lParam)
     static const WCHAR wszFmt02D[] = {'%','0','2','d',0};
     static const WCHAR wszUnitK[] = {' ','K',0};
 
-    idctrl = (int) wParam;
     pnmh = (LPNMHDR) lParam;
-    pnmv = (LPNMLISTVIEW) lParam;
     pnmdi = (NMLVDISPINFOW*) lParam;
-    pnmhdr = (LPNMHEADERW) lParam;
 
     if (pnmh->hwndFrom == hProcessPageListCtrl)
     {
@@ -544,8 +538,7 @@ ProcessPageWndProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
         break;
 
     case WM_NOTIFY:
-
-        ProcessPageOnNotify(wParam, lParam);
+        ProcessPageOnNotify(lParam);
         break;
     }
 

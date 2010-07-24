@@ -139,8 +139,7 @@ static inline HRESULT HRESULT_FROM_WIN32(unsigned int x)
 #define ERROR_SHARING_VIOLATION                            32
 #define ERROR_LOCK_VIOLATION                               33
 #define ERROR_WRONG_DISK                                   34
-/* FIXME: 35 gets returned for some unsuccessful DeviceIoControl calls */
-#define ERROR_UNKNOWN_NAME_01                              35
+#define ERROR_FCB_UNAVAILABLE                              35
 #define ERROR_SHARING_BUFFER_EXCEEDED                      36
 #define ERROR_HANDLE_EOF                                   38
 #define ERROR_HANDLE_DISK_FULL                             39
@@ -306,6 +305,9 @@ static inline HRESULT HRESULT_FROM_WIN32(unsigned int x)
 #define ERROR_ARITHMETIC_OVERFLOW                          534
 #define ERROR_PIPE_CONNECTED                               535
 #define ERROR_PIPE_LISTENING                               536
+#define ERROR_INVALID_LDT_SIZE                             561
+#define ERROR_INVALID_LDT_OFFSET                           563
+#define ERROR_INVALID_LDT_DESCRIPTOR                       564
 #define ERROR_HANDLES_CLOSED                               676
 #define ERROR_EA_ACCESS_DENIED                             994
 #define ERROR_OPERATION_ABORTED                            995
@@ -711,7 +713,17 @@ static inline HRESULT HRESULT_FROM_WIN32(unsigned int x)
 #define ERROR_INVALID_COMMAND_LINE                         1639
 #define ERROR_INSTALL_REMOTE_DISALLOWED                    1640
 #define ERROR_SUCCESS_REBOOT_INITIATED                     1641
+#define ERROR_PATCH_TARGET_NOT_FOUND                       1642
+#define ERROR_PATCH_PACKAGE_REJECTED                       1643
+#define ERROR_INSTALL_TRANSFORM_REJECTED                   1644
+#define ERROR_INSTALL_REMOTE_PROHIBITED                    1645
+#define ERROR_PATCH_REMOVAL_UNSUPPORTED                    1646
 #define ERROR_UNKNOWN_PATCH                                1647
+#define ERROR_PATCH_NO_SEQUENCE                            1648
+#define ERROR_PATCH_REMOVAL_DISALLOWED                     1649
+#define ERROR_INVALID_PATCH_XML                            1650
+#define ERROR_PATCH_MANAGED_ADVERTISED_PRODUCT             1651
+#define ERROR_INSTALL_SERVICE_SAFEBOOT                     1652
 #define RPC_S_INVALID_STRING_BINDING                       1700
 #define RPC_S_WRONG_KIND_OF_BINDING                        1701
 #define RPC_S_INVALID_BINDING                              1702
@@ -2209,6 +2221,10 @@ static inline HRESULT HRESULT_FROM_WIN32(unsigned int x)
 #define NTE_BAD_KEYSET_PARAM                               _HRESULT_TYPEDEF_(0x8009001FL)
 #define NTE_FAIL                                           _HRESULT_TYPEDEF_(0x80090020L)
 #define NTE_SYS_ERR                                        _HRESULT_TYPEDEF_(0x80090021L)
+#define NTE_SILENT_CONTEXT                                 _HRESULT_TYPEDEF_(0x80090022L)
+#define NTE_TOKEN_KEYSET_STORAGE_FULL                      _HRESULT_TYPEDEF_(0x80090023L)
+#define NTE_TEMPORARY_PROFILE                              _HRESULT_TYPEDEF_(0x80090024L)
+#define NTE_FIXEDPARAMETER                                 _HRESULT_TYPEDEF_(0x80090025L)
 #define NTE_OP_OK                                          _HRESULT_TYPEDEF_(0)
 
 #define SEC_E_INSUFFICIENT_MEMORY                          _HRESULT_TYPEDEF_(0x80090300L)

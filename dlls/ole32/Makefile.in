@@ -4,7 +4,7 @@ SRCDIR    = @srcdir@
 VPATH     = @srcdir@
 MODULE    = ole32.dll
 IMPORTLIB = ole32
-IMPORTS   = uuid advapi32 user32 gdi32 rpcrt4 kernel32 ntdll
+IMPORTS   = uuid advapi32 user32 gdi32 rpcrt4
 EXTRADEFS = -D_OLE32_ -DCOM_NO_WINDOWS_H \
     -DENTRY_PREFIX=OLE32_ -DPROXY_CLSID=CLSID_PSFactoryBuffer -DREGISTER_PROXY_DLL
 
@@ -21,6 +21,7 @@ C_SRCS = \
 	dictionary.c \
 	enumx.c \
 	errorinfo.c \
+	filelockbytes.c \
 	filemoniker.c \
 	ftmarshal.c \
 	git.c \
@@ -39,7 +40,6 @@ C_SRCS = \
 	pointermoniker.c \
 	regsvr.c \
 	rpc.c \
-	stg_bigblockfile.c \
 	stg_prop.c \
 	stg_stream.c \
 	storage32.c \

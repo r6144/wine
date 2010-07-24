@@ -6,6 +6,7 @@
  * Copyright 2003 Dimitrie O. Paun
  * Copyright 2003-2004 Mike Hearn
  * Copyright 2007 Mikolaj Zalewski
+ * Copyright 2010 £ukasz Wojni³owicz
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -28,7 +29,7 @@
 
 LANGUAGE LANG_POLISH, SUBLANG_DEFAULT
 
-IDR_WINECFG MENU DISCARDABLE
+IDR_WINECFG MENU
 BEGIN
     POPUP ""
     BEGIN
@@ -36,38 +37,39 @@ BEGIN
     END
 END
 
-IDD_ABOUTCFG DIALOGEX 0, 0, 260, 270
+IDD_ABOUTCFG DIALOGEX 0, 0, 260, 220
 STYLE WS_CHILD
 FONT 8, "MS Shell Dlg"
 BEGIN
-    LTEXT           PACKAGE_STRING,IDC_STATIC,119,17,120,8
-    CONTROL         IDB_WINE,IDC_STATIC,"Static",SS_BITMAP ,15,17,157,111
-    LTEXT           "http://www.winehq.org/",IDC_STATIC,119,31,106,8
+    CONTROL         "", IDC_ABT_PANEL, "STATIC", SS_OWNERDRAW, 0, 0, 260, 140
+    LTEXT           PACKAGE_NAME,IDC_ABT_TITLE_TEXT,105,30,55,30
+    LTEXT           PACKAGE_VERSION,IDC_ABT_PANEL_TEXT,160,43,140,8
+    CONTROL         "",IDC_ABT_WEB_LINK,"SysLink", LWS_TRANSPARENT, 105,53,106,8
     LTEXT           "Ta biblioteka jest wolnym oprogramowaniem; mo¿esz j¹ rozpowszechniaæ i/lub modyfikowaæ pod warunkami licencji GNU Lesser General Public License opublikowanej przez Free Software Foundation; licencji w wersji 2.1, lub (wed³ug w³asnego uznania) dowolnej póŸniejszej.",
-                    IDC_STATIC,119,44,124,72
-    GROUPBOX        " Windows Registration Information ", IDC_STATIC, 15, 110, 230, 55
-    LTEXT           "Owner:", IDC_STATIC, 22, 126, 40, 20
-    EDITTEXT        IDC_ABT_OWNER, 75, 126, 160, 13, ES_AUTOHSCROLL | WS_TABSTOP
-    LTEXT           "Organization:", IDC_STATIC, 22, 140, 50, 20
-    EDITTEXT        IDC_ABT_ORG, 75, 140, 160, 13, ES_AUTOHSCROLL | WS_TABSTOP
+                    IDC_ABT_LICENSE_TEXT,105,64,145,60
+    GROUPBOX        " Windows Registration Information ", IDC_STATIC, 15, 155, 230, 55
+    LTEXT           "W³aœciciel:", IDC_STATIC, 22, 171, 40, 20
+    EDITTEXT        IDC_ABT_OWNER, 75, 171, 160, 13, ES_AUTOHSCROLL | WS_TABSTOP
+    LTEXT           "Organizacja:", IDC_STATIC, 22, 185, 50, 20
+    EDITTEXT        IDC_ABT_ORG, 75, 185, 160, 13, ES_AUTOHSCROLL | WS_TABSTOP
 END
 
-IDD_APPCFG DIALOG DISCARDABLE  0, 0, 260, 250
+IDD_APPCFG DIALOG  0, 0, 260, 220
 STYLE WS_CHILD | WS_DISABLED
 FONT 8, "MS Shell Dlg"
 BEGIN
-    GROUPBOX        " Ustawienia aplikacji",IDC_STATIC, 8,4,244,240
+    GROUPBOX        " Ustawienia aplikacji",IDC_STATIC, 8,4,244,210
     LTEXT           "Wine mo¿e udawaæ ró¿ne wersje Windows dla ró¿nych aplikacji.  Wybór w tej zak³adce jest powi¹zany z zak³adkami Biblioteki i Grafika - ustawienia tam równie¿ dotycz¹ wszystkich aplikacji lub tylko wybranej.",
                     IDC_STATIC,15,20,227,36
     CONTROL         "Aplikacje",IDC_APP_LISTVIEW,"SysListView32",WS_BORDER | WS_TABSTOP | LVS_LIST | LVS_SINGLESEL | LVS_SHOWSELALWAYS,
-                    15,56,230,144
-    PUSHBUTTON	    "&Dodaj aplikacjê...",IDC_APP_ADDAPP, 90,204,75,14
-    PUSHBUTTON	    "&Usuñ aplikacjê",IDC_APP_REMOVEAPP, 170,204,75,14
-    LTEXT           "&Wersja Windows:",IDC_STATIC,17,226,58,8
-    COMBOBOX        IDC_WINVER,83,224,163,56,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+                    15,56,230,114
+    PUSHBUTTON	    "&Dodaj aplikacjê...",IDC_APP_ADDAPP, 90,174,75,14
+    PUSHBUTTON	    "&Usuñ aplikacjê",IDC_APP_REMOVEAPP, 170,174,75,14
+    LTEXT           "&Wersja Windows:",IDC_STATIC,17,196,58,8
+    COMBOBOX        IDC_WINVER,83,194,163,56,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
 END
 
-IDD_GRAPHCFG DIALOG DISCARDABLE  0, 0, 260, 250
+IDD_GRAPHCFG DIALOG  0, 0, 260, 220
 STYLE WS_CHILD | WS_DISABLED
 FONT 8, "MS Shell Dlg"
 BEGIN
@@ -87,30 +89,30 @@ BEGIN
     COMBOBOX    IDC_D3D_VSHADER_MODE,100,114,145,70,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
     CONTROL     "Obs³uguj Pixel Shader (je¿eli s¹ obs³ugiwane przez kartê graficzn¹)",IDC_D3D_PSHADER_MODE,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,15,132,230,10
 
-    GROUPBOX    " Rozdzielczoœæ ",IDC_STATIC,8,155,244,93
+    GROUPBOX    " Rozdzielczoœæ ",IDC_STATIC,8,155,244,63
     CONTROL     "", IDC_RES_TRACKBAR, "msctls_trackbar32",WS_TABSTOP,12,165,187,15
     EDITTEXT    IDC_RES_DPIEDIT,204,165,23,13,ES_NUMBER|WS_TABSTOP
     LTEXT       "dpi",IDC_STATIC,235,167,10,8
-    LTEXT       "Oto przyk³ad zastosowania 10-punktowej czcionki Tahoma",IDC_RES_FONT_PREVIEW,15,185,230,55
+    LTEXT       "Oto przyk³ad zastosowania 10-punktowej czcionki Tahoma",IDC_RES_FONT_PREVIEW,15,185,230,28
 END
 
-IDD_DLLCFG DIALOG DISCARDABLE  0, 0, 260, 250
+IDD_DLLCFG DIALOG  0, 0, 260, 220
 STYLE WS_CHILD | WS_DISABLED
 FONT 8, "MS Shell Dlg"
 BEGIN
-    GROUPBOX        " Regu³y bibliotek DLL ",IDC_STATIC,8,4,244,240
-    LTEXT           "Dla ka¿dej biblioteki DLL mo¿na wybraæ czy nale¿y u¿yæ wersji wbudowanej (dostarczonej z Wine) czy zewnêtrzenej (wziêtej z Windows lub dostarczonej wraz z aplikacj¹)."
+    GROUPBOX        " Regu³y bibliotek DLL ",IDC_STATIC,8,4,244,210
+    LTEXT           "Dla ka¿dej biblioteki DLL mo¿na zdecydowaæ czy nale¿y u¿yæ wersji wbudowanej (dostarczonej z Wine) czy zewnêtrznej (wziêtej z Windows lub dostarczonej wraz z aplikacj¹)."
                     ,IDC_STATIC,16,16,220,32
     LTEXT           "Nowa regu³a dla biblioteki:",IDC_STATIC,16,58,100,8
     COMBOBOX        IDC_DLLCOMBO,16,68,140,14,CBS_DROPDOWN | WS_VSCROLL | WS_TABSTOP | CBS_SORT | CBS_LOWERCASE
-    PUSHBUTTON      "&Dodaj",IDC_DLLS_ADDDLL, 164,68,82,13,BS_DEFPUSHBUTTON
-    LTEXT           "Instniej¹ce regu³y:",IDC_STATIC,16,86,100,8
-    LISTBOX         IDC_DLLS_LIST,16,96,140,140,WS_BORDER | WS_TABSTOP | WS_VSCROLL
+    PUSHBUTTON      "&Dodaj",IDC_DLLS_ADDDLL, 164,68,82,13
+    LTEXT           "Istniej¹ce regu³y:",IDC_STATIC,16,86,100,8
+    LISTBOX         IDC_DLLS_LIST,16,96,140,112,WS_BORDER | WS_TABSTOP | WS_VSCROLL
     PUSHBUTTON      "&Edycja",IDC_DLLS_EDITDLL,164,96,82,14
     PUSHBUTTON      "&Usuñ",IDC_DLLS_REMOVEDLL,164,114,82,14
 END
 
-IDD_LOADORDER DIALOG DISCARDABLE 80, 90, 150, 92
+IDD_LOADORDER DIALOG 80, 90, 150, 92
 STYLE DS_MODALFRAME | WS_CAPTION | WS_SYSMENU
 CAPTION "Edycja regu³y"
 FONT 8, "MS Shell Dlg"
@@ -125,12 +127,22 @@ BEGIN
     PUSHBUTTON      "&Anuluj",IDCANCEL,87,74,45,14,WS_GROUP
 END
 
-IDD_DRIVECFG DIALOG DISCARDABLE  0, 0, 260, 250
+IDD_DRIVECHOOSE DIALOG  60, 70, 170, 60
+STYLE DS_MODALFRAME | WS_CAPTION | WS_SYSMENU
+CAPTION "Wybierz literê napêdu"
+FONT 8, "MS Shell Dlg"
+BEGIN
+    COMBOBOX IDC_DRIVESA2Z,15,10,75,230,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    DEFPUSHBUTTON   "OK",IDOK,105,10,45,14,WS_GROUP
+    PUSHBUTTON      "Anuluj",IDCANCEL,105,30,45,14,WS_GROUP
+END
+
+IDD_DRIVECFG DIALOG  0, 0, 260, 220
 STYLE WS_CHILD | WS_DISABLED
 FONT 8, "MS Shell Dlg"
 BEGIN
-    GROUPBOX        " Przyporz¹dkowanie dysków ",IDC_STATIC,8,4,244,240
-    LTEXT           "Failed to connect to the mount manager, the drive configuration cannot be edited.", IDC_STATIC_MOUNTMGR_ERROR, 15,30,220,76
+    GROUPBOX        " Przyporz¹dkowanie dysków ",IDC_STATIC,8,4,244,195
+    LTEXT           "Nieudane po³¹czenie z mened¿erem montowania, konfiguracja napêdu nie mo¿e byæ zmodyfikowana.", IDC_STATIC_MOUNTMGR_ERROR, 15,30,190,76
     CONTROL         "Listview",IDC_LIST_DRIVES,"SysListView32",LVS_REPORT | LVS_AUTOARRANGE | LVS_ALIGNLEFT |
                     LVS_SINGLESEL | WS_BORDER | WS_TABSTOP, 15,18,232,76
     PUSHBUTTON      "&Dodaj...",IDC_BUTTON_ADD,15,98,37,14
@@ -138,50 +150,45 @@ BEGIN
     PUSHBUTTON      "Automatyczne wykrywanie",IDC_BUTTON_AUTODETECT,127,98,119,14
 
     /* editing drive details */
-    LTEXT           "&Œcie¿ka:",IDC_STATIC_PATH,15,123,25,9
+    LTEXT           "&Œcie¿ka:",IDC_STATIC_PATH,15,123,30,9
     EDITTEXT        IDC_EDIT_PATH,46,120,145,13,ES_AUTOHSCROLL | WS_TABSTOP
     PUSHBUTTON      "&Przegl¹daj...",IDC_BUTTON_BROWSE_PATH,196,120,50,13
 
     LTEXT           "&Typ:",IDC_STATIC_TYPE,15,138,21,10
-    COMBOBOX        IDC_COMBO_TYPE,41,135,77,60,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    COMBOBOX        IDC_COMBO_TYPE,46,135,77,60,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
 
-    LTEXT           "Etykieta i numer seryjny",IDC_LABELSERIAL_STATIC,15,155,95,10
+    PUSHBUTTON      "&Opcje zaawansowane >>",IDC_BUTTON_SHOW_HIDE_ADVANCED,156,135,90,13
+    LTEXT           "De&vice:",IDC_STATIC_DEVICE,15,153,26,9
+    EDITTEXT        IDC_EDIT_DEVICE,46,150,145,13,ES_AUTOHSCROLL | WS_TABSTOP
+    PUSHBUTTON      "Prze&gl¹daj...",IDC_BUTTON_BROWSE_DEVICE,201,150,45,13
 
-    PUSHBUTTON      "&Opcje zaawansowane >>",IDC_BUTTON_SHOW_HIDE_ADVANCED,156,136,90,13
-    CONTROL         "Odczytaj &z urz¹dzenia:",IDC_RADIO_AUTODETECT,"Button",
-                    BS_AUTORADIOBUTTON,15,166,93,10
-    EDITTEXT        IDC_EDIT_DEVICE,27,176,169,13,ES_AUTOHSCROLL
-    PUSHBUTTON      "Prze&gl¹daj...",IDC_BUTTON_BROWSE_DEVICE,201,176,45,13
-    CONTROL         "Prz&yporz¹dkuj rêcznie:",IDC_RADIO_ASSIGN,"Button",
-                    BS_AUTORADIOBUTTON,15,195,89,10
+    LTEXT           "&Etykieta:",IDC_STATIC_LABEL,15,168,59,12
+    EDITTEXT        IDC_EDIT_LABEL,75,165,78,13,ES_AUTOHSCROLL | WS_TABSTOP
+    LTEXT           "&Numer seryjny:",IDC_STATIC_SERIAL,15,183,59,12
+    EDITTEXT        IDC_EDIT_SERIAL,75,180,78,13,ES_AUTOHSCROLL | WS_TABSTOP
 
-    LTEXT           "&Etykieta:",IDC_STATIC_LABEL,33,208,59,12
-    EDITTEXT        IDC_EDIT_LABEL,93,205,78,13,ES_AUTOHSCROLL | WS_TABSTOP
-    LTEXT           "&Numer seryjny:",IDC_STATIC_SERIAL,33,225,59,12
-    EDITTEXT        IDC_EDIT_SERIAL,93,221,78,13,ES_AUTOHSCROLL | WS_TABSTOP
-
-    CONTROL         "Pokazuj pliki zaczynaj¹ce siê od kropki",IDC_SHOW_DOT_FILES,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,8,260,230,8
+    CONTROL         "Pokazuj pliki zaczynaj¹ce siê od kropki",IDC_SHOW_DOT_FILES,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,8,205,230,8
 END
 
-IDD_AUDIOCFG DIALOG DISCARDABLE  0, 0, 260, 250
+IDD_AUDIOCFG DIALOG  0, 0, 260, 220
 STYLE WS_CHILD | WS_DISABLED
 FONT 8, "MS Shell Dlg"
 BEGIN
-    GROUPBOX        " Wybór sterownika ",IDC_STATIC,8,4,244,210
+    GROUPBOX        " Wybór sterownika ",IDC_STATIC,8,4,244,160
     LTEXT           "Wybierz sterownik przez wstawienie krzy¿yka. Je¿eli chcesz wy³¹czyæ dŸwiêk, zostaw wszystkie pola puste. Wybór wielu sterowników na raz nie jest zalecany. Aby skonfigurowaæ sterownik kliknij prawym przyciskiem myszy na nim.",IDC_STATIC,15,20,227,40
-    CONTROL         "Urz¹dzenia",IDC_AUDIO_TREE,"SysTreeView32",WS_BORDER | WS_TABSTOP,15,58,140,147
+    CONTROL         "Urz¹dzenia",IDC_AUDIO_TREE,"SysTreeView32",WS_BORDER | WS_TABSTOP,15,58,140,97
     PUSHBUTTON      "Test dŸwiêku",IDC_AUDIO_TEST,165,58,69,14
     PUSHBUTTON	    "Panel sterowania",IDC_AUDIO_CONTROL_PANEL,165,78,69,14
-    GROUPBOX        " DirectSound ",IDC_STATIC,8,220,244,45
-    LTEXT	    "Przyœpiesznie sprzêtowe: ",IDC_STATIC,15,230,90,10
-    COMBOBOX	    IDC_DSOUND_HW_ACCEL,100,228,150,70,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
-    LTEXT           "Domyœlna czêstoœæ próbkowania:",IDC_STATIC,15,245,105,8
-    COMBOBOX        IDC_DSOUND_RATES,121,243,38,76,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
-    LTEXT           "Bitów na próbkê:",IDC_STATIC,165,245,55,8
-    COMBOBOX        IDC_DSOUND_BITS,223,243,27,56,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    GROUPBOX        " DirectSound ",IDC_STATIC,8,170,244,45
+    LTEXT	    "Przyœpieszenie sprzêtowe: ",IDC_STATIC,15,180,90,10
+    COMBOBOX	    IDC_DSOUND_HW_ACCEL,100,178,150,70,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "Domyœlna czêstoœæ próbkowania:",IDC_STATIC,15,195,105,8
+    COMBOBOX        IDC_DSOUND_RATES,121,193,38,76,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "Bitów na próbkê:",IDC_STATIC,165,195,55,8
+    COMBOBOX        IDC_DSOUND_BITS,223,193,27,56,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
 END
 
-IDD_DESKTOP_INTEGRATION DIALOG DISCARDABLE  0, 0, 260, 250
+IDD_DESKTOP_INTEGRATION DIALOG  0, 0, 260, 220
 STYLE WS_CHILD | WS_DISABLED
 FONT 8, "MS Shell Dlg"
 BEGIN
@@ -209,7 +216,7 @@ BEGIN
     PUSHBUTTON      "Przegl¹daj",IDC_BROWSE_SFPATH,195,195,50,13,WS_DISABLED
 END
 
-STRINGTABLE DISCARDABLE
+STRINGTABLE
 BEGIN
     IDS_TAB_APPLICATIONS    "Aplikacje"
     IDS_TAB_DLLS            "Biblioteki"
@@ -231,43 +238,43 @@ BEGIN
     IDS_LINKS_TO            "Dowi¹zany do"
 END
 
-STRINGTABLE DISCARDABLE
+STRINGTABLE
 BEGIN
     IDS_DLL_WARNING         "Zmiana regu³y dla tej biblioteki nie jest zalecana.\nCzy na pewno chcesz to zrobiæ?"
     IDS_DLL_WARNING_CAPTION "Uwaga: biblioteka systemowa"
     IDS_DLL_NATIVE          "zewnêtrzna"
     IDS_DLL_BUILTIN         "wbudowana"
-    IDS_DLL_NATIVE_BUILTIN  "zewnêtrzena, wbudowana"
-    IDS_DLL_BUILTIN_NATIVE  "wbudowana, zewnêtrzena"
+    IDS_DLL_NATIVE_BUILTIN  "zewnêtrzna, wbudowana"
+    IDS_DLL_BUILTIN_NATIVE  "wbudowana, zewnêtrzna"
     IDS_DLL_DISABLED        "wy³¹czona"
-    IDS_DEFAULT_SETTINGS    "Ustawnienia standardowe"
+    IDS_DEFAULT_SETTINGS    "Ustawienia standardowe"
     IDS_EXECUTABLE_FILTER   "Programy Wine (*.exe,*.exe.so)\0*.exe;*.exe.so\0"
     IDS_USE_GLOBAL_SETTINGS "U¿yj ustawieñ globalnych"
     IDS_SELECT_EXECUTABLE   "Wybierz plik wykonywalny"
 END
 
-STRINGTABLE DISCARDABLE
+STRINGTABLE
 BEGIN
     IDS_SHADER_MODE_HARDWARE    "Sprzêtowa"
     IDS_SHADER_MODE_NONE        "Brak"
 END
 
-STRINGTABLE DISCARDABLE
+STRINGTABLE
 BEGIN
     IDS_DRIVE_UNKNOWN           "Automatyczne wykrywanie"
     IDS_DRIVE_FIXED             "Lokalny dysk twardy"
     IDS_DRIVE_REMOTE            "Zasób sieciowy"
     IDS_DRIVE_REMOVABLE         "Stacja dyskietek"
     IDS_DRIVE_CDROM             "CD-ROM"
-    IDS_DRIVE_LETTERS_EXCEEDED  "Nie mo¿esz dodaæ nastêpnego dysku.\n\nKa¿dy dysk musi mieæ literê od A do Z, wiêc nie mo¿e byæ ich wiêcej ni¿ 26"
+    IDS_DRIVE_LETTERS_EXCEEDED  "Nie mo¿esz dodaæ kolejnego dysku.\n\nKa¿dy dysk musi mieæ literê od A do Z, co ogranicza ich liczbê do 26"
     IDS_SYSTEM_DRIVE_LABEL      "Dysk systemowy"
-    IDS_CONFIRM_DELETE_C        "Czy na pewno chcesz usun¹æ dysk C?\n\nWiêkszoœæ programów dla Windows zak³ada, ¿e taki dysk istnieje i mog¹ nie dzia³aæ bez niego. Je¿eli go skasujesz, nie zapomnij go znowu utworzyæ!"
+    IDS_CONFIRM_DELETE_C        "Czy na pewno chcesz usun¹æ dysk C?\n\nWiêkszoœæ programów dla Windows zak³ada istnienie takiego dysku i mog¹ przestaæ dzia³aæ gdy go zabraknie. Je¿eli go skasujesz, nie zapomnij o ponownym jego utworzeniu!"
     IDS_COL_DRIVELETTER         "Litera"
     IDS_COL_DRIVEMAPPING        "Przyporz¹dkowany do"
     IDS_NO_DRIVE_C              "Nie masz dysku C. To mo¿e powodowaæ problemy.\n\nNie zapomnij u¿yæ 'Dodaj' w zak³adce 'Dyski', aby go utworzyæ!\n"
 END
 
-STRINGTABLE DISCARDABLE
+STRINGTABLE
 BEGIN
     IDS_ACCEL_FULL              "Pe³ne"
     IDS_ACCEL_STANDARD          "Standardowe"
@@ -292,14 +299,14 @@ BEGIN
     IDS_WARNING                 "Ostrze¿enie"
 END
 
-STRINGTABLE DISCARDABLE
+STRINGTABLE
 BEGIN
     IDC_SYSPARAMS_BUTTON            "Kontrolki - t³o"
     IDC_SYSPARAMS_BUTTON_TEXT       "Kontrolki - tekst"
     IDC_SYSPARAMS_DESKTOP           "Pulpit"
     IDC_SYSPARAMS_MENU              "T³o menu"
     IDC_SYSPARAMS_MENU_TEXT         "Tekst menu"
-    IDC_SYSPARAMS_SCROLLBAR         "Paskek przewijania"
+    IDC_SYSPARAMS_SCROLLBAR         "Pasek przewijania"
     IDC_SYSPARAMS_SELECTION         "T³o zaznaczonego obszaru"
     IDC_SYSPARAMS_SELECTION_TEXT    "Zaznaczony tekst"
     IDC_SYSPARAMS_TOOLTIP           "T³o podpowiedzi"

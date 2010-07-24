@@ -171,6 +171,8 @@ static MSIFEATURE *msi_seltree_get_selected_feature( msi_control *control );
 static DWORD uiThreadId;
 static HWND hMsiHiddenWindow;
 
+static LPWSTR msi_get_window_text( HWND hwnd );
+
 static INT msi_dialog_scale_unit( msi_dialog *dialog, INT val )
 {
     return MulDiv( val, dialog->scale, 12 );
@@ -234,7 +236,7 @@ static LPWSTR msi_dialog_dup_property( msi_dialog *dialog, LPCWSTR property, BOO
         return NULL;
 
     if (indirect)
-        prop = msi_dup_property( dialog->package, property );
+        prop = msi_dup_property( dialog->package->db, property );
 
     if (!prop)
         prop = strdupW( property );
@@ -581,6 +583,13 @@ static void msi_dialog_update_controls( msi_dialog *dialog, LPCWSTR property )
     }
 }
 
+static void msi_dialog_set_property( MSIPACKAGE *package, LPCWSTR property, LPCWSTR value )
+{
+    UINT r = msi_set_property( package->db, property, value );
+    if (r == ERROR_SUCCESS && !strcmpW( property, cszSourceDir ))
+        msi_reset_folders( package, TRUE );
+}
+
 /* called from the Control Event subscription code */
 void msi_dialog_handle_event( msi_dialog* dialog, LPCWSTR control, 
                               LPCWSTR attribute, MSIRECORD *rec )
@@ -634,14 +643,14 @@ void msi_dialog_handle_event( msi_dialog* dialog, LPCWSTR control,
     else if ( !lstrcmpW(attribute, szProperty) )
     {
         MSIFEATURE *feature = msi_seltree_get_selected_feature( ctrl );
-        MSI_SetPropertyW( dialog->package, ctrl->property, feature->Directory );
+        msi_dialog_set_property( dialog->package, ctrl->property, feature->Directory );
     }
     else if ( !lstrcmpW(attribute, szSelectionPath) )
     {
         LPWSTR prop = msi_dialog_dup_property( dialog, ctrl->property, TRUE );
         LPWSTR path;
         if (!prop) return;
-        path = msi_dup_property( dialog->package, prop );
+        path = msi_dup_property( dialog->package->db, prop );
         SetWindowTextW( ctrl->hwnd, path );
         msi_free(prop);
         msi_free(path);
@@ -765,7 +774,7 @@ static UINT msi_dialog_text_control( msi_dialog *dialog, MSIRECORD *rec )
 {
     msi_control *control;
     struct msi_text_info *info;
-    LPCWSTR text, ptr, prop;
+    LPCWSTR text, ptr, prop, control_name;
     LPWSTR font_name;
 
     TRACE("%p %p\n", dialog, rec);
@@ -778,6 +787,7 @@ static UINT msi_dialog_text_control( msi_dialog *dialog, MSIRECORD *rec )
     if( !info )
         return ERROR_SUCCESS;
 
+    control_name = MSI_RecordGetString( rec, 2 );
     control->attributes = MSI_RecordGetInteger( rec, 8 );
     prop = MSI_RecordGetString( rec, 9 );
     control->property = msi_dialog_dup_property( dialog, prop, FALSE );
@@ -796,7 +806,7 @@ static UINT msi_dialog_text_control( msi_dialog *dialog, MSIRECORD *rec )
     SetPropW( control->hwnd, szButtonData, info );
 
     ControlEvent_SubscribeToEvent( dialog->package, dialog,
-                                   szSelectionPath, control->name, szSelectionPath );
+                                   szSelectionPath, control_name, szSelectionPath );
 
     return ERROR_SUCCESS;
 }
@@ -884,7 +894,7 @@ static LPWSTR msi_get_checkbox_value( msi_dialog *dialog, LPCWSTR prop )
     if (ret)
         return ret;
 
-    ret = msi_dup_property( dialog->package, prop );
+    ret = msi_dup_property( dialog->package->db, prop );
     if( ret && !ret[0] )
     {
         msi_free( ret );
@@ -1000,6 +1010,8 @@ MSIScrollText_WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
     switch( msg )
     {
+    case WM_GETDLGCODE:
+        return DLGC_WANTARROWS;
     case WM_NCDESTROY:
         msi_free( info );
         RemovePropW( hWnd, szButtonData );
@@ -1222,10 +1234,167 @@ static UINT msi_dialog_icon_control( msi_dialog *dialog, MSIRECORD *rec )
     return ERROR_SUCCESS;
 }
 
+/******************** Combo Box ***************************************/
+
+struct msi_combobox_info
+{
+    msi_dialog *dialog;
+    HWND hwnd;
+    WNDPROC oldproc;
+    DWORD num_items;
+    DWORD addpos_items;
+    LPWSTR *items;
+};
+
+static LRESULT WINAPI MSIComboBox_WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+    struct msi_combobox_info *info;
+    LRESULT r;
+    DWORD j;
+
+    TRACE("%p %04x %08lx %08lx\n", hWnd, msg, wParam, lParam);
+
+    info = GetPropW( hWnd, szButtonData );
+    if (!info)
+        return 0;
+
+    r = CallWindowProcW( info->oldproc, hWnd, msg, wParam, lParam );
+
+    switch (msg)
+    {
+    case WM_NCDESTROY:
+        for (j = 0; j < info->num_items; j++)
+            msi_free( info->items[j] );
+        msi_free( info->items );
+        msi_free( info );
+        RemovePropW( hWnd, szButtonData );
+        break;
+    }
+
+    return r;
+}
+
+static UINT msi_combobox_add_item( MSIRECORD *rec, LPVOID param )
+{
+    struct msi_combobox_info *info = param;
+    LPCWSTR value, text;
+    int pos;
+
+    value = MSI_RecordGetString( rec, 3 );
+    text = MSI_RecordGetString( rec, 4 );
+
+    info->items[info->addpos_items] = strdupW( value );
+
+    pos = SendMessageW( info->hwnd, CB_ADDSTRING, 0, (LPARAM)text );
+    SendMessageW( info->hwnd, CB_SETITEMDATA, pos, (LPARAM)info->items[info->addpos_items] );
+    info->addpos_items++;
+
+    return ERROR_SUCCESS;
+}
+
+static UINT msi_combobox_add_items( struct msi_combobox_info *info, LPCWSTR property )
+{
+    UINT r;
+    MSIQUERY *view = NULL;
+    DWORD count;
+
+    static const WCHAR query[] = {
+        'S','E','L','E','C','T',' ','*',' ',
+        'F','R','O','M',' ','`','C','o','m','b','o','B','o','x','`',' ',
+        'W','H','E','R','E',' ',
+        '`','P','r','o','p','e','r','t','y','`',' ','=',' ','\'','%','s','\'',' ',
+        'O','R','D','E','R',' ','B','Y',' ','`','O','r','d','e','r','`',0
+    };
+
+    r = MSI_OpenQuery( info->dialog->package->db, &view, query, property );
+    if (r != ERROR_SUCCESS)
+        return r;
+
+    /* just get the number of records */
+    count = 0;
+    r = MSI_IterateRecords( view, &count, NULL, NULL );
+
+    info->num_items = count;
+    info->items = msi_alloc( sizeof(*info->items) * count );
+
+    r = MSI_IterateRecords( view, NULL, msi_combobox_add_item, info );
+    msiobj_release( &view->hdr );
+
+    return r;
+}
+
+static UINT msi_dialog_combobox_handler( msi_dialog *dialog,
+                                         msi_control *control, WPARAM param )
+{
+    struct msi_combobox_info *info;
+    int index;
+    LPWSTR value;
+
+    if (HIWORD(param) != CBN_SELCHANGE && HIWORD(param) != CBN_EDITCHANGE)
+        return ERROR_SUCCESS;
+
+    info = GetPropW( control->hwnd, szButtonData );
+    index = SendMessageW( control->hwnd, CB_GETCURSEL, 0, 0 );
+    if (index == CB_ERR)
+        value = msi_get_window_text( control->hwnd );
+    else
+        value = (LPWSTR) SendMessageW( control->hwnd, CB_GETITEMDATA, index, 0 );
+
+    msi_dialog_set_property( info->dialog->package, control->property, value );
+    msi_dialog_evaluate_control_conditions( info->dialog );
+
+    if (index == CB_ERR)
+        msi_free( value );
+
+    return ERROR_SUCCESS;
+}
+
+static void msi_dialog_combobox_update( msi_dialog *dialog,
+                msi_control *control )
+{
+    struct msi_combobox_info *info;
+    LPWSTR value, tmp;
+    DWORD j;
+
+    info = GetPropW( control->hwnd, szButtonData );
+
+    value = msi_dup_property( dialog->package->db, control->property );
+    if (!value)
+    {
+        SendMessageW( control->hwnd, CB_SETCURSEL, -1, 0 );
+        return;
+    }
+
+    for (j = 0; j < info->num_items; j++)
+    {
+        tmp = (LPWSTR) SendMessageW( control->hwnd, CB_GETITEMDATA, j, 0 );
+        if (!lstrcmpW( value, tmp ))
+            break;
+    }
+
+    if (j < info->num_items)
+    {
+        SendMessageW( control->hwnd, CB_SETCURSEL, j, 0 );
+    }
+    else
+    {
+        SendMessageW( control->hwnd, CB_SETCURSEL, -1, 0 );
+        SetWindowTextW( control->hwnd, value );
+    }
+
+    msi_free(value);
+}
+
 static UINT msi_dialog_combo_control( msi_dialog *dialog, MSIRECORD *rec )
 {
-    static const WCHAR szCombo[] = { 'C','O','M','B','O','B','O','X',0 };
+    struct msi_combobox_info *info;
+    msi_control *control;
     DWORD attributes, style;
+    LPCWSTR prop;
+
+    info = msi_alloc( sizeof *info );
+    if (!info)
+        return ERROR_FUNCTION_FAILED;
 
     style = CBS_AUTOHSCROLL | WS_TABSTOP | WS_GROUP | WS_CHILD;
     attributes = MSI_RecordGetInteger( rec, 8 );
@@ -1236,7 +1405,33 @@ static UINT msi_dialog_combo_control( msi_dialog *dialog, MSIRECORD *rec )
     else
         style |= CBS_DROPDOWN;
 
-    msi_dialog_add_control( dialog, rec, szCombo, style );
+    control = msi_dialog_add_control( dialog, rec, WC_COMBOBOXW, style );
+    if (!control)
+    {
+        msi_free( info );
+        return ERROR_FUNCTION_FAILED;
+    }
+
+    control->handler = msi_dialog_combobox_handler;
+    control->update = msi_dialog_combobox_update;
+
+    prop = MSI_RecordGetString( rec, 9 );
+    control->property = msi_dialog_dup_property( dialog, prop, FALSE );
+
+    /* subclass */
+    info->dialog = dialog;
+    info->hwnd = control->hwnd;
+    info->items = NULL;
+    info->addpos_items = 0;
+    info->oldproc = (WNDPROC)SetWindowLongPtrW( control->hwnd, GWLP_WNDPROC,
+                                                (LONG_PTR)MSIComboBox_WndProc );
+    SetPropW( control->hwnd, szButtonData, info );
+
+    if (control->property)
+        msi_combobox_add_items( info, control->property );
+
+    msi_dialog_combobox_update( dialog, control );
+
     return ERROR_SUCCESS;
 }
 
@@ -1276,7 +1471,7 @@ static UINT msi_dialog_edit_control( msi_dialog *dialog, MSIRECORD *rec )
     if( prop )
         control->property = strdupW( prop );
 
-    val = msi_dup_property( dialog->package, control->property );
+    val = msi_dup_property( dialog->package->db, control->property );
     SetWindowTextW( control->hwnd, val );
     msi_free( val );
     return ERROR_SUCCESS;
@@ -1352,10 +1547,9 @@ static void msi_mask_control_change( struct msi_maskedit_info *info )
 
     if( i == info->num_groups )
     {
-        TRACE("Set property %s to %s\n",
-              debugstr_w(info->prop), debugstr_w(val) );
+        TRACE("Set property %s to %s\n", debugstr_w(info->prop), debugstr_w(val));
         CharUpperBuffW( val, info->num_chars );
-        MSI_SetPropertyW( info->dialog->package, info->prop, val );
+        msi_dialog_set_property( info->dialog->package, info->prop, val );
         msi_dialog_evaluate_control_conditions( info->dialog );
     }
     msi_free( val );
@@ -1587,7 +1781,7 @@ static UINT msi_dialog_maskedit_control( msi_dialog *dialog, MSIRECORD *rec )
 
     if( prop )
     {
-        val = msi_dup_property( dialog->package, prop );
+        val = msi_dup_property( dialog->package->db, prop );
         if( val )
         {
             msi_maskedit_set_text( info, val );
@@ -1705,7 +1899,7 @@ static BOOL msi_dialog_onkillfocus( msi_dialog *dialog, msi_control *control )
     else
     {
         valid = TRUE;
-        MSI_SetPropertyW( dialog->package, prop, buf );
+        msi_dialog_set_property( dialog->package, prop, buf );
     }
 
     msi_dialog_update_pathedit( dialog, control );
@@ -1855,7 +2049,7 @@ static UINT msi_dialog_radiogroup_control( msi_dialog *dialog, MSIRECORD *rec )
     group.dialog = dialog;
     group.parent = control;
     group.attributes = MSI_RecordGetInteger( rec, 8 );
-    group.propval = msi_dup_property( dialog->package, control->property );
+    group.propval = msi_dup_property( dialog->package->db, control->property );
 
     r = MSI_IterateRecords( view, 0, msi_dialog_create_radiobutton, &group );
     msiobj_release( &view->hdr );
@@ -2199,7 +2393,7 @@ done:
 static UINT msi_dialog_selection_tree( msi_dialog *dialog, MSIRECORD *rec )
 {
     msi_control *control;
-    LPCWSTR prop;
+    LPCWSTR prop, control_name;
     MSIPACKAGE *package = dialog->package;
     DWORD style;
     struct msi_selection_tree_info *info;
@@ -2219,6 +2413,7 @@ static UINT msi_dialog_selection_tree( msi_dialog *dialog, MSIRECORD *rec )
     }
 
     control->handler = msi_dialog_seltree_handler;
+    control_name = MSI_RecordGetString( rec, 2 );
     control->attributes = MSI_RecordGetInteger( rec, 8 );
     prop = MSI_RecordGetString( rec, 9 );
     control->property = msi_dialog_dup_property( dialog, prop, FALSE );
@@ -2231,7 +2426,7 @@ static UINT msi_dialog_selection_tree( msi_dialog *dialog, MSIRECORD *rec )
     SetPropW( control->hwnd, szButtonData, info );
 
     ControlEvent_SubscribeToEvent( dialog->package, dialog,
-                                   szSelectionPath, control->name, szProperty );
+                                   szSelectionPath, control_name, szProperty );
 
     /* initialize it */
     msi_seltree_create_imagelist( control->hwnd );
@@ -2357,8 +2552,7 @@ static UINT msi_dialog_listbox_handler( msi_dialog *dialog,
     index = SendMessageW( control->hwnd, LB_GETCURSEL, 0, 0 );
     value = (LPCWSTR) SendMessageW( control->hwnd, LB_GETITEMDATA, index, 0 );
 
-    MSI_SetPropertyW( info->dialog->package,
-                      control->property, value );
+    msi_dialog_set_property( info->dialog->package, control->property, value );
     msi_dialog_evaluate_control_conditions( info->dialog );
 
     return ERROR_SUCCESS;
@@ -2521,7 +2715,7 @@ UINT msi_dialog_directorylist_up( msi_dialog *dialog )
     if (ptr != path) *(ptr - 1) = '\0';
     PathAddBackslashW( path );
 
-    MSI_SetPropertyW( dialog->package, prop, path );
+    msi_dialog_set_property( dialog->package, prop, path );
 
     msi_dialog_update_directory_list( dialog, NULL );
     msi_dialog_update_directory_combo( dialog, NULL );
@@ -2567,7 +2761,7 @@ static UINT msi_dialog_dirlist_handler( msi_dialog *dialog,
     lstrcatW( new_path, text );
     lstrcatW( new_path, szBackSlash );
 
-    MSI_SetPropertyW( dialog->package, prop, new_path );
+    msi_dialog_set_property( dialog->package, prop, new_path );
 
     msi_dialog_update_directory_list( dialog, NULL );
     msi_dialog_update_directory_combo( dialog, NULL );
@@ -2810,7 +3004,7 @@ static UINT msi_dialog_volsel_handler( msi_dialog *dialog,
     indirect = control->attributes & msidbControlAttributesIndirect;
     prop = msi_dialog_dup_property( dialog, control->property, indirect );
 
-    MSI_SetPropertyW( dialog->package, prop, text );
+    msi_dialog_set_property( dialog->package, prop, text );
 
     msi_free( prop );
     return ERROR_SUCCESS;
@@ -3078,8 +3272,8 @@ static void msi_dialog_adjust_dialog_pos( msi_dialog *dialog, MSIRECORD *rec, LP
     sz.cx = msi_dialog_scale_unit( dialog, sz.cx );
     sz.cy = msi_dialog_scale_unit( dialog, sz.cy );
 
-    xres = msi_get_property_int( dialog->package, szScreenX, 0 );
-    yres = msi_get_property_int( dialog->package, szScreenY, 0 );
+    xres = msi_get_property_int( dialog->package->db, szScreenX, 0 );
+    yres = msi_get_property_int( dialog->package->db, szScreenY, 0 );
 
     center.x = MulDiv( center.x, xres, 100 );
     center.y = MulDiv( center.y, yres, 100 );
@@ -3172,7 +3366,7 @@ static LRESULT msi_dialog_oncreate( HWND hwnd, LPCREATESTRUCTW cs )
 
     dialog->attributes = MSI_RecordGetInteger( rec, 6 );
 
-    dialog->default_font = msi_dup_property( dialog->package, df );
+    dialog->default_font = msi_dup_property( dialog->package->db, df );
     if (!dialog->default_font)
     {
         dialog->default_font = strdupW(dfv);
@@ -3213,7 +3407,7 @@ static UINT msi_dialog_send_event( msi_dialog *dialog, LPCWSTR event, LPCWSTR ar
     return ERROR_SUCCESS;
 }
 
-static UINT msi_dialog_set_property( msi_dialog *dialog, LPCWSTR event, LPCWSTR arg )
+static UINT msi_dialog_set_property_event( msi_dialog *dialog, LPCWSTR event, LPCWSTR arg )
 {
     static const WCHAR szNullArg[] = { '{','}',0 };
     LPWSTR p, prop, arg_fmt = NULL;
@@ -3228,7 +3422,7 @@ static UINT msi_dialog_set_property( msi_dialog *dialog, LPCWSTR event, LPCWSTR 
         *p = 0;
         if( strcmpW( szNullArg, arg ) )
             deformat_string( dialog->package, arg, &arg_fmt );
-        MSI_SetPropertyW( dialog->package, prop, arg_fmt );
+        msi_dialog_set_property( dialog->package, prop, arg_fmt );
         msi_dialog_update_controls( dialog, prop );
         msi_free( arg_fmt );
     }
@@ -3251,7 +3445,7 @@ static UINT msi_dialog_control_event( MSIRECORD *rec, LPVOID param )
         event = MSI_RecordGetString( rec, 3 );
         arg = MSI_RecordGetString( rec, 4 );
         if( event[0] == '[' )
-            msi_dialog_set_property( dialog, event, arg );
+            msi_dialog_set_property_event( dialog, event, arg );
         else
             msi_dialog_send_event( dialog, event, arg );
     }
@@ -3366,7 +3560,7 @@ static UINT msi_dialog_get_checkbox_state( msi_dialog *dialog,
     WCHAR state[2] = { 0 };
     DWORD sz = 2;
 
-    MSI_GetPropertyW( dialog->package, control->property, state, &sz );
+    msi_get_property( dialog->package->db, control->property, state, &sz );
     return state[0] ? 1 : 0;
 }
 
@@ -3379,7 +3573,7 @@ static void msi_dialog_set_checkbox_state( msi_dialog *dialog,
     /* if uncheck then the property is set to NULL */
     if (!state)
     {
-        MSI_SetPropertyW( dialog->package, control->property, NULL );
+        msi_dialog_set_property( dialog->package, control->property, NULL );
         return;
     }
 
@@ -3389,7 +3583,7 @@ static void msi_dialog_set_checkbox_state( msi_dialog *dialog,
     else
         val = szState;
 
-    MSI_SetPropertyW( dialog->package, control->property, val );
+    msi_dialog_set_property( dialog->package, control->property, val );
 }
 
 static void msi_dialog_checkbox_sync_state( msi_dialog *dialog,
@@ -3433,8 +3627,7 @@ static UINT msi_dialog_edit_handler( msi_dialog *dialog,
           debugstr_w(control->property));
 
     buf = msi_get_window_text( control->hwnd );
-    MSI_SetPropertyW( dialog->package, control->property, buf );
-
+    msi_dialog_set_property( dialog->package, control->property, buf );
     msi_free( buf );
 
     return ERROR_SUCCESS;
@@ -3449,7 +3642,7 @@ static UINT msi_dialog_radiogroup_handler( msi_dialog *dialog,
     TRACE("clicked radio button %s, set %s\n", debugstr_w(control->name),
           debugstr_w(control->property));
 
-    MSI_SetPropertyW( dialog->package, control->property, control->name );
+    msi_dialog_set_property( dialog->package, control->property, control->name );
 
     return msi_dialog_button_handler( dialog, control, param );
 }
@@ -3835,7 +4028,7 @@ static UINT error_dialog_handler(MSIPACKAGE *package, LPCWSTR event,
     if ( !lstrcmpW( argument, error_abort ) || !lstrcmpW( argument, error_cancel ) ||
          !lstrcmpW( argument, error_no ) )
     {
-         MSI_SetPropertyW( package, result_prop, error_abort );
+         msi_set_property( package->db, result_prop, error_abort );
     }
 
     ControlEvent_CleanupSubscriptions(package);
@@ -3878,12 +4071,12 @@ UINT msi_spawn_error_dialog( MSIPACKAGE *package, LPWSTR error_dialog, LPWSTR er
         'M','S','I','E','r','r','o','r','D','i','a','l','o','g','R','e','s','u','l','t',0
     };
 
-    if ( (msi_get_property_int(package, szUILevel, 0) & INSTALLUILEVEL_MASK) == INSTALLUILEVEL_NONE )
+    if ( (msi_get_property_int( package->db, szUILevel, 0 ) & INSTALLUILEVEL_MASK) == INSTALLUILEVEL_NONE )
         return ERROR_SUCCESS;
 
     if ( !error_dialog )
     {
-        LPWSTR product_name = msi_dup_property( package, pn_prop );
+        LPWSTR product_name = msi_dup_property( package->db, pn_prop );
         WCHAR title[MAX_PATH];
 
         sprintfW( title, title_fmt, product_name );
@@ -3911,7 +4104,7 @@ UINT msi_spawn_error_dialog( MSIPACKAGE *package, LPWSTR error_dialog, LPWSTR er
     if ( r != ERROR_SUCCESS )
         goto done;
 
-    r = MSI_GetPropertyW( package, result_prop, result, &size );
+    r = msi_get_property( package->db, result_prop, result, &size );
     if ( r != ERROR_SUCCESS)
         r = ERROR_SUCCESS;
 

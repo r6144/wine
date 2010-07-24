@@ -55,8 +55,6 @@
  *      + all computations should be made on long long
  *              o expr computations are in int:s
  *              o bitfield size is on a 4-bytes
- *      + array_index and deref should be the same function (or should share the same
- *        core)
  * - execution:
  *      + set a better fix for gdb (proxy mode) than the step-mode hack
  *      + implement function call in debuggee
@@ -81,7 +79,6 @@
  *        every function call to catch the errors
  *      + BTW check also whether the exception mechanism is the best way to return
  *        errors (or find a proper fix for MinGW port)
- *      + use Wine standard list mechanism for all list handling
  */
 
 WINE_DEFAULT_DEBUG_CHANNEL(winedbg);
@@ -93,7 +90,7 @@ DWORD_PTR	        dbg_curr_pid = 0;
 CONTEXT                 dbg_context;
 BOOL    	        dbg_interactiveP = FALSE;
 
-static struct dbg_process*      dbg_process_list = NULL;
+static struct list      dbg_process_list = LIST_INIT(dbg_process_list);
 
 struct dbg_internal_var         dbg_internal_vars[DBG_IV_LAST];
 static HANDLE                   dbg_houtput;
@@ -227,9 +224,10 @@ static	unsigned dbg_save_internal_vars(void)
     {
         /* FIXME: type should be inferred from basic type -if any- of intvar */
         if (dbg_internal_vars[i].pval == &dbg_internal_vars[i].val)
-            RegSetValueExA(hkey, dbg_internal_vars[i].name, 0,
-                           REG_DWORD, (const void*)dbg_internal_vars[i].pval, 
-                           sizeof(*dbg_internal_vars[i].pval));
+        {
+            DWORD val = dbg_internal_vars[i].val;
+            RegSetValueExA(hkey, dbg_internal_vars[i].name, 0, REG_DWORD, (BYTE *)&val, sizeof(val));
+        }
     }
     RegCloseKey(hkey);
     return TRUE;
@@ -260,30 +258,25 @@ const struct dbg_internal_var* dbg_get_internal_var(const char* name)
 
 unsigned         dbg_num_processes(void)
 {
-    struct dbg_process*	p;
-    unsigned            num = 0;
-
-    for (p = dbg_process_list; p; p = p->next)
-	num++;
-    return num;
+    return list_count(&dbg_process_list);
 }
 
 struct dbg_process*     dbg_get_process(DWORD pid)
 {
     struct dbg_process*	p;
 
-    for (p = dbg_process_list; p; p = p->next)
-	if (p->pid == pid) break;
-    return p;
+    LIST_FOR_EACH_ENTRY(p, &dbg_process_list, struct dbg_process, entry)
+	if (p->pid == pid) return p;
+    return NULL;
 }
 
 struct dbg_process*     dbg_get_process_h(HANDLE h)
 {
     struct dbg_process*	p;
 
-    for (p = dbg_process_list; p; p = p->next)
-	if (p->handle == h) break;
-    return p;
+    LIST_FOR_EACH_ENTRY(p, &dbg_process_list, struct dbg_process, entry)
+	if (p->handle == h) return p;
+    return NULL;
 }
 
 struct dbg_process*	dbg_add_process(const struct be_process_io* pio, DWORD pid, HANDLE h)
@@ -311,7 +304,7 @@ struct dbg_process*	dbg_add_process(const struct be_process_io* pio, DWORD pid, 
     p->process_io = pio;
     p->pio_data = NULL;
     p->imageName = NULL;
-    p->threads = NULL;
+    list_init(&p->threads);
     p->continue_on_first_exception = FALSE;
     p->active_debuggee = FALSE;
     p->next_bp = 1;  /* breakpoint 0 is reserved for step-over */
@@ -324,10 +317,7 @@ struct dbg_process*	dbg_add_process(const struct be_process_io* pio, DWORD pid, 
     p->source_start_line = -1;
     p->source_end_line = -1;
 
-    p->next = dbg_process_list;
-    p->prev = NULL;
-    if (dbg_process_list) dbg_process_list->prev = p;
-    dbg_process_list = p;
+    list_add_head(&dbg_process_list, &p->entry);
     return p;
 }
 
@@ -343,9 +333,12 @@ void dbg_set_process_name(struct dbg_process* p, const WCHAR* imageName)
 
 void dbg_del_process(struct dbg_process* p)
 {
+    struct dbg_thread*  t;
+    struct dbg_thread*  t2;
     int	i;
 
-    while (p->threads) dbg_del_thread(p->threads);
+    LIST_FOR_EACH_ENTRY_SAFE(t, t2, &p->threads, struct dbg_thread, entry)
+        dbg_del_thread(t);
 
     for (i = 0; i < p->num_delayed_bp; i++)
         if (p->delayed_bp[i].is_symbol)
@@ -354,9 +347,7 @@ void dbg_del_process(struct dbg_process* p)
     HeapFree(GetProcessHeap(), 0, p->delayed_bp);
     source_nuke_path(p);
     source_free_files(p);
-    if (p->prev) p->prev->next = p->next;
-    if (p->next) p->next->prev = p->prev;
-    if (p == dbg_process_list) dbg_process_list = p->next;
+    list_remove(&p->entry);
     if (p == dbg_curr_process) dbg_curr_process = NULL;
     HeapFree(GetProcessHeap(), 0, (char*)p->imageName);
     HeapFree(GetProcessHeap(), 0, p);
@@ -458,9 +449,9 @@ struct dbg_thread* dbg_get_thread(struct dbg_process* p, DWORD tid)
     struct dbg_thread*	t;
 
     if (!p) return NULL;
-    for (t = p->threads; t; t = t->next)
-	if (t->tid == tid) break;
-    return t;
+    LIST_FOR_EACH_ENTRY(t, &p->threads, struct dbg_thread, entry)
+	if (t->tid == tid) return t;
+    return NULL;
 }
 
 struct dbg_thread* dbg_add_thread(struct dbg_process* p, DWORD tid,
@@ -488,10 +479,7 @@ struct dbg_thread* dbg_add_thread(struct dbg_process* p, DWORD tid,
 
     snprintf(t->name, sizeof(t->name), "%04x", tid);
 
-    t->next = p->threads;
-    t->prev = NULL;
-    if (p->threads) p->threads->prev = t;
-    p->threads = t;
+    list_add_head(&p->threads, &t->entry);
 
     return t;
 }
@@ -499,9 +487,7 @@ struct dbg_thread* dbg_add_thread(struct dbg_process* p, DWORD tid,
 void dbg_del_thread(struct dbg_thread* t)
 {
     HeapFree(GetProcessHeap(), 0, t->frames);
-    if (t->prev) t->prev->next = t->next;
-    if (t->next) t->next->prev = t->prev;
-    if (t == t->process->threads) t->process->threads = t->next;
+    list_remove(&t->entry);
     if (t == dbg_curr_thread) dbg_curr_thread = NULL;
     HeapFree(GetProcessHeap(), 0, t);
 }
@@ -542,14 +528,16 @@ void dbg_set_option(const char* option, const char* val)
 
 BOOL dbg_interrupt_debuggee(void)
 {
-    if (!dbg_process_list) return FALSE;
+    struct dbg_process* p;
+    if (list_empty(&dbg_process_list)) return FALSE;
     /* FIXME: since we likely have a single process, signal the first process
      * in list
      */
-    if (dbg_process_list->next) dbg_printf("Ctrl-C: only stopping the first process\n");
+    p = LIST_ENTRY(list_head(&dbg_process_list), struct dbg_process, entry);
+    if (list_next(&dbg_process_list, &p->entry)) dbg_printf("Ctrl-C: only stopping the first process\n");
     else dbg_printf("Ctrl-C: stopping debuggee\n");
-    dbg_process_list->continue_on_first_exception = FALSE;
-    return DebugBreakProcess(dbg_process_list->handle);
+    p->continue_on_first_exception = FALSE;
+    return DebugBreakProcess(p->handle);
 }
 
 static BOOL WINAPI ctrl_c_handler(DWORD dwCtrlType)
@@ -597,6 +585,9 @@ static int dbg_winedbg_usage(BOOL advanced)
 
 void dbg_start_interactive(HANDLE hFile)
 {
+    struct dbg_process* p;
+    struct dbg_process* p2;
+
     if (dbg_curr_process)
     {
         dbg_printf("WineDbg starting on pid %04lx\n", dbg_curr_pid);
@@ -606,8 +597,8 @@ void dbg_start_interactive(HANDLE hFile)
     dbg_interactiveP = TRUE;
     parser_handle(hFile);
 
-    while (dbg_process_list)
-        dbg_process_list->process_io->close_process(dbg_process_list, FALSE);
+    LIST_FOR_EACH_ENTRY_SAFE(p, p2, &dbg_process_list, struct dbg_process, entry)
+        p->process_io->close_process(p, FALSE);
 
     dbg_save_internal_vars();
 }

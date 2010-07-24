@@ -21,9 +21,11 @@
 
 #include "progman.h"
 
+LANGUAGE LANG_ENGLISH, SUBLANG_DEFAULT
+
 /* Menu */
 
-MAIN_MENU MENU LANGUAGE LANG_ENGLISH, SUBLANG_DEFAULT
+MAIN_MENU MENU
 {
  POPUP "&File" {
    MENUITEM "&New...",              PM_NEW
@@ -55,19 +57,13 @@ POPUP "&Help" {
    MENUITEM "&Help on Help",     PM_HELPONHELP
    MENUITEM "&Tutorial",         PM_TUTORIAL
    MENUITEM SEPARATOR
-
-   POPUP "&Info..." {
-     MENUITEM "&License",        PM_LICENSE
-     MENUITEM "&NO WARRANTY",    PM_NO_WARRANTY
-     MENUITEM "&About WINE",     PM_ABOUT_WINE
-   }
+   MENUITEM "&About Wine",     PM_ABOUT_WINE
  }
 }
 
 /* Dialog `New' */
 
 DIALOG_NEW DIALOG 0, 0, 170, 65
-LANGUAGE LANG_ENGLISH, SUBLANG_DEFAULT
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "New"
 {
@@ -83,7 +79,6 @@ PUSHBUTTON    "&Help",        PM_HELP,        105, 45,  60, 15, WS_TABSTOP
 /* Dialog `Move' */
 
 DIALOG_MOVE DIALOG 0, 0, 250, 65
-LANGUAGE LANG_ENGLISH, SUBLANG_DEFAULT
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Move Program"
 {
@@ -101,7 +96,6 @@ PUSHBUTTON    "&Help",            PM_HELP,           185, 45,  60, 15, WS_TABSTO
 /* Dialog `Copy' */
 
 DIALOG_COPY DIALOG 0, 0, 250, 65
-LANGUAGE LANG_ENGLISH, SUBLANG_DEFAULT
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Copy Program"
 {
@@ -119,7 +113,6 @@ PUSHBUTTON    "&Help",            PM_HELP,           185, 45,  60, 15, WS_TABSTO
 /* Dialog `Group attributes' */
 
 DIALOG_GROUP DIALOG 0, 0, 230, 65
-LANGUAGE LANG_ENGLISH, SUBLANG_DEFAULT
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Program Group Attributes"
 {
@@ -135,7 +128,6 @@ PUSHBUTTON    "&Help",          PM_HELP,             155, 45,  60, 15, WS_TABSTO
 /* Dialog `Program attributes' */
 
 DIALOG_PROGRAM DIALOG 0, 0, 250, 105
-LANGUAGE LANG_ENGLISH, SUBLANG_DEFAULT
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Program Attributes"
 {
@@ -160,7 +152,6 @@ PUSHBUTTON    "&Help",                 PM_HELP,             185, 85,  60, 15, WS
 /* Dialog `Symbol' */
 
 DIALOG_SYMBOL DIALOG 0, 0, 200, 85
-LANGUAGE LANG_ENGLISH, SUBLANG_DEFAULT
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Change Icon"
 {
@@ -178,7 +169,6 @@ PUSHBUTTON    "&Help",       PM_HELP,           135, 65,  60, 15, WS_TABSTOP
 /* Dialog `Execute' */
 
 DIALOG_EXECUTE DIALOG 0, 0, 200, 85
-LANGUAGE LANG_ENGLISH, SUBLANG_DEFAULT
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Execute Program"
 {
@@ -194,7 +184,7 @@ PUSHBUTTON    "&Help",             PM_HELP,   135, 65,  60, 15, WS_TABSTOP
 
 /* Strings */
 
-STRINGTABLE DISCARDABLE LANGUAGE LANG_ENGLISH, SUBLANG_DEFAULT
+STRINGTABLE
 {
 IDS_PROGRAM_MANAGER,		"Program Manager"
 IDS_ERROR,			"ERROR"
@@ -220,28 +210,4 @@ IDS_PROGRAMS,			"Programs"
 IDS_LIBRARIES_DLL,		"Libraries (*.dll)"
 IDS_SYMBOL_FILES,		"Icon files"
 IDS_SYMBOLS_ICO,		"Icons (*.ico)"
-}
-
-STRINGTABLE DISCARDABLE LANGUAGE LANG_ENGLISH, SUBLANG_DEFAULT
-{
-IDS_LICENSE_CAPTION,            "LICENSE"
-IDS_LICENSE,
-"This program is free software; you can redistribute it and/or \
-modify it under the terms of the GNU Lesser General Public \
-License as published by the Free Software Foundation; either \
-version 2.1 of the License, or (at your option) any later version.\n\
-This program is distributed in the hope that it will be useful, \
-but WITHOUT ANY WARRANTY; without even the implied warranty of \
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU \
-Lesser General Public License for more details.\n\
-You should have received a copy of the GNU Lesser General Public \
-License along with this program; if not, write to the Free Software \
-Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA"
-
-IDS_WARRANTY_CAPTION, "NO WARRANTY"
-IDS_WARRANTY,
-"This program is distributed in the hope that it will be useful, \
-but WITHOUT ANY WARRANTY; without even the implied warranty of \
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU \
-Lesser General Public License for more details."
 }

@@ -5,7 +5,7 @@ SRCDIR    = @srcdir@
 VPATH     = @srcdir@
 MODULE    = comctl32.dll
 IMPORTLIB = comctl32
-IMPORTS   = uuid user32 gdi32 advapi32 kernel32
+IMPORTS   = uuid user32 gdi32 advapi32
 DELAYIMPORTS = winmm uxtheme
 
 C_SRCS = \
@@ -49,6 +49,7 @@ C_SRCS = \
 RC_SRCS = \
 	comctl_Bg.rc \
 	comctl_Cs.rc \
+	comctl_Da.rc \
 	comctl_De.rc \
 	comctl_El.rc \
 	comctl_En.rc \
@@ -68,11 +69,20 @@ RC_SRCS = \
 	comctl_Ru.rc \
 	comctl_Si.rc \
 	comctl_Sk.rc \
+	comctl_Sr.rc \
 	comctl_Sv.rc \
 	comctl_Th.rc \
 	comctl_Tr.rc \
 	comctl_Uk.rc \
 	comctl_Zh.rc \
 	rsrc.rc
+
+SVG_SRCS = \
+	idb_hist_large.svg \
+	idb_hist_small.svg \
+	idb_std_large.svg \
+	idb_std_small.svg \
+	idb_view_large.svg \
+	idb_view_small.svg
 
 @MAKE_DLL_RULES@

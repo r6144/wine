@@ -1,0 +1,15 @@
+TOPSRCDIR = @top_srcdir@
+TOPOBJDIR = ../..
+SRCDIR    = @srcdir@
+VPATH     = @srcdir@
+MODULE    = msvcp90.dll
+IMPORTS   = msvcrt
+MODCFLAGS = @BUILTINFLAG@
+EXTRAINCL = -I$(TOPSRCDIR)/include/msvcrt
+
+C_SRCS = \
+	memory.c \
+	msvcp90_main.c \
+	string.c
+
+@MAKE_DLL_RULES@

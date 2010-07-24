@@ -4,7 +4,7 @@ SRCDIR    = @srcdir@
 VPATH     = @srcdir@
 MODULE    = wldap32.dll
 IMPORTLIB = wldap32
-IMPORTS   = user32 kernel32
+IMPORTS   = user32
 EXTRALIBS = @LDAPLIBS@
 
 C_SRCS = \
@@ -35,12 +35,15 @@ RC_SRCS = \
 	wldap32_En.rc \
 	wldap32_Es.rc \
 	wldap32_Fr.rc \
+	wldap32_Hu.rc \
+	wldap32_It.rc \
 	wldap32_Ko.rc \
 	wldap32_Lt.rc \
 	wldap32_Nl.rc \
 	wldap32_No.rc \
 	wldap32_Pl.rc \
 	wldap32_Pt.rc \
+	wldap32_Ro.rc \
 	wldap32_Ru.rc \
 	wldap32_Sv.rc \
 	wldap32_Tr.rc \

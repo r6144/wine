@@ -51,7 +51,7 @@ WINE_DEFAULT_DEBUG_CHANNEL(winecfg);
 #define DEVICE_MASK 0x40000000
 #define MAX_NAME_LENGTH 64
 
-typedef DWORD (WINAPI * MessagePtr)(UINT, UINT, DWORD, DWORD, DWORD);
+typedef DWORD (WINAPI * MessagePtr)(UINT, UINT, DWORD_PTR, DWORD_PTR, DWORD_PTR);
 
 static struct DSOUNDACCEL
 {
@@ -86,9 +86,10 @@ typedef struct
 {
   UINT nameID;
   const char *szDriver;
+  HDRVR hDriver;
 } AUDIO_DRIVER;
 
-static const AUDIO_DRIVER sAudioDrivers[] = {
+static AUDIO_DRIVER sAudioDrivers[] = {
   {IDS_DRIVER_ALSA,      "alsa"},
   {IDS_DRIVER_OSS,       "oss"},
   {IDS_DRIVER_COREAUDIO, "coreaudio"},
@@ -118,19 +119,17 @@ static void configureAudioDriver(HWND hDlg)
         HDRVR hdrvr;
         char wine_driver[MAX_NAME_LENGTH + 9];
         sprintf(wine_driver, "wine%s.drv", pAudioDrv->szDriver);
-        hdrvr = OpenDriverA(wine_driver, 0, 0);
+        hdrvr = pAudioDrv->hDriver;
         if (hdrvr != 0)
         {
             if (SendDriverMessage(hdrvr, DRV_QUERYCONFIGURE, 0, 0) != 0)
             {
                 DRVCONFIGINFO dci;
-                LONG lRes;
                 dci.dwDCISize = sizeof (dci);
                 dci.lpszDCISectionName = NULL;
                 dci.lpszDCIAliasName = NULL;
-                lRes = SendDriverMessage(hdrvr, DRV_CONFIGURE, 0, (LONG_PTR)&dci);
+                SendDriverMessage(hdrvr, DRV_CONFIGURE, 0, (LONG_PTR)&dci);
             }
-            CloseDriver(hdrvr, 0, 0);
         }
         else
         {
@@ -198,7 +197,7 @@ static void removeDriver(const char * driver)
 
 static void initAudioDeviceTree(HWND hDlg)
 {
-    const AUDIO_DRIVER *pAudioDrv = NULL;
+    AUDIO_DRIVER *pAudioDrv = NULL;
     int i, j;
     TVINSERTSTRUCTW insert;
     HTREEITEM root, driver[10];
@@ -248,7 +247,7 @@ static void initAudioDeviceTree(HWND hDlg)
         LoadStringW (GetModuleHandle (NULL), pAudioDrv->nameID, text,
             sizeof(text)/sizeof(text[0]));
 
-        if ((hdrv = OpenDriverA(name, 0, 0)))
+        if ((hdrv = pAudioDrv->hDriver))
         {
             HMODULE lib;
             if ((lib = GetDriverModuleHandle(hdrv)))
@@ -474,7 +473,6 @@ static void initAudioDeviceTree(HWND hDlg)
                     }
                 }
             }
-            CloseDriver(hdrv, 0, 0);
         }
     }
 
@@ -491,7 +489,7 @@ static void initAudioDeviceTree(HWND hDlg)
 static void findAudioDrivers(void)
 {
     int numFound = 0;
-    const AUDIO_DRIVER *pAudioDrv = NULL;
+    AUDIO_DRIVER *pAudioDrv = NULL;
     HCURSOR old_cursor;
 
     /* delete an existing list */
@@ -512,10 +510,38 @@ static void findAudioDrivers(void)
 
             sprintf(driver, "wine%s.drv", pAudioDrv->szDriver);
 
-            if ((hdrv = OpenDriverA(driver, 0, 0)))
-            {
-                CloseDriver(hdrv, 0, 0);
+            hdrv = pAudioDrv->hDriver;
+            if (!pAudioDrv->hDriver && (hdrv = OpenDriverA(driver, 0, 0))) {
+                HMODULE lib = GetDriverModuleHandle(hdrv);
+                MessagePtr wodMessagePtr = (MessagePtr)GetProcAddress(lib, "wodMessage");
+                MessagePtr widMessagePtr = (MessagePtr)GetProcAddress(lib, "widMessage");
+                MessagePtr modMessagePtr = (MessagePtr)GetProcAddress(lib, "modMessage");
+                MessagePtr midMessagePtr = (MessagePtr)GetProcAddress(lib, "midMessage");
+                MessagePtr auxMessagePtr = (MessagePtr)GetProcAddress(lib, "auxMessage");
+                MessagePtr mxdMessagePtr = (MessagePtr)GetProcAddress(lib, "mxdMessage");
 
+                pAudioDrv->hDriver = hdrv;
+
+                if (wodMessagePtr)
+                    wodMessagePtr(0, DRVM_INIT, 0, 0, 0);
+
+                if (widMessagePtr)
+                    widMessagePtr(0, DRVM_INIT, 0, 0, 0);
+
+                if (modMessagePtr)
+                    modMessagePtr(0, DRVM_INIT, 0, 0, 0);
+
+                if (midMessagePtr)
+                    midMessagePtr(0, DRVM_INIT, 0, 0, 0);
+
+                if (auxMessagePtr)
+                    auxMessagePtr(0, DRVM_INIT, 0, 0, 0);
+
+                if (mxdMessagePtr)
+                    mxdMessagePtr(0, DRVM_INIT, 0, 0, 0);
+            }
+            if (hdrv)
+            {
                 if (loadedAudioDrv)
                     loadedAudioDrv = HeapReAlloc(GetProcessHeap(), 0, loadedAudioDrv, (numFound + 1) * sizeof(AUDIO_DRIVER));
                 else

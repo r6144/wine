@@ -132,6 +132,11 @@ static void ps_1_1_test(void) {
             {0xffff0101, 0x00000042, 0xb00f0000, 0x00000002, 0x80070000, 0x80e40000,
              0x80e40001, 0x40000001, 0x80080000, 0xb0e40000, 0x0000ffff}
         },
+        {   /* shader 1 */
+            "ps.1.1\n"
+            "mov_d4 r0, r1\n",
+            {0xffff0101, 0x00000001, 0x8e0f0000, 0x80e40001, 0x0000ffff}
+        },
     };
 
     exec_tests("ps_1_1", tests, sizeof(tests) / sizeof(tests[0]));
@@ -478,6 +483,43 @@ static void ps_1_3_test(void) {
             "mov_x4_sat r0.a, -r1_bx2.a\n",
             {0xffff0103, 0x00000001, 0x82180000, 0x85ff0001, 0x0000ffff}
         },
+        {   /* shader 30 */
+            "ps_1_3\n"
+            "texcoord_x2 t0\n",
+            {0xffff0103, 0x00000040, 0xb10f0000, 0x0000ffff}
+        },
+        {   /* shader 31 */
+            "ps_1_3\n"
+            "tex_x2 t0\n",
+            {0xffff0103, 0x00000042, 0xb10f0000, 0x0000ffff}
+        },
+        {   /* shader 32 */
+            "ps_1_3\n"
+            "texreg2ar_x4 t0, t1\n",
+            {0xffff0103, 0x00000045, 0xb20f0000, 0xb0e40001, 0x0000ffff}
+        },
+        {   /* shader 33 */
+            "ps_1_3\n"
+            "texbem_d4 t1, t0\n",
+            {0xffff0103, 0x00000043, 0xbe0f0001, 0xb0e40000, 0x0000ffff}
+        },
+        {   /* shader 34 */
+            "ps_1_3\n"
+            "tex t0\n"
+            "texm3x3pad_x2 t1, t0\n"
+            "texm3x3pad_x2 t2, t0\n"
+            "texm3x3tex_x2 t3, t0\n",
+            {0xffff0103, 0x00000042, 0xb00f0000, 0x00000049, 0xb10f0001, 0xb0e40000,
+	     0x00000049, 0xb10f0002, 0xb0e40000, 0x0000004a, 0xb10f0003, 0xb0e40000,
+	     0x0000ffff}
+        },
+        {   /* shader 35 */
+            "ps_1_3\n"
+            "tex t0\n"
+            "texdp3tex_x8 t1, t0\n",
+            {0xffff0103, 0x00000042, 0xb00f0000, 0x00000053, 0xb30f0001, 0xb0e40000,
+	     0x0000ffff}
+        },
     };
 
     exec_tests("ps_1_3", tests, sizeof(tests) / sizeof(tests[0]));
@@ -560,6 +602,43 @@ static void ps_1_4_test(void) {
             "ps_1_4\n"
             "texdepth r5\n",
             {0xffff0104, 0x00000057, 0x800f0005, 0x0000ffff}
+        },
+        {   /* shader 15 */
+            "ps_1_4\n"
+            "add r0, r1, r2_bx2\n",
+            {0xffff0104, 0x00000002, 0x800f0000, 0x80e40001, 0x84e40002, 0x0000ffff}
+        },
+        {   /* shader 16 */
+            "ps_1_4\n"
+            "add_x4 r0, r1, r2\n",
+            {0xffff0104, 0x00000002, 0x820f0000, 0x80e40001, 0x80e40002, 0x0000ffff}
+        },
+        {   /* shader 17 */
+            "ps_1_4\n"
+            "add r0.rgb, r1, r2\n"
+            "+add r0.a, r1, r2\n",
+            {0xffff0104, 0x00000002, 0x80070000, 0x80e40001, 0x80e40002, 0x40000002,
+             0x80080000, 0x80e40001, 0x80e40002, 0x0000ffff}
+        },
+        {   /* shader 18 */
+            "ps_1_4\n"
+            "texdepth_x2 r5\n",
+            {0xffff0104, 0x00000057, 0x810f0005, 0x0000ffff}
+        },
+        {   /* shader 19 */
+            "ps_1_4\n"
+            "bem_d2 r1, c0, r0\n",
+            {0xffff0104, 0x00000059, 0x8f0f0001, 0xa0e40000, 0x80e40000, 0x0000ffff}
+        },
+        {   /* shader 20 */
+            "ps_1_4\n"
+            "texkill t0\n",
+            {0xffff0104, 0x00000041, 0xb00f0000, 0x0000ffff}
+        },
+        {   /* shader 21 */
+            "ps_1_4\n"
+            "texkill r0\n",
+            {0xffff0104, 0x00000041, 0x800f0000, 0x0000ffff}
         },
     };
 
@@ -739,6 +818,19 @@ static void vs_2_0_test(void) {
             "endif\n",
             {0xfffe0200, 0x01000028, 0xede40800, 0x0000002a, 0x0000002b, 0x0000ffff}
         },
+        {   /* shader 28 */
+            "vs_2_0\n"
+            "call l3\n"
+            "ret\n"
+            "label l3\n"
+            "ret\n",
+            {0xfffe0200, 0x01000019, 0xa0e41003, 0x0000001c, 0x0100001e, 0xa0e41003, 0x0000001c, 0x0000ffff}
+        },
+        {   /* shader 29: labels up to 2047 are accepted even in vs_2_0 */
+            "vs_2_0\n"
+            "call l2047\n",
+            {0xfffe0200, 0x01000019, 0xa0e417ff, 0x0000ffff}
+        },
     };
 
     exec_tests("vs_2_0", tests, sizeof(tests) / sizeof(tests[0]));
@@ -873,6 +965,22 @@ static void ps_2_0_test(void) {
             {0xffff0200, 0x0200001f, 0x90000000, 0xa00f0802, 0x03020042, 0x800f0000,
              0xb0e40001, 0xa0e40802, 0x0000ffff}
         },
+        {   /* shader 11 */
+            "ps_2_0\n"
+            "dcl v0\n",
+            {0xffff0200, 0x0200001f, 0x80000000, 0x900f0000, 0x0000ffff}
+        },
+        {   /* shader 12 */
+            "ps_2_0\n"
+            "dcl t0.xyz\n"
+            "dcl t1\n",
+            {0xffff0200, 0x0200001f, 0x80000000, 0xb0070000, 0x0200001f, 0x80000000, 0xb00f0001, 0x0000ffff}
+        },
+        {   /* shader 13 */
+            "ps_2_0\n"
+            "dcl_pp t0\n",
+            {0xffff0200, 0x0200001f, 0x80000000, 0xb02f0000, 0x0000ffff}
+        },
     };
 
     exec_tests("ps_2_0", tests, sizeof(tests) / sizeof(tests[0]));
@@ -1002,62 +1110,100 @@ static void ps_2_x_test(void) {
             {0xffff0201, 0x01000026, 0xf0e40000, 0x01000060, 0xb0ff1000,
              0x00000027, 0x0000ffff}
         },
+        {   /* shader 16 */
+            "ps_2_x\n"
+            "call l2047\n"
+            "ret\n"
+            "label l2047\n"
+            "ret\n",
+            {0xffff0201, 0x01000019, 0xa0e417ff, 0x0000001c, 0x0100001e, 0xa0e417ff,
+             0x0000001c, 0x0000ffff}
+        },
     };
 
     exec_tests("ps_2_x", tests, sizeof(tests) / sizeof(tests[0]));
 }
 
 static void vs_3_0_test(void) {
-    /* FIXME: Some tests are temporarily commented out, because the
-       current implementation doesn't support the entire vs_3_0 syntax
-       and it is not trivial to remove todo_wine only from
-       a subset of the tests here */
     struct shader_test tests[] = {
         {   /* shader 0 */
             "vs_3_0\n"
             "mov r0, c0\n",
             {0xfffe0300, 0x02000001, 0x800f0000, 0xa0e40000, 0x0000ffff}
         },
-/*      {*/ /* shader 1 */
-/*          "vs_3_0\n"
+        {   /* shader 1 */
+            "vs_3_0\n"
             "dcl_2d s0\n",
             {0xfffe0300, 0x0200001f, 0x90000000, 0xa00f0800, 0x0000ffff}
-        },*/
-/*      {*/ /* shader 2 */
-/*          "vs_3_0\n"
+        },
+        {   /* shader 2 */
+            "vs_3_0\n"
             "dcl_position o0\n",
             {0xfffe0300, 0x0200001f, 0x80000000, 0xe00f0000, 0x0000ffff}
-        },*/
-/*      {*/ /* shader 3 */
-/*          "vs_3_0\n"
+        },
+        {   /* shader 3 */
+            "vs_3_0\n"
             "dcl_texcoord12 o11\n",
             {0xfffe0300, 0x0200001f, 0x800c0005, 0xe00f000b, 0x0000ffff}
-        },*/
-/*      {*/ /* shader 4 */
-/*          "vs_3_0\n"
+        },
+        {   /* shader 4 */
+            "vs_3_0\n"
             "texldl r0, v0, s0\n",
             {0xfffe0300, 0x0300005f, 0x800f0000, 0x90e40000, 0xa0e40800, 0x0000ffff}
-        },*/
-/*      {*/ /* shader 5 */
-/*          "vs_3_0\n"
+        },
+        {   /* shader 5 */
+            "vs_3_0\n"
             "mov r0, c0[aL]\n",
             {0xfffe0300, 0x03000001, 0x800f0000, 0xa0e42000, 0xf0e40800, 0x0000ffff}
-        },*/
-/*      {*/ /* shader 6 */
-/*          "vs_3_0\n"
+        },
+        {   /* shader 6 */
+            "vs_3_0\n"
             "mov o[ a0.x + 12 ], r0\n",
             {0xfffe0300, 0x03000001, 0xe00f200c, 0xb0000000, 0x80e40000, 0x0000ffff}
-        },*/
-/*      {*/ /* shader 7 */
-/*          "vs_3_0\n"
+        },
+        {   /* shader 7 */
+            "vs_3_0\n"
             "add_sat r0, r0, r1\n",
             {0xfffe0300, 0x03000002, 0x801f0000, 0x80e40000, 0x80e40001, 0x0000ffff}
-        },*/
-/*      {*/ /* shader 8 */
-/*          "vs_3_0\n"
+        },
+        {   /* shader 8 */
+            "vs_3_0\n"
             "mov r2, r1_abs\n",
             {0xfffe0300, 0x02000001, 0x800f0002, 0x8be40001, 0x0000ffff}
-        },*/
+        },
+        {   /* shader 9 */
+            "vs_3_0\n"
+            "mov r2, r1.xygb\n",
+            {0xfffe0300, 0x02000001, 0x800f0002, 0x80940001, 0x0000ffff}
+        },
+        {   /* shader 10 */
+            "vs_3_0\n"
+            "mov r2.xyb, r1\n",
+            {0xfffe0300, 0x02000001, 0x80070002, 0x80e40001, 0x0000ffff}
+        },
+        {   /* shader 11 */
+            "vs_3_0\n"
+            "mova_sat a0.x, r1\n",
+            {0xfffe0300, 0x0200002e, 0xb0110000, 0x80e40001, 0x0000ffff}
+        },
+        {   /* shader 12 */
+            "vs_3_0\n"
+            "sincos r0, r1\n",
+            {0xfffe0300, 0x02000025, 0x800f0000, 0x80e40001, 0x0000ffff}
+        },
+        {   /* shader 13 */
+            "vs_3_0\n"
+            "def c0, 1.0f, 1.0f, 1.0f, 0.5f\n",
+            {0xfffe0300, 0x05000051, 0xa00f0000, 0x3f800000, 0x3f800000, 0x3f800000,
+             0x3f000000, 0x0000ffff}
+        },
+        {   /* shader 14: no register number checks with relative addressing */
+            "vs_3_0\n"
+            "add r0, v20[aL], r2\n",
+            {0xfffe0300, 0x04000002, 0x800f0000, 0x90e42014, 0xf0e40800, 0x80e40002,
+             0x0000ffff}
+        },
+
     };
 
     exec_tests("vs_3_0", tests, sizeof(tests) / sizeof(tests[0]));
@@ -1102,6 +1248,57 @@ static void ps_3_0_test(void) {
             "ps_3_0\n"
             "texldl r0, v0, s0\n",
             {0xffff0300, 0x0300005f, 0x800f0000, 0x90e40000, 0xa0e40800, 0x0000ffff}
+        },
+        {   /* shader 7 */
+            "ps_3_0\n"
+            "add_pp r0, r0, r1\n",
+            {0xffff0300, 0x03000002, 0x802f0000, 0x80e40000, 0x80e40001, 0x0000ffff}
+        },
+        {   /* shader 8 */
+            "ps_3_0\n"
+            "dsx_sat r0, r1\n",
+            {0xffff0300, 0x0200005b, 0x801f0000, 0x80e40001, 0x0000ffff}
+        },
+        {   /* shader 9 */
+            "ps_3_0\n"
+            "texldd_pp r0, r1, r2, r3, r4\n",
+            {0xffff0300, 0x0500005d, 0x802f0000, 0x80e40001, 0x80e40002, 0x80e40003,
+	     0x80e40004, 0x0000ffff}
+        },
+        {   /* shader 10 */
+            "ps_3_0\n"
+            "texkill v0\n",
+            {0xffff0300, 0x01000041, 0x900f0000, 0x0000ffff}
+        },
+        {   /* shader 11 */
+            "ps_3_0\n"
+            "add oC3, r0, r1\n",
+            {0xffff0300, 0x03000002, 0x800f0803, 0x80e40000, 0x80e40001, 0x0000ffff}
+        },
+        {   /* shader 12 */
+            "ps_3_0\n"
+            "dcl_texcoord0_centroid v0\n",
+            {0xffff0300, 0x0200001f, 0x80000005, 0x904f0000, 0x0000ffff}
+        },
+        {   /* shader 13 */
+            "ps_3_0\n"
+            "dcl_2d_centroid s0\n",
+            {0xffff0300, 0x0200001f, 0x90000000, 0xa04f0800, 0x0000ffff}
+        },
+        {   /* shader 14 */
+            "ps_3_0\n"
+            "dcl_2d_pp s0\n",
+            {0xffff0300, 0x0200001f, 0x90000000, 0xa02f0800, 0x0000ffff}
+        },
+        {   /* shader 15 */
+            "ps_3_0\n"
+            "dcl v0\n",
+            {0xffff0300, 0x0200001f, 0x80000000, 0x900f0000, 0x0000ffff}
+        },
+        {   /* shader 16 */
+            "ps_3_0\n"
+            "dcl s2\n",
+            {0xffff0300, 0x0200001f, 0x80000000, 0xa00f0802, 0x0000ffff}
         },
     };
 
@@ -1184,6 +1381,93 @@ static void failure_test(void) {
         /* shader 22: register r5 doesn't exist in PS < 1.4 */
         "ps_1_3\n"
         "mov r5, r0\n",
+        /* shader 23: can't declare output registers in a pixel shader */
+        "ps_3_0\n"
+        "dcl_positiont o0\n",
+        /* shader 24: _pp instruction modifier not allowed in vertex shaders */
+        "vs_3_0\n"
+        "add_pp r0, r0, r1\n",
+        /* shader 25: _x4 instruction modified not allowed in > ps_1_x */
+        "ps_3_0\n"
+        "add_x4 r0, r0, r1\n",
+        /* shader 26: there aren't oCx registers in ps_1_x */
+        "ps_1_3\n"
+        "add oC0, r0, r1\n",
+        /* shader 27: oC3 is the max in >= ps_2_0 */
+        "ps_3_0\n"
+        "add oC4, r0, r1\n",
+        /* shader 28: register v17 doesn't exist */
+        "vs_3_0\n"
+        "add r0, r0, v17\n",
+        /* shader 29: register o13 doesn't exist */
+        "vs_3_0\n"
+        "add o13, r0, r1\n",
+        /* shader 30: label > 2047 not allowed */
+        "vs_3_0\n"
+        "call l2048\n",
+        /* shader 31: s20 register does not exist */
+        "ps_3_0\n"
+        "texld r0, r1, s20\n",
+        /* shader 32: t5 not allowed in ps_1_3 */
+        "ps_1_3\n"
+        "tex t5\n",
+        /* shader 33: no temporary registers relative addressing */
+        "vs_3_0\n"
+        "add r0, r0[ a0.x ], r1\n",
+        /* shader 34: no input registers relative addressing in vs_2_0 */
+        "vs_2_0\n"
+        "add r0, v[ a0.x ], r1\n",
+        /* shader 35: no aL register in ps_2_0 */
+        "ps_2_0\n"
+        "add r0, v[ aL ], r1\n",
+        /* shader 36: no relative addressing in ps_2_0 */
+        "ps_2_0\n"
+        "add r0, v[ r0 ], r1\n",
+        /* shader 37: no a0 register in ps_3_0 */
+        "ps_3_0\n"
+        "add r0, v[ a0.x ], r1\n",
+        /* shader 38: only a0.x accepted in vs_1_1 */
+        "vs_1_1\n"
+        "mov r0, c0[ a0 ]\n",
+        /* shader 39: invalid modifier for dcl instruction */
+        "ps_3_0\n"
+        "dcl_texcoord0_sat v0\n",
+        /* shader 40: shift not allowed */
+        "ps_3_0\n"
+        "dcl_texcoord0_x2 v0\n",
+        /* shader 41: no modifier allowed with dcl instruction in vs */
+        "vs_3_0\n"
+        "dcl_texcoord0_centroid v0\n",
+        /* shader 42: no modifiers with vs dcl sampler instruction */
+        "vs_3_0\n"
+        "dcl_2d_pp s0\n",
+        /* shader 43: can't explicitly declare input registers in ps_2_0 */
+        "ps_2_0\n"
+        "dcl_texcoord0 t0\n",
+        /* shader 44: can't implicitly declare registers in vs */
+        "vs_2_0\n"
+        "dcl o0\n",
+        /* shader 45: can't implicitly declare samplers in vs */
+        "vs_3_0\n"
+        "dcl s2\n",
+        /* shader 46: no tx registers in ps_3_0 */
+        "ps_3_0\n"
+        "dcl t2\n",
+        /* shader 47: no samplers in vs_2_0 */
+        "vs_2_0\n"
+        "dcl_2d s2\n",
+        /* shader 48: semantic required in vs dcl input instruction */
+        "vs_2_0\n"
+        "dcl v0\n",
+        /* shader 49: semantic not allowed in ps dcl input instruction*/
+        "ps_2_0\n"
+        "dcl_position0 v0\n",
+        /* shader 50: dcl instruction not in ps_1_x */
+        "ps_1_4\n"
+        "dcl_position0 v0\n",
+        /* shader 51: no dcl output instruction in < vs 3.0 */
+        "vs_2_0\n"
+        "dcl_positiont0 o0\n",
     };
     HRESULT hr;
     unsigned int i;
@@ -1270,8 +1554,6 @@ static void assembleshader_test(void) {
     struct D3DXIncludeImpl include;
     HRESULT shader_vsh_res, incl_vsh_res;
 
-    todo_wine {
-
     /* pDefines test */
     shader = NULL;
     messages = NULL;
@@ -1284,6 +1566,25 @@ static void assembleshader_test(void) {
         ID3DXBuffer_Release(messages);
     }
     if(shader) ID3DXBuffer_Release(shader);
+
+    /* NULL messages test */
+    shader = NULL;
+    hr = D3DXAssembleShader(test1, strlen(test1),
+                            defines, NULL, D3DXSHADER_SKIPVALIDATION,
+                            &shader, NULL);
+    ok(hr == D3D_OK, "NULL messages test failed with error 0x%x - %d\n", hr, hr & 0x0000FFFF);
+    if(shader) ID3DXBuffer_Release(shader);
+
+    /* NULL shader test */
+    messages = NULL;
+    hr = D3DXAssembleShader(test1, strlen(test1),
+                            defines, NULL, D3DXSHADER_SKIPVALIDATION,
+                            NULL, &messages);
+    ok(hr == D3D_OK, "NULL shader test failed with error 0x%x - %d\n", hr, hr & 0x0000FFFF);
+    if(messages) {
+        trace("D3DXAssembleShader messages:\n%s", (char *)ID3DXBuffer_GetBufferPointer(messages));
+        ID3DXBuffer_Release(messages);
+    }
 
     /* pInclude test */
     shader = NULL;
@@ -1298,6 +1599,8 @@ static void assembleshader_test(void) {
         ID3DXBuffer_Release(messages);
     }
     if(shader) ID3DXBuffer_Release(shader);
+
+    todo_wine {
 
     shader_vsh_res = create_file("shader.vsh", testshader, sizeof(testshader));
     if(SUCCEEDED(shader_vsh_res)) {
@@ -1362,6 +1665,8 @@ static void assembleshader_test(void) {
     }
     if(shader) ID3DXBuffer_Release(shader);
 
+    } /* end of todo_wine */
+
     /* D3DXAssembleShaderFromResource test */
     shader = NULL;
     messages = NULL;
@@ -1374,8 +1679,6 @@ static void assembleshader_test(void) {
         ID3DXBuffer_Release(messages);
     }
     if(shader) ID3DXBuffer_Release(shader);
-
-    } /* end of todo_wine */
 
     /* D3DXAssembleShaderFromResource with missing shader resource test */
     shader = NULL;
@@ -1399,17 +1702,17 @@ static void assembleshader_test(void) {
 
 START_TEST(asm)
 {
-    todo_wine preproc_test();
-    todo_wine ps_1_1_test();
-    todo_wine vs_1_1_test();
-    todo_wine ps_1_3_test();
-    todo_wine ps_1_4_test();
-    todo_wine vs_2_0_test();
-    todo_wine vs_2_x_test();
-    todo_wine ps_2_0_test();
-    todo_wine ps_2_x_test();
+    preproc_test();
+    ps_1_1_test();
+    vs_1_1_test();
+    ps_1_3_test();
+    ps_1_4_test();
+    vs_2_0_test();
+    vs_2_x_test();
+    ps_2_0_test();
+    ps_2_x_test();
     vs_3_0_test();
-    todo_wine ps_3_0_test();
+    ps_3_0_test();
 
     failure_test();
 

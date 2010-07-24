@@ -1708,15 +1708,22 @@ loadmemopts
 		}
 	;
 
-lamo	: tPRELOAD	{ $$ = new_int(WRC_MO_PRELOAD); }
-	| tMOVEABLE	{ $$ = new_int(WRC_MO_MOVEABLE); }
-	| tDISCARDABLE	{ $$ = new_int(WRC_MO_DISCARDABLE); }
-	| tPURE		{ $$ = new_int(WRC_MO_PURE); }
+lamo	: tPRELOAD	{ $$ = new_int(WRC_MO_PRELOAD);
+			  if (win32 && pedantic) parser_warning("PRELOAD is ignored in 32-bit mode\n"); }
+	| tMOVEABLE	{ $$ = new_int(WRC_MO_MOVEABLE);
+			  if (win32 && pedantic) parser_warning("MOVEABLE is ignored in 32-bit mode\n"); }
+	| tDISCARDABLE	{ $$ = new_int(WRC_MO_DISCARDABLE);
+			  if (win32 && pedantic) parser_warning("DISCARDABLE is ignored in 32-bit mode\n"); }
+	| tPURE		{ $$ = new_int(WRC_MO_PURE);
+			  if (win32 && pedantic) parser_warning("PURE is ignored in 32-bit mode\n"); }
 	;
 
-lama	: tLOADONCALL	{ $$ = new_int(~WRC_MO_PRELOAD); }
-	| tFIXED	{ $$ = new_int(~WRC_MO_MOVEABLE); }
-	| tIMPURE	{ $$ = new_int(~WRC_MO_PURE); }
+lama	: tLOADONCALL	{ $$ = new_int(~WRC_MO_PRELOAD);
+			  if (win32 && pedantic) parser_warning("LOADONCALL is ignored in 32-bit mode\n"); }
+	| tFIXED	{ $$ = new_int(~WRC_MO_MOVEABLE);
+			  if (win32 && pedantic) parser_warning("FIXED is ignored in 32-bit mode\n"); }
+	| tIMPURE	{ $$ = new_int(~WRC_MO_PURE);
+			  if (win32 && pedantic) parser_warning("IMPURE is ignored in 32-bit mode\n"); }
 	;
 
 /* ------------------------------ Win32 options ------------------------------ */
@@ -2172,7 +2179,9 @@ static event_t *add_string_event(string_t *key, int id, int flags, event_t *prev
 
     if(key->type == str_char)
     {
-	if((flags & WRC_AF_VIRTKEY) && (!isupper(key->str.cstr[0] & 0xff) && !isdigit(key->str.cstr[0] & 0xff)))
+	if((flags & WRC_AF_VIRTKEY) &&
+           !((key->str.cstr[0] >= 'A' && key->str.cstr[0] <= 'Z') ||
+             (key->str.cstr[0] >= '0' && key->str.cstr[0] <= '9')))
 		yyerror("VIRTKEY code is not equal to ascii value");
 
 	if(key->str.cstr[0] == '^' && (flags & WRC_AF_CONTROL) != 0)
@@ -2181,7 +2190,7 @@ static event_t *add_string_event(string_t *key, int id, int flags, event_t *prev
 	}
 	else if(key->str.cstr[0] == '^')
 	{
-		keycode = toupper(key->str.cstr[1]) - '@';
+		keycode = toupper((unsigned char)key->str.cstr[1]) - '@';
 		if(keycode >= ' ')
 			yyerror("Control-code out of range");
 	}
@@ -2190,7 +2199,9 @@ static event_t *add_string_event(string_t *key, int id, int flags, event_t *prev
     }
     else
     {
-	if((flags & WRC_AF_VIRTKEY) && !isupperW(key->str.wstr[0]) && !isdigitW(key->str.wstr[0]))
+	if((flags & WRC_AF_VIRTKEY) &&
+           !((key->str.wstr[0] >= 'A' && key->str.wstr[0] <= 'Z') ||
+             (key->str.wstr[0] >= '0' && key->str.wstr[0] <= '9')))
 		yyerror("VIRTKEY code is not equal to ascii value");
 
 	if(key->str.wstr[0] == '^' && (flags & WRC_AF_CONTROL) != 0)
@@ -2865,7 +2876,6 @@ clean:
 static int rsrcid_to_token(int lookahead)
 {
 	int token;
-	const char *type = "?";
 
 	/* Get a token if we don't have one yet */
 	if(lookahead == YYEMPTY)
@@ -2886,64 +2896,49 @@ static int rsrcid_to_token(int lookahead)
 	switch(yylval.num)
 	{
 	case WRC_RT_CURSOR:
-		type = "CURSOR";
 		token = tCURSOR;
 		break;
 	case WRC_RT_ICON:
-		type = "ICON";
 		token = tICON;
 		break;
 	case WRC_RT_BITMAP:
-		type = "BITMAP";
 		token = tBITMAP;
 		break;
 	case WRC_RT_FONT:
-		type = "FONT";
 		token = tFONT;
 		break;
 	case WRC_RT_FONTDIR:
-		type = "FONTDIR";
 		token = tFONTDIR;
 		break;
 	case WRC_RT_RCDATA:
-		type = "RCDATA";
 		token = tRCDATA;
 		break;
 	case WRC_RT_MESSAGETABLE:
-		type = "MESSAGETABLE";
 		token = tMESSAGETABLE;
 		break;
 	case WRC_RT_DLGINIT:
-		type = "DLGINIT";
 		token = tDLGINIT;
 		break;
 	case WRC_RT_ACCELERATOR:
-		type = "ACCELERATOR";
 		token = tACCELERATORS;
 		break;
 	case WRC_RT_MENU:
-		type = "MENU";
 		token = tMENU;
 		break;
 	case WRC_RT_DIALOG:
-		type = "DIALOG";
 		token = tDIALOG;
 		break;
 	case WRC_RT_VERSION:
-		type = "VERSION";
 		token = tVERSIONINFO;
 		break;
 	case WRC_RT_TOOLBAR:
-		type = "TOOLBAR";
 		token = tTOOLBAR;
 		break;
 	case WRC_RT_HTML:
-		type = "HTML";
 		token = tHTML;
 		break;
 
 	case WRC_RT_STRING:
-		type = "STRINGTABLE";
 		break;
 
 	case WRC_RT_ANICURSOR:

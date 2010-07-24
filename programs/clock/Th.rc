@@ -38,13 +38,11 @@ MAIN_MENU MENU
   MENUITEM "ยูบนสุดเสมอ", IDM_ONTOP
  }
  POPUP "รายละเอียด" {
-  MENUITEM "ใบอนุญาต...", IDM_LICENSE
-  MENUITEM "ไม่มี WARRANTY...", IDM_NOWARRANTY
   MENUITEM "เกี่ยวกับนาฬิกา...", IDM_ABOUT
  }
 }
 
-STRINGTABLE DISCARDABLE
+STRINGTABLE
 {
 IDS_CLOCK, "นาฬิกา"
 }

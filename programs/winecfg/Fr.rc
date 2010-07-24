@@ -29,7 +29,7 @@
 
 LANGUAGE LANG_FRENCH, SUBLANG_NEUTRAL
 
-IDR_WINECFG MENU DISCARDABLE
+IDR_WINECFG MENU
 BEGIN
     POPUP ""
     BEGIN
@@ -37,38 +37,39 @@ BEGIN
     END
 END
 
-IDD_ABOUTCFG DIALOGEX 0, 0, 260, 270
+IDD_ABOUTCFG DIALOGEX 0, 0, 260, 220
 STYLE WS_CHILD
 FONT 8, "MS Shell Dlg"
 BEGIN
-    LTEXT           PACKAGE_STRING,IDC_STATIC,119,17,120,8
-    CONTROL         IDB_WINE,IDC_STATIC,"Static",SS_BITMAP ,15,17,157,111
-    LTEXT           "http://www.winehq.org/",IDC_STATIC,119,31,106,8
+    CONTROL         "", IDC_ABT_PANEL, "STATIC", SS_OWNERDRAW, 0, 0, 260, 140
+    LTEXT           PACKAGE_NAME,IDC_ABT_TITLE_TEXT,105,30,55,30
+    LTEXT           PACKAGE_VERSION,IDC_ABT_PANEL_TEXT,160,43,140,8
+    CONTROL         "",IDC_ABT_WEB_LINK,"SysLink", LWS_TRANSPARENT, 105,53,106,8
     LTEXT           "Ce programme est un logiciel libre ; vous pouvez le redistribuer et/ou le modifier suivant les termes de la Licence Générale Publique Limitée, telle que publiée par la Free Software Foundation ; soit la version 2.1 de la Licence, soit (à votre gré) toute version ultérieure."
-                    IDC_STATIC,119,44,124,72
-    GROUPBOX        "Informations d'enregistrement de Windows ", IDC_STATIC, 15, 113, 230, 55
-    LTEXT           "&Propriétaire:", IDC_STATIC, 22, 129, 40, 20
-    EDITTEXT        IDC_ABT_OWNER, 75, 129, 160, 13, ES_AUTOHSCROLL | WS_TABSTOP
-    LTEXT           "&Organisation:", IDC_STATIC, 22, 143, 50, 20
-    EDITTEXT        IDC_ABT_ORG, 75, 143, 160, 13, ES_AUTOHSCROLL | WS_TABSTOP
+                    IDC_ABT_LICENSE_TEXT,105,64,145,60
+    GROUPBOX        "Informations d'enregistrement de Windows ", IDC_STATIC, 15, 155, 230, 55
+    LTEXT           "&Propriétaire:", IDC_STATIC, 22, 171, 40, 20
+    EDITTEXT        IDC_ABT_OWNER, 75, 171, 160, 13, ES_AUTOHSCROLL | WS_TABSTOP
+    LTEXT           "&Organisation:", IDC_STATIC, 22, 185, 50, 20
+    EDITTEXT        IDC_ABT_ORG, 75, 185, 160, 13, ES_AUTOHSCROLL | WS_TABSTOP
 END
 
-IDD_APPCFG DIALOG DISCARDABLE  0, 0, 260, 250
+IDD_APPCFG DIALOG  0, 0, 260, 220
 STYLE WS_CHILD | WS_DISABLED
 FONT 8, "MS Shell Dlg"
 BEGIN
-    GROUPBOX        " Paramètres des applications ",IDC_STATIC, 8,4,244,240
+    GROUPBOX        " Paramètres des applications ",IDC_STATIC, 8,4,244,210
     LTEXT           "Wine peut imiter différentes versions de Windows pour chaque application. Cet onglet est lié aux onglets Bibliothèques et Affichage pour vous permettre de changer des paramètres globaux ou par application dans ces onglets.",
                     IDC_STATIC,15,20,227,40
     CONTROL         "Applications",IDC_APP_LISTVIEW,"SysListView32",WS_BORDER | WS_TABSTOP | LVS_LIST | LVS_SINGLESEL | LVS_SHOWSELALWAYS,
-                    15,60,230,140
-    PUSHBUTTON	    "&Ajouter une application...",IDC_APP_ADDAPP, 16,204,90,14
-    PUSHBUTTON	    "&Supprimer une application",IDC_APP_REMOVEAPP, 110,204,90,14
-    LTEXT           "Version de &Windows :",IDC_STATIC,17,225,70,8
-    COMBOBOX        IDC_WINVER,95,224,151,31,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+                    15,60,230,110
+    PUSHBUTTON	    "&Ajouter une application...",IDC_APP_ADDAPP, 16,174,90,14
+    PUSHBUTTON	    "&Supprimer une application",IDC_APP_REMOVEAPP, 110,174,90,14
+    LTEXT           "Version de &Windows :",IDC_STATIC,17,195,70,8
+    COMBOBOX        IDC_WINVER,95,194,151,31,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
 END
 
-IDD_GRAPHCFG DIALOG DISCARDABLE  0, 0, 260, 260
+IDD_GRAPHCFG DIALOG  0, 0, 260, 220
 STYLE WS_CHILD | WS_DISABLED
 FONT 8, "MS Shell Dlg"
 BEGIN
@@ -83,35 +84,35 @@ BEGIN
     EDITTEXT    IDC_DESKTOP_WIDTH,74,76,40,12,ES_AUTOHSCROLL | ES_NUMBER | WS_DISABLED
     EDITTEXT    IDC_DESKTOP_HEIGHT,127,76,40,12,ES_AUTOHSCROLL | ES_NUMBER | WS_DISABLED
 
-    GROUPBOX    " Direct3D ",IDC_STATIC,8,103,244,49
-    LTEXT       "Support du Vertex Shader: ",IDC_STATIC,15,118,90,32
-    COMBOBOX    IDC_D3D_VSHADER_MODE,110,116,135,70,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
-    CONTROL     "Utiliser le Pixel Shader (si supporté par le matériel)",IDC_D3D_PSHADER_MODE,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,15,134,230,10
+    GROUPBOX    " Direct3D ",IDC_STATIC,8,100,244,49
+    LTEXT       "Support du Vertex Shader: ",IDC_STATIC,15,115,90,32
+    COMBOBOX    IDC_D3D_VSHADER_MODE,110,113,135,70,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    CONTROL     "Utiliser le Pixel Shader (si supporté par le matériel)",IDC_D3D_PSHADER_MODE,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,15,131,230,10
 
-    GROUPBOX    " Résolution de l'écran ",IDC_STATIC,8,159,244,93
-    CONTROL     "", IDC_RES_TRACKBAR, "msctls_trackbar32",WS_TABSTOP,12,169,187,15
-    EDITTEXT    IDC_RES_DPIEDIT,204,169,23,13,ES_NUMBER|WS_TABSTOP
-    LTEXT       "dpi",IDC_STATIC,233,171,12,8 /* units shouldn't be translated */
-    LTEXT       "Ceci est un exemple utilisant du Tahoma 10 points",IDC_RES_FONT_PREVIEW,15,189,230,55
+    GROUPBOX    " Résolution de l'écran ",IDC_STATIC,8,153,244,63
+    CONTROL     "", IDC_RES_TRACKBAR, "msctls_trackbar32",WS_TABSTOP,12,163,187,15
+    EDITTEXT    IDC_RES_DPIEDIT,204,163,23,13,ES_NUMBER|WS_TABSTOP
+    LTEXT       "dpi",IDC_STATIC,233,165,12,8 /* units shouldn't be translated */
+    LTEXT       "Ceci est un exemple utilisant du Tahoma 10 points",IDC_RES_FONT_PREVIEW,15,183,230,28
 END
 
-IDD_DLLCFG DIALOG DISCARDABLE  0, 0, 260, 250
+IDD_DLLCFG DIALOG  0, 0, 260, 220
 STYLE WS_CHILD | WS_DISABLED
 FONT 8, "MS Shell Dlg"
 BEGIN
-    GROUPBOX        " Remplacement de DLL ",IDC_STATIC,8,4,244,240
+    GROUPBOX        " Remplacement de DLL ",IDC_STATIC,8,4,244,210
     LTEXT           "Il est possible de spécifier si Wine doit utiliser une version native (importée depuis Windows ou installée par l'application) ou bien une version intégrée (distribuée avec Wine) de chaque bibliothèque partagée (DLL) utilisée par un programme."
                     , IDC_STATIC,16,16,220,32
     LTEXT           "&Nouveau remplacement pour :",IDC_STATIC,16,58,100,8
     COMBOBOX        IDC_DLLCOMBO,16,68,140,14,CBS_DROPDOWN | WS_VSCROLL | WS_TABSTOP | CBS_SORT | CBS_LOWERCASE
-    PUSHBUTTON      "&Ajouter",IDC_DLLS_ADDDLL, 164,68,82,14,BS_DEFPUSHBUTTON
+    PUSHBUTTON      "&Ajouter",IDC_DLLS_ADDDLL, 164,68,82,14
     LTEXT           "Remplacements existants :",IDC_STATIC,16,86,100,8
-    LISTBOX         IDC_DLLS_LIST,16,96,140,140,WS_BORDER | WS_TABSTOP | WS_VSCROLL
+    LISTBOX         IDC_DLLS_LIST,16,96,140,112,WS_BORDER | WS_TABSTOP | WS_VSCROLL
     PUSHBUTTON      "&Modifier",IDC_DLLS_EDITDLL,164,96,82,14
     PUSHBUTTON      "&Supprimer",IDC_DLLS_REMOVEDLL,164,114,82,14
 END
 
-IDD_LOADORDER DIALOG DISCARDABLE 80, 90, 135, 92
+IDD_LOADORDER DIALOG 80, 90, 135, 92
 STYLE DS_MODALFRAME | WS_CAPTION | WS_SYSMENU
 CAPTION "Éditer le remplacement"
 FONT 8, "MS Shell Dlg"
@@ -126,7 +127,7 @@ BEGIN
     PUSHBUTTON      "Annuler",IDCANCEL,72,74,45,14,WS_GROUP
 END
 
-IDD_DRIVECHOOSE DIALOG DISCARDABLE  60, 70, 170, 60
+IDD_DRIVECHOOSE DIALOG  60, 70, 170, 60
 STYLE DS_MODALFRAME | WS_CAPTION | WS_SYSMENU
 CAPTION "Sélectionnez la lettre du lecteur"
 FONT 8, "MS Shell Dlg"
@@ -136,12 +137,12 @@ BEGIN
     PUSHBUTTON      "Annuler",IDCANCEL,105,30,45,14,WS_GROUP
 END
 
-IDD_DRIVECFG DIALOG DISCARDABLE  0, 0, 260, 266
+IDD_DRIVECFG DIALOG  0, 0, 260, 220
 STYLE WS_CHILD | WS_DISABLED
 FONT 8, "MS Shell Dlg"
 BEGIN
-    GROUPBOX        " Assignation des lecteurs ",IDC_STATIC,8,4,244,240
-    LTEXT           "N'a pu se connecter au gestionnaire de montage : la configuration du lecteur n'a pu être éditée.", IDC_STATIC_MOUNTMGR_ERROR, 15,30,220,76
+    GROUPBOX        " Assignation des lecteurs ",IDC_STATIC,8,4,244,195
+    LTEXT           "N'a pu se connecter au gestionnaire de montage : la configuration du lecteur n'a pu être éditée.", IDC_STATIC_MOUNTMGR_ERROR, 15,30,190,76
     CONTROL         "Listview",IDC_LIST_DRIVES,"SysListView32",LVS_REPORT | LVS_AUTOARRANGE | LVS_ALIGNLEFT |
                     LVS_SINGLESEL | WS_BORDER | WS_TABSTOP, 15,18,232,76
     PUSHBUTTON      "&Ajouter...",IDC_BUTTON_ADD,15,98,40,14
@@ -151,48 +152,43 @@ BEGIN
     /* editing drive details */
     LTEXT           "&Chemin :",IDC_STATIC_PATH,15,122,30,9
     EDITTEXT        IDC_EDIT_PATH,49,120,152,13,ES_AUTOHSCROLL | WS_TABSTOP
-    PUSHBUTTON      "&Parcourir...",IDC_BUTTON_BROWSE_PATH,204,119,43,14
+    PUSHBUTTON      "&Parcourir...",IDC_BUTTON_BROWSE_PATH,204,120,43,14
 
     LTEXT           "&Type :",IDC_STATIC_TYPE,15,137,21,10
     COMBOBOX        IDC_COMBO_TYPE,49,135,77,16,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
 
-    LTEXT           "Étiquette et numéro de série",IDC_LABELSERIAL_STATIC,15,155,95,10
+    PUSHBUTTON      "&Affichage avancé",IDC_BUTTON_SHOW_HIDE_ADVANCED,147,135,100,14  /* doesn't seem to be displayed, ever */
+    LTEXT           "De&vice:",IDC_STATIC_DEVICE,15,153,26,9
+    EDITTEXT        IDC_EDIT_DEVICE,49,150,152,14,ES_AUTOHSCROLL | WS_TABSTOP
+    PUSHBUTTON      "&Parcourir...",IDC_BUTTON_BROWSE_DEVICE,204,150,43,14
 
-    PUSHBUTTON      "&Affichage avancé",IDC_BUTTON_SHOW_HIDE_ADVANCED,147,136,100,14  /* doesn't seem to be displayed, ever */
-    CONTROL         "Détection automatique depuis le &lecteur :",IDC_RADIO_AUTODETECT,"Button",
-                    BS_AUTORADIOBUTTON,15,166,146,10
-    EDITTEXT        IDC_EDIT_DEVICE,27,176,173,14,ES_AUTOHSCROLL
-    PUSHBUTTON      "&Parcourir...",IDC_BUTTON_BROWSE_DEVICE,204,176,43,14
-    CONTROL         "Assigner &manuellement :",IDC_RADIO_ASSIGN,"Button",
-                    BS_AUTORADIOBUTTON,15,195,140,10
+    LTEXT           "É&tiquette :",IDC_STATIC_LABEL,15,168,40,12
+    EDITTEXT        IDC_EDIT_LABEL,55,165,67,13,ES_AUTOHSCROLL | WS_TABSTOP
+    LTEXT           "N° de &série :",IDC_STATIC_SERIAL,15,183,40,12
+    EDITTEXT        IDC_EDIT_SERIAL,55,180,67,13,ES_AUTOHSCROLL | WS_TABSTOP
 
-    LTEXT           "É&tiquette :",IDC_STATIC_LABEL,33,208,40,12
-    EDITTEXT        IDC_EDIT_LABEL,77,206,67,13,ES_AUTOHSCROLL | WS_TABSTOP
-    LTEXT           "N° de &série :",IDC_STATIC_SERIAL,33,225,40,12
-    EDITTEXT        IDC_EDIT_SERIAL,77,223,67,13,ES_AUTOHSCROLL | WS_TABSTOP
-
-    CONTROL         "Montrer les fichiers cachés",IDC_SHOW_DOT_FILES,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,8,251,230,8
+    CONTROL         "Montrer les fichiers cachés",IDC_SHOW_DOT_FILES,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,8,205,230,8
 END
 
-IDD_AUDIOCFG DIALOG DISCARDABLE  0, 0, 260, 270
+IDD_AUDIOCFG DIALOG  0, 0, 260, 220
 STYLE WS_CHILD | WS_DISABLED
 FONT 8, "MS Shell Dlg"
 BEGIN
-    GROUPBOX        " Sélection du pilote ",IDC_STATIC,8,4,244,210
+    GROUPBOX        " Sélection du pilote ",IDC_STATIC,8,4,244,160
     LTEXT           "Sélectionnez un pilote audio en cochant la case en regard du pilote désiré. Désactivez le son en ne sélectionnant aucun pilote. La sélection de pilotes multiples n'est pas recommandée. Configurez le pilote en effectuant un clic droit dessus.",IDC_STATIC,15,20,227,35
-    CONTROL         "Matériel",IDC_AUDIO_TREE,"SysTreeView32",WS_BORDER | WS_TABSTOP,15,55,140,154
+    CONTROL         "Matériel",IDC_AUDIO_TREE,"SysTreeView32",WS_BORDER | WS_TABSTOP,15,55,140,105
     PUSHBUTTON      "&Tester le son",IDC_AUDIO_TEST,159,56,89,14
     PUSHBUTTON	    "Panneau de &configuration",IDC_AUDIO_CONTROL_PANEL,159,76,89,14
-    GROUPBOX        " DirectSound ",IDC_STATIC,8,220,244,45
-    LTEXT	    "Accélération matérielle : ",IDC_STATIC,15,230,80,10
-    COMBOBOX	    IDC_DSOUND_HW_ACCEL,100,228,148,30,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
-    LTEXT           "Échantillonage (défaut) :",IDC_STATIC,15,245,80,8
-    COMBOBOX        IDC_DSOUND_RATES,100,243,38,30,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
-    LTEXT           "Bits par échantillon :",IDC_STATIC,153,245,80,8
-    COMBOBOX        IDC_DSOUND_BITS,223,243,25,30,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    GROUPBOX        " DirectSound ",IDC_STATIC,8,170,244,45
+    LTEXT	    "Accélération matérielle : ",IDC_STATIC,15,180,80,10
+    COMBOBOX	    IDC_DSOUND_HW_ACCEL,100,178,148,30,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "Échantillonage (défaut) :",IDC_STATIC,15,195,80,8
+    COMBOBOX        IDC_DSOUND_RATES,100,193,38,30,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "Bits par échantillon :",IDC_STATIC,153,195,80,8
+    COMBOBOX        IDC_DSOUND_BITS,223,193,25,30,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
 END
 
-IDD_DESKTOP_INTEGRATION DIALOG DISCARDABLE  0, 0, 260, 220
+IDD_DESKTOP_INTEGRATION DIALOG  0, 0, 260, 220
 STYLE WS_CHILD | WS_DISABLED
 FONT 8, "MS Shell Dlg"
 BEGIN
@@ -220,7 +216,7 @@ BEGIN
     PUSHBUTTON      "Parcou&rir...",IDC_BROWSE_SFPATH,197,191,49,14,WS_DISABLED
 END
 
-STRINGTABLE DISCARDABLE
+STRINGTABLE
 BEGIN
     IDS_TAB_APPLICATIONS    "Applications"
     IDS_TAB_DLLS            "Bibliothèques"
@@ -242,7 +238,7 @@ BEGIN
     IDS_LINKS_TO            "Pointe vers"
 END
 
-STRINGTABLE DISCARDABLE
+STRINGTABLE
 BEGIN
     IDS_DLL_WARNING         "Modifier l'ordre de chargement de cette bibliothèque n'est pas recommandé.\nÊtes-vous sûr de vouloir le faire ?"
     IDS_DLL_WARNING_CAPTION "Attention : bibliothèque système"
@@ -257,13 +253,13 @@ BEGIN
     IDS_SELECT_EXECUTABLE   "Sélectionnez un fichier exécutable"
 END
 
-STRINGTABLE DISCARDABLE
+STRINGTABLE
 BEGIN
     IDS_SHADER_MODE_HARDWARE    "Matériel"
     IDS_SHADER_MODE_NONE        "Aucun"
 END
 
-STRINGTABLE DISCARDABLE
+STRINGTABLE
 BEGIN
     IDS_DRIVE_UNKNOWN           "Détection automatique"
     IDS_DRIVE_FIXED             "Disque dur local"
@@ -278,7 +274,7 @@ BEGIN
     IDS_NO_DRIVE_C              "Vous ne disposez pas de lecteur C, ce qui peut poser des problèmes.\n\nN'oubliez pas d'en recréer un en cliquant sur le bouton « Ajouter » dans l'onglet « Lecteurs » !\n"
 END
 
-STRINGTABLE DISCARDABLE
+STRINGTABLE
 BEGIN
     IDS_ACCEL_FULL              "Complète"
     IDS_ACCEL_STANDARD          "Standard"
@@ -303,7 +299,7 @@ BEGIN
     IDS_WARNING                 "Attention"
 END
 
-STRINGTABLE DISCARDABLE
+STRINGTABLE
 BEGIN
     IDC_SYSPARAMS_BUTTON            "Contrôle l'arrière-plan"
     IDC_SYSPARAMS_BUTTON_TEXT       "Contrôle le texte"

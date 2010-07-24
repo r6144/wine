@@ -4,7 +4,7 @@ SRCDIR    = @srcdir@
 VPATH     = @srcdir@
 MODULE    = credui.dll
 IMPORTLIB = credui
-IMPORTS   = comctl32 user32 advapi32 kernel32
+IMPORTS   = comctl32 user32 advapi32
 
 C_SRCS = \
 	credui_main.c
@@ -16,6 +16,7 @@ RC_SRCS = \
 	credui_En.rc \
 	credui_Es.rc \
 	credui_Fr.rc \
+	credui_Hu.rc \
 	credui_It.rc \
 	credui_Ko.rc \
 	credui_Lt.rc \
@@ -29,5 +30,8 @@ RC_SRCS = \
 	credui_Sv.rc \
 	credui_Uk.rc \
 	credui_Zh.rc
+
+SVG_SRCS = \
+	banner.svg
 
 @MAKE_DLL_RULES@

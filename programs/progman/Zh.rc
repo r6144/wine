@@ -61,12 +61,7 @@ POPUP "帮助(&H)" {
    MENUITEM "如何使用帮助(&H)",     PM_HELPONHELP
    MENUITEM "教程(&T)",         PM_TUTORIAL
    MENUITEM SEPARATOR
-
-   POPUP "资料信息(&I)..." {
-     MENUITEM "用户许可协议(&L)",        PM_LICENSE
-     MENUITEM "责任无关(&N)",    PM_NO_WARRANTY
-     MENUITEM "关于 Wine(&A)",     PM_ABOUT_WINE
-   }
+   MENUITEM "关于 Wine(&A)",     PM_ABOUT_WINE
  }
 }
 
@@ -193,7 +188,7 @@ PUSHBUTTON    "帮助(&H)",             PM_HELP,   135, 65,  60, 15, WS_TABSTOP
 
 /* Strings */
 
-STRINGTABLE DISCARDABLE
+STRINGTABLE
 {
 IDS_PROGRAM_MANAGER,		"程序管理器"
 IDS_ERROR,			"错误"
@@ -255,12 +250,7 @@ POPUP "幫助(&H)" {
    MENUITEM "如何使用幫助(&H)",      PM_HELPONHELP
    MENUITEM "教程(&T)",             PM_TUTORIAL
    MENUITEM SEPARATOR
-
-   POPUP "資料資訊(&I)..." {
-     MENUITEM "用戶許可協議(&L)",    PM_LICENSE
-     MENUITEM "責任無關(&N)",       PM_NO_WARRANTY
-     MENUITEM "關於 Wine(&A)",      PM_ABOUT_WINE
-   }
+   MENUITEM "關於 Wine(&A)",      PM_ABOUT_WINE
  }
 }
 
@@ -387,7 +377,7 @@ PUSHBUTTON    "幫助(&H)",       PM_HELP,   135, 65,  60, 15, WS_TABSTOP
 
 /* Strings */
 
-STRINGTABLE DISCARDABLE
+STRINGTABLE
 {
 IDS_PROGRAM_MANAGER,		"程式管理器"
 IDS_ERROR,			"錯誤"

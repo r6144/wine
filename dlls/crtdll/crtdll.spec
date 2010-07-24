@@ -1,7 +1,9 @@
 # Old C runtime library. All functions provided by msvcrt
 
-@ cdecl ??2@YAPAXI@Z(long) msvcrt.??2@YAPAXI@Z
-@ cdecl ??3@YAXPAX@Z(ptr) msvcrt.??3@YAXPAX@Z
+@ cdecl -arch=win32 ??2@YAPAXI@Z(long) msvcrt.??2@YAPAXI@Z
+@ cdecl -arch=win64 ??2@YAPEAX_K@Z(long) msvcrt.??2@YAPEAX_K@Z
+@ cdecl -arch=win32 ??3@YAXPAX@Z(ptr) msvcrt.??3@YAXPAX@Z
+@ cdecl -arch=win64 ??3@YAXPEAX@Z(ptr) msvcrt.??3@YAXPEAX@Z
 @ cdecl ?_set_new_handler@@YAP6AHI@ZP6AHI@Z@Z(ptr) msvcrt.?_set_new_handler@@YAP6AHI@ZP6AHI@Z@Z
 @ cdecl -arch=i386 _CIacos() msvcrt._CIacos
 @ cdecl -arch=i386 _CIasin() msvcrt._CIasin
@@ -77,7 +79,7 @@
 @ extern _environ_dll msvcrt._environ
 @ cdecl _eof(long) msvcrt._eof
 @ cdecl _errno() msvcrt._errno
-@ cdecl _except_handler2(ptr ptr ptr ptr) msvcrt._except_handler2
+@ cdecl -i386 _except_handler2(ptr ptr ptr ptr) msvcrt._except_handler2
 @ varargs _execl(str str) msvcrt._execl
 @ varargs _execle(str str) msvcrt._execle
 @ varargs _execlp(str str) msvcrt._execlp
@@ -128,7 +130,7 @@
 @ cdecl _getpid() msvcrt._getpid
 @ cdecl _getsystime(ptr) msvcrt._getsystime
 @ cdecl _getw(ptr) msvcrt._getw
-@ cdecl _global_unwind2(ptr) msvcrt._global_unwind2
+@ cdecl -i386 _global_unwind2(ptr) msvcrt._global_unwind2
 @ cdecl _heapchk() msvcrt._heapchk
 @ cdecl _heapmin() msvcrt._heapmin
 @ cdecl _heapset(long) msvcrt._heapset

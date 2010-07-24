@@ -3,7 +3,7 @@ TOPOBJDIR = ../../..
 SRCDIR    = @srcdir@
 VPATH     = @srcdir@
 TESTDLL   = urlmon.dll
-IMPORTS   = urlmon ole32 user32 advapi32 kernel32
+IMPORTS   = urlmon ole32 oleaut32 user32 advapi32
 
 C_SRCS = \
 	generated.c \
@@ -11,6 +11,7 @@ C_SRCS = \
 	protocol.c \
 	sec_mgr.c \
 	stream.c \
+	uri.c \
 	url.c
 
 @MAKE_TEST_RULES@

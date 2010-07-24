@@ -3,28 +3,36 @@ TOPOBJDIR = ../..
 SRCDIR    = @srcdir@
 VPATH     = @srcdir@
 MODULE    = appwiz.cpl
-IMPORTS   = kernel32 comctl32 advapi32 shell32 user32 comdlg32
+IMPORTS   = comctl32 advapi32 shell32 user32 comdlg32
 
 C_SRCS = \
 	appwiz.c
 
 RC_SRCS = \
+	Da.rc \
 	De.rc \
 	En.rc \
 	Es.rc \
 	Fr.rc \
+	Hu.rc \
 	It.rc \
 	Ja.rc \
 	Ko.rc \
 	Lt.rc \
 	Nl.rc \
 	No.rc \
+	Pl.rc \
 	Pt.rc \
 	Ro.rc \
 	Ru.rc \
 	Si.rc \
+	Sr.rc \
 	Sv.rc \
+	Uk.rc \
 	Zh.rc \
 	appwiz.rc
+
+SVG_SRCS = \
+	appwiz.svg
 
 @MAKE_DLL_RULES@

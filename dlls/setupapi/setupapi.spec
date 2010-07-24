@@ -273,7 +273,7 @@
 @ stdcall SetupDiBuildClassInfoList(long ptr long ptr)
 @ stdcall SetupDiBuildClassInfoListExA(long ptr long ptr str ptr)
 @ stdcall SetupDiBuildClassInfoListExW(long ptr long ptr wstr ptr)
-@ stub SetupDiBuildDriverInfoList
+@ stdcall SetupDiBuildDriverInfoList(ptr ptr long)
 @ stdcall SetupDiCallClassInstaller(long ptr ptr)
 @ stub SetupDiCancelDriverInfoSearch
 @ stub SetupDiChangeState
@@ -297,7 +297,7 @@
 @ stdcall SetupDiCreateDeviceInterfaceRegKeyA(ptr ptr long long ptr ptr)
 @ stdcall SetupDiCreateDeviceInterfaceRegKeyW(ptr ptr long long ptr ptr)
 @ stdcall SetupDiDeleteDevRegKey(ptr ptr long long long)
-@ stub SetupDiDeleteDeviceInfo
+@ stdcall SetupDiDeleteDeviceInfo(ptr ptr)
 @ stub SetupDiDeleteDeviceInterfaceData
 @ stdcall SetupDiDeleteDeviceInterfaceRegKey(ptr ptr long)
 @ stub SetupDiDeleteDeviceRegKey
@@ -412,7 +412,7 @@
 @ stdcall SetupGetFileCompressionInfoW(wstr ptr ptr ptr ptr)
 @ stdcall SetupGetFileQueueCount(long long ptr)
 @ stdcall SetupGetFileQueueFlags(long ptr)
-@ stub SetupGetInfFileListA
+@ stdcall SetupGetInfFileListA(str long ptr long ptr)
 @ stdcall SetupGetInfFileListW(wstr long ptr long ptr)
 @ stdcall SetupGetInfInformationA(ptr long ptr long ptr)
 @ stdcall SetupGetInfInformationW(ptr long ptr long ptr)
@@ -426,6 +426,7 @@
 @ stdcall SetupGetLineTextW(ptr long wstr wstr ptr long ptr)
 @ stdcall SetupGetMultiSzFieldA(ptr long ptr long ptr)
 @ stdcall SetupGetMultiSzFieldW(ptr long ptr long ptr)
+@ stdcall SetupGetNonInteractiveMode()
 @ stdcall SetupGetSourceFileLocationA(ptr ptr str ptr ptr long ptr)
 @ stdcall SetupGetSourceFileLocationW(ptr ptr wstr ptr ptr long ptr)
 @ stub SetupGetSourceFileSizeA
@@ -520,6 +521,7 @@
 @ stdcall SetupSetFileQueueAlternatePlatformA(ptr ptr str)
 @ stdcall SetupSetFileQueueAlternatePlatformW(ptr ptr wstr)
 @ stdcall SetupSetFileQueueFlags(long long long)
+@ stdcall SetupSetNonInteractiveMode(long)
 @ stub SetupSetPlatformPathOverrideA
 @ stub SetupSetPlatformPathOverrideW
 @ stdcall SetupSetSourceListA(long ptr long)

@@ -25,6 +25,7 @@
 
 #include "windows.h"
 #include "commdlg.h"
+#include "shellapi.h"
 #include "winhelp.h"
 
 #include "wine/debug.h"
@@ -63,6 +64,9 @@ static WINHELP_BUTTON**        MACRO_LookupButton(WINHELP_WINDOW* win, LPCSTR na
         if (!lstrcmpi(name, (*b)->lpszID)) break;
     return b;
 }
+
+/******* some forward declarations *******/
+static void CALLBACK MACRO_JumpID(LPCSTR lpszPathWindow, LPCSTR topic_id);
 
 /******* real macro implementation *******/
 
@@ -277,24 +281,32 @@ static void CALLBACK MACRO_CheckItem(LPCSTR str)
 static void CALLBACK MACRO_CloseSecondarys(void)
 {
     WINHELP_WINDOW *win;
+    WINHELP_WINDOW *next;
 
     WINE_TRACE("()\n");
-    for (win = Globals.win_list; win; win = win->next)
+    for (win = Globals.win_list; win; win = next)
+    {
+        next = win->next;
         if (lstrcmpi(win->info->name, "main"))
             WINHELP_ReleaseWindow(win);
+    }
 }
 
 static void CALLBACK MACRO_CloseWindow(LPCSTR lpszWindow)
 {
     WINHELP_WINDOW *win;
+    WINHELP_WINDOW *next;
 
     WINE_TRACE("(\"%s\")\n", lpszWindow);
 
     if (!lpszWindow || !lpszWindow[0]) lpszWindow = "main";
 
-    for (win = Globals.win_list; win; win = win->next)
+    for (win = Globals.win_list; win; win = next)
+    {
+        next = win->next;
         if (!lstrcmpi(win->info->name, lpszWindow))
             WINHELP_ReleaseWindow(win);
+    }
 }
 
 static void CALLBACK MACRO_Compare(LPCSTR str)
@@ -352,9 +364,20 @@ static void CALLBACK MACRO_EndMPrint(void)
     WINE_FIXME("()\n");
 }
 
-static void CALLBACK MACRO_ExecFile(LPCSTR str1, LPCSTR str2, LONG u, LPCSTR str3)
+static void CALLBACK MACRO_ExecFile(LPCSTR pgm, LPCSTR args, LONG cmd_show, LPCSTR topic)
 {
-    WINE_FIXME("(\"%s\", \"%s\", %u, \"%s\")\n", str1, str2, u, str3);
+    HINSTANCE ret;
+
+    WINE_TRACE("(%s, %s, %u, %s)\n",
+               wine_dbgstr_a(pgm), wine_dbgstr_a(args), cmd_show, wine_dbgstr_a(topic));
+
+    ret = ShellExecuteA(Globals.active_win ? Globals.active_win->hMainWnd : NULL, "open",
+                        pgm, args, ".", cmd_show);
+    if ((DWORD_PTR)ret < 32)
+    {
+        WINE_WARN("Failed with %p\n", ret);
+        if (topic) MACRO_JumpID(NULL, topic);
+    }
 }
 
 static void CALLBACK MACRO_ExecProgram(LPCSTR str, LONG u)
@@ -560,13 +583,17 @@ static void CALLBACK MACRO_JumpID(LPCSTR lpszPathWindow, LPCSTR topic_id)
     if ((ptr = strchr(lpszPathWindow, '>')) != NULL)
     {
         LPSTR   tmp;
-        size_t  sz = ptr - lpszPathWindow;
+        size_t  sz;
 
-        tmp = HeapAlloc(GetProcessHeap(), 0, sz + 1);
+        tmp = HeapAlloc(GetProcessHeap(), 0, strlen(lpszPathWindow) + 1);
         if (tmp)
         {
-            memcpy(tmp, lpszPathWindow, sz);
-            tmp[sz] = '\0';
+            strcpy(tmp, lpszPathWindow);
+            tmp[ptr - lpszPathWindow] = '\0';
+            ptr += tmp - lpszPathWindow; /* ptr now points to '>' in tmp buffer */
+            /* in some cases, we have a trailing space that we need to get rid of */
+            /* FIXME: check if it has to be done in lexer rather than here */
+            for (sz = strlen(ptr + 1); sz >= 1 && ptr[sz] == ' '; sz--) ptr[sz] = '\0';
             MACRO_JumpHash(tmp, ptr + 1, HLPFILE_Hash(topic_id));
             HeapFree(GetProcessHeap(), 0, tmp);
         }

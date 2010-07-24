@@ -138,6 +138,7 @@ static const char * const atom_names[NB_XATOMS - FIRST_XATOM] =
     "_NET_SUPPORTED",
     "_NET_SYSTEM_TRAY_OPCODE",
     "_NET_SYSTEM_TRAY_S0",
+    "_NET_WM_ICON",
     "_NET_WM_MOVERESIZE",
     "_NET_WM_NAME",
     "_NET_WM_PID",
@@ -149,6 +150,8 @@ static const char * const atom_names[NB_XATOMS - FIRST_XATOM] =
     "_NET_WM_STATE_MAXIMIZED_VERT",
     "_NET_WM_STATE_SKIP_PAGER",
     "_NET_WM_STATE_SKIP_TASKBAR",
+    "_NET_WM_USER_TIME",
+    "_NET_WM_USER_TIME_WINDOW",
     "_NET_WM_WINDOW_OPACITY",
     "_NET_WM_WINDOW_TYPE",
     "_NET_WM_WINDOW_TYPE_DIALOG",
@@ -196,7 +199,10 @@ static inline BOOL ignore_error( Display *display, XErrorEvent *event )
     /* ignore a number of errors on gdi display caused by creating/destroying windows */
     if (display == gdi_display)
     {
-        if (event->error_code == BadDrawable || event->error_code == BadGC) return TRUE;
+        if (event->error_code == BadDrawable ||
+            event->error_code == BadGC ||
+            event->error_code == BadWindow)
+            return TRUE;
 #ifdef HAVE_X11_EXTENSIONS_XRENDER_H
         if (xrender_error_base)  /* check for XRender errors */
         {
@@ -663,7 +669,6 @@ struct x11drv_thread_data *x11drv_init_thread_data(void)
     TlsSetValue( thread_data_tls_index, data );
 
     if (use_xim) X11DRV_SetupXIM();
-    X11DRV_SetCursor( NULL );
 
     return data;
 }

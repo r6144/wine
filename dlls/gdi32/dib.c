@@ -123,7 +123,7 @@ int DIB_GetDIBImageBytes( int width, int height, int depth )
  */
 int bitmap_info_size( const BITMAPINFO * info, WORD coloruse )
 {
-    int colors, masks = 0;
+    unsigned int colors, size, masks = 0;
 
     if (info->bmiHeader.biSize == sizeof(BITMAPCOREHEADER))
     {
@@ -139,8 +139,8 @@ int bitmap_info_size( const BITMAPINFO * info, WORD coloruse )
         if (!colors && (info->bmiHeader.biBitCount <= 8))
             colors = 1 << info->bmiHeader.biBitCount;
         if (info->bmiHeader.biCompression == BI_BITFIELDS) masks = 3;
-        return sizeof(BITMAPINFOHEADER) + masks * sizeof(DWORD) + colors *
-               ((coloruse == DIB_RGB_COLORS) ? sizeof(RGBQUAD) : sizeof(WORD));
+        size = max( info->bmiHeader.biSize, sizeof(BITMAPINFOHEADER) + masks * sizeof(DWORD) );
+        return size + colors * ((coloruse == DIB_RGB_COLORS) ? sizeof(RGBQUAD) : sizeof(WORD));
     }
 }
 
@@ -332,21 +332,26 @@ INT WINAPI SetDIBits( HDC hdc, HBITMAP hbitmap, UINT startscan,
 		      UINT lines, LPCVOID bits, const BITMAPINFO *info,
 		      UINT coloruse )
 {
-    DC *dc;
+    DC *dc = get_dc_ptr( hdc );
+    BOOL delete_hdc = FALSE;
     BITMAPOBJ *bitmap;
     INT result = 0;
 
-    if (coloruse == DIB_RGB_COLORS) hdc = CreateCompatibleDC(0);
+    if (coloruse == DIB_RGB_COLORS && !dc)
+    {
+        hdc = CreateCompatibleDC(0);
+        dc = get_dc_ptr( hdc );
+        delete_hdc = TRUE;
+    }
 
-    if (!(dc = get_dc_ptr( hdc )))
-        return 0;
+    if (!dc) return 0;
 
     update_dc( dc );
 
     if (!(bitmap = GDI_GetObjPtr( hbitmap, OBJ_BITMAP )))
     {
         release_dc_ptr( dc );
-        if (coloruse == DIB_RGB_COLORS) DeleteDC(hdc);
+        if (delete_hdc) DeleteDC(hdc);
         return 0;
     }
 
@@ -365,7 +370,7 @@ INT WINAPI SetDIBits( HDC hdc, HBITMAP hbitmap, UINT startscan,
  done:
     GDI_ReleaseObj( hbitmap );
     release_dc_ptr( dc );
-    if (coloruse == DIB_RGB_COLORS) DeleteDC(hdc);
+    if (delete_hdc) DeleteDC(hdc);
     return result;
 }
 
@@ -642,18 +647,24 @@ INT WINAPI GetDIBits(
                 DIB_GetDIBImageBytes( bmp->bitmap.bmWidth,
                                       bmp->bitmap.bmHeight,
                                       bmp->bitmap.bmBitsPixel );
-            info->bmiHeader.biCompression = (bmp->bitmap.bmBitsPixel > 8) ? BI_BITFIELDS : BI_RGB;
-            switch(bmp->bitmap.bmBitsPixel)
+            if (bmp->dib)
             {
-            case 15:
-                info->bmiHeader.biBitCount = 16;
-                break;
-            case 24:
-                info->bmiHeader.biBitCount = 32;
-                break;
-            default:
+                info->bmiHeader.biBitCount = bmp->dib->dsBm.bmBitsPixel;
+                switch (bmp->dib->dsBm.bmBitsPixel)
+                {
+                case 16:
+                case 32:
+                    info->bmiHeader.biCompression = BI_BITFIELDS;
+                    break;
+                default:
+                    info->bmiHeader.biCompression = BI_RGB;
+                    break;
+                }
+            }
+            else
+            {
+                info->bmiHeader.biCompression = (bmp->bitmap.bmBitsPixel > 8) ? BI_BITFIELDS : BI_RGB;
                 info->bmiHeader.biBitCount = bmp->bitmap.bmBitsPixel;
-                break;
             }
             info->bmiHeader.biXPelsPerMeter = 0;
             info->bmiHeader.biYPelsPerMeter = 0;
@@ -822,9 +833,13 @@ INT WINAPI GetDIBits(
     case 16:
         if (info->bmiHeader.biCompression == BI_BITFIELDS)
         {
-            ((PDWORD)info->bmiColors)[0] = 0xf800;
-            ((PDWORD)info->bmiColors)[1] = 0x07e0;
-            ((PDWORD)info->bmiColors)[2] = 0x001f;
+            if (bmp->dib) memcpy( info->bmiColors, bmp->dib->dsBitfields, 3 * sizeof(DWORD) );
+            else
+            {
+                ((PDWORD)info->bmiColors)[0] = 0xf800;
+                ((PDWORD)info->bmiColors)[1] = 0x07e0;
+                ((PDWORD)info->bmiColors)[2] = 0x001f;
+            }
         }
         break;
 
@@ -832,9 +847,13 @@ INT WINAPI GetDIBits(
     case 32:
         if (info->bmiHeader.biCompression == BI_BITFIELDS)
         {
-            ((PDWORD)info->bmiColors)[0] = 0xff0000;
-            ((PDWORD)info->bmiColors)[1] = 0x00ff00;
-            ((PDWORD)info->bmiColors)[2] = 0x0000ff;
+            if (bmp->dib) memcpy( info->bmiColors, bmp->dib->dsBitfields, 3 * sizeof(DWORD) );
+            else
+            {
+                ((PDWORD)info->bmiColors)[0] = 0xff0000;
+                ((PDWORD)info->bmiColors)[1] = 0x00ff00;
+                ((PDWORD)info->bmiColors)[2] = 0x0000ff;
+            }
         }
         break;
     }
@@ -1231,9 +1250,20 @@ HBITMAP WINAPI CreateDIBSection(HDC hdc, CONST BITMAPINFO *bmi, UINT usage,
                                            &planes, &bpp, &compression, &sizeImage )) == -1))
         return 0;
 
-    if (compression != BI_RGB && compression != BI_BITFIELDS)
+    switch (bpp)
     {
-        TRACE("can't create a compressed (%u) dibsection\n", compression);
+    case 16:
+    case 32:
+        if (compression == BI_BITFIELDS) break;
+        /* fall through */
+    case 1:
+    case 4:
+    case 8:
+    case 24:
+        if (compression == BI_RGB) break;
+        /* fall through */
+    default:
+        WARN( "invalid %u bpp compression %u\n", bpp, compression );
         return 0;
     }
 

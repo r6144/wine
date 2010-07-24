@@ -728,7 +728,7 @@ static HMODULE16 build_module( const void *mapping, SIZE_T mapping_size, LPCSTR 
         if (!NE_READ_DATA( pModule, buffer, ne_header->ne_nrestab, ne_header->ne_cbnrestab ))
         {
             GlobalFree16( pModule->nrname_handle );
-            goto failed;
+            pModule->nrname_handle = 0;
         }
     }
     else pModule->nrname_handle = 0;
@@ -1518,7 +1518,9 @@ BOOL16 WINAPI GetModuleName16( HINSTANCE16 hinst, LPSTR buf, INT16 count )
 /**********************************************************************
  *	    GetModuleFileName      (KERNEL.49)
  *
- * Comment: see GetModuleFileNameA
+ * See also: GetModuleFileNameA
+ *
+ * This function returns short paths when the modules version field is < 4.0).
  *
  * Even if invoked by second instance of a program,
  * it still returns path of first one.

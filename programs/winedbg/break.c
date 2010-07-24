@@ -137,9 +137,9 @@ static	int init_xpoint(int type, const ADDRESS64* addr)
  *
  * Returns the value watched by watch point 'num'.
  */
-static	BOOL	get_watched_value(int num, LPDWORD val)
+static	BOOL	get_watched_value(int num, DWORD64* val)
 {
-    BYTE        buf[4];
+    DWORD64     buf[1];
 
     if (!dbg_read_memory(memory_to_linear_addr(&dbg_curr_process->bp[num].addr),
                          buf, dbg_curr_process->bp[num].w.len + 1))
@@ -147,6 +147,7 @@ static	BOOL	get_watched_value(int num, LPDWORD val)
 
     switch (dbg_curr_process->bp[num].w.len + 1)
     {
+    case 8:	*val = *(DWORD64*)buf;	break;
     case 4:	*val = *(DWORD*)buf;	break;
     case 2:	*val = *(WORD*)buf;	break;
     case 1:	*val = *(BYTE*)buf;	break;
@@ -372,6 +373,11 @@ static void break_add_watch(const struct dbg_lvalue* lvalue, BOOL is_write)
     int         num;
     DWORD64     l = 4;
 
+    if (lvalue->cookie == DLV_HOST)
+    {
+        dbg_printf("Cannot set a watch point on register or register-based variable\n");
+        return;
+    }
     num = init_xpoint((is_write) ? be_xpoint_watch_write : be_xpoint_watch_read,
                       &lvalue->addr);
     if (num == -1) return;
@@ -535,16 +541,15 @@ void break_enable_xpoint(int num, BOOL enable)
  *           find_triggered_watch
  *
  * Lookup the watchpoints to see if one has been triggered
- * Return >= (watch point index) if one is found and *oldval is set to
- * 	the value watched before the TRAP
- * Return -1 if none found (*oldval is undetermined)
+ * Return >= (watch point index) if one is found
+ * Return -1 if none found
  *
- * Unfortunately, Linux does *NOT* (A REAL PITA) report with ptrace
+ * Unfortunately, Linux used to *NOT* (A REAL PITA) report with ptrace
  * the DR6 register value, so we have to look with our own need the
  * cause of the TRAP.
  * -EP
  */
-static int find_triggered_watch(LPDWORD oldval)
+static int find_triggered_watch(void)
 {
     int                         found = -1;
     int                         i;
@@ -555,14 +560,13 @@ static int find_triggered_watch(LPDWORD oldval)
      */
     for (i = 0; i < dbg_curr_process->next_bp; i++)
     {
-        DWORD val = 0;
+        DWORD64 val = 0;
 
         if (bp[i].refcount && bp[i].enabled && !is_xpoint_break(i) &&
             (be_cpu->is_watchpoint_set(&dbg_context, bp[i].info)))
         {
             be_cpu->clear_watchpoint(&dbg_context, bp[i].info);
 
-            *oldval = bp[i].w.oldval;
             if (get_watched_value(i, &val))
             {
                 bp[i].w.oldval = val;
@@ -579,13 +583,12 @@ static int find_triggered_watch(LPDWORD oldval)
      */
     for (i = 0; i < dbg_curr_process->next_bp; i++)
     {
-        DWORD val = 0;
+        DWORD64 val = 0;
 
         if (bp[i].refcount && bp[i].enabled && !is_xpoint_break(i) &&
             get_watched_value(i, &val))
         {
-            *oldval = bp[i].w.oldval;
-            if (val != *oldval)
+            if (val != bp[i].w.oldval)
             {
                 be_cpu->clear_watchpoint(&dbg_context, bp[i].info);
                 bp[i].w.oldval = val;
@@ -743,8 +746,8 @@ BOOL break_should_continue(ADDRESS64* addr, DWORD code)
         case be_xpoint_watch_write:
             dbg_printf("Stopped on watchpoint %d at ", dbg_curr_thread->stopped_xpoint);
             print_address(addr, TRUE);
-            dbg_printf(" new value %u\n",
-                       dbg_curr_process->bp[dbg_curr_thread->stopped_xpoint].w.oldval);
+            dbg_printf(" new value %s\n",
+                       wine_dbgstr_longlong(dbg_curr_process->bp[dbg_curr_thread->stopped_xpoint].w.oldval));
         }
         return FALSE;
     }
@@ -782,8 +785,6 @@ BOOL break_should_continue(ADDRESS64* addr, DWORD code)
  */
 void break_adjust_pc(ADDRESS64* addr, DWORD code, BOOL first_chance, BOOL* is_break)
 {
-    DWORD	        oldval = 0;
-
     /* break / watch points are handled on first chance */
     if ( !first_chance )
     {
@@ -806,7 +807,7 @@ void break_adjust_pc(ADDRESS64* addr, DWORD code, BOOL first_chance, BOOL* is_br
     {
         dbg_curr_thread->stopped_xpoint = find_xpoint(addr, be_xpoint_watch_exec);
         if (dbg_curr_thread->stopped_xpoint < 0)
-            dbg_curr_thread->stopped_xpoint = find_triggered_watch(&oldval);
+            dbg_curr_thread->stopped_xpoint = find_triggered_watch();
         if (dbg_curr_thread->stopped_xpoint > 0)
         {
             /* If not single-stepping, do not back up over the break instruction */

@@ -282,7 +282,7 @@ sub parse_spec_file($$) {
 	my $ARCHES="alpha|i386|powerpc|sparc|win32|win64|x86_64";
 	if(/^(\d+|@)\s+
 	   (cdecl|pascal|stdcall|varargs)\s+
-	   ((?:(?:-arch=(?:$ARCHES)(?:,(?:$ARCHES))*|-noname|-norelay|-i386|-ret16|-ret64|-register|-interrupt|-private)\s+)*)(\S+)\s*\(\s*(.*?)\s*\)\s*(\S*)$/x)
+	   ((?:(?:-arch=(?:$ARCHES)(?:,(?:$ARCHES))*|-noname|-norelay|-ordinal|-i386|-ret16|-ret64|-register|-interrupt|-private)\s+)*)(\S+)\s*\(\s*(.*?)\s*\)\s*(\S*)$/x)
 	{
 	    my $calling_convention = $2;
 	    my $flags = $3;
@@ -391,7 +391,7 @@ sub parse_spec_file($$) {
 		    }
 		}
 	    }
-	} elsif(/^(\d+|@)\s+stub(?:\s+(-arch=(?:$ARCHES)(?:,(?:$ARCHES))*|-noname|-norelay|-i386|-ret16|-ret64|-private))?\s+(\S+)$/) {
+	} elsif(/^(\d+|@)\s+stub(?:\s+(-arch=(?:$ARCHES)(?:,(?:$ARCHES))*|-noname|-norelay|-i386|-ret16|-ret64|-private))*\s+(\S+)$/) {
 	    $ordinal = $1;
 
 	    my $flags = $2;
@@ -440,7 +440,7 @@ sub parse_spec_file($$) {
 	    } else { # if($$function_external_module{$external_name} !~ /$module/) {
 		$$function_external_module{$external_name} .= " & $module";
 	    }
-	} elsif(/^(\d+|@)\s+extern(?:\s+(?:-arch=(?:$ARCHES)(?:,(?:$ARCHES))*|-norelay|-i386|-ret16|-ret64))?\s+(\S+)\s*(\S*)$/) {
+	} elsif(/^(\d+|@)\s+extern(?:\s+(?:-arch=(?:$ARCHES)(?:,(?:$ARCHES))*|-norelay|-i386|-ret16|-ret64))*\s+(\S+)\s*(\S*)$/) {
 	    $ordinal = $1;
 
 	    my $external_name = $2;

@@ -154,7 +154,7 @@ BOOL WINAPI CreateCaret( HWND hwnd, HBITMAP bitmap, INT width, INT height )
 		{
 		    HBITMAP hPrevBmp = SelectObject(hMemDC, hBmp);
                     SetRect( &r, 0, 0, width, height );
-		    FillRect(hMemDC, &r, ULongToHandle((bitmap ? COLOR_GRAYTEXT : COLOR_WINDOW) + 1));
+		    FillRect(hMemDC, &r, bitmap ? GetStockObject(GRAY_BRUSH) : GetStockObject(WHITE_BRUSH));
 		    SelectObject(hMemDC, hPrevBmp);
 		}
 		DeleteDC(hMemDC);
@@ -269,7 +269,7 @@ BOOL WINAPI SetCaretPos( INT x, INT y )
         }
     }
     SERVER_END_REQ;
-    if (ret && !hidden)
+    if (ret && !hidden && (x != r.left || y != r.top))
     {
         if (old_state) CARET_DisplayCaret( hwnd, &r );
         r.right += x - r.left;

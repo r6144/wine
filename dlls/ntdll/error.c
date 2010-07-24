@@ -128,6 +128,17 @@ DWORD WINAPI RtlGetLastWin32Error(void)
     return NtCurrentTeb()->LastErrorValue;
 }
 
+/**********************************************************************
+ *      NtRaiseHardError (NTDLL.@)
+ */
+NTSTATUS WINAPI NtRaiseHardError( NTSTATUS ErrorStatus, ULONG NumberOfParameters,
+                                  PUNICODE_STRING UnicodeStringParameterMask, PVOID *Parameters,
+                                  HARDERROR_RESPONSE_OPTION ResponseOption, PHARDERROR_RESPONSE Response )
+{
+    FIXME(": stub. Errorstatus was %08x\n", ErrorStatus);
+    return STATUS_NOT_IMPLEMENTED;
+}
+
 /***********************************************************************
  *      RtlSetLastWin32Error (NTDLL.@)
  *      RtlRestoreLastWin32Error (NTDLL.@)
@@ -658,9 +669,9 @@ static const DWORD table_c0000001[411] =
    0,                                      /* c0000115 (STATUS_ABIOS_SELECTOR_NOT_AVAILABLE) */
    0,                                      /* c0000116 (STATUS_ABIOS_INVALID_SELECTOR) */
    ERROR_INVALID_THREAD_ID,                /* c0000117 (STATUS_NO_LDT) */
-   0,                                      /* c0000118 (STATUS_INVALID_LDT_SIZE) */
-   0,                                      /* c0000119 (STATUS_INVALID_LDT_OFFSET) */
-   0,                                      /* c000011a (STATUS_INVALID_LDT_DESCRIPTOR) */
+   ERROR_INVALID_LDT_SIZE,                 /* c0000118 (STATUS_INVALID_LDT_SIZE) */
+   ERROR_INVALID_LDT_OFFSET,               /* c0000119 (STATUS_INVALID_LDT_OFFSET) */
+   ERROR_INVALID_LDT_DESCRIPTOR,           /* c000011a (STATUS_INVALID_LDT_DESCRIPTOR) */
    ERROR_BAD_EXE_FORMAT,                   /* c000011b (STATUS_INVALID_IMAGE_NE_FORMAT) */
    ERROR_RXACT_INVALID_STATE,              /* c000011c (STATUS_RXACT_INVALID_STATE) */
    ERROR_RXACT_COMMIT_FAILURE,             /* c000011d (STATUS_RXACT_COMMIT_FAILURE) */
@@ -1447,5 +1458,5 @@ static const struct error_table error_table[] =
     { 0xc00a0001, 0xc00a0037, table_c00a0001 },
     { 0xc0130001, 0xc0130017, table_c0130001 },
     { 0xc0150001, 0xc015000f, table_c0150001 },
-    { 0, 0, 0 }  /* last entry */
+    { 0, 0, NULL }  /* last entry */
 };

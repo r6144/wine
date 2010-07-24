@@ -1353,6 +1353,7 @@ void (WINE_GLAPI *glVertex4sv)(const GLshort *v) DECLSPEC_HIDDEN;
 void (WINE_GLAPI *glVertexPointer)(GLint size, GLenum type, GLsizei stride, const GLvoid *pointer) DECLSPEC_HIDDEN;
 void (WINE_GLAPI *glViewport)(GLint x, GLint y, GLsizei width, GLsizei height) DECLSPEC_HIDDEN;
 void (WINE_GLAPI *glPointParameterfv)(GLenum pname, const GLfloat *params) DECLSPEC_HIDDEN;
+void (WINE_GLAPI *glPointParameteri)(GLenum name, GLint value) DECLSPEC_HIDDEN;
 
 /* glFinish and glFlush are always loaded from opengl32.dll, thus they always have
  * __stdcall calling convention.
@@ -1708,6 +1709,7 @@ BOOL (WINAPI *pwglShareLists)(HGLRC, HGLRC) DECLSPEC_HIDDEN;
     USE_GL_FUNC(glVertexPointer) \
     USE_GL_FUNC(glViewport) \
     USE_GL_FUNC(glPointParameterfv) \
+    USE_GL_FUNC(glPointParameteri) \
 
 #define WGL_FUNCS_GEN \
     USE_WGL_FUNC(wglCreateContext) \
@@ -1754,6 +1756,7 @@ typedef enum wined3d_gl_extension
     ARB_SHADER_OBJECTS,
     ARB_SHADER_TEXTURE_LOD,
     ARB_SHADING_LANGUAGE_100,
+    ARB_SHADOW,
     ARB_SYNC,
     ARB_TEXTURE_BORDER_CLAMP,
     ARB_TEXTURE_COMPRESSION,
@@ -1815,6 +1818,7 @@ typedef enum wined3d_gl_extension
     NV_FRAGMENT_PROGRAM_OPTION,
     NV_HALF_FLOAT,
     NV_LIGHT_MAX_EXPONENT,
+    NV_POINT_SPRITE,
     NV_REGISTER_COMBINERS,
     NV_REGISTER_COMBINERS2,
     NV_TEXGEN_REFLECTION,
@@ -1833,7 +1837,8 @@ typedef enum wined3d_gl_extension
     WGL_ARB_PIXEL_FORMAT,
     WGL_WINE_PIXEL_FORMAT_PASSTHROUGH,
     /* Internally used */
-    WINE_NORMALIZED_TEXRECT,
+    WINED3D_GL_NORMALIZED_TEXRECT,
+    WINED3D_GL_VERSION_2_0,
 
     WINED3D_GL_EXT_COUNT,
 } GL_SupportedExt;
@@ -2402,6 +2407,14 @@ typedef unsigned int GLhandleARB;
 #ifndef GL_ARB_shading_language_100
 #define GL_ARB_shading_language_100 1
 #define GL_SHADING_LANGUAGE_VERSION_ARB                     0x8b8c
+#endif
+
+/* GL_ARB_shadow */
+#ifndef GL_ARB_shadow
+#define GL_ARB_shadow 1
+#define GL_TEXTURE_COMPARE_MODE_ARB                         0x884c
+#define GL_TEXTURE_COMPARE_FUNC_ARB                         0x884d
+#define GL_COMPARE_R_TO_TEXTURE_ARB                         0x884e
 #endif
 
 /* GL_ARB_sync */
@@ -3470,6 +3483,16 @@ typedef void (WINE_GLAPI *PGLFNVERTEXATTRIBS4HVNVPROC)(GLuint index, GLsizei n, 
 #define GL_MAX_SPOT_EXPONENT_NV                             0x8505
 #endif
 
+/* GL_NV_point_sprite */
+#ifndef GL_NV_point_sprite
+#define GL_NV_point_sprite 1
+#define GL_NV_POINT_SPRITE_NV                               0x8861
+#define GL_NV_COORD_REPLACE_NV                              0x8862
+#define GL_NV_POINT_SPRITE_R_MODE_NV                        0x8863
+#endif
+typedef void (WINE_GLAPI *PGLFNPOINTPARAMETERIVNVPROC)(GLenum pname, const GLint *params);
+typedef void (WINE_GLAPI *PGLFNPOINTPARAMETERINVPROC)(GLenum pname, GLint param);
+
 /* GL_NV_register_combiners */
 #ifndef GL_NV_register_combiners
 #define GL_NV_register_combiners 1
@@ -3919,7 +3942,7 @@ typedef BOOL (WINAPI *WINED3D_PFNWGLSETPIXELFORMATWINE)(HDC hdc, int iPixelForma
             glUniform3iARB,                             ARB_SHADER_OBJECTS,             NULL) \
     USE_GL_FUNC(WINED3D_PFNGLUNIFORM4IARBPROC, \
             glUniform4iARB,                             ARB_SHADER_OBJECTS,             NULL) \
-    USE_GL_FUNC(WINED3D_PFNGLUNIFORM1IARBPROC, \
+    USE_GL_FUNC(WINED3D_PFNGLUNIFORM1FARBPROC, \
             glUniform1fARB,                             ARB_SHADER_OBJECTS,             NULL) \
     USE_GL_FUNC(WINED3D_PFNGLUNIFORM2FARBPROC, \
             glUniform2fARB,                             ARB_SHADER_OBJECTS,             NULL) \
@@ -4465,6 +4488,11 @@ typedef BOOL (WINAPI *WINED3D_PFNWGLSETPIXELFORMATWINE)(HDC hdc, int iPixelForma
             glVertexAttribs3hvNV,                       NV_HALF_FLOAT,                  NULL) \
     USE_GL_FUNC(PGLFNVERTEXATTRIBS4HVNVPROC, \
             glVertexAttribs4hvNV,                       NV_HALF_FLOAT,                  NULL) \
+    /* GL_NV_point_sprite */ \
+    USE_GL_FUNC(PGLFNPOINTPARAMETERIVNVPROC, \
+            glPointParameterivNV,                       NV_POINT_SPRITE,                NULL) \
+    USE_GL_FUNC(PGLFNPOINTPARAMETERINVPROC, \
+            glPointParameteriNV,                        NV_POINT_SPRITE,                NULL) \
     /* GL_NV_register_combiners */ \
     USE_GL_FUNC(PGLFNCOMBINERINPUTNVPROC, \
             glCombinerInputNV,                          NV_REGISTER_COMBINERS,          NULL) \

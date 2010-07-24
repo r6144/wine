@@ -47,7 +47,7 @@ POPUP "&Правка" {
   MENUITEM "Вст&авить\tCtrl+V",    CMD_PASTE
   MENUITEM "&Удалить\tDel",      CMD_DELETE
   MENUITEM SEPARATOR
-  MENUITEM "Выделить в&се",       CMD_SELECT_ALL
+  MENUITEM "Выделить в&сё",       CMD_SELECT_ALL
   MENUITEM "Врем&я и дата\tF5",    CMD_TIME_DATE
   MENUITEM SEPARATOR
   MENUITEM "&Перенос по словам",  CMD_WRAP
@@ -94,7 +94,7 @@ PUSHBUTTON    "Отмена",     IDCANCEL,               180, 21, 40, 15, WS_TA
 PUSHBUTTON    "&Справка",       IDHELP,                180, 39, 40, 15, WS_TABSTOP
 }
 
-IDD_OFN_TEMPLATE  DIALOG  DISCARDABLE 50,50,300,15
+IDD_OFN_TEMPLATE  DIALOG 50,50,300,15
 STYLE DS_3DLOOK | DS_CONTROL | WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_BORDER
 FONT 8, "MS Shell Dlg"
 BEGIN
@@ -102,7 +102,7 @@ BEGIN
   COMBOBOX IDC_OFN_ENCCOMBO, 53,0, 156,48, WS_CHILD | WS_VSCROLL | CBS_DROPDOWNLIST
 END
 
-STRINGTABLE DISCARDABLE
+STRINGTABLE
 {
 STRING_PAGESETUP_HEADERVALUE,   "&f"
 STRING_PAGESETUP_FOOTERVALUE,   "Страница &p"
@@ -123,7 +123,7 @@ STRING_NOTEXT,                                  "Вы не ввели никак
 \nВведите что-нибудь и попробуйте еще."
 STRING_DOESNOTEXIST,                            "Файл '%s'\nне существует\n\n \
 Хотите создать новый файл?"
-STRING_NOTSAVED,                                "Файл '%s'\nбыл изменен\n\n \
+STRING_NOTSAVED,                                "Файл '%s'\nбыл изменён\n\n \
 Хотите сохранить изменения?"
 STRING_NOTFOUND,                                        "'%s' не найден."
 STRING_OUT_OF_MEMORY,                   "Недостаточно памяти для завершения этой операции \

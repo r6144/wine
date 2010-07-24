@@ -1,6 +1,6 @@
 /*
  * Copyright 2005-2006 Jacek Caban for CodeWeavers
- * Copyright 2009 Detlef Riekenberg
+ * Copyright 2009-2010 Detlef Riekenberg
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -35,21 +35,25 @@
 
 #include "initguid.h"
 
+
+static HRESULT (WINAPI *pCoInternetCreateSecurityManager)(IServiceProvider *, IInternetSecurityManager**, DWORD);
+static HRESULT (WINAPI *pCoInternetCreateZoneManager)(IServiceProvider *, IInternetZoneManager**, DWORD);
+static HRESULT (WINAPI *pCoInternetGetSecurityUrl)(LPCWSTR, LPWSTR*, PSUACTION, DWORD);
+
 static const WCHAR url1[] = {'r','e','s',':','/','/','m','s','h','t','m','l','.','d','l','l',
         '/','b','l','a','n','k','.','h','t','m',0};
 static const WCHAR url2[] = {'i','n','d','e','x','.','h','t','m',0};
 static const WCHAR url3[] = {'f','i','l','e',':','/','/','c',':','\\','I','n','d','e','x','.','h','t','m',0};
 static const WCHAR url4[] = {'f','i','l','e',':','s','o','m','e','%','2','0','f','i','l','e',
         '%','2','e','j','p','g',0};
-static const WCHAR url5[] = {'h','t','t','p',':','/','/','w','w','w','.','w','i','n','e','h','q',
-        '.','o','r','g',0};
+static const WCHAR url5[] = {'h','t','t','p',':','/','/','w','w','w','.','z','o','n','e','3',
+        '.','w','i','n','e','t','e','s','t',0};
 static const WCHAR url6[] = {'a','b','o','u','t',':','b','l','a','n','k',0};
-static const WCHAR url7[] = {'f','t','p',':','/','/','w','i','n','e','h','q','.','o','r','g','/',
-        'f','i','l','e','.','t','e','s','t',0};
+static const WCHAR url7[] = {'f','t','p',':','/','/','z','o','n','e','3',
+        '.','w','i','n','e','t','e','s','t','/','f','i','l','e','.','t','e','s','t',0};
 static const WCHAR url8[] = {'t','e','s','t',':','1','2','3','a','b','c',0};
-static const WCHAR url9[] =
-    {'h','t','t','p',':','/','/','w','w','w','.','w','i','n','e','h','q','.','o','r','g',
-     '/','s','i','t','e','/','a','b','o','u','t',0};
+static const WCHAR url9[] = {'h','t','t','p',':','/','/','w','w','w','.','z','o','n','e','3',
+        '.','w','i','n','e','t','e','s','t', '/','s','i','t','e','/','a','b','o','u','t',0};
 static const WCHAR url10[] = {'f','i','l','e',':','/','/','s','o','m','e','%','2','0','f','i','l','e',
         '.','j','p','g',0};
 
@@ -58,11 +62,11 @@ static const WCHAR url4e[] = {'f','i','l','e',':','s','o','m','e',' ','f','i','l
 
 
 static const BYTE secid1[] = {'f','i','l','e',':',0,0,0,0};
-static const BYTE secid5[] = {'h','t','t','p',':','w','w','w','.','w','i','n','e','h','q',
-    '.','o','r','g',3,0,0,0};
+static const BYTE secid5[] = {'h','t','t','p',':','w','w','w','.','z','o','n','e','3',
+        '.','w','i','n','e','t','e','s','t',3,0,0,0};
 static const BYTE secid6[] = {'a','b','o','u','t',':','b','l','a','n','k',3,0,0,0};
-static const BYTE secid7[] = {'f','t','p',':','w','i','n','e','h','q','.','o','r','g',
-                              3,0,0,0};
+static const BYTE secid7[] = {'f','t','p',':','z','o','n','e','3',
+        '.','w','i','n','e','t','e','s','t',3,0,0,0};
 static const BYTE secid10[] =
     {'f','i','l','e',':','s','o','m','e','%','2','0','f','i','l','e','.','j','p','g',3,0,0,0};
 static const BYTE secid10_2[] =
@@ -108,7 +112,11 @@ static void test_SecurityManager(void)
     DWORD zone, size, policy;
     HRESULT hres;
 
-    hres = CoInternetCreateSecurityManager(NULL, &secmgr, 0);
+    if(!pCoInternetCreateSecurityManager) {
+        return;
+    }
+
+    hres = pCoInternetCreateSecurityManager(NULL, &secmgr, 0);
     ok(hres == S_OK, "CoInternetCreateSecurityManager failed: %08x\n", hres);
     if(FAILED(hres))
         return;
@@ -341,9 +349,13 @@ static void test_polices(void)
     IInternetSecurityManager *secmgr = NULL;
     HRESULT hres;
 
-    hres = CoInternetCreateSecurityManager(NULL, &secmgr, 0);
+    if(!pCoInternetCreateSecurityManager || !pCoInternetCreateZoneManager) {
+        return;
+    }
+
+    hres = pCoInternetCreateSecurityManager(NULL, &secmgr, 0);
     ok(hres == S_OK, "CoInternetCreateSecurityManager failed: %08x\n", hres);
-    hres = CoInternetCreateZoneManager(NULL, &zonemgr, 0);
+    hres = pCoInternetCreateZoneManager(NULL, &zonemgr, 0);
     ok(hres == S_OK, "CoInternetCreateZoneManager failed: %08x\n", hres);
 
     test_url_action(secmgr, zonemgr, URLACTION_SCRIPT_RUN);
@@ -367,7 +379,11 @@ static void test_CoInternetCreateZoneManager(void)
     IUnknown *punk = NULL;
     HRESULT hr;
 
-    hr = CoInternetCreateZoneManager(NULL, &zonemgr, 0);
+    if(!pCoInternetCreateZoneManager) {
+        return;
+    }
+
+    hr = pCoInternetCreateZoneManager(NULL, &zonemgr, 0);
     ok(hr == S_OK, "CoInternetCreateZoneManager result: 0x%x\n", hr);
     if (FAILED(hr))
         return;
@@ -411,7 +427,11 @@ static void test_CreateZoneEnumerator(void)
     DWORD dwCount;
     DWORD dwCount2;
 
-    hr = CoInternetCreateZoneManager(NULL, &zonemgr, 0);
+    if (!pCoInternetCreateZoneManager) {
+        return;
+    }
+
+    hr = pCoInternetCreateZoneManager(NULL, &zonemgr, 0);
     ok(hr == S_OK, "CoInternetCreateZoneManager result: 0x%x\n", hr);
     if (FAILED(hr))
         return;
@@ -477,7 +497,7 @@ static void test_GetZoneActionPolicy(void)
     HRESULT hres;
     DWORD action = URLACTION_CREDENTIALS_USE; /* Implemented on all IE versions */
 
-    hres = CoInternetCreateZoneManager(NULL, &zonemgr, 0);
+    hres = pCoInternetCreateZoneManager(NULL, &zonemgr, 0);
     ok(hres == S_OK, "CoInternetCreateZoneManager failed: %08x\n", hres);
     if(FAILED(hres))
         return;
@@ -520,7 +540,7 @@ static void test_GetZoneAt(void)
     DWORD dwZone;
     DWORD i;
 
-    hr = CoInternetCreateZoneManager(NULL, &zonemgr, 0);
+    hr = pCoInternetCreateZoneManager(NULL, &zonemgr, 0);
     ok(hr == S_OK, "CoInternetCreateZoneManager result: 0x%x\n", hr);
     if (FAILED(hr))
         return;
@@ -568,7 +588,7 @@ static void test_GetZoneAttributes(void)
     HRESULT hr;
     DWORD i;
 
-    hr = CoInternetCreateZoneManager(NULL, &zonemgr, 0);
+    hr = pCoInternetCreateZoneManager(NULL, &zonemgr, 0);
     ok(hr == S_OK, "CoInternetCreateZoneManager result: 0x%x\n", hr);
     if (FAILED(hr))
         return;
@@ -621,7 +641,12 @@ static void test_InternetSecurityMarshalling(void)
     IStream *stream;
     HRESULT hres;
 
-    hres = CoInternetCreateSecurityManager(NULL, &secmgr, 0);
+    if(!pCoInternetCreateSecurityManager) {
+        return;
+    }
+
+    hres = pCoInternetCreateSecurityManager(NULL, &secmgr, 0);
+    ok(hres == S_OK, "CoInternetCreateSecurityManager failed: %08x\n", hres);
     if(FAILED(hres))
         return;
 
@@ -632,7 +657,9 @@ static void test_InternetSecurityMarshalling(void)
     ok(hres == S_OK, "CreateStreamOnHGlobal returned: %08x\n", hres);
 
     hres = CoMarshalInterface(stream, &IID_IInternetSecurityManager, unk, MSHCTX_INPROC, NULL, MSHLFLAGS_NORMAL);
-    ok(hres == S_OK, "CoMarshalInterface returned: %08x\n", hres);
+    /* Not supported in W98 */
+    ok(hres == S_OK || broken(hres == REGDB_E_IIDNOTREG),
+        "CoMarshalInterface returned: %08x\n", hres);
 
     IStream_Release(stream);
     IUnknown_Release(unk);
@@ -641,8 +668,9 @@ static void test_InternetSecurityMarshalling(void)
 
 static void test_InternetGetSecurityUrl(void)
 {
-    const WCHAR url5_out[] = {'h','t','t','p',':','w','w','w','.','w','i','n','e','h','q','.','o','r','g',0};
-    const WCHAR url7_out[] = {'f','t','p',':','w','i','n','e','h','q','.','o','r','g',0};
+    const WCHAR url5_out[] = {'h','t','t','p',':','w','w','w','.','z','o','n','e','3',
+                              '.','w','i','n','e','t','e','s','t',0};
+    const WCHAR url7_out[] = {'f','t','p',':','z','o','n','e','3','.','w','i','n','e','t','e','s','t',0};
 
     const WCHAR *in[] = {url2, url3, url4, url5, url7, url8, url9, url10};
     const WCHAR *out_default[] = {url2, url3, url4, url5_out, url7_out, url8, url5_out, url10};
@@ -652,8 +680,12 @@ static void test_InternetGetSecurityUrl(void)
     DWORD i;
     HRESULT hres;
 
+    if (!pCoInternetGetSecurityUrl) {
+        return;
+    }
+
     for(i=0; i<sizeof(in)/sizeof(WCHAR*); i++) {
-        hres = CoInternetGetSecurityUrl(in[i], &sec, PSU_DEFAULT, 0);
+        hres = pCoInternetGetSecurityUrl(in[i], &sec, PSU_DEFAULT, 0);
         ok(hres == S_OK, "(%d) CoInternetGetSecurityUrl returned: %08x\n", i, hres);
         if(hres == S_OK) {
             ok(!strcmp_w(sec, out_default[i]), "(%d) Got %s, expected %s\n",
@@ -661,7 +693,7 @@ static void test_InternetGetSecurityUrl(void)
             CoTaskMemFree(sec);
         }
 
-        hres = CoInternetGetSecurityUrl(in[i], &sec, PSU_SECURITY_URL_ONLY, 0);
+        hres = pCoInternetGetSecurityUrl(in[i], &sec, PSU_SECURITY_URL_ONLY, 0);
         ok(hres == S_OK, "(%d) CoInternetGetSecurityUrl returned: %08x\n", i, hres);
         if(hres == S_OK) {
             ok(!strcmp_w(sec, out_securl[i]), "(%d) Got %s, expected %s\n",
@@ -674,7 +706,19 @@ static void test_InternetGetSecurityUrl(void)
 
 START_TEST(sec_mgr)
 {
+    HMODULE hurlmon;
+
     OleInitialize(NULL);
+
+    hurlmon = GetModuleHandle("urlmon.dll");
+    pCoInternetCreateSecurityManager = (void*) GetProcAddress(hurlmon, "CoInternetCreateSecurityManager");
+    pCoInternetCreateZoneManager = (void*) GetProcAddress(hurlmon, "CoInternetCreateZoneManager");
+    pCoInternetGetSecurityUrl = (void*) GetProcAddress(hurlmon, "CoInternetGetSecurityUrl");
+
+    if (!pCoInternetCreateSecurityManager || !pCoInternetCreateZoneManager ||
+        !pCoInternetGetSecurityUrl) {
+        win_skip("Various CoInternet* functions not present in IE 4.0\n");
+    }
 
     test_InternetGetSecurityUrl();
     test_SecurityManager();
