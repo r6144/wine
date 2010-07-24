@@ -142,6 +142,33 @@ void *_DIBDRVBITMAP_Get_Bits(DIBDRVBITMAP * dib)
     }
 }
 
+/* calculates and sets the lightest color for monochrome bitmaps */
+int _DIBDRVBITMAP_GetLightestColorIndex(DIBDRVBITMAP *dib)
+{
+    DWORD foreRed, foreGreen, foreBlue;
+    DWORD backRed, backGreen, backBlue;
+    RGBQUAD *fore, *back;
+    
+    /* zero for non-monochrome bitmaps */
+    if(dib->bitCount != 1)
+        return 0;
+    /* just in case color table hasn't been grabbed yet */
+    if(!dib->colorTableGrabbed)
+        return 1;
+    back = dib->colorTable;
+    fore = back + 1;
+    foreRed = fore->rgbRed; foreGreen = fore->rgbGreen; foreBlue = fore->rgbBlue;
+    backRed = back->rgbRed; backGreen = back->rgbGreen; backBlue = back->rgbBlue;
+    if(foreRed*foreRed + foreGreen*foreGreen + foreBlue*foreBlue >
+       backRed*backRed + backGreen*backGreen + backBlue*backBlue)
+    {
+        dib->lightColor = 1;
+        return 1;
+    }
+    dib->lightColor = 0;
+    return 0;
+}
+
 /* initializes dib from a bitmap : 
     dib           dib being initialized
     bi            source BITMAPINFOHEADER with required DIB format info
@@ -264,6 +291,9 @@ BOOL _DIBDRVBITMAP_InitFromBMIH(DIBDRVBITMAP *dib, const BITMAPINFOHEADER *bi, c
         memcpy(dib->colorTable, colorTable,
             dib->colorTableSize * sizeof(dib->colorTable[0]));
         dib->colorTableGrabbed = TRUE;
+
+        /* for monochrome bitmaps, we need the 'lightest' color */
+        _DIBDRVBITMAP_GetLightestColorIndex(dib);
     }
     else if(!dib->colorTableSize)
         /* no color table on more than 8 bits/pixel */
@@ -273,16 +303,64 @@ BOOL _DIBDRVBITMAP_InitFromBMIH(DIBDRVBITMAP *dib, const BITMAPINFOHEADER *bi, c
     return TRUE;
 }
 
-BOOL _DIBDRVBITMAP_InitFromBitmapinfo(DIBDRVBITMAP *dib, const BITMAPINFO *bmi)
+DIBDRVBITMAP *_DIBDRVBITMAP_CreateFromBMIH(const BITMAPINFOHEADER *bi, const DWORD *bit_fields,
+                     const RGBQUAD *colorTable, void *bits)
+{
+    DIBDRVBITMAP *bmp = _DIBDRVBITMAP_New();
+    if(bmp && !_DIBDRVBITMAP_InitFromBMIH(bmp, bi, bit_fields, colorTable, bits))
+    {
+        _DIBDRVBITMAP_Free(bmp);
+        bmp = NULL;
+    }
+    return bmp;
+}
+
+/* gets a BITMAPINFOHEADER from a soure BITMAPINFO- or BITMAPCORE-header */
+static BITMAPINFOHEADER *GetBitmapInfoHeader(BITMAPINFO const *bmi)
+{
+    BITMAPINFOHEADER *res = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(BITMAPINFOHEADER));
+    
+    int size = bmi->bmiHeader.biSize;
+    if(size >= sizeof(BITMAPINFOHEADER))
+    {
+        memcpy(res, bmi, sizeof(BITMAPINFOHEADER));
+        res->biSize = sizeof(BITMAPINFOHEADER);
+    }
+    else if(size == sizeof(BITMAPCOREHEADER))
+    {
+        BITMAPCOREHEADER *core = (BITMAPCOREHEADER *)bmi;
+        res->biSize = sizeof(BITMAPINFOHEADER);
+        res->biWidth = core->bcWidth;
+        res->biHeight = core->bcHeight;
+        res->biPlanes = core->bcPlanes;
+        res->biBitCount = core->bcBitCount;
+    }
+    else
+    {
+        HeapFree(GetProcessHeap(), 0, res);
+        ERR("Bad/unknown header size %d\n", size);
+        res = NULL;
+    }
+    return res;
+}
+
+BOOL _DIBDRVBITMAP_InitFromBitmapinfo(DIBDRVBITMAP *dib, const BITMAPINFO *bmi, void *bits)
 {
     static const DWORD bit_fields_DIB32_RGB[3] = {0xff0000, 0x00ff00, 0x0000ff};
     static const DWORD bit_fields_DIB16_RGB[3] = {0x7c00, 0x03e0, 0x001f};
-    BITMAPINFOHEADER *bi = (BITMAPINFOHEADER *)bmi;
     const DWORD *masks = NULL;
     RGBQUAD *colorTable = NULL;
-    BYTE *ptr = (BYTE*)bmi + bi->biSize;
-    int num_colors = bi->biClrUsed;
+    BITMAPINFOHEADER *bi;
+    BYTE *ptr;
+    int num_colors;
     BOOL res;
+
+    /* gets info header */
+    if(!(bi = GetBitmapInfoHeader(bmi)))
+        return FALSE;
+        
+    ptr = (BYTE*)bmi + bmi->bmiHeader.biSize;
+    num_colors = bi->biClrUsed;
     
     MAYBE(TRACE("dib=%p, bmi=%p\n", dib, bmi));
 
@@ -302,9 +380,21 @@ BOOL _DIBDRVBITMAP_InitFromBitmapinfo(DIBDRVBITMAP *dib, const BITMAPINFO *bmi)
         colorTable = (RGBQUAD*)ptr;
     ptr += num_colors * sizeof(*colorTable);
 
-    res = _DIBDRVBITMAP_InitFromBMIH(dib, bi, masks, colorTable, ptr);
+    res = _DIBDRVBITMAP_InitFromBMIH(dib, bi, masks, colorTable, bits ? bits : ptr);
+    HeapFree(GetProcessHeap(), 0, bi);
     MAYBE(TRACE("END\n"));
     return res;
+}
+
+DIBDRVBITMAP *_DIBDRVBITMAP_CreateFromBitmapinfo(const BITMAPINFO *bmi, void *bits)
+{
+    DIBDRVBITMAP *bmp = _DIBDRVBITMAP_New();
+    if(bmp && !_DIBDRVBITMAP_InitFromBitmapinfo(bmp, bmi, bits))
+    {
+        _DIBDRVBITMAP_Free(bmp);
+        bmp = NULL;
+    }
+    return bmp;
 }
 
 /* initializes a DIBRDVBITMAP copying it from a source one
@@ -334,6 +424,8 @@ BOOL _DIBDRVBITMAP_InitFromDibdrvbitmap(DIBDRVBITMAP *dib, const DIBDRVBITMAP *s
     dib->blueLen = src->blueLen;
 
     dib->funcs = src->funcs;
+    
+    dib->lightColor = src->lightColor;
     
     if(copy)
     {
@@ -375,92 +467,6 @@ BOOL _DIBDRVBITMAP_InitFromDibdrvbitmap(DIBDRVBITMAP *dib, const DIBDRVBITMAP *s
     dib->colorTableSize = src->colorTableSize;
     dib->colorTableGrabbed = TRUE;
     MAYBE(TRACE("END\n"));
-    return TRUE;
-}
-
-/* initializes a DIBRDVBITMAP from a DIB HBITMAP
-   Parameters :
-      bmp           destination DIBDRVBITMAP
-      hbmp          source HBITMAP
-      copyPixels    TRUE->copy source pixel array FALSE->link to source pixel array */
-BOOL _DIBDRVBITMAP_InitFromHBITMAP(DIBDRVBITMAP *bmp, const HBITMAP hbmp, BOOL copyPixels)
-{
-    BITMAPINFO *destInfo;
-    DIBSECTION ds;
-    int size;
-    
-    MAYBE(TRACE("bmp=%p, hbmp=%p, copyPixels = %s\n", bmp, hbmp, copyPixels ? "TRUE" : "FALSE"));
-
-    /* be sure bitmap is empty */
-    _DIBDRVBITMAP_Clear(bmp);
-    
-    /* gets source bitmap data */
-    if(!(size = GetObjectW(hbmp, sizeof(DIBSECTION), &ds)))
-    {
-        ERR("Failed getting bitmap object\n");
-        return FALSE;
-    }
-    if(size != sizeof(DIBSECTION))
-    {
-        ERR("Bitmap is not a DIB section\n");
-        return FALSE;
-    }
-    
-    destInfo = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(BITMAPINFOHEADER) + 256 * sizeof(RGBQUAD));
-    if(!destInfo)
-    {
-        ERR("HeapAlloc failed\n");
-        return FALSE;
-    }
-    
-    memcpy(destInfo, &ds.dsBmih, sizeof(BITMAPINFOHEADER));
-    if(ds.dsBmih.biCompression == BI_BITFIELDS)
-        memcpy((BITMAPINFOHEADER *)destInfo + 1, ds.dsBitfields, 3 * sizeof(RGBQUAD));
-    else if(ds.dsBmih.biBitCount <= 8)
-    {
-        FIXME("Can't grab color table here.... syslvel lock\n");
-        return FALSE;
-#if 0
-        HDC refDC = CreateCompatibleDC(0);
-        if(!refDC)
-        {
-            ERR("CreateCompatibleDC() failed\n");
-            return FALSE;
-        }
-        if(!GetDIBits(refDC, hbmp, 0, 1, NULL, destInfo, DIB_RGB_COLORS))
-        {
-            DeleteDC(refDC);
-            HeapFree(GetProcessHeap(), 0, destInfo);
-            ERR("GetDIBits failed\n");
-            return FALSE;
-        }
-        DeleteDC(refDC);
-#endif
-    }
-    if(!_DIBDRVBITMAP_InitFromBitmapinfo(bmp, destInfo))
-    {
-        HeapFree(GetProcessHeap(), 0, destInfo);
-        ERR("_DIBDRVBITMAP_InitFromBitmapinfo failed\n");
-        return FALSE;
-    }
-    HeapFree(GetProcessHeap(), 0, destInfo);
-    if(copyPixels)
-    {
-        size = abs(bmp->stride) * bmp->height;
-        if(!(bmp->bits = HeapAlloc(GetProcessHeap(), 0, size)))
-        {
-            ERR("HeapAlloc failed\n");
-            _DIBDRVBITMAP_Free(bmp);
-            return FALSE;
-        }
-        memcpy(bmp->bits, ds.dsBm.bmBits, size);
-        bmp->ownsBits = TRUE;
-    }
-    else
-        bmp->bits = ds.dsBm.bmBits;
-    if(bmp->stride < 0)
-        bmp->bits    = (BYTE*)bmp->bits - (bmp->height - 1) * bmp->stride;
-    
     return TRUE;
 }
 
@@ -512,6 +518,8 @@ void _DIBDRVBITMAP_Clear(DIBDRVBITMAP *bmp)
 {
     MAYBE(TRACE("bmp=%p\n", bmp));
     
+    if(!bmp)
+        return;
     bmp->bits = NULL;
     bmp->ownsBits = FALSE;
     bmp->colorTable = NULL;
@@ -521,11 +529,23 @@ void _DIBDRVBITMAP_Clear(DIBDRVBITMAP *bmp)
     MAYBE(TRACE("END\n"));
 }
 
+/* allocates a new DIBDTVBITMAP */
+DIBDRVBITMAP *_DIBDRVBITMAP_New(void)
+{
+    DIBDRVBITMAP *bmp = HeapAlloc(GetProcessHeap(), 0, sizeof(DIBDRVBITMAP));
+    if(!bmp)
+        return NULL;
+    _DIBDRVBITMAP_Clear(bmp);
+    return bmp;
+}
+
 /* Frees a DIBDRVBITMAP structure data */
 void _DIBDRVBITMAP_Free(DIBDRVBITMAP *bmp)
 {
     MAYBE(TRACE("bmp=%p\n", bmp));
     
+    if(!bmp)
+        return;
     /* frees bits, if needed */
     if(bmp->bits && bmp->ownsBits)
     {
@@ -535,17 +555,12 @@ void _DIBDRVBITMAP_Free(DIBDRVBITMAP *bmp)
             bmp->bits = (BYTE *)bmp->bits + bmp->stride * (bmp->height -1);
         HeapFree(GetProcessHeap(), 0, bmp->bits);
     }
-    bmp->ownsBits = FALSE;
-    bmp->bits = NULL;
-    
     /* frees color table */
     if(bmp->colorTable)
         HeapFree(GetProcessHeap(), 0, bmp->colorTable);
-    bmp->colorTable = NULL;
-    bmp->colorTableSize = 0;
-    bmp->colorTableGrabbed = FALSE;
+
+    HeapFree(GetProcessHeap(), 0, bmp);
     
-    MAYBE(TRACE("END\n"));
 }
 
 

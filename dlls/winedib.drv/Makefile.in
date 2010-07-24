@@ -3,13 +3,14 @@ TOPOBJDIR = ../..
 SRCDIR    = @srcdir@
 VPATH     = @srcdir@
 EXTRAINCL = @FREETYPEINCL@ @FONTCONFIGINCL@
-EXTRALIBS = @XLIB@
+EXTRALIBS = @X_LIBS@ @X_PRE_LIBS@ @XLIB@ @X_EXTRA_LIBS@
 MODULE    = winedib.drv
 IMPORTS   = user32 gdi32 advapi32 kernel32 ntdll
 
 C_SRCS = \
     bitblt.c \
     bitmap.c \
+    bitmaplist.c \
     clipping.c \
     convert.c \
     dc.c \

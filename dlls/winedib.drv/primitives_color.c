@@ -142,32 +142,30 @@ DWORD _DIBDRV_GetNearestColorIndex(const DIBDRVBITMAP *dib, COLORREF color)
 
 DWORD _DIBDRV_ColorToPixelColortable(const DIBDRVBITMAP *dib, COLORREF color)
 {
-    DWORD r, g, b;
-
-    r = GetRValue(color);
-    g = GetGValue(color);
-    b = GetBValue(color);
-    
     /* just in case it's being called without color table
        properly initialized */
     if(!dib->colorTableGrabbed)
         return 0;
         
+    color &= 0xffffff;
+        
     /* for monochrome bitmaps, color is :
            foreground if matching foreground ctable
            else background if matching background ctable
-           else foreground ix 0xffffff
+           else foreground if 0xffffff
            else background */
     if(dib->colorTableSize == 2)
     {
         RGBQUAD *back = dib->colorTable;
         RGBQUAD *fore = dib->colorTable + 1;
-        if(r == fore->rgbRed && g == fore->rgbGreen && b == fore->rgbBlue)
+        COLORREF backColorref = RGB(back->rgbRed, back->rgbGreen, back->rgbBlue);
+        COLORREF foreColorref = RGB(fore->rgbRed, fore->rgbGreen, fore->rgbBlue);
+        if(color == foreColorref)
             return 1;
-        else if(r == back->rgbRed && g == back->rgbGreen && b == back->rgbBlue)
+        else if(color == backColorref)
             return 0;
-        if((color & 0xffffff) == 0xffffff)
-            return 1;
+        else if(color == 0xffffff)
+            return dib->lightColor;
         else
             return 0;
     }

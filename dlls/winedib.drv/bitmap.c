@@ -34,13 +34,15 @@ HBITMAP DIBDRV_SelectBitmap( DIBDRVPHYSDEV *physDev, HBITMAP hbitmap )
     DIBSECTION dibSection;
     HBITMAP res;
     
+    MAYBE(TRACE("physDev:%p, hbitmap:%p\n", physDev, hbitmap));
+
     /* try to get the DIBSECTION data from the bitmap */
-    if(GetObjectW(hbitmap, sizeof(DIBSECTION), &dibSection) == sizeof(BITMAP))
+    if(GetObjectW(hbitmap, sizeof(DIBSECTION), &dibSection) != sizeof(DIBSECTION))
     {
         /* not a DIB section, sets it on physDev and use X11 behaviour */
 
-        MAYBE(TRACE("physDev:%p, hbitmap:%p\n", physDev, hbitmap));
         physDev->hasDIB = FALSE;
+        physDev->physBitmap = NULL;
         res = _DIBDRV_GetDisplayDriver()->pSelectBitmap(physDev->X11PhysDev, hbitmap);
         if(res)
             physDev->hbitmap = hbitmap;
@@ -49,32 +51,23 @@ HBITMAP DIBDRV_SelectBitmap( DIBDRVPHYSDEV *physDev, HBITMAP hbitmap )
     {
         /* it's a DIB section, sets it on physDev and use DIB Engine behaviour */
         
-        MAYBE(TRACE("physDev:%p, hbitmap:%p, physBitmap=%p\n", physDev, hbitmap, &physDev->physBitmap));
-
-        /* frees any previously physical bitmap */
-        _DIBDRVBITMAP_Free(&physDev->physBitmap);
-
-        /* WARNING : the color table can't be grabbed here, since it's still
-           not initialized. It'll be grabbed on RealizeDefaultPalette(),
-           which is presumably the first call made after palette initialization.
-           So, by now we just set up palette size and leave NULL the palette pointer */
-        if(_DIBDRVBITMAP_InitFromBMIH(&physDev->physBitmap, &dibSection.dsBmih, dibSection.dsBitfields, NULL, dibSection.dsBm.bmBits))
+        /* sets the physical bitmap */
+        if((physDev->physBitmap = _BITMAPLIST_Get(hbitmap)) != NULL)
         {
-            /* stores the active bitmap */
-            res = physDev->hbitmap;
-            physDev->hbitmap = hbitmap;
-            
-            /* remember there's a DIB selected in */
             physDev->hasDIB = TRUE;
+            physDev->hbitmap = hbitmap;
+            MAYBE(TRACE("physDev->physBitmap:%p(%s)\n", physDev->physBitmap, _DIBDRVBITMAP_GetFormatName(physDev->physBitmap)));
+            res = hbitmap;
         }
         else
         {
-            ERR("Failed to initialize physical bitmap\n");
+            ERR("Physical bitmap %p not found in internal list\n", hbitmap);
+            physDev->hbitmap = GetStockObject(DEFAULT_BITMAP);
+            physDev->hasDIB = FALSE;
             res = 0;
         }
     }
     return res;
-    
 }
 
 /****************************************************************************
@@ -96,7 +89,7 @@ BOOL DIBDRV_CreateBitmap( DIBDRVPHYSDEV *physDev, HBITMAP hbitmap, LPVOID bmBits
     else
     {
         /* it's a DIB section, use DIB Engine behaviour - should not happen, but.... */
-        ONCE(FIXME("CreateBitmap() called for a DIB section - shouldn't happen\n"));
+        ERR("CreateBitmap() called for a DIB section - shouldn't happen\n");
         res = TRUE;
     }
     return res;
@@ -108,12 +101,13 @@ BOOL DIBDRV_CreateBitmap( DIBDRVPHYSDEV *physDev, HBITMAP hbitmap, LPVOID bmBits
 BOOL DIBDRV_DeleteBitmap( HBITMAP hbitmap )
 {
     DIBSECTION dibSection;
+    DIBDRVBITMAP *bmp;
     BOOL res;
     
     MAYBE(TRACE("hbitmap:%p\n", hbitmap));
 
     /* try to get the DIBSECTION data from the bitmap */
-    if(GetObjectW(hbitmap, sizeof(DIBSECTION), &dibSection) == sizeof(BITMAP))
+    if(GetObjectW(hbitmap, sizeof(DIBSECTION), &dibSection) != sizeof(DIBSECTION))
     {
         /* not a DIB section, use X11 behaviour */
         res = _DIBDRV_GetDisplayDriver()->pDeleteBitmap(hbitmap);
@@ -121,8 +115,22 @@ BOOL DIBDRV_DeleteBitmap( HBITMAP hbitmap )
     else
     {
         /* it's a DIB section, use DIB Engine behaviour */
-        ONCE(FIXME("STUB\n"));
-        res = TRUE;
+        
+        /* do not try to delete stock objects */
+        if(hbitmap == GetStockObject(DEFAULT_BITMAP))
+            res = TRUE;
+        
+        /* locates and frees the physical bitmap */
+        else if((bmp = _BITMAPLIST_Remove(hbitmap)) != NULL)
+        {
+            _DIBDRVBITMAP_Free(bmp);
+            res = TRUE;
+        }
+        else
+        {
+            ERR("Physical bitmap %p not found in internal list\n", hbitmap);
+            res = FALSE;
+        }
     }
     return res;
 }

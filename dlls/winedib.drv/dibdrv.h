@@ -171,6 +171,9 @@ typedef struct _DIBDRVBITMAP
     RGBQUAD *colorTable;
     DWORD colorTableSize;
     
+    /* lightest color index, for monochrome bitmaps */
+    int lightColor;
+    
     /* flag indicating that color table has been grabbed */
     BOOL colorTableGrabbed;
 
@@ -203,7 +206,7 @@ typedef struct _DIBDRVPHYSDEV
     HBITMAP hbitmap;
     
     /* physical bitmap */
-    DIBDRVBITMAP physBitmap;
+    DIBDRVBITMAP *physBitmap;
 
     /* active ROP2 */
     INT rop2;
@@ -249,8 +252,8 @@ typedef struct _DIBDRVPHYSDEV
     
     /* brush bitmap, if needed, and its converted/resized cache copy */
     BOOL isBrushBitmap;
-    DIBDRVBITMAP brushBitmap;
-    DIBDRVBITMAP brushBmpCache;
+    DIBDRVBITMAP *brushBitmap;
+    DIBDRVBITMAP *brushBmpCache;
     
     /* text color */
     COLORREF textColor;
@@ -317,7 +320,10 @@ const char *_DIBDRVBITMAP_GetFormatName(DIBDRVBITMAP const *bmp);
 void _DIBDRVBITMAP_Set_Bits(DIBDRVBITMAP *dib, void *bits, BOOL owns);
 void *_DIBDRVBITMAP_Get_Bits(DIBDRVBITMAP *dib);
 
-/* initializes dib from a bitmap : 
+/* calculates and sets the lightest color for monochrome bitmaps */
+int _DIBDRVBITMAP_GetLightestColorIndex(DIBDRVBITMAP *dib);
+
+/* initialize or create dib from a bitmap : 
     dib           dib being initialized
     bi            source BITMAPINFOHEADER with required DIB format info
     bit_fields    color masks
@@ -326,8 +332,11 @@ void *_DIBDRVBITMAP_Get_Bits(DIBDRVBITMAP *dib);
     NOTE : DIBDRVBITMAP doesn't owns bits, but do own color table */
 BOOL _DIBDRVBITMAP_InitFromBMIH(DIBDRVBITMAP *dib, const BITMAPINFOHEADER *bi, const DWORD *bit_fields,
                                 const RGBQUAD *color_table, void *bits);
+DIBDRVBITMAP *_DIBDRVBITMAP_CreateFromBMIH(const BITMAPINFOHEADER *bi, const DWORD *bit_fields,
+                     const RGBQUAD *colorTable, void *bits);
 
-BOOL _DIBDRVBITMAP_InitFromBitmapinfo(DIBDRVBITMAP *dib, const BITMAPINFO *bmi);
+BOOL _DIBDRVBITMAP_InitFromBitmapinfo(DIBDRVBITMAP *dib, const BITMAPINFO *bmi, void *bits);
+DIBDRVBITMAP *_DIBDRVBITMAP_CreateFromBitmapinfo(const BITMAPINFO *bmi, void *bits);
 
 /* initializes a DIBRDVBITMAP copying it from a source one
    Parameters :
@@ -336,13 +345,6 @@ BOOL _DIBDRVBITMAP_InitFromBitmapinfo(DIBDRVBITMAP *dib, const BITMAPINFO *bmi);
       copy      TRUE->copy source pixel array FALSE->link to source pixel array */
 BOOL _DIBDRVBITMAP_InitFromDibdrvbitmap(DIBDRVBITMAP *dib, const DIBDRVBITMAP *src, BOOL copy);
 
-/* initializes a DIBRDVBITMAP from a DIB HBITMAP
-   Parameters :
-      bmp           destination DIBDRVBITMAP
-      hbmp          source HBITMAP
-      copyPixels    TRUE->copy source pixel array FALSE->link to source pixel array */
-BOOL _DIBDRVBITMAP_InitFromHBITMAP(DIBDRVBITMAP *bmp, const HBITMAP hbmp, BOOL copyPixels);
-
 /* creates a DIBRDVBITMAP copying format info from a source one
    Parameters :
       dib            destination DIBDRVBITMAP
@@ -350,12 +352,15 @@ BOOL _DIBDRVBITMAP_InitFromHBITMAP(DIBDRVBITMAP *bmp, const HBITMAP hbmp, BOOL c
       widht, height  sizes of newly created bitmap  */
 BOOL _DIBDRVBITMAP_CreateFromDibdrvbitmap(DIBDRVBITMAP *dib, const DIBDRVBITMAP *src, int width, int height);
 
+/* allocates a new DIBDTVBITMAP */
+DIBDRVBITMAP *_DIBDRVBITMAP_New(void);
+
+/* Frees and de-allocates a DIBDRVBITMAP structure data */
+void _DIBDRVBITMAP_Free(DIBDRVBITMAP *bmp);
+
 /* Clears a DIBDRVBITMAP structure data
    WARNING : doesn't free anything */
 void _DIBDRVBITMAP_Clear(DIBDRVBITMAP *bmp);
-
-/* Frees a DIBDRVBITMAP structure data */
-void _DIBDRVBITMAP_Free(DIBDRVBITMAP *bmp);
 
 /* checks whether the format of 2 DIBs are identical
    it checks the pixel bit count and the color table size
@@ -373,6 +378,26 @@ BOOL _DIBDRVBITMAP_CreateSolid(DIBDRVBITMAP *bmp, DIBDRVBITMAP *format, int widt
    keeping its width as a multiple of a base width
    Used to widen brushes in order to optimize blitting */
 BOOL _DIBDRVBITMAP_ExpandHoriz(DIBDRVBITMAP *dib, int baseWidth, int minWidth);
+
+/* *********************************************************************
+ * BITMAP LIST MANAGEMENT FUNCTIONS
+ * ********************************************************************/
+
+/* initializes bitmap list -- to be called at process attach */
+void _BITMAPLIST_Init(void);
+
+/* terminates bitmap list -- to be called at process detach */
+void _BITMAPLIST_Terminate(void);
+
+/* adds a DIB to the list - it adds it on top, as
+   usually most recently created DIBs are used first */
+BOOL _BITMAPLIST_Add(HBITMAP hbmp, DIBDRVBITMAP *bmp);
+
+/* removes a DIB from the list */
+DIBDRVBITMAP *_BITMAPLIST_Remove(HBITMAP hbmp);
+
+/* scans list for a DIB */
+DIBDRVBITMAP *_BITMAPLIST_Get(HBITMAP hbmp);
 
 /* *********************************************************************
  * DIB <--> DDB CONVERSION ROUTINES

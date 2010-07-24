@@ -165,8 +165,8 @@ BOOL DIBDRV_CreateDC( HDC hdc, DIBDRVPHYSDEV **pdev, LPCWSTR driver, LPCWSTR dev
     /* no DIB selected into DC on creation */
     physDev->hasDIB = FALSE;
     
-    /* clear physical bitmap */
-    _DIBDRVBITMAP_Clear(&physDev->physBitmap);
+    /* initializes the physical bitmap */
+    physDev->physBitmap = NULL;
     
     /* clears pen and brush */
     physDev->rop2 = R2_COPYPEN;
@@ -200,8 +200,8 @@ BOOL DIBDRV_CreateDC( HDC hdc, DIBDRVPHYSDEV **pdev, LPCWSTR driver, LPCWSTR dev
     physDev->brushHLine = dummy4;
     
     physDev->isBrushBitmap = FALSE;
-    _DIBDRVBITMAP_Clear(&physDev->brushBitmap);
-    _DIBDRVBITMAP_Clear(&physDev->brushBmpCache);
+    physDev->brushBitmap = NULL;
+    physDev->brushBmpCache = NULL;
     
     /* text color */
     physDev->textColor = 0;
@@ -234,12 +234,14 @@ BOOL DIBDRV_DeleteDC( DIBDRVPHYSDEV *physDev )
     res = _DIBDRV_GetDisplayDriver()->pDeleteDC(physDev->X11PhysDev);
     physDev->X11PhysDev = NULL;
     
-    /* frees physical bitmap */
-    _DIBDRVBITMAP_Free(&physDev->physBitmap);
+    /* resets physical bitmap */
+    physDev->physBitmap = NULL;
     
-    /* frees brush bitmap */
-    _DIBDRVBITMAP_Free(&physDev->brushBitmap);
-    _DIBDRVBITMAP_Free(&physDev->brushBmpCache);
+    /* reset brush bitmap */
+    _DIBDRVBITMAP_Free(physDev->brushBitmap);
+    physDev->brushBitmap = NULL;
+    _DIBDRVBITMAP_Free(physDev->brushBmpCache);
+    physDev->brushBmpCache = NULL;
     
     /* free brush ands and xors */
     if(physDev->brushAnds)

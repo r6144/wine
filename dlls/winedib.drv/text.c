@@ -120,7 +120,7 @@ BOOL DIBDRV_ExtTextOut( DIBDRVPHYSDEV *physDev, INT x, INT y, UINT flags,
                 {
                     /* paints the backgound */
                     for(iLine = tr.top; iLine < tr.bottom; iLine++)
-                        physDev->physBitmap.funcs->SolidHLine(&physDev->physBitmap,
+                        physDev->physBitmap->funcs->SolidHLine(physDev->physBitmap,
                             tr.left, tr.right-1, iLine, 0, backPixel);
                 }
             }
@@ -187,7 +187,7 @@ BOOL DIBDRV_ExtTextOut( DIBDRVPHYSDEV *physDev, INT x, INT y, UINT flags,
                     error = pFT_Glyph_To_Bitmap(
                         &glyph,
     #ifdef DIBDRV_ANTIALIASED_FONTS        
-                        physDev->physBitmap.bitCount > 8 ? FT_RENDER_MODE_NORMAL : FT_RENDER_MODE_MONO,
+                        physDev->physBitmap->bitCount > 8 ? FT_RENDER_MODE_NORMAL : FT_RENDER_MODE_MONO,
     #else
                         FT_RENDER_MODE_MONO,
     #endif
@@ -220,7 +220,7 @@ BOOL DIBDRV_ExtTextOut( DIBDRVPHYSDEV *physDev, INT x, INT y, UINT flags,
                 }
 
                 /* now, draw to our target surface */
-                physDev->physBitmap.funcs->FreetypeBlit(physDev, x+bitmapGlyph->left, y-bitmapGlyph->top, &clipRec, bitmap);
+                physDev->physBitmap->funcs->FreetypeBlit(physDev, x+bitmapGlyph->left, y-bitmapGlyph->top, &clipRec, bitmap);
                 
                 /* frees converted bitmap, if any */
                 if(bitmap != &bitmapGlyph->bitmap)

@@ -68,15 +68,44 @@ static DWORD pal8[] =
 HBITMAP DIBDRV_CreateDIBSection( DIBDRVPHYSDEV *physDev, HBITMAP hbitmap,
                                  const BITMAPINFO *bmi, UINT usage )
 {
-    HBITMAP res;
+    DIBDRVBITMAP *bmp;
+    DIBSECTION ds;
     
     MAYBE(TRACE("physDev:%p, hbitmap:%p, bmi:%p, usage:%d\n", physDev, hbitmap, bmi, usage));
 
     /* createDIBSection is only DIB-related, so we just use the engine */
-    ONCE(FIXME("STUB\n"));
-    res = hbitmap;
 
-    return res;
+    /* we need bitmap bits */
+    if(GetObjectW(hbitmap, sizeof(DIBSECTION), &ds) != sizeof(DIBSECTION))
+    {
+        ERR("Bitmap is not a DIB Section\n");
+        return NULL;
+    }
+
+    /* creates the physical bitmap */
+    if(!(bmp = _DIBDRVBITMAP_CreateFromBitmapinfo(bmi, ds.dsBm.bmBits)))
+    {
+        ERR("_DIBDRVBITMAP_CreateFromBitmapinfo failed\n");
+        return NULL;
+    }
+    
+    /* TEMPORARY -- if usage is DIB_PAL_COLOR, sets the palette
+       as ungrabbed, so next call to RealizeDefaultPalette will
+       do it */
+    if(usage == DIB_PAL_COLORS)
+    {
+        FIXME("Do color table grabbing here instead of RealizeDefaultPalette\n");
+        bmp->colorTableGrabbed = FALSE;
+    }
+    
+    /* adds it to the internal list */
+    if(!_BITMAPLIST_Add(hbitmap, bmp))
+    {
+        ERR("Couldn't add physical bitmap to list\n");
+        _DIBDRVBITMAP_Free(bmp);
+        return NULL;
+    }
+    return hbitmap;
 }
 
 /***********************************************************************
@@ -87,15 +116,12 @@ INT DIBDRV_GetDIBits( DIBDRVPHYSDEV *physDev, HBITMAP hbitmap, UINT startscan,
 {
     INT res;
     DIBSECTION ds;
-    DIBDRVBITMAP sBmp, dBmp;
+    DIBDRVBITMAP *sBmp, *dBmp;
     DWORD *buf;
     int iLine;
     int size;
-    BOOL justInfo, justInfoHeader;
     int requestedBpp;
-    RGBQUAD *colorTable;
-    int colorTableSize;
-    BITMAPINFO *sourceInfo;
+    RGBQUAD *colorTable = NULL;
 
     MAYBE(TRACE("physDev:%p, hbitmap:%p, startscan:%d, lines:%d, bits:%p, info:%p, coloruse:%d\n",
         physDev, hbitmap, startscan, lines, bits, info, coloruse));
@@ -118,118 +144,46 @@ INT DIBDRV_GetDIBits( DIBDRVPHYSDEV *physDev, HBITMAP hbitmap, UINT startscan,
             return 0;
         }
         
-        /* get requested BPP */
+        /* if we wants just the BITMAPINFOHEADER data, do it */
+        if(bits == NULL && info->bmiHeader.biBitCount == 0)
+        {
+            memcpy(&info->bmiHeader, &ds.dsBmih, size);
+            return abs(ds.dsBmih.biHeight);
+        }
+        
+        /* source and dest sizes must match */
+        if(info->bmiHeader.biWidth != ds.dsBmih.biWidth || abs(info->bmiHeader.biHeight) != abs(ds.dsBmih.biHeight))
+        {
+            WARN("Source and dest DIBs sizes don't match\n");
+            return 0;
+        }
+        
+        /* get requested BPP and check it */
         requestedBpp = info->bmiHeader.biBitCount;
+        if(requestedBpp !=  1 && requestedBpp !=  4 &&
+           requestedBpp !=  8 && requestedBpp != 16 &&
+           requestedBpp != 24 && requestedBpp != 32)
+        {
+            ERR("Unknown BitCount %d\n", requestedBpp);
+            return 0;
+        }
         
-        /* check wetrher we wants just the BITMAPINFO data */
-        justInfo = (bits == NULL);
-        
-        /* check wether we wants just to get BITMAPINFOHEADER data */
-        justInfoHeader = (requestedBpp == 0);
-        
-        if(!justInfo && justInfoHeader)
+        /* now we must get (if needed) the color table */
+        if(!(sBmp = _BITMAPLIST_Get(hbitmap)))
         {
-            ERR("Bad requested BPP\n");
+            ERR("Couldn't retrieve source DIB data\n");
             return 0;
         }
-
-        /* copy / set missing DIB info */
-        if(justInfo)
-        {
-            info->bmiHeader.biWidth = ds.dsBmih.biWidth;
-            info->bmiHeader.biHeight = ds.dsBmih.biHeight;
-        }
-        info->bmiHeader.biPlanes = 1;
-        if(justInfoHeader)
-            info->bmiHeader.biBitCount = ds.dsBmih.biBitCount;
-        if(size == sizeof(BITMAPINFOHEADER))
-        {
-            if(justInfoHeader)
-            {
-                info->bmiHeader.biCompression = ds.dsBmih.biCompression;
-                info->bmiHeader.biXPelsPerMeter = ds.dsBmih.biXPelsPerMeter;
-                info->bmiHeader.biYPelsPerMeter = ds.dsBmih.biYPelsPerMeter;
-                info->bmiHeader.biClrUsed = ds.dsBmih.biClrUsed;
-                info->bmiHeader.biClrImportant = ds.dsBmih.biClrImportant;
-            }
-            info->bmiHeader.biSizeImage = ds.dsBmih.biSizeImage;
-        }
-
-        /* width and height *must* match source's ones */
-        if(info->bmiHeader.biWidth != ds.dsBmih.biWidth ||
-           abs(info->bmiHeader.biHeight) != abs(ds.dsBmih.biHeight))
-        {
-            ERR("Size of requested bitmap data don't match source's ones\n");
-            return 0;
-        }
-
-        /* if we just wants the BITMAPINFOHEADER data, we're done */
-        if(justInfoHeader || (justInfo && ds.dsBmih.biBitCount > 8))
-            return abs(info->bmiHeader.biHeight);
-            
-        /* we now have to get source data -- we need it for palette, for example */
-        colorTableSize = 0;
-        if(ds.dsBmih.biBitCount <= 8)
-            colorTableSize = (1 << ds.dsBmih.biBitCount);
-        else if(ds.dsBmih.biCompression == BI_BITFIELDS)
-            colorTableSize = 3;
-        sourceInfo = HeapAlloc(GetProcessHeap(), 0, sizeof(BITMAPINFOHEADER) + colorTableSize * sizeof(RGBQUAD));
-        if(!sourceInfo)
-        {
-            ERR("HeapAlloc failed\n");
-            return 0;
-        }
-        memcpy(sourceInfo, &ds.dsBmih, sizeof(BITMAPINFOHEADER));
-        if(ds.dsBmih.biBitCount <= 8)
-        {
-            /* grab palette - well, we should. No way to do it by now....
-               we should add a list HBITMAP <--> DIBDRVBITMAP and fiddle to many
-               , many parts of the engine. Not worth the effort by now.
-               So, we just synthesize the table */
-            switch(requestedBpp)
-            {
-                case 1:
-                    memcpy((BYTE *)sourceInfo + sizeof(BITMAPINFOHEADER), pal1, 2*sizeof(DWORD));
-                    break;
-                    
-                case 4:
-                    memcpy((BYTE *)sourceInfo + sizeof(BITMAPINFOHEADER), pal4, 16*sizeof(DWORD));
-                    break;
-                
-                case 8:
-                    memcpy((BYTE *)sourceInfo + sizeof(BITMAPINFOHEADER), pal8, 256*sizeof(DWORD));
-                    break;
-                    
-                default:
-                    ERR("Unknown requested bith depth %d\n", requestedBpp);
-                    _DIBDRVBITMAP_Free(&sBmp);
-                    return 0;
-            }
-        }
-        else if(ds.dsBmih.biCompression == BI_BITFIELDS)
-            memcpy((BYTE *)sourceInfo + sizeof(BITMAPINFOHEADER), ds.dsBitfields, 3 * sizeof(RGBQUAD));
-        _DIBDRVBITMAP_Clear(&sBmp);
-        if(!_DIBDRVBITMAP_InitFromBitmapinfo(&sBmp, sourceInfo))
-        {
-            ERR("_DIBDRVBITMAP_InitFromBitmapinfo failed\n");
-            HeapFree(GetProcessHeap(), 0, sourceInfo);
-            return 0;
-        }
-        _DIBDRVBITMAP_Set_Bits(&sBmp, ds.dsBm.bmBits, FALSE);
-        HeapFree(GetProcessHeap(), 0, sourceInfo);
-                
-        /* now grab / synthesize the color table if needed */
         if(requestedBpp <= 8)
         {
             colorTable = (RGBQUAD *)((BYTE *)info + size);
-            if(requestedBpp == ds.dsBmih.biBitCount)
-            {
-                /* same source and dest format - copy color tables */
-                memcpy(colorTable, sBmp.colorTable, colorTableSize);
-            }
+            
+            /* if same color format, just grab the color table */
+            if(requestedBpp == sBmp->bitCount)
+                memcpy(colorTable, sBmp->colorTable, sBmp->colorTableSize);
+            /* otherwise synthesize a new color table */
             else
             {
-                /* different formats -- synthesize color table */
                 switch(requestedBpp)
                 {
                     case 1:
@@ -246,38 +200,33 @@ INT DIBDRV_GetDIBits( DIBDRVPHYSDEV *physDev, HBITMAP hbitmap, UINT startscan,
                         
                     default:
                         ERR("Unknown requested bith depth %d\n", requestedBpp);
-                        _DIBDRVBITMAP_Free(&sBmp);
                         return 0;
                 }
             }
         }
         
-        /* if we just wanted DIB info, job is done */
-        if(justInfo)
+        /* If we wanted just BITMAPINFO data, we're done */
+        if(!bits)
+            return abs(ds.dsBmih.biHeight);
+
+        /* now it's time to transfer image bits; for this we should create
+           a DIBDRVBITMAP from dest BITMAPINFO data */
+        /* FIXME -- HERE is the place to add support for 'startscan' stuffs */
+        if(!(dBmp = _DIBDRVBITMAP_CreateFromBMIH((BITMAPINFOHEADER *)info, ds.dsBitfields, colorTable, bits)))
         {
-            _DIBDRVBITMAP_Free(&sBmp);
-            return abs(info->bmiHeader.biHeight);
-        }
-        
-        /* Creates a DIBDRVBITMAP from dest dib */
-        _DIBDRVBITMAP_Clear(&dBmp);
-        if(!_DIBDRVBITMAP_InitFromBitmapinfo(&dBmp, info))
-        {
-            ERR("_DIBDRVBITMAP_InitFromBitmapinfo failed\n");
-            _DIBDRVBITMAP_Free(&sBmp);
+            ERR("Couldn't create dest DIB\n");
             return 0;
         }
-        _DIBDRVBITMAP_Set_Bits(&dBmp, bits, FALSE);
         
         /* now we can do the bit conversion */
         buf = HeapAlloc(GetProcessHeap(), 0, ds.dsBmih.biWidth * sizeof(RGBQUAD));
         for(iLine = 0; iLine < lines; iLine++)
         {
-            sBmp.funcs->GetLine(&sBmp, iLine, 0, ds.dsBmih.biWidth, buf);
-            dBmp.funcs->PutLine(&dBmp, iLine, 0, ds.dsBmih.biWidth, buf);
+            sBmp->funcs->GetLine(sBmp, iLine, 0, ds.dsBmih.biWidth, buf);
+            dBmp->funcs->PutLine(dBmp, iLine, 0, ds.dsBmih.biWidth, buf);
         }
-        _DIBDRVBITMAP_Free(&sBmp);
-        _DIBDRVBITMAP_Free(&dBmp);
+        HeapFree(GetProcessHeap(), 0, buf);
+        _DIBDRVBITMAP_Free(dBmp);
         return lines;
     }
     else
@@ -293,13 +242,11 @@ INT DIBDRV_GetDIBits( DIBDRVPHYSDEV *physDev, HBITMAP hbitmap, UINT startscan,
 UINT DIBDRV_SetDIBColorTable( DIBDRVPHYSDEV *physDev, UINT start, UINT count,
                               const RGBQUAD *colors )
 {
-    DIBDRVBITMAP *dib = &physDev->physBitmap;
-#if 0
-    HBITMAP thisDIB;
-#endif
+    DIBDRVBITMAP *dib = physDev->physBitmap;
+    HBRUSH thisBrush;
+    HPEN thisPen;
 
     MAYBE(TRACE("physDev:%p, start:%d, count:%d, colors:%p\n", physDev, start, count, colors));
-
     /* SetDIBColorTable operates on a DIB, so we use the engine */
     
     /* if bpp > 8, some error occurred... */
@@ -334,13 +281,16 @@ UINT DIBDRV_SetDIBColorTable( DIBDRVPHYSDEV *physDev, UINT start, UINT count,
     }
     memcpy(dib->colorTable + start, colors, sizeof(RGBQUAD) * count);
     dib->colorTableGrabbed = TRUE;
-
-    /* hack to make GDI32 sense the DIB color table change
-       (fixes a couple of todos in bitmap test suite */
-#if 0
-    thisDIB = SelectObject(physDev->hdc, GetStockObject(OBJ_BITMAP));
-    SelectObject(physDev->hdc, thisDIB);
-#endif
+    
+    /* for monochrome bitmaps, we need the 'lightest' color */
+    _DIBDRVBITMAP_GetLightestColorIndex(dib);
+    
+    /* we should re-select both current pen and brush
+       in order to update colormap-dependent colors */
+    thisBrush = SelectObject(physDev->hdc, GetStockObject(NULL_BRUSH));    
+    thisPen = SelectObject(physDev->hdc, GetStockObject(NULL_PEN));
+    SelectObject(physDev->hdc, thisBrush);    
+    SelectObject(physDev->hdc, thisPen);    
 
     return TRUE;
 }
@@ -353,7 +303,7 @@ INT DIBDRV_SetDIBits( DIBDRVPHYSDEV *physDev, HBITMAP hbitmap, UINT startscan,
 {
     INT res;
     DIBSECTION ds;
-    DIBDRVBITMAP sBmp, dBmp;
+    DIBDRVBITMAP *sBmp, *dBmp;
     DWORD *buf;
     int iLine;
     
@@ -373,31 +323,29 @@ INT DIBDRV_SetDIBits( DIBDRVPHYSDEV *physDev, HBITMAP hbitmap, UINT startscan,
         }
         
         /* Creates a DIBDRVBITMAP from source dib */
-        _DIBDRVBITMAP_Clear(&sBmp);
-        if(!_DIBDRVBITMAP_InitFromBitmapinfo(&sBmp, info))
+        if(!(sBmp = _DIBDRVBITMAP_CreateFromBitmapinfo(info, (LPVOID)bits)))
         {
-            ERR("_DIBDRVBITMAP_InitFromBitmapinfo failed\n");
-            return 0;
-        }
-        _DIBDRVBITMAP_Set_Bits(&sBmp, (LPVOID)bits, FALSE);
-        
-        /* same for destination dib */
-        if(!_DIBDRVBITMAP_InitFromHBITMAP(&dBmp, hbitmap, FALSE))
-        {
-            ERR("_DIBDRVBITMAP_InitFromHBITMAP failed\n");
-            _DIBDRVBITMAP_Free(&sBmp);
+            ERR("_DIBDRVBITMAP_CreateFromBitmapinfo failed\n");
             return 0;
         }
         
+        /* get destination physical bitmap */
+        if(!(dBmp = _BITMAPLIST_Get(hbitmap)))
+        {
+            ERR("Couldn't retrieve dest physical bitmap\n");
+            _DIBDRVBITMAP_Free(sBmp);
+            return 0;
+        }
+            
         /* now we can do the bit conversion */
         buf = HeapAlloc(GetProcessHeap(), 0, ds.dsBmih.biWidth * sizeof(RGBQUAD));
         for(iLine = 0; iLine < lines; iLine++)
         {
-            sBmp.funcs->GetLine(&sBmp, iLine, 0, ds.dsBmih.biWidth, buf);
-            dBmp.funcs->PutLine(&dBmp, iLine, 0, ds.dsBmih.biWidth, buf);
+            sBmp->funcs->GetLine(sBmp, iLine, 0, ds.dsBmih.biWidth, buf);
+            dBmp->funcs->PutLine(dBmp, iLine, 0, ds.dsBmih.biWidth, buf);
         }
-        _DIBDRVBITMAP_Free(&sBmp);
-        _DIBDRVBITMAP_Free(&dBmp);
+        HeapFree(GetProcessHeap(), 0, buf);
+        _DIBDRVBITMAP_Free(sBmp);
         return lines;
     }
     else
@@ -411,34 +359,35 @@ INT DIBDRV_SetDIBits( DIBDRVPHYSDEV *physDev, HBITMAP hbitmap, UINT startscan,
 /*************************************************************************
  *              DIBDRV_SetDIBitsToDevice
  */
-INT DIBDRV_SetDIBitsToDevice( DIBDRVPHYSDEV *physDev, INT xDest, INT yDest, DWORD cx,
+INT DIBDRV_SetDIBitsToDevice( DIBDRVPHYSDEV *physDev, INT xDst, INT yDst, DWORD cx,
                               DWORD cy, INT xSrc, INT ySrc,
                               UINT startscan, UINT lines, LPCVOID bits,
                               const BITMAPINFO *info, UINT coloruse )
 {
-    BITMAPINFO *bitmapInfo;
-    int bmInfoSize;
     int dibHeight, dibWidth;
-    DIBDRVBITMAP sBmp;
-    int sLine, dLine, iLine;
+    DIBDRVBITMAP *sBmp, *dBmp;
+    int iLine;
     void *buf;
     
-    MAYBE(TRACE("physDev:%p, xDest:%d, yDest:%d, cx:%x, cy:%x, xSrc:%d, ySrc:%d, startscan:%d, lines:%d, bits:%p, info:%p, coloruse:%d\n",
-        physDev, xDest, yDest, cx, cy, xSrc, ySrc, startscan, lines, bits, info, coloruse));
+    MAYBE(TRACE("physDev:%p, xDst:%d, yDst:%d, cx:%x, cy:%x, xSrc:%d, ySrc:%d, startscan:%d, lines:%d, bits:%p, info:%p, coloruse:%d\n",
+        physDev, xDst, yDst, cx, cy, xSrc, ySrc, startscan, lines, bits, info, coloruse));
 
     if(physDev->hasDIB)
     {
         /* DIB section selected in, use DIB Engine */
         
         /* inverts y on source -- FIXME: check if right with some tests, it seems so */
-        ySrc = abs(info->bmiHeader.biHeight) - ySrc - cy;
+//        ySrc = abs(info->bmiHeader.biHeight) - ySrc - cy;
         
         dibHeight = info->bmiHeader.biHeight;
         dibWidth = info->bmiHeader.biWidth;
 
         /* sanity check and source clipping on physical sizes */
         if(startscan >= abs(dibHeight))
+        {
+            ERR("startscan out of range\n");
             return 0;
+        }
         if(startscan + lines > abs(dibHeight))
             lines = abs(dibHeight) - startscan;
 
@@ -446,75 +395,63 @@ INT DIBDRV_SetDIBitsToDevice( DIBDRVPHYSDEV *physDev, INT xDest, INT yDest, DWOR
         dibHeight += (dibHeight > 0 ? -startscan : startscan);
 
         if(xSrc >= dibWidth)
+        {
+            ERR("xSrc out of range\n");
             return 0;
+        }
         if(xSrc + cx > dibWidth)
             cx = dibWidth - xSrc;
         if(ySrc > abs(dibHeight))
+        {
+            ERR("ySrc out of range\n");
             return 0;
+        }
         if(ySrc + cy > abs(dibHeight))
             cy = abs(dibHeight) - ySrc;
             
         ySrc -= startscan;
         cy -= startscan;
         if(cy <= 0)
+        {
+            ERR("Null or negative vertical size\n");
             return 0;
+        }
         if(ySrc < 0)
         {
-            yDest += ySrc;
+            yDst += ySrc;
             cy += ySrc;
             ySrc = 0;
         }
         if(cy <= 0)
+        {
+            ERR("Null or negative vertical size\n");
             return 0;
+        }
 
-        /* grab a copy of BITMAPINFO */
-        bmInfoSize = sizeof(BITMAPINFOHEADER);
-        if(info->bmiHeader.biCompression == BI_BITFIELDS)
-            bmInfoSize += 3 * sizeof(RGBQUAD);
-        else if (info->bmiHeader.biBitCount <= 8)
+        /* Creates a DIBDRVBITMAP from source dib */
+        if(!(sBmp = _DIBDRVBITMAP_CreateFromBitmapinfo(info, (LPVOID)bits)))
         {
-            if(info->bmiHeader.biClrUsed)
-                bmInfoSize += info->bmiHeader.biClrUsed * sizeof(RGBQUAD);
-            else
-                bmInfoSize += (1 << info->bmiHeader.biBitCount) * sizeof(RGBQUAD);
-        }
-        if(!(bitmapInfo = HeapAlloc(GetProcessHeap(), 0, bmInfoSize)))
-        {
-            ERR("HeapAlloc failed\n");
+            ERR("_DIBDRVBITMAP_CreateFromBitmapinfo failed\n");
             return 0;
         }
-        memcpy(bitmapInfo, info, bmInfoSize);
-        bitmapInfo->bmiHeader.biHeight = dibHeight;
-
-        /* create a DIBDRVBITMAP from BITMAPINFO data */
-        _DIBDRVBITMAP_Clear(&sBmp);
-        if(!_DIBDRVBITMAP_InitFromBitmapinfo(&sBmp, bitmapInfo))
-        {
-            ERR("_DIBDRVBITMAP_InitFromBitmapinfo failed\n");
-            HeapFree(GetProcessHeap, 0, bitmapInfo);
-            return 0;
-        }
-        HeapFree(GetProcessHeap(), 0, bitmapInfo);
-        _DIBDRVBITMAP_Set_Bits(&sBmp, (LPVOID)bits, FALSE);
         
-        /* transfer lines to dest bitmap */
-        if(!(buf = HeapAlloc(GetProcessHeap(), 0, cx * sizeof(RGBQUAD))))
+        /* get destination physical bitmap */
+        dBmp = physDev->physBitmap;
+
+        /* now we can do the bit conversion */
+        buf = HeapAlloc(GetProcessHeap(), 0, cx * sizeof(RGBQUAD));
+        for(iLine = 0; iLine < cy; iLine++)
         {
-            ERR("HeapAlloc failed\n");
-            return 0;
-        }
-        for(sLine = ySrc, dLine = yDest, iLine = 0; iLine < cy; sLine++, dLine++, iLine++)
-        {
-            sBmp.funcs->GetLine(&sBmp, sLine, xSrc, cx, buf); 
-            physDev->physBitmap.funcs->PutLine(&physDev->physBitmap, dLine, xDest, cx, buf);
+            sBmp->funcs->GetLine(sBmp, ySrc++, xSrc, cx, buf);
+            dBmp->funcs->PutLine(dBmp, yDst++, xDst, cx, buf);
         }
         HeapFree(GetProcessHeap(), 0, buf);
-
+        _DIBDRVBITMAP_Free(sBmp);
         return cy;
     }
     else
     {
-        return _DIBDRV_GetDisplayDriver()->pSetDIBitsToDevice(physDev->X11PhysDev, xDest, yDest, cx, cy, xSrc, ySrc,
+        return _DIBDRV_GetDisplayDriver()->pSetDIBitsToDevice(physDev->X11PhysDev, xDst, yDst, cx, cy, xSrc, ySrc,
                                                             startscan, lines, bits, info, coloruse);
     }
 }

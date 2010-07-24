@@ -169,8 +169,8 @@ BOOL _DIBDRV_AlphaBlend_generic(DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
     BYTE constAlpha = blendFn.SourceConstantAlpha;
     
     /* source and dest bitmaps */
-    const DIBDRVBITMAP *srcBmp = &physDevSrc->physBitmap;
-    DIBDRVBITMAP *dstBmp = &physDevDst->physBitmap;
+    const DIBDRVBITMAP *srcBmp = physDevSrc->physBitmap;
+    DIBDRVBITMAP *dstBmp = physDevDst->physBitmap;
     
     /* source and destination line buffers */
     DWORD *sBuf = HeapAlloc(GetProcessHeap(), 0, abs(srcBmp->stride));
@@ -403,15 +403,15 @@ BOOL _DIBDRV_BitBlt_generic(DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
     
     /* gets source, dest and pattern bitmaps, if available */
     if(usePat && physDevDst->isBrushBitmap)
-        patBmp = &physDevDst->brushBmpCache;
+        patBmp = physDevDst->brushBmpCache;
     else
         patBmp = NULL;
 
     if(useSrc)
-        srcBmp = &physDevSrc->physBitmap;
+        srcBmp = physDevSrc->physBitmap;
     else
         srcBmp = NULL;
-    dstBmp = &physDevDst->physBitmap;
+    dstBmp = physDevDst->physBitmap;
     
     /* gets pattern color, in case it's needed
        it's NOT the COLORREF value (colors are swapped
@@ -656,15 +656,15 @@ BOOL _DIBDRV_StretchBlt_generic(DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
     
     /* gets source, dest and pattern bitmaps, if available */
     if(usePat && physDevDst->isBrushBitmap)
-        patBmp = &physDevDst->brushBmpCache;
+        patBmp = physDevDst->brushBmpCache;
     else
         patBmp = NULL;
 
     if(useSrc)
-        srcBmp = &physDevSrc->physBitmap;
+        srcBmp = physDevSrc->physBitmap;
     else
         srcBmp = NULL;
-    dstBmp = &physDevDst->physBitmap;
+    dstBmp = physDevDst->physBitmap;
     
     /* gets pattern color, in case it's needed
        it's NOT the COLORREF value (colors are swapped

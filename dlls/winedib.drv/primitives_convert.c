@@ -537,6 +537,9 @@ BOOL _DIBDRV_PutLine1(const DIBDRVBITMAP *bmp, INT line, INT startx, int width, 
     /* get foreground color */
     DWORD back = *(DWORD *)bmp->colorTable       & 0x00ffffff;
     DWORD fore = *((DWORD *)bmp->colorTable + 1) & 0x00ffffff;
+    
+    /* get 'light' color */
+    int lightColor = bmp->lightColor;
 
     /* put first partial byte, if any */
     startx &= 0x07;
@@ -553,7 +556,7 @@ BOOL _DIBDRV_PutLine1(const DIBDRVBITMAP *bmp, INT line, INT startx, int width, 
                 b |= mask;
             else if(c == back)
                 b &= !mask;
-            else if(c == 0x00ffffff)
+            else if((c == 0x00ffffff && lightColor) || (c == 0 && !lightColor))
                 b |= mask;
             else
                 b &= !mask;
@@ -570,7 +573,7 @@ BOOL _DIBDRV_PutLine1(const DIBDRVBITMAP *bmp, INT line, INT startx, int width, 
         for(i = 0 ; i < 8 ; i++)
         {
             c = *dwBuf++ & 0x00ffffff;
-            if(c == fore || (c == 0x00ffffff && c != back))
+            if(c == fore || (c == 0x00ffffff && c != back && lightColor) || (c == 0 && !lightColor))
                 b |= mask;
             mask >>= 1;
         }
@@ -589,7 +592,7 @@ BOOL _DIBDRV_PutLine1(const DIBDRVBITMAP *bmp, INT line, INT startx, int width, 
                 b |= mask;
             else if(c == back)
                 b &= !mask;
-            else if(c == 0x00ffffff)
+            else if((c == 0x00ffffff && lightColor) || (c == 0 && !lightColor))
                 b |= mask;
             else
                 b &= !mask;
