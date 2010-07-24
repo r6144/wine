@@ -204,6 +204,12 @@ typedef struct _DIBDRVPHYSDEV
 
     /* active ROP2 */
     INT rop2;
+    
+    /* clipping region and its rectangles */
+    HRGN region;
+    RGNDATA *regionData;
+    RECT *regionRects;
+    int regionRectCount;
 
     /* background color and active ROP2 precalculated
        AND and XOR values for it */

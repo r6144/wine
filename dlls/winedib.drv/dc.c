@@ -165,6 +165,12 @@ BOOL DIBDRV_CreateDC( HDC hdc, DIBDRVPHYSDEV **pdev, LPCWSTR driver, LPCWSTR dev
     
     /* clears pen and brush */
     physDev->rop2 = R2_COPYPEN;
+    
+    /* clipping region */
+    physDev->region = CreateRectRgn( 0, 0, 0, 0 );
+    physDev->regionData = NULL;
+    physDev->regionRects = NULL;
+    physDev->regionRectCount = 0;
 
     physDev->backgroundColor = 0;
     _DIBDRV_CalcAndXorMasks(physDev->rop2, 0, &physDev->backgroundAnd, &physDev->backgroundXor);
@@ -228,6 +234,14 @@ BOOL DIBDRV_DeleteDC( DIBDRVPHYSDEV *physDev )
     physDev->brushAnds = NULL;
     physDev->brushXors = NULL;
     
+    /* frees clipping region */
+    DeleteObject(physDev->region);
+    if(physDev->regionData)
+        HeapFree(GetProcessHeap(), 0, physDev->regionData);
+    physDev->regionData = NULL;
+    physDev->regionRects = NULL;
+    physDev->regionRectCount = 0;
+
     /* frees DIB Engine device */
     HeapFree(GetProcessHeap(), 0, physDev);
     
