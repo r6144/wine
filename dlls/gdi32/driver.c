@@ -216,7 +216,6 @@ static struct graphics_driver *create_driver( HMODULE module )
 
 
 /**********************************************************************
-<<<<<<< HEAD
  *	     Load_Dib_Driver
  *
  * Check if we want the DIB engine and try to load it
