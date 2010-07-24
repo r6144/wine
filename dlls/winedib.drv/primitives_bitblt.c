@@ -25,6 +25,12 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(dibdrv);
 
+static inline COLORREF SwapColors(DWORD c)
+{
+    return ((c & 0x0000ff) << 16) | (c & 0x00ff00) | ((c & 0xff0000) >> 16);
+    
+}
+
 /* shrinks a line -- srcWidth >= dstWidth */
 static void ShrinkLine(DWORD *dst, int dstWidth, DWORD *src, int srcWidth)
 {
@@ -407,9 +413,11 @@ BOOL _DIBDRV_BitBlt_generic(DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
         srcBmp = NULL;
     dstBmp = &physDevDst->physBitmap;
     
-    /* gets pattern color, in case it's needed */
+    /* gets pattern color, in case it's needed
+       it's NOT the COLORREF value (colors are swapped
+       NOR the pixel value (it's applied to a 32 BPP BI_RGB */
     if(usePat)
-        patColor = physDevDst->brushColor;
+        patColor = SwapColors(physDevDst->brushColorref);
     else
         patColor = 0;
 
@@ -658,9 +666,11 @@ BOOL _DIBDRV_StretchBlt_generic(DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
         srcBmp = NULL;
     dstBmp = &physDevDst->physBitmap;
     
-    /* gets pattern color, in case it's needed */
+    /* gets pattern color, in case it's needed
+       it's NOT the COLORREF value (colors are swapped
+       NOR the pixel value (it's applied to a 32 BPP BI_RGB */
     if(usePat)
-        patColor = physDevDst->brushColor;
+        patColor = SwapColors(physDevDst->brushColorref);
     else
         patColor = 0;
 

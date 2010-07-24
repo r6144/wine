@@ -25,6 +25,69 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(dibdrv);
 
+/* maps a colorref to actual color */
+COLORREF _DIBDRV_MapColor(DIBDRVPHYSDEV *physDev, COLORREF color)
+{
+    WORD index;
+    RGBQUAD *palColor;
+    HPALETTE hPal;
+    PALETTEENTRY paletteEntry;
+    
+    switch(color >> 24)
+    {
+        case 0x10 : /* DIBINDEX */
+            MAYBE(TRACE("DIBINDEX Color is %08x\n", color));
+            index =  color & 0xffff;
+            if(index >= physDev->physBitmap.colorTableSize)
+            {
+                WARN("DIBINDEX color out of range\n");
+                return 0;
+            }
+            palColor = physDev->physBitmap.colorTable + index;
+            MAYBE(TRACE("Returning color %08x\n", RGB(palColor->rgbRed, palColor->rgbGreen, palColor->rgbBlue)));
+            return RGB(palColor->rgbRed, palColor->rgbGreen, palColor->rgbBlue);
+            
+        case 0x01: /* PALETTEINDEX */
+            MAYBE(TRACE("PALETTEINDEX Color is %08x\n", color));
+            index =  color & 0xffff;
+            if(!(hPal = GetCurrentObject(physDev->hdc, OBJ_PAL)))
+            {
+                ERR("Couldn't get palette\n");
+                return 0;
+            }
+            if (!GetPaletteEntries(hPal, index, 1, &paletteEntry))
+            {
+                WARN("PALETTEINDEX(%x) : index %d is out of bounds, assuming black\n", color, index);
+                return 0;
+            }
+            MAYBE(TRACE("Returning color %08x\n", RGB(paletteEntry.peRed, paletteEntry.peGreen, paletteEntry.peBlue)));
+            return RGB(paletteEntry.peRed, paletteEntry.peGreen, paletteEntry.peBlue);
+        
+        case 0x02: /* PALETTERGB */
+            return _DIBDRV_GetNearestColor(&physDev->physBitmap, color & 0xffffff);
+        
+        default:
+            /* RGB color -- we must process special case for monochrome bitmaps */
+            if(physDev->physBitmap.bitCount == 1)
+            {
+                RGBQUAD *back = physDev->physBitmap.colorTable;
+                RGBQUAD *fore = back+1;
+                if(fore->rgbRed * fore->rgbRed + fore->rgbGreen * fore->rgbGreen + fore->rgbBlue * fore->rgbBlue <
+                   back->rgbRed * back->rgbRed + back->rgbGreen * back->rgbGreen + back->rgbBlue * back->rgbBlue)
+                {
+                    fore = back;
+                    back = fore + 1;
+                }
+                if ( ((color >> 16) & 0xff) + ((color >>  8) & 0xff) + (color & 0xff) > 255*3/2)
+                    return RGB(fore->rgbRed, fore->rgbGreen, fore->rgbBlue);
+                else
+                    return RGB(back->rgbRed, back->rgbGreen, back->rgbBlue);
+            }
+            else
+                return color;
+    }
+}
+
 /***********************************************************************
  *              DIBDRV_RealizePalette
  */

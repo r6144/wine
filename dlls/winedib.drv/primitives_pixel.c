@@ -25,23 +25,14 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(dibdrv);
 
-
 /* ------------------------------------------------------------*/
 /*                     BITFIELD HELPERS                        */
-static DWORD GetField32 (DWORD pixel, int shift, int len)
+static inline DWORD GetField32 (DWORD pixel, int shift, int len)
 {
     pixel = pixel & (((1 << (len)) - 1) << shift);
     pixel = pixel << (32 - (shift + len)) >> 24;
     return pixel;
 }
-
-static WORD GetField16 (WORD pixel, int shift, int len)
-{
-    FIXME("TODO\n");
-    return 0;
-}
-
-
 
 /* ------------------------------------------------------------*/
 /*                     PIXEL POINTER READING                   */
@@ -174,45 +165,50 @@ void _DIBDRV_SetPixel1(DIBDRVBITMAP *dib, int x, int y, DWORD and, DWORD xor)
 /*                     PIXEL READING                           */
 DWORD _DIBDRV_GetPixel32_RGB(const DIBDRVBITMAP *dib, int x, int y)
 {
-    DWORD *ptr = dib->funcs->GetPixelPointer(dib, x, y);
-    return *ptr;
+    DWORD c = *(DWORD *)dib->funcs->GetPixelPointer(dib, x, y);
+    return
+        ((c & 0x000000ff) << 16) |
+        ((c & 0x0000ff00)      ) |
+        ((c & 0x00ff0000) >> 16) |
+        ( c & 0xff000000       );   /* last one for alpha channel */
 }
 
 DWORD _DIBDRV_GetPixel32_BITFIELDS(const DIBDRVBITMAP *dib, int x, int y)
 {
     DWORD *ptr = dib->funcs->GetPixelPointer(dib, x, y);
 
-    return GetField32(*ptr, dib->redShift,   dib->redLen)   << 16 |
+    return GetField32(*ptr, dib->redShift,   dib->redLen)         |
            GetField32(*ptr, dib->greenShift, dib->greenLen) <<  8 |
-           GetField32(*ptr, dib->blueShift,  dib->blueLen);
+           GetField32(*ptr, dib->blueShift,  dib->blueLen)  << 16;
 }
 
 DWORD _DIBDRV_GetPixel24(const DIBDRVBITMAP *dib, int x, int y)
 {
     BYTE *ptr = dib->funcs->GetPixelPointer(dib, x, y);
-    return (ptr[0] << 16) | (ptr[1] << 8) | ptr[2];
+    return ((WORD)ptr[0] << 16) | ((WORD)ptr[1] << 8) | (WORD)ptr[2];
 }
 
 DWORD _DIBDRV_GetPixel16_RGB(const DIBDRVBITMAP *dib, int x, int y)
 {
-    WORD *ptr = dib->funcs->GetPixelPointer(dib, x, y);
-    return ((*ptr & 0x7c00) << 9) | ((*ptr & 0x03e0) << 6) | ((*ptr & 0x001f) << 3);
+    WORD c = *(WORD *)dib->funcs->GetPixelPointer(dib, x, y);
+   /* 0RRR|RRGG|GGGB|BBBB */
+   return ((c & 0x7c00) >> 7) | ((c & 0x03e0) << 6) | ((c & 0x001f) << 19);
 }
 
 DWORD _DIBDRV_GetPixel16_BITFIELDS(const DIBDRVBITMAP *dib, int x, int y)
 {
-    WORD *ptr = dib->funcs->GetPixelPointer(dib, x, y);
+    WORD c = *(WORD *)dib->funcs->GetPixelPointer(dib, x, y);
 
-    return GetField16(*ptr, dib->redShift,   dib->redLen)   << 16 |
-           GetField16(*ptr, dib->greenShift, dib->greenLen) <<  8 |
-           GetField16(*ptr, dib->blueShift,  dib->blueLen);
+    return (((c & dib->blueMask ) >> dib->blueShift ) << (24 - dib->blueLen )) |
+           (((c & dib->greenMask) >> dib->greenShift) << (16 - dib->greenLen)) |
+           (((c & dib->redMask  ) >> dib->redShift  ) << ( 8 - dib->redLen  ));
 }
 
 DWORD _DIBDRV_GetPixel8(const DIBDRVBITMAP *dib, int x, int y)
 {
     BYTE *ptr = dib->funcs->GetPixelPointer(dib, x, y);
     RGBQUAD *color = dib->colorTable + *ptr;
-    return (color->rgbRed << 16) | (color->rgbGreen << 8) | color->rgbBlue;
+    return (color->rgbRed) | (color->rgbGreen << 8) | (color->rgbBlue << 16);
 }
 
 DWORD _DIBDRV_GetPixel4(const DIBDRVBITMAP *dib, int x, int y)
@@ -226,7 +222,7 @@ DWORD _DIBDRV_GetPixel4(const DIBDRVBITMAP *dib, int x, int y)
         pix = *ptr >> 4;
 
     color = dib->colorTable + pix;
-    return (color->rgbRed << 16) | (color->rgbGreen << 8) | color->rgbBlue;
+    return (color->rgbRed) | (color->rgbGreen << 8) | (color->rgbBlue << 16);
 }
 
 DWORD _DIBDRV_GetPixel1(const DIBDRVBITMAP *dib, int x, int y)
@@ -240,5 +236,5 @@ DWORD _DIBDRV_GetPixel1(const DIBDRVBITMAP *dib, int x, int y)
     pix &= 1;
 
     color = dib->colorTable + pix;
-    return (color->rgbRed << 16) | (color->rgbGreen << 8) | color->rgbBlue;
+    return (color->rgbRed) | (color->rgbGreen << 8) | (color->rgbBlue << 16);
 }

@@ -31,6 +31,33 @@ static inline COLORREF SwapColors(DWORD c)
     
 }
 
+static inline DWORD PlaceField32(BYTE c, int shift, int len)
+{
+    DWORD res = c;
+    if(len < 8)
+        res >>= (8 - len);
+    else
+        res <<= (len - 8);
+    return res << shift;
+}
+
+static inline WORD PlaceField16(BYTE c, int shift, int len)
+{
+    WORD res = c;
+    if(len < 8)
+        res >>= (8 - len);
+    else
+        res <<= (len - 8);
+    return res << shift;
+}
+
+static inline BYTE GetField32(DWORD dwColor, int shift, int len)
+{
+    dwColor = dwColor & (((1 << (len)) - 1) << shift);
+    dwColor = dwColor << (32 - (shift + len)) >> 24;
+    return dwColor;
+}
+
 /* ----------------------------------------------------------------*/
 /*                         CONVERT PRIMITIVES                      */
 /* converts (part of) line of any DIB format from/to DIB32_RGB one */
@@ -63,7 +90,7 @@ BOOL _DIBDRV_GetLine32_RGB(const DIBDRVBITMAP *bmp, INT line, INT startx, int wi
 
 BOOL _DIBDRV_GetLine32_BITFIELDS(const DIBDRVBITMAP *bmp, INT line, INT startx, int width, void *buf)
 {
-    BYTE *bBuf = (BYTE *)buf;
+    DWORD *dwBuf = (DWORD *)buf;
     DWORD *src;
 
 #ifdef DIBDRV_CHECK_RANGES
@@ -85,10 +112,10 @@ BOOL _DIBDRV_GetLine32_BITFIELDS(const DIBDRVBITMAP *bmp, INT line, INT startx, 
     src = (DWORD *)((BYTE *)bmp->bits + line * bmp->stride + 4 * startx);
     for(; width ; width--)
     {
-        *bBuf++ = (*src & bmp->blueMask ) >> bmp->blueShift;
-        *bBuf++ = (*src & bmp->greenMask) >> bmp->greenShift;
-        *bBuf++ = (*src & bmp->redMask  ) >> bmp->redShift;
-        *bBuf++ = 0x0;
+        *dwBuf++ =
+            GetField32(*src, bmp->redShift  , bmp->redLen  ) << 16 |
+            GetField32(*src, bmp->greenShift, bmp->greenLen) <<  8 |
+            GetField32(*src, bmp->blueShift , bmp->blueLen );
         src++;
     }
     return TRUE;
@@ -184,6 +211,7 @@ BOOL _DIBDRV_GetLine16_BITFIELDS(const DIBDRVBITMAP *bmp, INT line, INT startx, 
     for(; width ; width--)
     {
         b = *src++;
+
         *dwBuf++ =((( b & bmp->blueMask) >> bmp->blueShift ) << ( 8 - bmp->blueLen )) |
                   (((b & bmp->greenMask) >> bmp->greenShift) << (16 - bmp->greenLen)) |
                   (((b & bmp->redMask  ) >> bmp->redShift  ) << (24 - bmp->redLen  ));
@@ -350,14 +378,14 @@ BOOL _DIBDRV_PutLine32_BITFIELDS(const DIBDRVBITMAP *bmp, INT line, INT startx, 
 {
     DWORD *dwBuf = (DWORD *)buf;
     DWORD *dst = (DWORD *)((BYTE *)bmp->bits + line * bmp->stride + 4 * startx);
-    DWORD c;
+    RGBQUAD *c;
     for(; width; width--)
     {
-        c = *dwBuf++;
+        c = (RGBQUAD *)dwBuf++;
         *dst++ =
-            ((( c & 0x000000ff)        << bmp->blueShift)  & bmp->blueMask) |
-            ((((c & 0x0000ff00) >>  8) << bmp->greenShift) & bmp->greenMask) |
-            ((((c & 0x00ff0000) >> 16) << bmp->redShift)   & bmp->redMask);
+            PlaceField32(c->rgbRed  , bmp->redShift  , bmp->redLen  ) |
+            PlaceField32(c->rgbGreen, bmp->greenShift, bmp->greenLen) |
+            PlaceField32(c->rgbBlue , bmp->blueShift , bmp->blueLen );
     }
     return TRUE;
 }
@@ -386,6 +414,7 @@ BOOL _DIBDRV_PutLine16_RGB(const DIBDRVBITMAP *bmp, INT line, INT startx, int wi
     {
         c = *dwBuf++;
         *dst++ =
+        /* 0RRR|RRGG|GGGB|BBBB */
             ((c & 0x000000f8) >> 3) |
             ((c & 0x0000f800) >> 6) |
             ((c & 0x00f80000) >> 9);
@@ -506,8 +535,9 @@ BOOL _DIBDRV_PutLine1(const DIBDRVBITMAP *bmp, INT line, INT startx, int width, 
     DWORD c;
 
     /* get foreground color */
+    DWORD back = *(DWORD *)bmp->colorTable       & 0x00ffffff;
     DWORD fore = *((DWORD *)bmp->colorTable + 1) & 0x00ffffff;
-    
+
     /* put first partial byte, if any */
     startx &= 0x07;
     mask = 0x80 >> startx;
@@ -519,7 +549,11 @@ BOOL _DIBDRV_PutLine1(const DIBDRVBITMAP *bmp, INT line, INT startx, int width, 
         while(startx--)
         {
             c = *dwBuf++ & 0x00ffffff;
-            if(c == 0x00ffffff || c == fore)
+            if(c == fore)
+                b |= mask;
+            else if(c == back)
+                b &= !mask;
+            else if(c == 0x00ffffff)
                 b |= mask;
             else
                 b &= !mask;
@@ -536,7 +570,7 @@ BOOL _DIBDRV_PutLine1(const DIBDRVBITMAP *bmp, INT line, INT startx, int width, 
         for(i = 0 ; i < 8 ; i++)
         {
             c = *dwBuf++ & 0x00ffffff;
-            if(c == 0x00ffffff || c == fore)
+            if(c == fore || (c == 0x00ffffff && c != back))
                 b |= mask;
             mask >>= 1;
         }
@@ -551,7 +585,11 @@ BOOL _DIBDRV_PutLine1(const DIBDRVBITMAP *bmp, INT line, INT startx, int width, 
         while(width--)
         {
             c = *dwBuf++ & 0x00ffffff;
-            if(c == 0x00ffffff || c == fore)
+            if(c == fore)
+                b |= mask;
+            else if(c == back)
+                b &= !mask;
+            else if(c == 0x00ffffff)
                 b |= mask;
             else
                 b &= !mask;

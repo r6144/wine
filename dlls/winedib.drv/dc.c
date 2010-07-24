@@ -80,6 +80,10 @@ static DWORD get_dpi( void )
     return dpi;
 }
 
+/* dummy function for pen/brush drawing primitives initializations */
+static void dummy4(DIBDRVPHYSDEV *physDev, int a, int b, int c) {} ;
+static void dummy5(DIBDRVPHYSDEV *physDev, int a, int b, int c, int d) {} ;
+
 /**********************************************************************
  *       device_init
  *
@@ -119,10 +123,6 @@ static void device_init(void)
 
     device_init_done = TRUE;
 }
-
-/* dummy null function for pen and brush */
-static void dummy3(DIBDRVPHYSDEV *p, int a, int b, int c) {}
-static void dummy4(DIBDRVPHYSDEV *p, int a, int b, int c, int d) {}
 
 /**********************************************************************
  *           DIBDRV_CreateDC
@@ -180,22 +180,24 @@ BOOL DIBDRV_CreateDC( HDC hdc, DIBDRVPHYSDEV **pdev, LPCWSTR driver, LPCWSTR dev
     physDev->backgroundColor = 0;
     _DIBDRV_CalcAndXorMasks(physDev->rop2, 0, &physDev->backgroundAnd, &physDev->backgroundXor);
     
-    physDev->penColor = 0;
-    _DIBDRV_CalcAndXorMasks(physDev->rop2, 0, &physDev->penAnd, &physDev->penXor);
-    
+    /* stock pen */
     physDev->penStyle = PS_NULL;
-    physDev->penHLine = dummy3;
-    physDev->penVLine = dummy3;
-    physDev->penLine  = dummy4;
+    physDev->penColor = 0;
+    physDev->penColorref = 0;
+    _DIBDRV_CalcAndXorMasks(physDev->rop2, 0, &physDev->penAnd, &physDev->penXor);
+    physDev->penHLine = dummy4;
+    physDev->penVLine = dummy4;
+    physDev->penLine = dummy5;
     physDev->penPattern = NULL;
     
-    physDev->brushColor = 0;
-    _DIBDRV_CalcAndXorMasks(physDev->rop2, 0, &physDev->brushAnd, &physDev->brushXor);
+    /* stock brush */
+    physDev->brushStyle = BS_NULL;
+    physDev->brushColor = 0x0;
+    physDev->brushColorref = 0x0;
+    _DIBDRV_CalcAndXorMasks(physDev->rop2, 0x0, &physDev->brushAnd, &physDev->brushXor);
     physDev->brushAnds = NULL;
     physDev->brushXors = NULL;
-    
-    physDev->brushStyle = BS_NULL;
-    physDev->brushHLine = dummy3;
+    physDev->brushHLine = dummy4;
     
     physDev->isBrushBitmap = FALSE;
     _DIBDRVBITMAP_Clear(&physDev->brushBitmap);
@@ -215,7 +217,7 @@ BOOL DIBDRV_CreateDC( HDC hdc, DIBDRVPHYSDEV **pdev, LPCWSTR driver, LPCWSTR dev
 
     /* sets the result value and returns */
     *pdev = physDev;
-
+    
     return TRUE;
 }
 
