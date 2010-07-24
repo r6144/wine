@@ -498,7 +498,7 @@ HBRUSH DIBDRV_SelectBrush( DIBDRVPHYSDEV *physDev, HBRUSH hbrush )
                 }
 
                 /* gets brush DIB's pointer */
-                bmi = GlobalLock16(logbrush.lbHatch);
+                bmi = GlobalLock((HGLOBAL)logbrush.lbHatch);
         
                 /* initializes a temporary DIB with brush's one */
                 if(!_DIBDRVBITMAP_InitFromBitmapinfo(&src, bmi, NULL))
@@ -525,7 +525,7 @@ HBRUSH DIBDRV_SelectBrush( DIBDRVPHYSDEV *physDev, HBRUSH hbrush )
 
     err:            
                 /* frees brush's DIB pointer */
-                GlobalUnlock16(logbrush.lbHatch);
+                GlobalUnlock((HGLOBAL)logbrush.lbHatch);
                 
                 break;
             }

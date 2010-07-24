@@ -33,7 +33,6 @@
 #include "wine/debug.h"
 #include "wingdi.h"
 #include "winreg.h"
-#include "wine/winbase16.h" /* GlobalLock16 */
 
 #include "freetype.h"
 
