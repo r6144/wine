@@ -3492,7 +3492,7 @@ GdiFont *WineEngCreateFontInstance(DC *dc, HFONT hfont)
 	  lf.lfWeight, lf.lfPitchAndFamily, lf.lfCharSet, lf.lfOrientation,
 	  lf.lfEscapement);
     /* Replace some Japanese fonts when using a Chinese charset, since they are likely not intended */
-    if (lf.lfCharSet == 134) { /* FIXME: what about DEFAULT_CHARSET? */
+    if (lf.lfCharSet == 134 || lf.lfCharSet == 1) { /* FIXME: Modifying DEFAULT_CHARSET might be dangerous? */
 	/* MS Gothic */
 	static const WCHAR gothicW[] = { 0xff2d, 0xff33, ' ', 0x30b4, 0x30b7, 0x30c3, 0x30af, 0 };
 	/* MS PGothic */
@@ -3501,9 +3501,11 @@ GdiFont *WineEngCreateFontInstance(DC *dc, HFONT hfont)
 	   Chinese translations of Japanese games. */
 	static const WCHAR sgothicGW[] = { 0x6617, 0x5f28, 0x50d1, 0x50d4, 0x50e2, 0x50cb, 0 };
 	static const WCHAR sminchoGW[] = { 0x6617, 0x5f28, 0x67e7, 0x632c, 0 };
+	static const WCHAR verdanaW[] = { 'V', 'e', 'r', 'd', 'a', 'n', 'a', 0 };
 	static const WCHAR simsunW[] = { 0x5b8b, 0x4f53, 0 };
-	if (strcmpiW(lf.lfFaceName, gothicW) == 0 || strcmpiW(lf.lfFaceName, pgothicW) == 0
-	    || strcmpiW(lf.lfFaceName, sgothicGW) == 0 || strcmpiW(lf.lfFaceName, sminchoGW) == 0) {
+	if ((lf.lfCharSet == 134 && (strcmpiW(lf.lfFaceName, gothicW) == 0 || strcmpiW(lf.lfFaceName, pgothicW) == 0
+				     || strcmpiW(lf.lfFaceName, sgothicGW) == 0 || strcmpiW(lf.lfFaceName, sminchoGW) == 0))
+	    || strcmpiW(lf.lfFaceName, verdanaW) == 0) {
 	    TRACE("Japanese font replaced by Chinese font\n");
 	    strcpyW(lf.lfFaceName, simsunW); /* NOTE: beware of buffer overflows */
 	}
@@ -3513,6 +3515,10 @@ GdiFont *WineEngCreateFontInstance(DC *dc, HFONT hfont)
         TRACE("SimSun => SimHei\n");
         lf.lfWeight = 0; lf.lfFaceName[0] = 0x9ed1;
     }
+    TRACE("REPLACED: %s, h=%d, it=%d, weight=%d, PandF=%02x, charset=%d orient %d escapement %d\n",
+	  debugstr_w(lf.lfFaceName), lf.lfHeight, lf.lfItalic,
+	  lf.lfWeight, lf.lfPitchAndFamily, lf.lfCharSet, lf.lfOrientation,
+	  lf.lfEscapement);
 
     if(dc->GraphicsMode == GM_ADVANCED)
         memcpy(&dcmat, &dc->xformWorld2Vport, sizeof(FMAT2));
