@@ -36,6 +36,8 @@
 #include "wine/unicode.h"
 #include "wine/debug.h"
 
+#include <stdio.h>
+
 WINE_DEFAULT_DEBUG_CHANNEL(font);
 
   /* Device -> World size conversion */
@@ -1779,6 +1781,19 @@ BOOL WINAPI ExtTextOutW( HDC hdc, INT x, INT y, UINT flags,
 
     TRACE("%p, %d, %d, %08x, %p, %s, %d, %p)\n", hdc, x, y, flags,
           lprect, debugstr_wn(str, count), count, lpDx);
+
+#if 0
+    {
+#define BUFSIZE 1024
+		char buf[BUFSIZE];
+		int result;
+		result = wine_utf8_wcstombs(0, str, count, buf, BUFSIZE - 1);
+		if (result >= 0) { /* should be the length */
+			buf[result] = '\0'; fputs(buf, stderr); fflush(stderr);
+		}
+#undef BUFSIZE
+	}
+#endif
 
     if(lprect)
         TRACE("rect: %d,%d - %d,%d\n", lprect->left, lprect->top, lprect->right,
