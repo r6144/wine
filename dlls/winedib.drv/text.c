@@ -97,6 +97,7 @@ BOOL DIBDRV_ExtTextOut( DIBDRVPHYSDEV *physDev, INT x, INT y, UINT flags,
         _DIBDRV_Sizes_ws2ds(physDev, &w, &h);
  
         /* loop on all clip region rectangles */
+	TRACE("dibdrv text out start\n");
         r = physDev->regionRects;
         for(iRec = 0; iRec < physDev->regionRectCount; iRec++, r++)
         {
@@ -184,6 +185,7 @@ BOOL DIBDRV_ExtTextOut( DIBDRVPHYSDEV *physDev, INT x, INT y, UINT flags,
                 /* convert to an anti-aliased bitmap, if needed */
                 if ( glyph->format != FT_GLYPH_FORMAT_BITMAP )
                 {
+					TRACE("Converting to bitmap from format %d\n", (int) glyph->format);
                     error = pFT_Glyph_To_Bitmap(
                         &glyph,
     #ifdef DIBDRV_ANTIALIASED_FONTS        
@@ -207,8 +209,11 @@ BOOL DIBDRV_ExtTextOut( DIBDRVPHYSDEV *physDev, INT x, INT y, UINT flags,
                 
                 /* convert the bitmap in an 8bpp 1 byte aligned one if needed */
                 bitmap = &bitmapGlyph->bitmap;
+				TRACE("bitmapGlyph->bitmap: pixel_mode=%d num_grays=%d rows=%d width=%d pitch=%d\n",
+					  bitmap->pixel_mode, bitmap->num_grays, bitmap->rows, bitmap->width, bitmap->pitch);
                 if(bitmap->pixel_mode != FT_PIXEL_MODE_GRAY)
                 {
+					TRACE("Converting bitmap to 8-bit grayscale from format %d\n", (int) bitmap->pixel_mode);
                     pFT_Bitmap_New(&bitmap8);
                     if(pFT_Bitmap_Convert(glyph->library, bitmap, &bitmap8, 1))
                     {
@@ -218,7 +223,10 @@ BOOL DIBDRV_ExtTextOut( DIBDRVPHYSDEV *physDev, INT x, INT y, UINT flags,
                     }
                     bitmap = &bitmap8;
                 }
+				TRACE("bitmap: pixel_mode=%d num_grays=%d rows=%d width=%d pitch=%d\n",
+					  bitmap->pixel_mode, bitmap->num_grays, bitmap->rows, bitmap->width, bitmap->pitch);
 
+				TRACE("FreetypeBlit\n");
                 /* now, draw to our target surface */
                 physDev->physBitmap->funcs->FreetypeBlit(physDev, x+bitmapGlyph->left, y-bitmapGlyph->top, &clipRec, bitmap);
                 
@@ -235,6 +243,7 @@ BOOL DIBDRV_ExtTextOut( DIBDRVPHYSDEV *physDev, INT x, INT y, UINT flags,
                 res = TRUE;
             }
         } /* end region rects loop */
+	TRACE("dibdrv text out end\n");
     }
     else
     {
