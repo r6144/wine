@@ -33,7 +33,7 @@ void _DIBDRV_freetype_blit_8888(DIBDRVPHYSDEV *physDev, int x, int y, RECT *clip
     
     DIBDRVBITMAP *dib = physDev->physBitmap;
     int bmpX, bmpY;
-    BYTE *buf;
+    BYTE *buf, val;
     int dibX, dibY;
     int xMin, xMax, yMin, yMax;
     DWORD *ptr;
@@ -60,17 +60,18 @@ void _DIBDRV_freetype_blit_8888(DIBDRVPHYSDEV *physDev, int x, int y, RECT *clip
         {
             if(dibX < xMax && dibY < yMax && dibX >= xMin && dibY >= yMin && *buf)
             {
-#ifdef DIBDRV_ANTIALIASED_FONTS        
-                c = physDev->textColorTable[*buf];
-                if(*buf < ng1)
+#ifdef DIBDRV_ANTIALIASED_FONTS
+				val = MulDiv(255, *buf, ng1); /* Normalize to num_grays==256 */
+                c = physDev->textColorTable[val];
+                if(val < 255)
                 {
-                    negColor = ng1 - *buf;
+                    negColor = 255 - val;
                     r = (*ptr >> 16) & 0xff;
                     g = (*ptr >>  8) & 0xff;
                     b = *ptr         & 0xff;
-                    c += MulDiv(r, ng1 - *buf, ng1) << 16 |
-                         MulDiv(g, ng1 - *buf, ng1) <<  8 |
-                         MulDiv(b, ng1 - *buf, ng1);
+                    c += MulDiv(r, 255 - val, 255) << 16 |
+                         MulDiv(g, 255 - val, 255) <<  8 |
+                         MulDiv(b, 255 - val, 255);
                 }
 #endif
                 *ptr = c;
@@ -87,7 +88,7 @@ void _DIBDRV_freetype_blit_32_RGB(DIBDRVPHYSDEV *physDev, int x, int y, RECT *cl
     
     DIBDRVBITMAP *dib = physDev->physBitmap;
     int bmpX, bmpY;
-    BYTE *buf;
+    BYTE *buf, val;
     int dibX, dibY;
     int xMin, xMax, yMin, yMax;
     DWORD *ptr;
@@ -115,16 +116,17 @@ void _DIBDRV_freetype_blit_32_RGB(DIBDRVPHYSDEV *physDev, int x, int y, RECT *cl
             if(dibX < xMax && dibY < yMax && dibX >= xMin && dibY >= yMin && *buf)
             {
 #ifdef DIBDRV_ANTIALIASED_FONTS        
-                c = physDev->textColorTable[*buf];
-                if(*buf < ng1)
+				val = MulDiv(255, *buf, ng1); /* Normalize to num_grays==256 */
+                c = physDev->textColorTable[val];
+                if(val < 255)
                 {
-                    negColor = ng1 - *buf;
+                    negColor = 255 - val;
                     r = (*ptr >> 16) & 0xff;
                     g = (*ptr >>  8) & 0xff;
                     b = *ptr         & 0xff;
-                    c += MulDiv(r, ng1 - *buf, ng1) << 16 |
-                         MulDiv(g, ng1 - *buf, ng1) <<  8 |
-                         MulDiv(b, ng1 - *buf, ng1);
+                    c += MulDiv(r, 255 - val, 255) << 16 |
+                         MulDiv(g, 255 - val, 255) <<  8 |
+                         MulDiv(b, 255 - val, 255);
                 }
 #endif
                 *ptr = c;
@@ -141,7 +143,7 @@ void _DIBDRV_freetype_blit_32_BITFIELDS(DIBDRVPHYSDEV *physDev, int x, int y, RE
     
     DIBDRVBITMAP *dib = physDev->physBitmap;
     int bmpX, bmpY;
-    BYTE *buf;
+    BYTE *buf, val;
     int dibX, dibY;
     int xMin, xMax, yMin, yMax;
 #ifdef DIBDRV_ANTIALIASED_FONTS        
@@ -168,17 +170,18 @@ void _DIBDRV_freetype_blit_32_BITFIELDS(DIBDRVPHYSDEV *physDev, int x, int y, RE
             if(dibX < xMax && dibY < yMax && dibX >= xMin && dibY >= yMin && *buf)
             {
 #ifdef DIBDRV_ANTIALIASED_FONTS        
-                c = physDev->textColorTable[*buf];
-                if(*buf < ng1)
+				val = MulDiv(255, *buf, ng1); /* Normalize to num_grays==256 */
+                c = physDev->textColorTable[val];
+                if(val < 255)
                 {
-                    negColor = ng1 - *buf;
+                    negColor = 255 - val;
                     pix = dib->funcs->GetPixel(dib, dibX, dibY);
                     r = pix         & 0xff;
                     g = (pix >>  8) & 0xff;
                     b = (pix >> 16) & 0xff;
-                    c += MulDiv(r, ng1 - *buf, ng1) << 16 |
-                         MulDiv(g, ng1 - *buf, ng1) <<  8 |
-                         MulDiv(b, ng1 - *buf, ng1);
+                    c += MulDiv(r, 255 - val, 255) << 16 |
+                         MulDiv(g, 255 - val, 255) <<  8 |
+                         MulDiv(b, 255 - val, 255);
                 }
 #endif
                 dib->funcs->SetPixel(dib, dibX, dibY, 0, c);
@@ -194,7 +197,7 @@ void _DIBDRV_freetype_blit_24(DIBDRVPHYSDEV *physDev, int x, int y, RECT *clipRe
     
     DIBDRVBITMAP *dib = physDev->physBitmap;
     int bmpX, bmpY;
-    BYTE *buf;
+    BYTE *buf, val;
     int dibX, dibY;
     int xMin, xMax, yMin, yMax;
 #ifdef DIBDRV_ANTIALIASED_FONTS        
@@ -221,17 +224,18 @@ void _DIBDRV_freetype_blit_24(DIBDRVPHYSDEV *physDev, int x, int y, RECT *clipRe
             if(dibX < xMax && dibY < yMax && dibX >= xMin && dibY >= yMin && *buf)
             {
 #ifdef DIBDRV_ANTIALIASED_FONTS        
-                c = physDev->textColorTable[*buf];
-                if(*buf < ng1)
+				val = MulDiv(255, *buf, ng1); /* Normalize to num_grays==256 */
+                c = physDev->textColorTable[val];
+                if(val < 255)
                 {
-                    negColor = ng1 - *buf;
+                    negColor = 255 - val;
                     pix = dib->funcs->GetPixel(dib, dibX, dibY);
                     r = pix         & 0xff;
                     g = (pix >>  8) & 0xff;
                     b = (pix >> 16) & 0xff;
-                    c += MulDiv(r, ng1 - *buf, ng1) << 16 |
-                         MulDiv(g, ng1 - *buf, ng1) <<  8 |
-                         MulDiv(b, ng1 - *buf, ng1);
+                    c += MulDiv(r, 255 - val, 255) << 16 |
+                         MulDiv(g, 255 - val, 255) <<  8 |
+                         MulDiv(b, 255 - val, 255);
                 }
 #endif
                 dib->funcs->SetPixel(dib, dibX, dibY, 0, c);
@@ -247,7 +251,7 @@ void _DIBDRV_freetype_blit_16_RGB(DIBDRVPHYSDEV *physDev, int x, int y, RECT *cl
     
     DIBDRVBITMAP *dib = physDev->physBitmap;
     int bmpX, bmpY;
-    BYTE *buf;
+    BYTE *buf, val;
     int dibX, dibY;
     int xMin, xMax, yMin, yMax;
 #ifdef DIBDRV_ANTIALIASED_FONTS        
@@ -274,17 +278,18 @@ void _DIBDRV_freetype_blit_16_RGB(DIBDRVPHYSDEV *physDev, int x, int y, RECT *cl
             if(dibX < xMax && dibY < yMax && dibX >= xMin && dibY >= yMin && *buf)
             {
 #ifdef DIBDRV_ANTIALIASED_FONTS        
-                c = physDev->textColorTable[*buf];
-                if(*buf < ng1)
+				val = MulDiv(255, *buf, ng1); /* Normalize to num_grays==256 */
+                c = physDev->textColorTable[val];
+                if(val < 255)
                 {
-                    negColor = ng1 - *buf;
+                    negColor = 255 - val;
                     pix = dib->funcs->GetPixel(dib, dibX, dibY);
                     r = pix         & 0xff;
                     g = (pix >>  8) & 0xff;
                     b = (pix >> 16) & 0xff;
-                    c += MulDiv(r, ng1 - *buf, ng1) << 16 |
-                         MulDiv(g, ng1 - *buf, ng1) <<  8 |
-                         MulDiv(b, ng1 - *buf, ng1);
+                    c += MulDiv(r, 255 - val, 255) << 16 |
+                         MulDiv(g, 255 - val, 255) <<  8 |
+                         MulDiv(b, 255 - val, 255);
                 }
 #endif
                 dib->funcs->SetPixel(dib, dibX, dibY, 0, c);
@@ -300,7 +305,7 @@ void _DIBDRV_freetype_blit_16_BITFIELDS(DIBDRVPHYSDEV *physDev, int x, int y, RE
     
     DIBDRVBITMAP *dib = physDev->physBitmap;
     int bmpX, bmpY;
-    BYTE *buf;
+    BYTE *buf, val;
     int dibX, dibY;
     int xMin, xMax, yMin, yMax;
 #ifdef DIBDRV_ANTIALIASED_FONTS        
@@ -327,17 +332,18 @@ void _DIBDRV_freetype_blit_16_BITFIELDS(DIBDRVPHYSDEV *physDev, int x, int y, RE
             if(dibX < xMax && dibY < yMax && dibX >= xMin && dibY >= yMin && *buf)
             {
 #ifdef DIBDRV_ANTIALIASED_FONTS        
-                c = physDev->textColorTable[*buf];
-                if(*buf < ng1)
+				val = MulDiv(255, *buf, ng1); /* Normalize to num_grays==256 */
+                c = physDev->textColorTable[val];
+                if(val < 255)
                 {
-                    negColor = ng1 - *buf;
+                    negColor = 255 - val;
                     pix = dib->funcs->GetPixel(dib, dibX, dibY);
                     r = pix         & 0xff;
                     g = (pix >>  8) & 0xff;
                     b = (pix >> 16) & 0xff;
-                    c += MulDiv(r, ng1 - *buf, ng1) << 16 |
-                         MulDiv(g, ng1 - *buf, ng1) <<  8 |
-                         MulDiv(b, ng1 - *buf, ng1);
+                    c += MulDiv(r, 255 - val, 255) << 16 |
+                         MulDiv(g, 255 - val, 255) <<  8 |
+                         MulDiv(b, 255 - val, 255);
                 }
 #endif
                 dib->funcs->SetPixel(dib, dibX, dibY, 0, c);
