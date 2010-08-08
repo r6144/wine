@@ -181,7 +181,8 @@ BOOL _DIBDRVBITMAP_InitFromBMIH(DIBDRVBITMAP *dib, const BITMAPINFOHEADER *bi, c
                      const RGBQUAD *colorTable, void *bits)
 {
     MAYBE(TRACE("dib=%p, bi=%p, bit_fields=%p, colorTable=%p, bits=%p\n", dib, bi, bit_fields, colorTable, bits));
-    MAYBE(TRACE("bit_fields=(%x,%x,%x)\n", (unsigned) bit_fields[0], (unsigned) bit_fields[1], (unsigned) bit_fields[2]));
+    if (bit_fields != NULL)
+		MAYBE(TRACE("bit_fields=(%x,%x,%x)\n", (unsigned) bit_fields[0], (unsigned) bit_fields[1], (unsigned) bit_fields[2]));
     
     /* initializes DIB dimensions and color depth */
     dib->bitCount = bi->biBitCount;
