@@ -3481,6 +3481,7 @@ GdiFont *WineEngCreateFontInstance(DC *dc, HFONT hfont)
     HFONTLIST *hflist;
     FMAT2 dcmat;
     FontSubst *psub = NULL;
+    static const WCHAR pmingliuW[] = { 0x65b0, 0x7d30, 0x660e, 0x9ad4, 0 };
 
     if (!GetObjectW( hfont, sizeof(lf), &lf )) return NULL;
     lf.lfWidth = abs(lf.lfWidth);
@@ -3610,6 +3611,8 @@ GdiFont *WineEngCreateFontInstance(DC *dc, HFONT hfont)
             FaceName = &lf.lfFaceName[1];
 
         psub = get_font_subst(&font_subst_list, FaceName, lf.lfCharSet);
+	/* pmingliu is a Big5 font; this matters in font matching, and somehow this information is not available by default */
+	if (psub && strcmpiW(psub->to.name, pmingliuW) == 0) psub->to.charset = 136;
 
 	if(psub) {
 	    TRACE("substituting %s,%d -> %s,%d\n", debugstr_w(FaceName), lf.lfCharSet,
