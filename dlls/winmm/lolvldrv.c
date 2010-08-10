@@ -116,10 +116,14 @@ DWORD  MMDRV_Message(LPWINE_MLD mld, UINT wMsg, DWORD_PTR dwParam1,
 
     assert(part->fnMessage32);
 
-    TRACE("Calling message(dev=%d msg=%u usr=0x%08lx p1=0x%08lx p2=0x%08lx)\n",
-          mld->uDeviceID, wMsg, mld->dwDriverInstance, dwParam1, dwParam2);
+    TRACE("Calling message(dev=%d msg=%u usr=0x%08lx p1=0x%08lx p2=0x%08lx), fnMessage32=%p\n",
+          mld->uDeviceID, wMsg, mld->dwDriverInstance, dwParam1, dwParam2, part->fnMessage32);
     ret = part->fnMessage32(mld->uDeviceID, wMsg, mld->dwDriverInstance, dwParam1, dwParam2);
     TRACE("=> %s\n", WINMM_ErrorToString(ret));
+#if 0
+    /* LWP uses WODM_PREPARE, which is not supported by winealsa */
+    if (ret == MMSYSERR_NOTSUPPORTED) ret = MMSYSERR_NOERROR;
+#endif
 
     return ret;
 }
