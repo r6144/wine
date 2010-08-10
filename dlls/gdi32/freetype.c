@@ -3617,8 +3617,10 @@ GdiFont *WineEngCreateFontInstance(DC *dc, HFONT hfont)
 	if(psub) {
 	    TRACE("substituting %s,%d -> %s,%d\n", debugstr_w(FaceName), lf.lfCharSet,
 		  debugstr_w(psub->to.name), (psub->to.charset != -1) ? psub->to.charset : lf.lfCharSet);
-	    if (psub->to.charset != -1)
+	    if (psub->to.charset != -1) {
 		lf.lfCharSet = psub->to.charset;
+		TranslateCharsetInfo((DWORD*)(INT_PTR)lf.lfCharSet, &csi, TCI_SRCCHARSET);
+	    }
 	}
 
 	/* We want a match on name and charset or just name if
@@ -3627,13 +3629,17 @@ GdiFont *WineEngCreateFontInstance(DC *dc, HFONT hfont)
 	   where we'll either use the charset of the current ansi codepage
 	   or if that's unavailable the first charset that the font supports.
 	*/
+	TRACE("Searching ordinary fonts\n");
         LIST_FOR_EACH(family_elem_ptr, &font_list) {
             family = LIST_ENTRY(family_elem_ptr, Family, entry);
             if (!strcmpiW(family->FamilyName, FaceName) ||
                 (psub && !strcmpiW(family->FamilyName, psub->to.name)))
             {
+                TRACE("Found family: %s\n", debugstr_w(family->FamilyName));
                 LIST_FOR_EACH(face_elem_ptr, &family->faces) { 
                     face = LIST_ENTRY(face_elem_ptr, Face, entry);
+		    TRACE("Face: csi.fs.fsCsb=0x%x face->fs.fsCsb=0x%x face->fs_links.fsCsb=0x%x scalable=%d can_use_bitmap=%d\n",
+			  csi.fs.fsCsb[0], face->fs.fsCsb[0], face->fs_links.fsCsb[0], (int) face->scalable, (int) can_use_bitmap);
                     if((csi.fs.fsCsb[0] & (face->fs.fsCsb[0] | face->fs_links.fsCsb[0])) || !csi.fs.fsCsb[0])
                         if(face->scalable || can_use_bitmap)
                             goto found;
@@ -3645,6 +3651,7 @@ GdiFont *WineEngCreateFontInstance(DC *dc, HFONT hfont)
 	 * Try check the SystemLink list first for a replacement font.
 	 * We may find good replacements there.
          */
+	TRACE("Searching SystemLinks\n");
         LIST_FOR_EACH_ENTRY(font_link, &system_links, SYSTEM_LINKS, entry)
         {
             if(!strcmpiW(font_link->font_name, FaceName) ||
@@ -3666,6 +3673,7 @@ GdiFont *WineEngCreateFontInstance(DC *dc, HFONT hfont)
         }
     }
 
+    TRACE("Not found yet\n");
     psub = NULL; /* substitution is no more relevant */
 
     /* If requested charset was DEFAULT_CHARSET then try using charset
@@ -3749,6 +3757,7 @@ GdiFont *WineEngCreateFontInstance(DC *dc, HFONT hfont)
     csi.fs.fsCsb[0] = 0;
 
 found:
+    TRACE("Found: %s\n", debugstr_w(family->FamilyName));
     it = lf.lfItalic ? 1 : 0;
     bd = lf.lfWeight > 550 ? 1 : 0;
 
