@@ -49,8 +49,11 @@ static void drawStridedFast(IWineD3DDevice *iface, GLenum primitive_type,
     {
         TRACE("(%p) : glDrawArrays(%#x, %d, %d)\n", iface, primitive_type, start_idx, count);
 
-        glDrawArrays(primitive_type, start_idx, count);
-        checkGLcall("glDrawArrays");
+	if (count >= 1000) TRACE("debug: skipping large draws\n");
+	else {
+	    glDrawArrays(primitive_type, start_idx, count);
+	    checkGLcall("glDrawArrays");
+	}
     }
 }
 
