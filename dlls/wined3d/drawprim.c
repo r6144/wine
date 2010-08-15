@@ -81,7 +81,7 @@ static void drawStridedSlow(IWineD3DDevice *iface, const struct wined3d_context 
     UINT num_untracked_materials;
     DWORD tex_mask = 0;
 
-    TRACE("Using slow vertex array code\n");
+    TRACE("Using slow vertex array code, NumVertexes=%u\n", NumVertexes);
 
     /* Variable Initialization */
     if (idxSize)

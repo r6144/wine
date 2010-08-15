@@ -448,8 +448,13 @@ void device_update_stream_info(IWineD3DDeviceImpl *device, const struct wined3d_
         slow_mask |= -!gl_info->supported[ARB_VERTEX_ARRAY_BGRA]
                 & ((1 << WINED3D_FFP_DIFFUSE) | (1 << WINED3D_FFP_SPECULAR));
 
-        if ((stream_info->position_transformed || (stream_info->use_map & slow_mask)) && !fixup)
+	/* th128 appears to run correctly even when the fast vertex
+	 * array code is used, but when there are many fire bullets,
+	 * the slowdown remains. */
+        if (((0 && stream_info->position_transformed) || (stream_info->use_map & slow_mask)) && !fixup)
         {
+	    TRACE("Using drawStridedSlow: position_transformed=0x%x use_map=0x%x slow_mask=0x%x fixup=%d\n",
+		  (unsigned) stream_info->position_transformed, (unsigned) stream_info->use_map, (unsigned) slow_mask, (int) fixup);
             device->useDrawStridedSlow = TRUE;
         }
         else
