@@ -649,8 +649,9 @@ static DWORD MCIQTZ_mciStatus(UINT wDevID, DWORD dwFlags, LPMCI_DGV_STATUS_PARMS
             FIXME("MCI_STATUS_NUMBER_OF_TRACKS not implemented yet\n");
             return MCIERR_UNRECOGNIZED_COMMAND;
         case MCI_STATUS_MODE:
-            FIXME("MCI_STATUS_MODE not implemented yet\n");
-            return MCIERR_UNRECOGNIZED_COMMAND;
+            FIXME("MCI_STATUS_MODE not implemented yet; returning MCI_MODE_STOP\n");
+	    lpParms->dwReturn = MCI_MODE_STOP;
+	    break;
         case MCI_STATUS_MEDIA_PRESENT:
             FIXME("MCI_STATUS_MEDIA_PRESENT not implemented yet\n");
             return MCIERR_UNRECOGNIZED_COMMAND;
