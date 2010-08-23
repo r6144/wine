@@ -1,0 +1,14 @@
+TOPSRCDIR = @top_srcdir@
+TOPOBJDIR = ../..
+SRCDIR    = @srcdir@
+VPATH     = @srcdir@
+MODULE    = winepulse.drv
+IMPORTS   = winmm user32 kernel32
+EXTRALIBS = @PULSELIBS@
+EXTRACFLAGS = @PULSEINCL@
+
+C_SRCS = waveout.c \
+         wavein.c \
+         pulse.c
+
+@MAKE_DLL_RULES@
