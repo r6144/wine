@@ -370,7 +370,7 @@ static DWORD MCIAVI_mciPlay_async(WINE_MCIAVI *wma, DWORD dwFlags, LPMCI_PLAY_PA
     data->flags = dwFlags;
     data->params = *lpParams;
 
-    if (!(handle = CreateThread(NULL, 0, MCIAVI_mciPlay_thread, data, 0, NULL)))
+    if (1 || !(handle = CreateThread(NULL, 0, MCIAVI_mciPlay_thread, data, 0, NULL)))
     {
         WARN("Couldn't create thread for async play, playing synchronously\n");
         return MCIAVI_mciPlay_thread(data);
