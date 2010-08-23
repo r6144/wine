@@ -1056,6 +1056,7 @@ X11DRV_GetPixel( X11DRV_PDEVICE *physDev, INT x, INT y )
     POINT pt;
     BOOL memdc = (GetObjectType(physDev->hdc) == OBJ_MEMDC);
 
+    if (getenv("WINE_NO_GETPIXEL") != NULL) return 0;
     pt.x = x;
     pt.y = y;
     LPtoDP( physDev->hdc, &pt, 1 );
