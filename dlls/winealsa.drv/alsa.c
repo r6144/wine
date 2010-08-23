@@ -157,10 +157,14 @@ int ALSA_AddRingMessage(ALSA_MSG_RING* omr, enum win_wm_message msg, DWORD_PTR p
             LeaveCriticalSection(&omr->msg_crst);
             return 0;
         }
-        if (omr->msg_toget != omr->msg_tosave && omr->messages[omr->msg_toget].msg != WINE_WM_HEADER)
+        if (omr->msg_toget != omr->msg_tosave && omr->messages[omr->msg_toget].msg != WINE_WM_HEADER) {
             FIXME("two fast messages in the queue!!!! toget = %d(%s), tosave=%d(%s)\n",
                   omr->msg_toget,ALSA_getCmdString(omr->messages[omr->msg_toget].msg),
                   omr->msg_tosave,ALSA_getCmdString(omr->messages[omr->msg_tosave].msg));
+	    wait = FALSE;
+	    CloseHandle(hEvent);
+	    hEvent = INVALID_HANDLE_VALUE;
+	}
 
         /* fast messages have to be added at the start of the queue */
         omr->msg_toget = (omr->msg_toget + omr->ring_buffer_size - 1) % omr->ring_buffer_size;
