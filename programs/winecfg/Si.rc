@@ -278,6 +278,7 @@ BEGIN
     IDS_ACCEL_STANDARD          "Standardno"
     IDS_ACCEL_BASIC             "Osnovno"
     IDS_ACCEL_EMULATION         "Emulacija"
+    IDS_DRIVER_PULSE            "PulseAudio gonilnik"
     IDS_DRIVER_ALSA             "ALSA gonilnik"
     IDS_DRIVER_ESOUND           "EsounD gonilnik"
     IDS_DRIVER_OSS              "OSS gonilnik"

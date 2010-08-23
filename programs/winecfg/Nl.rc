@@ -279,6 +279,7 @@ BEGIN
     IDS_ACCEL_STANDARD          "Standaard"
     IDS_ACCEL_BASIC             "Eenvoudig"
     IDS_ACCEL_EMULATION         "Emulatie"
+    IDS_DRIVER_PULSE            "PulseAudio Stuurprogramma"
     IDS_DRIVER_ALSA             "ALSA Stuurprogramma"
     IDS_DRIVER_ESOUND           "EsounD Stuurprogramma"
     IDS_DRIVER_OSS              "OSS Stuurprogramma"

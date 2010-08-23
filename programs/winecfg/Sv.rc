@@ -266,6 +266,7 @@ BEGIN
     IDS_ACCEL_STANDARD          "Standard"
     IDS_ACCEL_BASIC             "Grundläggande"
     IDS_ACCEL_EMULATION         "Emulering"
+    IDS_DRIVER_PULSE            "PulseAudio-drivrutin"
     IDS_DRIVER_ALSA             "ALSA-drivrutin"
     IDS_DRIVER_ESOUND           "EsounD-drivrutin"
     IDS_DRIVER_OSS              "OSS-drivrutin"

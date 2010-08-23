@@ -272,6 +272,7 @@ BEGIN
     IDS_ACCEL_STANDARD          "Standardní"
     IDS_ACCEL_BASIC             "Základní"
     IDS_ACCEL_EMULATION         "Emulace"
+    IDS_DRIVER_PULSE            "Ovladaè PulseAudio"
     IDS_DRIVER_ALSA             "Ovladaè ALSA"
     IDS_DRIVER_ESOUND           "Ovladaè EsounD"
     IDS_DRIVER_OSS              "Ovladaè OSS"

@@ -279,6 +279,7 @@ BEGIN
     IDS_ACCEL_STANDARD          "Standartinis"
     IDS_ACCEL_BASIC             "Bazinis"
     IDS_ACCEL_EMULATION         "Emuliacija"
+    IDS_DRIVER_PULSE            "PulseAudio tvarkyklė"
     IDS_DRIVER_ALSA             "ALSA tvarkyklė"
     IDS_DRIVER_ESOUND           "EsounD tvarkyklė"
     IDS_DRIVER_OSS              "OSS tvarkyklė"

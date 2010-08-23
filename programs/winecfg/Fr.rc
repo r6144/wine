@@ -280,6 +280,7 @@ BEGIN
     IDS_ACCEL_STANDARD          "Standard"
     IDS_ACCEL_BASIC             "Basique"
     IDS_ACCEL_EMULATION         "Émulation"
+    IDS_DRIVER_PULSE            "Pilote PulseAudio"
     IDS_DRIVER_ALSA             "Pilote ALSA"
     IDS_DRIVER_ESOUND           "Pilote EsounD"
     IDS_DRIVER_OSS              "Pilote OSS"

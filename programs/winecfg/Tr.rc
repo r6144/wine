@@ -266,6 +266,7 @@ BEGIN
     IDS_ACCEL_STANDARD          "Standart"
     IDS_ACCEL_BASIC             "Temel"
     IDS_ACCEL_EMULATION         "Taklit"
+    IDS_DRIVER_PULSE            "PulseAudio Sürücüsü"
     IDS_DRIVER_ALSA             "ALSA Sürücüsü"
     IDS_DRIVER_ESOUND           "EsounD Sürücüsü"
     IDS_DRIVER_OSS              "OSS Sürücüsü"

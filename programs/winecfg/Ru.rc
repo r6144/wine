@@ -283,6 +283,7 @@ BEGIN
     IDS_ACCEL_STANDARD          "Стандартное"
     IDS_ACCEL_BASIC             "Минимальное"
     IDS_ACCEL_EMULATION         "Эмуляция"
+    IDS_DRIVER_PULSE            "PulseAudio драйвер"
     IDS_DRIVER_ALSA             "ALSA драйвер"
     IDS_DRIVER_ESOUND           "EsounD драйвер"
     IDS_DRIVER_OSS              "OSS драйвер"

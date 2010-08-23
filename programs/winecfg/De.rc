@@ -278,6 +278,7 @@ BEGIN
     IDS_ACCEL_STANDARD          "Standard"
     IDS_ACCEL_BASIC             "Einfach"
     IDS_ACCEL_EMULATION         "Emulation"
+    IDS_DRIVER_PULSE            "PulseAudio-Treiber"
     IDS_DRIVER_ALSA             "ALSA-Treiber"
     IDS_DRIVER_ESOUND           "EsounD-Treiber"
     IDS_DRIVER_OSS              "OSS-Treiber"

@@ -281,6 +281,7 @@ BEGIN
     IDS_ACCEL_STANDARD          "標準"
     IDS_ACCEL_BASIC             "基本"
     IDS_ACCEL_EMULATION         "エミュレーション"
+    IDS_DRIVER_PULSE            "PulseAudio ドライバ"
     IDS_DRIVER_ALSA             "ALSA ドライバ"
     IDS_DRIVER_ESOUND           "EsounD ドライバ"
     IDS_DRIVER_OSS              "OSS ドライバ"
