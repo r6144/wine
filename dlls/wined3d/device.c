@@ -449,9 +449,10 @@ void device_update_stream_info(IWineD3DDeviceImpl *device, const struct wined3d_
                 & ((1 << WINED3D_FFP_DIFFUSE) | (1 << WINED3D_FFP_SPECULAR));
 
 	/* th128 appears to run correctly even when the fast vertex
-	 * array code is used, but when there are many fire bullets,
-	 * the slowdown remains. */
-        if (((0 && stream_info->position_transformed) || (stream_info->use_map & slow_mask)) && !fixup)
+	 * array code is used (which isn't by default since
+	 * position_transformed is true, but when there are many fire
+	 * bullets, the slowdown remains. */
+        if (((stream_info->position_transformed) || (stream_info->use_map & slow_mask)) && !fixup)
         {
 	    TRACE("Using drawStridedSlow: position_transformed=0x%x use_map=0x%x slow_mask=0x%x fixup=%d\n",
 		  (unsigned) stream_info->position_transformed, (unsigned) stream_info->use_map, (unsigned) slow_mask, (int) fixup);
@@ -3024,6 +3025,15 @@ static HRESULT WINAPI IWineD3DDeviceImpl_SetRenderState(IWineD3DDevice *iface, W
     DWORD oldValue = This->stateBlock->renderState[State];
 
     TRACE("(%p)->state = %s(%d), value = %d\n", This, debug_d3drenderstate(State), State, Value);
+    /* th128 is making an excessive number of state changes when
+       drawing ice and fire bullets; for example, the DESTBLEND state
+       is changed between INVSRCALPHA and ONE for every 6 vertices.
+       Disabling such state changes does not improve performance
+       noticeably though, and it is making most of the game overly
+       bright. */
+#if 0
+    if (State == WINED3DRS_DESTBLEND && Value == WINED3DBLEND_INVSRCALPHA) Value = WINED3DBLEND_ONE;
+#endif
 
     This->updateStateBlock->changed.renderState[State >> 5] |= 1 << (State & 0x1f);
     This->updateStateBlock->renderState[State] = Value;
