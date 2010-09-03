@@ -230,7 +230,9 @@ HRESULT vertexdeclaration_init(IWineD3DVertexDeclarationImpl *declaration, IWine
         e->usage = elements[i].usage;
         e->usage_idx = elements[i].usage_idx;
 
+#if 1 /* Commenting this out makes the rendered result incorrect */
         if (e->usage == WINED3DDECLUSAGE_POSITIONT) declaration->position_transformed = TRUE;
+#endif
 
         /* Find the streams used in the declaration. The vertex buffers have
          * to be loaded when drawing, but filter tesselation pseudo streams. */

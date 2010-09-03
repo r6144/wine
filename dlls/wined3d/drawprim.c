@@ -49,8 +49,11 @@ static void drawStridedFast(IWineD3DDevice *iface, GLenum primitive_type,
     {
         TRACE("(%p) : glDrawArrays(%#x, %d, %d)\n", iface, primitive_type, start_idx, count);
 
-        glDrawArrays(primitive_type, start_idx, count);
-        checkGLcall("glDrawArrays");
+	if (count >= 1000) TRACE("debug: skipping large draws\n");
+	else {
+	    glDrawArrays(primitive_type, start_idx, count);
+	    checkGLcall("glDrawArrays");
+	}
     }
 }
 
@@ -81,7 +84,7 @@ static void drawStridedSlow(IWineD3DDevice *iface, const struct wined3d_context 
     UINT num_untracked_materials;
     DWORD tex_mask = 0;
 
-    TRACE("Using slow vertex array code\n");
+    TRACE("Using slow vertex array code, NumVertexes=%u\n", NumVertexes);
 
     /* Variable Initialization */
     if (idxSize)
