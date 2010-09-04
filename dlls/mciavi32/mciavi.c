@@ -346,10 +346,12 @@ struct MCIAVI_play_data
 static DWORD WINAPI MCIAVI_mciPlay_thread(LPVOID arg)
 {
     struct MCIAVI_play_data *data = (struct MCIAVI_play_data *)arg;
-    DWORD ret;
+    DWORD ret = 0;
 
     TRACE("In thread before async play command (id %08x, flags %08x)\n", data->wDevID, data->flags);
+#if 0
     ret = MCIAVI_mciPlay(data->wDevID, data->flags | MCI_WAIT, &data->params);
+#endif
     TRACE("In thread after async play command (id %08x, flags %08x)\n", data->wDevID, data->flags);
 
     HeapFree(GetProcessHeap(), 0, data);
