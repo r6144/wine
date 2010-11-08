@@ -30,6 +30,7 @@
 WINE_DEFAULT_DEBUG_CHANNEL(d3d_draw);
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <math.h>
 
 /* GL locking is done by the caller */
@@ -83,6 +84,7 @@ static void drawStridedSlow(IWineD3DDevice *iface, const struct wined3d_context 
     const struct wined3d_stream_info_element *element;
     UINT num_untracked_materials;
     DWORD tex_mask = 0;
+    BOOL color_hack = (getenv("WINE_COLOR_HACK") != NULL);
 
     TRACE("Using slow vertex array code, NumVertexes=%u\n", NumVertexes);
 
@@ -254,7 +256,14 @@ static void drawStridedSlow(IWineD3DDevice *iface, const struct wined3d_context 
         if (diffuse) {
             const void *ptrToCoords = diffuse + SkipnStrides * si->elements[WINED3D_FFP_DIFFUSE].stride;
 
-            diffuse_funcs[si->elements[WINED3D_FFP_DIFFUSE].format_desc->emit_idx](ptrToCoords);
+#if 0
+	    TRACE("diffuseColor[%u]=0x%x (diffuse=%p, SkipnStrides=%u, stride=%u)\n", vx_index, *(const DWORD *) ptrToCoords,
+		  diffuse, (unsigned) SkipnStrides, (unsigned) si->elements[WINED3D_FFP_DIFFUSE].stride);
+#endif
+	    /* LIONHEART's Sanae2 game draws rectangles with two rectangles, and often only the first vertex of each triangle has non-zero
+	       diffuse color... */
+	    if (! color_hack || *(const DWORD *) ptrToCoords != 0)
+	      diffuse_funcs[si->elements[WINED3D_FFP_DIFFUSE].format_desc->emit_idx](ptrToCoords);
             if (num_untracked_materials)
             {
                 DWORD diffuseColor = ((const DWORD *)ptrToCoords)[0];
