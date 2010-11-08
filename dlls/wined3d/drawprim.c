@@ -107,6 +107,7 @@ static void drawStridedSlow(IWineD3DDevice *iface, const struct wined3d_context 
 
     /* Start drawing in GL */
     glBegin(glPrimType);
+    TRACE("glPrimType=0x%x\n", (unsigned) glPrimType);
 
     if (si->use_map & (1 << WINED3D_FFP_POSITION))
     {
@@ -260,9 +261,9 @@ static void drawStridedSlow(IWineD3DDevice *iface, const struct wined3d_context 
 	    TRACE("diffuseColor[%u]=0x%x (diffuse=%p, SkipnStrides=%u, stride=%u)\n", vx_index, *(const DWORD *) ptrToCoords,
 		  diffuse, (unsigned) SkipnStrides, (unsigned) si->elements[WINED3D_FFP_DIFFUSE].stride);
 #endif
-	    /* LIONHEART's Sanae2 game draws rectangles with two rectangles, and often only the first vertex of each triangle has non-zero
-	       diffuse color... */
-	    if (! color_hack || *(const DWORD *) ptrToCoords != 0)
+	    /* LIONHEART's Sanae2 and MysticalChain draws rectangles with two triangles,
+	       and often only the first vertex of each triangle has non-zero diffuse color... */
+	    if (! color_hack || (glPrimType == GL_TRIANGLES && vx_index % 3 == 0))
 	      diffuse_funcs[si->elements[WINED3D_FFP_DIFFUSE].format_desc->emit_idx](ptrToCoords);
             if (num_untracked_materials)
             {
