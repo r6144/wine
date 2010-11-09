@@ -263,7 +263,7 @@ static void drawStridedSlow(IWineD3DDevice *iface, const struct wined3d_context 
 #endif
 	    /* LIONHEART's Sanae2 and MysticalChain draws rectangles with two triangles,
 	       and often only the first vertex of each triangle has non-zero diffuse color... */
-	    if (! color_hack || (glPrimType == GL_TRIANGLES && vx_index % 3 == 0))
+	    if (! (color_hack && glPrimType == GL_TRIANGLES) || vx_index % 3 == 0)
 	      diffuse_funcs[si->elements[WINED3D_FFP_DIFFUSE].format_desc->emit_idx](ptrToCoords);
             if (num_untracked_materials)
             {
