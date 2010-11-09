@@ -135,6 +135,18 @@ PixelFormat_WineD3DtoDD(DDPIXELFORMAT *DDPixelFormat,
             DDPixelFormat->u5.dwRGBAlphaBitMask = 0xF000;
             break;
 
+	    /* FIXME: SNORM and UNORM are different (http://msdn.microsoft.com/en-us/library/dd607323%28VS.85%29.aspx),
+	       but does this matter for colors? */
+        case WINED3DFMT_R8G8B8A8_SNORM:
+            DDPixelFormat->dwFlags = DDPF_RGB | DDPF_ALPHAPIXELS;
+            DDPixelFormat->dwFourCC = 0;
+            DDPixelFormat->u1.dwRGBBitCount = 32;
+            DDPixelFormat->u2.dwRBitMask = 0x000F;
+            DDPixelFormat->u3.dwGBitMask = 0x00F0;
+            DDPixelFormat->u4.dwBBitMask = 0x0F00;
+            DDPixelFormat->u5.dwRGBAlphaBitMask = 0xF000;
+	    break;
+
         case WINED3DFMT_B2G3R3_UNORM:
             DDPixelFormat->dwFlags = DDPF_RGB;
             DDPixelFormat->dwFourCC = 0;
@@ -314,11 +326,21 @@ PixelFormat_WineD3DtoDD(DDPIXELFORMAT *DDPixelFormat,
             DDPixelFormat->u4.dwBumpLuminanceBitMask =  0x00000000;
             DDPixelFormat->u5.dwLuminanceAlphaBitMask = 0x00000000;
             break;
-
-        case WINED3DFMT_R5G5_SNORM_L6_UNORM:
+        
+        case WINED3DFMT_R16G16_SNORM:
             DDPixelFormat->dwFlags = DDPF_BUMPDUDV;
             DDPixelFormat->dwFourCC = 0;
             DDPixelFormat->u1.dwBumpBitCount = 16;
+            DDPixelFormat->u2.dwBumpDuBitMask =         0x0000ffff;
+            DDPixelFormat->u3.dwBumpDvBitMask =         0xffff0000;
+            DDPixelFormat->u4.dwBumpLuminanceBitMask =  0x00000000;
+            DDPixelFormat->u5.dwLuminanceAlphaBitMask = 0x00000000;
+	    break;
+	    
+        case WINED3DFMT_R5G5_SNORM_L6_UNORM:
+            DDPixelFormat->dwFlags = DDPF_BUMPDUDV;
+            DDPixelFormat->dwFourCC = 0;
+            DDPixelFormat->u1.dwBumpBitCount = 32;
             DDPixelFormat->u2.dwBumpDuBitMask =         0x0000001f;
             DDPixelFormat->u3.dwBumpDvBitMask =         0x000003e0;
             DDPixelFormat->u4.dwBumpLuminanceBitMask =  0x0000fc00;
