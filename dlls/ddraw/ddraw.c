@@ -2986,6 +2986,11 @@ static HRESULT WINAPI ddraw7_CreateSurface(IDirectDraw7 *iface,
         TRACE(" (%p) Requesting surface desc :\n", This);
         DDRAW_dump_surface_desc(DDSD);
     }
+
+    /* Sanae1 uses DDraw and specifies DDSCAPS_3DDEVICE, but it actually requires so much texture uploading/downloading that it runs
+       much faster in software mode. */
+    if (getenv("WINE_DDRAW_NO_D3D")) DDSD->ddsCaps.dwCaps &= ~DDSCAPS_3DDEVICE;
+
     EnterCriticalSection(&ddraw_cs);
 
     if (UnkOuter != NULL)
