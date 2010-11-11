@@ -25,6 +25,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #include "windef.h"
 #include "winbase.h"
@@ -1667,6 +1668,11 @@ BOOL CDECL X11DRV_StretchBlt( X11DRV_PDEVICE *physDevDst, INT xDst, INT yDst, IN
 done:
     if (useSrc && physDevDst != physDevSrc) X11DRV_UnlockDIBSection( physDevSrc, FALSE );
     X11DRV_UnlockDIBSection( physDevDst, TRUE );
+    if (widthDst == 37 && heightDst == 37) {
+	XSync(gdi_display, False);
+	TRACE("Wait...\n");
+	sleep(5);
+    }
     return TRUE;
 }
 
