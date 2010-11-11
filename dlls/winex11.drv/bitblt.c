@@ -1027,7 +1027,7 @@ static int BITBLT_GetSrcArea( X11DRV_PDEVICE *physDevSrc, X11DRV_PDEVICE *physDe
             exposures++;
             wine_tsx11_unlock();
         }
-        else  /* color -> monochrome */
+        else  /* color -> color or monochrome */
         {
             unsigned long pixel_mask;
             wine_tsx11_lock();
@@ -1049,10 +1049,17 @@ static int BITBLT_GetSrcArea( X11DRV_PDEVICE *physDevSrc, X11DRV_PDEVICE *physDe
                 return exposures;
             }
             pixel_mask = image_pixel_mask( physDevSrc );
-            for (y = 0; y < height; y++)
-                for (x = 0; x < width; x++)
-                    XPutPixel(imageDst, x, y,
-                              !((XGetPixel(imageSrc,x,y) ^ physDevSrc->backgroundPixel) & pixel_mask));
+	    TRACE("%d->%d using XGetImage/XPutImage\n", physDevSrc->depth, physDevDst->depth);
+	    if (physDevDst->depth == 1) {
+		for (y = 0; y < height; y++)
+		    for (x = 0; x < width; x++)
+			XPutPixel(imageDst, x, y,
+				  !((XGetPixel(imageSrc,x,y) ^ physDevSrc->backgroundPixel) & pixel_mask));
+	    } else { /* e.g. 24->32; setting the alpha to 1 to be safe */
+		for (y = 0; y < height; y++)
+		    for (x = 0; x < width; x++)
+			XPutPixel(imageDst, x, y, XGetPixel(imageSrc, x, y) | 0xff000000U);
+	    }
             XPutImage( gdi_display, pixmap, gc, imageDst,
                        0, 0, 0, 0, width, height );
             XDestroyImage( imageSrc );

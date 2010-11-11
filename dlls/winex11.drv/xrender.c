@@ -2365,7 +2365,9 @@ BOOL X11DRV_XRender_GetSrcAreaStretch(X11DRV_PDEVICE *physDevSrc, X11DRV_PDEVICE
     else /* color -> color (can be at different depths) or mono -> mono */
     {
 	// if (physDevDst->depth == 32 && physDevSrc->depth < 32) mask_pict = get_no_alpha_mask();
-	mask_pict = get_no_alpha_mask();
+	TRACE("%d->%d using XRender\n", physDevSrc->depth, physDevDst->depth);
+	if (physDevDst->depth == 32 && physDevSrc->depth < 32) return FALSE;
+	mask_pict = None; // get_no_alpha_mask();
         src_pict = get_xrender_picture_source( physDevSrc, use_repeat );
 
         wine_tsx11_lock();
