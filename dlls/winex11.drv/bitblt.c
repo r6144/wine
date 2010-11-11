@@ -1486,7 +1486,6 @@ BOOL CDECL X11DRV_StretchBlt( X11DRV_PDEVICE *physDevDst, INT xDst, INT yDst, IN
         TRACE("    rectsrc=%d,%d %dx%d orgsrc=%d,%d vissrc=%s\n",
               src.x, src.y, src.width, src.height,
               physDevSrc->dc_rect.left, physDevSrc->dc_rect.top, wine_dbgstr_rect( &src.visrect ) );
-    if ((rop >> 16) == 0xac || (rop >> 16) == 0xaa) { TRACE("    skipped\n"); return TRUE; }
 
     width  = dst.visrect.right - dst.visrect.left;
     height = dst.visrect.bottom - dst.visrect.top;
