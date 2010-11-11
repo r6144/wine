@@ -1393,6 +1393,30 @@ static BOOL same_format(X11DRV_PDEVICE *physDevSrc, X11DRV_PDEVICE *physDevDst)
     return FALSE;
 }
 
+static void dump_drawable(Display *display, Drawable d, int x, int y, int width, int height, const char *label)
+{
+    XImage *img;
+    int i, j;
+    /* NOTE: pixmaps[DST] is width*height, although the actual destination drawable can be larger
+       and we might only blit to a region of it */
+    img = XGetImage(display, d, x, y, width, height, 0xffffffffU, ZPixmap);
+    TRACE("%s dump (x=%d, y=%d, width %d, height %d):\n", label, x, y, width, height);
+    for (i = 0; i < height; i++) {
+	for (j = 0; j < width; j++) {
+	    unsigned long pixel = XGetPixel(img, j, i);
+#if 0
+	    unsigned val = pixel;
+	    val ^= (val >> 16); val ^= (val >> 8); val ^= (val >> 4); val &= 0xf;
+	    TRACE("%c", (pixel == 0) ? ' ' : 'a' + val);
+#else
+	    TRACE("%08lx ", pixel);
+#endif
+	}
+	TRACE("\n");
+    }
+    XDestroyImage(img);
+}
+
 /***********************************************************************
  *           X11DRV_StretchBlt
  */
@@ -1455,6 +1479,7 @@ BOOL CDECL X11DRV_StretchBlt( X11DRV_PDEVICE *physDevDst, INT xDst, INT yDst, IN
         TRACE("    rectsrc=%d,%d %dx%d orgsrc=%d,%d vissrc=%s\n",
               src.x, src.y, src.width, src.height,
               physDevSrc->dc_rect.left, physDevSrc->dc_rect.top, wine_dbgstr_rect( &src.visrect ) );
+    if ((rop >> 16) == 0xac || (rop >> 16) == 0xaa) { TRACE("    skipped\n"); return TRUE; }
 
     width  = dst.visrect.right - dst.visrect.left;
     height = dst.visrect.bottom - dst.visrect.top;
@@ -1468,8 +1493,10 @@ BOOL CDECL X11DRV_StretchBlt( X11DRV_PDEVICE *physDevDst, INT xDst, INT yDst, IN
         same_format(physDevSrc, physDevDst))
     {
         if (client_side_dib_copy( physDevSrc, src.visrect.left, src.visrect.top,
-                                  physDevDst, dst.visrect.left, dst.visrect.top, width, height ))
+                                  physDevDst, dst.visrect.left, dst.visrect.top, width, height )) {
+	    TRACE("Using client_side_dib_copy\n");
             goto done;
+	}
     }
 
     X11DRV_CoerceDIBSection( physDevDst, DIB_Status_GdiMod );
@@ -1500,6 +1527,7 @@ BOOL CDECL X11DRV_StretchBlt( X11DRV_PDEVICE *physDevDst, INT xDst, INT yDst, IN
                                     physDevDst->dc_rect.top + dst.visrect.top,
                                     width, height );
                     wine_tsx11_unlock();
+		    TRACE("PAT->DST: BLACKNESS/WHITENESS\n");
                     goto done;
                 }
                 break;
@@ -1520,6 +1548,7 @@ BOOL CDECL X11DRV_StretchBlt( X11DRV_PDEVICE *physDevDst, INT xDst, INT yDst, IN
                                     physDevDst->dc_rect.top + dst.visrect.top,
                                     width, height );
                     wine_tsx11_unlock();
+		    TRACE("PAT->DST: DSTINVERT\n");
                     goto done;
                 }
                 break;
@@ -1533,7 +1562,9 @@ BOOL CDECL X11DRV_StretchBlt( X11DRV_PDEVICE *physDevDst, INT xDst, INT yDst, IN
                                 physDevDst->dc_rect.top + dst.visrect.top,
                                 width, height );
                 wine_tsx11_unlock();
+		TRACE("PAT->DST: Using XFillRectangle\n");
             }
+	    TRACE("PAT->DST: generic\n");
             goto done;
         }
         else if (OP_SRCDST(*opcode) == OP_ARGS(SRC,DST))
@@ -1550,6 +1581,7 @@ BOOL CDECL X11DRV_StretchBlt( X11DRV_PDEVICE *physDevDst, INT xDst, INT yDst, IN
                     {
                         X11DRV_DIB_CopyDIBSection( physDevSrc, physDevDst, src.visrect.left, src.visrect.top,
                                                    dst.visrect.left, dst.visrect.top, width, height );
+			TRACE("SRC->DST: sSrc == AppMod\n");
                         goto done;
                     }
                     X11DRV_CoerceDIBSection( physDevSrc, DIB_Status_GdiMod );
@@ -1564,7 +1596,8 @@ BOOL CDECL X11DRV_StretchBlt( X11DRV_PDEVICE *physDevDst, INT xDst, INT yDst, IN
                            physDevDst->dc_rect.top + dst.visrect.top );
                 physDevDst->exposures++;
                 wine_tsx11_unlock();
-                goto done;
+		TRACE("SRC->DST: generic same-format\n");
+		goto done;
             }
             if (physDevSrc->depth == 1)
             {
@@ -1585,6 +1618,7 @@ BOOL CDECL X11DRV_StretchBlt( X11DRV_PDEVICE *physDevDst, INT xDst, INT yDst, IN
                             physDevDst->dc_rect.top + dst.visrect.top, 1 );
                 physDevDst->exposures++;
                 wine_tsx11_unlock();
+		TRACE("SRC->DST: generic depth-1\n");
                 goto done;
             }
         }
@@ -1607,6 +1641,10 @@ BOOL CDECL X11DRV_StretchBlt( X11DRV_PDEVICE *physDevDst, INT xDst, INT yDst, IN
 
         if (physDevDst != physDevSrc) X11DRV_CoerceDIBSection( physDevSrc, DIB_Status_GdiMod );
 
+	if (widthDst == 37 && heightDst == 37) {
+	    dump_drawable(gdi_display, physDevSrc->drawable, src.visrect.left, src.visrect.top,
+			  src.visrect.right - src.visrect.left, src.visrect.bottom - src.visrect.top, "physSrc");
+	}
         if(!X11DRV_XRender_GetSrcAreaStretch( physDevSrc, physDevDst, pixmaps[SRC], tmpGC, &src, &dst ))
         {
             if (fStretch)
@@ -1614,6 +1652,9 @@ BOOL CDECL X11DRV_StretchBlt( X11DRV_PDEVICE *physDevDst, INT xDst, INT yDst, IN
             else
                 BITBLT_GetSrcArea( physDevSrc, physDevDst, pixmaps[SRC], tmpGC, &src.visrect );
         }
+	if (widthDst == 37 && heightDst == 37) {
+	    dump_drawable(gdi_display, pixmaps[SRC], 0, 0, width, height, "src");
+	}
     }
 
     if (useDst) BITBLT_GetDstArea( physDevDst, pixmaps[DST], tmpGC, &dst.visrect );
@@ -1658,21 +1699,27 @@ BOOL CDECL X11DRV_StretchBlt( X11DRV_PDEVICE *physDevDst, INT xDst, INT yDst, IN
         }
     }
     XSetFunction( gdi_display, physDevDst->gc, GXcopy );
+    if (widthDst == 37 && heightDst == 37) {
+	dump_drawable(gdi_display, pixmaps[DST], 0, 0, width, height, "dst");
+    }
     physDevDst->exposures += BITBLT_PutDstArea( physDevDst, pixmaps[destUsed ? DST : SRC], &dst.visrect );
     XFreePixmap( gdi_display, pixmaps[DST] );
     if (pixmaps[SRC]) XFreePixmap( gdi_display, pixmaps[SRC] );
     if (pixmaps[TMP]) XFreePixmap( gdi_display, pixmaps[TMP] );
     XFreeGC( gdi_display, tmpGC );
     wine_tsx11_unlock();
+    TRACE("Finished using the most general path.\n");
 
 done:
     if (useSrc && physDevDst != physDevSrc) X11DRV_UnlockDIBSection( physDevSrc, FALSE );
     X11DRV_UnlockDIBSection( physDevDst, TRUE );
+#if 0
     if (widthDst == 37 && heightDst == 37) {
 	XSync(gdi_display, False);
 	TRACE("Wait...\n");
 	sleep(5);
     }
+#endif
     return TRUE;
 }
 

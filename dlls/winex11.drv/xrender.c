@@ -609,7 +609,7 @@ static Picture get_xrender_picture_source(X11DRV_PDEVICE *physDev, BOOL repeat)
     return info->pict_src;
 }
 
-/* return a mask picture used to force alpha to 0 */
+/* return a mask picture used to force alpha to 1 */
 static Picture get_no_alpha_mask(void)
 {
     static Pixmap pixmap;
@@ -628,7 +628,7 @@ static Picture get_no_alpha_mask(void)
         pict = pXRenderCreatePicture( gdi_display, pixmap, fmt->pict_format,
                                       CPRepeat|CPComponentAlpha, &pa );
         col.red = col.green = col.blue = 0xffff;
-        col.alpha = 0;
+        col.alpha = 0xffff;
         pXRenderFillRectangle( gdi_display, PictOpSrc, pict, &col, 0, 0, 1, 1 );
     }
     wine_tsx11_unlock();
@@ -2364,7 +2364,8 @@ BOOL X11DRV_XRender_GetSrcAreaStretch(X11DRV_PDEVICE *physDevSrc, X11DRV_PDEVICE
     }
     else /* color -> color (can be at different depths) or mono -> mono */
     {
-        if (physDevDst->depth == 32 && physDevSrc->depth < 32) mask_pict = get_no_alpha_mask();
+	// if (physDevDst->depth == 32 && physDevSrc->depth < 32) mask_pict = get_no_alpha_mask();
+	mask_pict = get_no_alpha_mask();
         src_pict = get_xrender_picture_source( physDevSrc, use_repeat );
 
         wine_tsx11_lock();
