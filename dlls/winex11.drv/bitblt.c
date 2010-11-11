@@ -1647,10 +1647,12 @@ BOOL CDECL X11DRV_StretchBlt( X11DRV_PDEVICE *physDevDst, INT xDst, INT yDst, IN
 
         if (physDevDst != physDevSrc) X11DRV_CoerceDIBSection( physDevSrc, DIB_Status_GdiMod );
 
+#if 0
 	if (widthDst == 37 && heightDst == 37) {
 	    dump_drawable(gdi_display, physDevSrc->drawable, src.visrect.left, src.visrect.top,
 			  src.visrect.right - src.visrect.left, src.visrect.bottom - src.visrect.top, "physSrc");
 	}
+#endif
         if(!X11DRV_XRender_GetSrcAreaStretch( physDevSrc, physDevDst, pixmaps[SRC], tmpGC, &src, &dst ))
         {
             if (fStretch)
@@ -1658,9 +1660,11 @@ BOOL CDECL X11DRV_StretchBlt( X11DRV_PDEVICE *physDevDst, INT xDst, INT yDst, IN
             else
                 BITBLT_GetSrcArea( physDevSrc, physDevDst, pixmaps[SRC], tmpGC, &src.visrect );
         }
+#if 0
 	if (widthDst == 37 && heightDst == 37) {
 	    dump_drawable(gdi_display, pixmaps[SRC], 0, 0, width, height, "src");
 	}
+#endif
     }
 
     if (useDst) BITBLT_GetDstArea( physDevDst, pixmaps[DST], tmpGC, &dst.visrect );
@@ -1705,9 +1709,11 @@ BOOL CDECL X11DRV_StretchBlt( X11DRV_PDEVICE *physDevDst, INT xDst, INT yDst, IN
         }
     }
     XSetFunction( gdi_display, physDevDst->gc, GXcopy );
+#if 0
     if (widthDst == 37 && heightDst == 37) {
 	dump_drawable(gdi_display, pixmaps[DST], 0, 0, width, height, "dst");
     }
+#endif
     physDevDst->exposures += BITBLT_PutDstArea( physDevDst, pixmaps[destUsed ? DST : SRC], &dst.visrect );
     XFreePixmap( gdi_display, pixmaps[DST] );
     if (pixmaps[SRC]) XFreePixmap( gdi_display, pixmaps[SRC] );

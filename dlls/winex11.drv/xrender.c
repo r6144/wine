@@ -609,32 +609,6 @@ static Picture get_xrender_picture_source(X11DRV_PDEVICE *physDev, BOOL repeat)
     return info->pict_src;
 }
 
-/* return a mask picture used to force alpha to 1 */
-static Picture get_no_alpha_mask(void)
-{
-    static Pixmap pixmap;
-    static Picture pict;
-
-    wine_tsx11_lock();
-    if (!pict)
-    {
-        const WineXRenderFormat *fmt = get_xrender_format( WXR_FORMAT_A8R8G8B8 );
-        XRenderPictureAttributes pa;
-        XRenderColor col;
-
-        pixmap = XCreatePixmap( gdi_display, root_window, 1, 1, 32 );
-        pa.repeat = RepeatNormal;
-        pa.component_alpha = True;
-        pict = pXRenderCreatePicture( gdi_display, pixmap, fmt->pict_format,
-                                      CPRepeat|CPComponentAlpha, &pa );
-        col.red = col.green = col.blue = 0xffff;
-        col.alpha = 0xffff;
-        pXRenderFillRectangle( gdi_display, PictOpSrc, pict, &col, 0, 0, 1, 1 );
-    }
-    wine_tsx11_unlock();
-    return pict;
-}
-
 static BOOL fontcmp(LFANDSIZE *p1, LFANDSIZE *p2)
 {
   if(p1->hash != p2->hash) return TRUE;
@@ -2364,10 +2338,9 @@ BOOL X11DRV_XRender_GetSrcAreaStretch(X11DRV_PDEVICE *physDevSrc, X11DRV_PDEVICE
     }
     else /* color -> color (can be at different depths) or mono -> mono */
     {
-	// if (physDevDst->depth == 32 && physDevSrc->depth < 32) mask_pict = get_no_alpha_mask();
-	TRACE("%d->%d using XRender\n", physDevSrc->depth, physDevDst->depth);
+	/* I'm having problems with 24->32 blits, usually from the front buffer of a window onto a pixmap */
 	if (physDevDst->depth == 32 && physDevSrc->depth < 32) return FALSE;
-	mask_pict = None; // get_no_alpha_mask();
+	TRACE("%d->%d using XRender\n", physDevSrc->depth, physDevDst->depth);
         src_pict = get_xrender_picture_source( physDevSrc, use_repeat );
 
         wine_tsx11_lock();
