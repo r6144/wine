@@ -30,6 +30,8 @@
 #include "config.h"
 #include "wine/port.h"
 #include "wined3d_private.h"
+#include <stdio.h>
+#include <assert.h>
 
 WINE_DEFAULT_DEBUG_CHANNEL(d3d_surface);
 WINE_DECLARE_DEBUG_CHANNEL(d3d);
@@ -737,6 +739,52 @@ static void surface_upload_data(IWineD3DSurfaceImpl *This, const struct wined3d_
             This, internal, width, height, format_desc->glFormat, format_desc->glType, data);
     TRACE("target %#x, level %u, resource size %u.\n",
             This->texture_target, This->texture_level, This->resource.size);
+
+    {
+	static unsigned num = 0;
+	char fname[256];
+	FILE *file;
+	unsigned maxval = 0, bytes_pixel = 0;
+	unsigned pitch, i, j;
+	
+	/* We use PPM due to convenience, but it doesn't preserve alpha information unless we output a separate file.
+	   It's a pity that ImageMagick can't be persuaded to open 16bpp raw RGBA files; for 32bpp files we could use
+	   "gm display -size 640x480 -depth 8 RGBA:/tmp/tex1.img" */
+	assert(format_desc->glFormat == GL_BGRA);
+	switch (format_desc->glType) {
+	case GL_UNSIGNED_SHORT_1_5_5_5_REV: maxval = 31; bytes_pixel = 2; break;
+	case GL_UNSIGNED_INT_8_8_8_8_REV: maxval = 255; bytes_pixel = 4; break;
+	default: assert(0); break;
+	}
+	pitch = IWineD3DSurface_GetPitch((IWineD3DSurface *) This);
+	assert(This->resource.size == height * pitch);
+	sprintf(fname, "/tmp/tex%u.ppm", ++num);
+	file = fopen(fname, "wb"); assert(file != NULL);
+	fprintf(file, "P6 %u %u %u\n", (unsigned) width, (unsigned) height, maxval);
+	for (i = 0; i < height; i++) {
+	    void *rowptr = (char *) data + i * pitch;
+	    for (j = 0; j < width; j++) {
+		unsigned val, r, g, b;
+		/* Uses native endianness by default; see glspec20, sec.3.6.4 */
+		switch (bytes_pixel) {
+		case 2: val = ((unsigned short *) rowptr)[j]; break;
+		case 4: val = ((unsigned *) rowptr)[j]; break;
+		default: assert(0); break;
+		}
+		/* REV means that the first item in glFormat occupy the least significant bits (the rightmost field in 1_5_5_5) */
+		switch (format_desc->glType) {
+		case GL_UNSIGNED_SHORT_1_5_5_5_REV: /* BGRA reversed is ARGB, from most to least significant */
+		    r = (val >> 10) & 31; g = (val >> 5) & 31; b = val & 31; break;
+		case GL_UNSIGNED_INT_8_8_8_8_REV:
+		    r = (val >> 16) & 255; g = (val >> 8) & 255; b = val & 255; break;
+		default: assert(0); break;
+		}
+		putc(r, file); putc(g, file); putc(b, file);
+	    }
+	}
+	fclose(file);
+	TRACE("Dumped texture to %s\n", fname);
+    }
 
     if (format_desc->heightscale != 1.0f && format_desc->heightscale != 0.0f) height *= format_desc->heightscale;
 

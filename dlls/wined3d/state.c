@@ -111,8 +111,9 @@ static void state_zenable(DWORD state, IWineD3DStateBlockImpl *stateblock, struc
             checkGLcall("glDisable GL_DEPTH_TEST");
             break;
         case WINED3DZB_TRUE:
-            glEnable(GL_DEPTH_TEST);
-            checkGLcall("glEnable GL_DEPTH_TEST");
+	    /* Disabling the depth test doesn't seem to help */
+	    glEnable(GL_DEPTH_TEST);
+	    checkGLcall("glEnable GL_DEPTH_TEST");
             break;
         case WINED3DZB_USEW:
             glEnable(GL_DEPTH_TEST);
