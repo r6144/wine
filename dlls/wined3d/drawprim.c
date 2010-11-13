@@ -85,7 +85,7 @@ static void drawStridedSlow(IWineD3DDevice *iface, const struct wined3d_context 
     UINT num_untracked_materials;
     DWORD tex_mask = 0;
     BOOL color_hack = (getenv("WINE_COLOR_HACK") != NULL);
-    BOOL verbose_vertexes = (NumVertexes == 4);
+    BOOL verbose_vertexes = FALSE; /* Useful for debugging transformation and clipping problems */
 
     TRACE("Using slow vertex array code, NumVertexes=%u\n", NumVertexes);
 

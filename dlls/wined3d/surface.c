@@ -740,7 +740,10 @@ static void surface_upload_data(IWineD3DSurfaceImpl *This, const struct wined3d_
     TRACE("target %#x, level %u, resource size %u.\n",
             This->texture_target, This->texture_level, This->resource.size);
 
-    {
+    if (0) {
+	/* We dump the textures here so that individual draw calls are more easily identified in the
+	   WINEDEBUG=d3d,d3d_draw,d3d_surface,d3d_frame log, by simply matching the container of the surface with the texture.
+	   Currently we support only the texture formats in th123, though. */
 	static unsigned num = 0;
 	char fname[256];
 	FILE *file;
