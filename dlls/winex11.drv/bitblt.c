@@ -1406,7 +1406,7 @@ static void dump_drawable(Display *display, Drawable d, int x, int y, int width,
     int i, j;
     /* NOTE: pixmaps[DST] is width*height, although the actual destination drawable can be larger
        and we might only blit to a region of it */
-    img = XGetImage(display, d, x, y, width, height, 0xffffffffU, ZPixmap);
+    img = XGetImage(display, d, x, y, width, height, AllPlanes, ZPixmap);
     TRACE("%s dump (x=%d, y=%d, width %d, height %d):\n", label, x, y, width, height);
     for (i = 0; i < height; i++) {
 	for (j = 0; j < width; j++) {

@@ -2338,8 +2338,10 @@ BOOL X11DRV_XRender_GetSrcAreaStretch(X11DRV_PDEVICE *physDevSrc, X11DRV_PDEVICE
     }
     else /* color -> color (can be at different depths) or mono -> mono */
     {
-	/* I'm having problems with 24->32 blits, usually from the front buffer of a window onto a pixmap */
-	if (physDevDst->depth == 32 && physDevSrc->depth < 32) return FALSE;
+	/* I'm having problems with 24->32 blits, usually from the front buffer of a window onto a pixmap.
+	   This affects e.g. LWP1's clock.  However, the fallback path in BITBLT_GetSrcArea is prone to BadMatch errors
+	   for e.g. th123_update_110.exe for unknown reasons, so for now we have to make it conditional. */
+	if (getenv("WINE_24_32_BLIT_NO_XRENDER") && physDevDst->depth == 32 && physDevSrc->depth < 32) return FALSE;
 	TRACE("%d->%d using XRender\n", physDevSrc->depth, physDevDst->depth);
         src_pict = get_xrender_picture_source( physDevSrc, use_repeat );
 
