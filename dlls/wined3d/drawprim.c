@@ -85,6 +85,7 @@ static void drawStridedSlow(IWineD3DDevice *iface, const struct wined3d_context 
     UINT num_untracked_materials;
     DWORD tex_mask = 0;
     BOOL color_hack = (getenv("WINE_COLOR_HACK") != NULL);
+    BOOL verbose_vertexes = (NumVertexes == 4);
 
     TRACE("Using slow vertex array code, NumVertexes=%u\n", NumVertexes);
 
@@ -106,6 +107,20 @@ static void drawStridedSlow(IWineD3DDevice *iface, const struct wined3d_context 
     }
 
     /* Start drawing in GL */
+    if (verbose_vertexes) {
+	float mat[16];
+	float drange[2];
+	glGetFloatv(GL_MODELVIEW_MATRIX, mat);
+	TRACE("GL_MODELVIEW_MATRIX: [%f,%f,%f,%f; %f,%f,%f,%f; %f,%f,%f,%f; %f,%f,%f,%f]\n",
+	      mat[0], mat[1], mat[2], mat[3], mat[4], mat[5], mat[6], mat[7],
+	      mat[8], mat[9], mat[10], mat[11], mat[12], mat[13], mat[14], mat[15]);
+	glGetFloatv(GL_PROJECTION_MATRIX, mat);
+	TRACE("GL_PROJECTION_MATRIX: [%f,%f,%f,%f; %f,%f,%f,%f; %f,%f,%f,%f; %f,%f,%f,%f]\n",
+	      mat[0], mat[1], mat[2], mat[3], mat[4], mat[5], mat[6], mat[7],
+	      mat[8], mat[9], mat[10], mat[11], mat[12], mat[13], mat[14], mat[15]);
+	glGetFloatv(GL_DEPTH_RANGE, drange);
+	TRACE("GL_DEPTH_RANGE: [%f,%f]\n", drange[0], drange[1]);
+    }
     glBegin(glPrimType);
     TRACE("glPrimType=0x%x\n", (unsigned) glPrimType);
 
@@ -306,6 +321,11 @@ static void drawStridedSlow(IWineD3DDevice *iface, const struct wined3d_context 
         if (position) {
             const void *ptrToCoords = position + SkipnStrides * si->elements[WINED3D_FFP_POSITION].stride;
             position_funcs[si->elements[WINED3D_FFP_POSITION].format_desc->emit_idx](ptrToCoords);
+	    if (verbose_vertexes) {
+		/* Assume float4 */
+		const float *v = ptrToCoords;
+		TRACE("vertex[%u] = (%f, %f, %f, %f)\n", vx_index, v[0], v[1], v[2], v[3]);
+	    }
         }
 
         /* For non indexed mode, step onto next parts */
