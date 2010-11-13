@@ -27,6 +27,7 @@
 
 #include "config.h"
 #include <stdio.h>
+#include <stdlib.h>
 #ifdef HAVE_FLOAT_H
 # include <float.h>
 #endif
@@ -558,8 +559,21 @@ static void state_clipping(DWORD state, IWineD3DStateBlockImpl *stateblock, stru
         disable = ~stateblock->renderState[WINED3DRS_CLIPPLANEENABLE];
         if (gl_info->supported[ARB_DEPTH_CLAMP])
         {
-            glDisable(GL_DEPTH_CLAMP);
-            checkGLcall("glDisable(GL_DEPTH_CLAMP)");
+	    if (! getenv("WINE_NOCLIP")) {
+		glDisable(GL_DEPTH_CLAMP);
+		checkGLcall("glDisable(GL_DEPTH_CLAMP)");
+	    } else {
+		/* According to http://msdn.microsoft.com/en-us/library/bb206341%28VS.85%29.aspx,
+		   clipping is sometimes not performed for transformed vertices from a vertex
+		   buffer, which might be the reason why e.g. th123 uses out-of-range Z values in
+		   Sanae's 5C attack and it still gets displayed.
+		   
+		   Note that MinZ and MaxZ in the viewport settings are not used for clipping as of
+		   DX9.  It simply transforms the normalized Z range from [0,1] to [MinZ,MaxZ], and
+		   if the transformed normalized Z value is outside [0,1], it is clipped. */
+		glEnable(GL_DEPTH_CLAMP);
+		checkGLcall("glEnable(GL_DEPTH_CLAMP)");
+	    }
         }
     } else {
         disable = 0xffffffff;
