@@ -217,7 +217,7 @@ static void test_D3DXLoadSurface(IDirect3DDevice9 *device)
     HRESULT hr;
     BOOL testdummy_ok, testbitmap_ok;
     IDirect3DSurface9 *surf, *newsurf;
-    RECT rect;
+    RECT rect, destrect;
     D3DLOCKED_RECT lockrect;
     const WORD pixdata_a8r3g3b2[] = { 0x57df, 0x98fc, 0xacdd, 0xc891 };
     const WORD pixdata_a1r5g5b5[] = { 0x46b5, 0x99c8, 0x06a2, 0x9431 };
@@ -252,10 +252,8 @@ static void test_D3DXLoadSurface(IDirect3DDevice9 *device)
     } else skip("Couldn't create \"testbitmap.bmp\"\n");
 
     if(testdummy_ok) {
-        todo_wine {
-            hr = D3DXLoadSurfaceFromFileA(surf, NULL, NULL, "testdummy.bmp", NULL, D3DX_DEFAULT, 0, NULL);
-            ok(hr == D3DXERR_INVALIDDATA, "D3DXLoadSurfaceFromFile returned %#x, expected %#x\n", hr, D3DXERR_INVALIDDATA);
-        }
+        hr = D3DXLoadSurfaceFromFileA(surf, NULL, NULL, "testdummy.bmp", NULL, D3DX_DEFAULT, 0, NULL);
+        ok(hr == D3DXERR_INVALIDDATA, "D3DXLoadSurfaceFromFile returned %#x, expected %#x\n", hr, D3DXERR_INVALIDDATA);
     } else skip("Couldn't create \"testdummy.bmp\"\n");
 
     hr = D3DXLoadSurfaceFromFileA(surf, NULL, NULL, NULL, NULL, D3DX_DEFAULT, 0, NULL);
@@ -269,10 +267,10 @@ static void test_D3DXLoadSurface(IDirect3DDevice9 *device)
     todo_wine {
         hr = D3DXLoadSurfaceFromResourceA(surf, NULL, NULL, NULL, MAKEINTRESOURCE(IDB_BITMAP_1x1), NULL, D3DX_DEFAULT, 0, NULL);
         ok(hr == D3D_OK, "D3DXLoadSurfaceFromResource returned %#x, expected %#x\n", hr, D3D_OK);
-
-        hr = D3DXLoadSurfaceFromResourceA(surf, NULL, NULL, NULL, MAKEINTRESOURCE(IDD_BITMAPDATA_1x1), NULL, D3DX_DEFAULT, 0, NULL);
-        ok(hr == D3D_OK, "D3DXLoadSurfaceFromResource returned %#x, expected %#x\n", hr, D3D_OK);
     }
+
+    hr = D3DXLoadSurfaceFromResourceA(surf, NULL, NULL, NULL, MAKEINTRESOURCE(IDD_BITMAPDATA_1x1), NULL, D3DX_DEFAULT, 0, NULL);
+    ok(hr == D3D_OK, "D3DXLoadSurfaceFromResource returned %#x, expected %#x\n", hr, D3D_OK);
 
     hr = D3DXLoadSurfaceFromResourceA(surf, NULL, NULL, NULL, NULL, NULL, D3DX_DEFAULT, 0, NULL);
     ok(hr == D3DXERR_INVALIDDATA, "D3DXLoadSurfaceFromResource returned %#x, expected %#x\n", hr, D3DXERR_INVALIDDATA);
@@ -288,10 +286,10 @@ static void test_D3DXLoadSurface(IDirect3DDevice9 *device)
     todo_wine {
         hr = D3DXLoadSurfaceFromFileInMemory(surf, NULL, NULL, bmp01, sizeof(bmp01), NULL, D3DX_DEFAULT, 0, NULL);
         ok(hr == D3D_OK, "D3DXLoadSurfaceFromFileInMemory returned %#x, expected %#x\n", hr, D3D_OK);
-
-        hr = D3DXLoadSurfaceFromFileInMemory(surf, NULL, NULL, noimage, sizeof(noimage), NULL, D3DX_DEFAULT, 0, NULL);
-        ok(hr == D3DXERR_INVALIDDATA, "D3DXLoadSurfaceFromFileInMemory returned %#x, expected %#x\n", hr, D3DXERR_INVALIDDATA);
     }
+
+    hr = D3DXLoadSurfaceFromFileInMemory(surf, NULL, NULL, noimage, sizeof(noimage), NULL, D3DX_DEFAULT, 0, NULL);
+    ok(hr == D3DXERR_INVALIDDATA, "D3DXLoadSurfaceFromFileInMemory returned %#x, expected %#x\n", hr, D3DXERR_INVALIDDATA);
 
     hr = D3DXLoadSurfaceFromFileInMemory(surf, NULL, NULL, bmp01, 0, NULL, D3DX_DEFAULT, 0, NULL);
     ok(hr == D3DERR_INVALIDCALL, "D3DXLoadSurfaceFromFileInMemory returned %#x, expected %#x\n", hr, D3DERR_INVALIDCALL);
@@ -330,14 +328,32 @@ static void test_D3DXLoadSurface(IDirect3DDevice9 *device)
     hr = D3DXLoadSurfaceFromMemory(surf, NULL, NULL, pixdata, D3DFMT_UNKNOWN, sizeof(pixdata), NULL, &rect, D3DX_DEFAULT, 0);
     ok(hr == E_FAIL, "D3DXLoadSurfaceFromMemory returned %#x, expected %#x\n", hr, E_FAIL);
 
+    SetRect(&destrect, -1, -1, 1, 1); /* destination rect is partially outside texture boundaries */
+    hr = D3DXLoadSurfaceFromMemory(surf, NULL, &destrect, pixdata, D3DFMT_A8R8G8B8, sizeof(pixdata), NULL, &rect, D3DX_FILTER_NONE, 0);
+    ok(hr == D3DERR_INVALIDCALL, "D3DXLoadSurfaceFromMemory returned %#x, expected %#x\n", hr, D3DERR_INVALIDCALL);
+
+    SetRect(&destrect, 255, 255, 257, 257); /* destination rect is partially outside texture boundaries */
+    hr = D3DXLoadSurfaceFromMemory(surf, NULL, &destrect, pixdata, D3DFMT_A8R8G8B8, sizeof(pixdata), NULL, &rect, D3DX_FILTER_NONE, 0);
+    ok(hr == D3DERR_INVALIDCALL, "D3DXLoadSurfaceFromMemory returned %#x, expected %#x\n", hr, D3DERR_INVALIDCALL);
+
+    SetRect(&destrect, 1, 1, 0, 0); /* left > right, top > bottom */
+    hr = D3DXLoadSurfaceFromMemory(surf, NULL, &destrect, pixdata, D3DFMT_A8R8G8B8, sizeof(pixdata), NULL, &rect, D3DX_FILTER_NONE, 0);
+    ok(hr == D3DERR_INVALIDCALL, "D3DXLoadSurfaceFromMemory returned %#x, expected %#x\n", hr, D3DERR_INVALIDCALL);
+
+    SetRect(&destrect, 0, 0, 0, 0); /* left = right, top = bottom */
+    hr = D3DXLoadSurfaceFromMemory(surf, NULL, &destrect, pixdata, D3DFMT_A8R8G8B8, sizeof(pixdata), NULL, &rect, D3DX_FILTER_NONE, 0);
+    ok(hr == D3D_OK, "D3DXLoadSurfaceFromMemory returned %#x, expected %#x\n", hr, D3D_OK);
+
+    SetRect(&destrect, 257, 257, 257, 257); /* left = right, top = bottom, but invalid values */
+    hr = D3DXLoadSurfaceFromMemory(surf, NULL, &destrect, pixdata, D3DFMT_A8R8G8B8, sizeof(pixdata), NULL, &rect, D3DX_FILTER_NONE, 0);
+    ok(hr == D3DERR_INVALIDCALL, "D3DXLoadSurfaceFromMemory returned %#x, expected %#x\n", hr, D3DERR_INVALIDCALL);
+
 
     /* D3DXLoadSurfaceFromSurface */
     hr = IDirect3DDevice9_CreateOffscreenPlainSurface(device, 256, 256, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &newsurf, NULL);
     if(SUCCEEDED(hr)) {
-        todo_wine {
-            hr = D3DXLoadSurfaceFromSurface(newsurf, NULL, NULL, surf, NULL, NULL, D3DX_DEFAULT, 0);
-            ok(hr == D3D_OK, "D3DXLoadSurfaceFromSurface returned %#x, expected %#x\n", hr, D3D_OK);
-        }
+        hr = D3DXLoadSurfaceFromSurface(newsurf, NULL, NULL, surf, NULL, NULL, D3DX_DEFAULT, 0);
+        ok(hr == D3D_OK, "D3DXLoadSurfaceFromSurface returned %#x, expected %#x\n", hr, D3D_OK);
 
         hr = D3DXLoadSurfaceFromSurface(NULL, NULL, NULL, surf, NULL, NULL, D3DX_DEFAULT, 0);
         ok(hr == D3DERR_INVALIDCALL, "D3DXLoadSurfaceFromSurface returned %#x, expected %#x\n", hr, D3DERR_INVALIDCALL);

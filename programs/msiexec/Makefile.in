@@ -1,8 +1,4 @@
 EXTRADEFS = -DWINE_NO_UNICODE_MACROS
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = msiexec.exe
 APPMODE   = -mwindows
 IMPORTS   = msi ole32 advapi32 user32
@@ -12,6 +8,8 @@ C_SRCS = \
 	service.c
 
 RC_SRCS = rsrc.rc
+
+MANPAGE = msiexec.man
 
 SVG_SRCS = msiexec.svg
 

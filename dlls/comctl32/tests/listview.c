@@ -59,6 +59,8 @@ static INT  notifyFormat;
 static BOOL g_is_below_5;
 /* item data passed to LVN_GETDISPINFOA */
 static LVITEMA g_itema;
+/* alter notification code A->W */
+static BOOL g_disp_A_to_W;
 
 static HWND subclass_editbox(HWND hwndListview);
 
@@ -372,6 +374,13 @@ static LRESULT WINAPI parent_wnd_proc(HWND hwnd, UINT message, WPARAM wParam, LP
               {
                   NMLVDISPINFOA *dispinfo = (NMLVDISPINFOA*)lParam;
                   g_itema = dispinfo->item;
+
+                  if (g_disp_A_to_W && (dispinfo->item.mask & LVIF_TEXT))
+                  {
+                      static const WCHAR testW[] = {'T','E','S','T',0};
+                      dispinfo->hdr.code = LVN_GETDISPINFOW;
+                      memcpy(dispinfo->item.pszText, testW, sizeof(testW));
+                  }
               }
               break;
           case NM_HOVER:
@@ -2992,7 +3001,8 @@ static void test_hittest(void)
     LVITEMA item;
     static CHAR text[] = "1234567890ABCDEFGHIJKLMNOPQRST";
     POINT pos;
-    INT x, y;
+    INT x, y, i;
+    WORD horiz, vert;
     HIMAGELIST himl, himl2;
     HBITMAP hbmp;
 
@@ -3020,6 +3030,11 @@ static void test_hittest(void)
     r = SendMessage(hwnd, LVM_GETITEMRECT, 0, (LPARAM)&bounds);
     ok(bounds.bottom - bounds.top > 0, "Expected non zero item height\n");
     ok(bounds.right - bounds.left > 0, "Expected non zero item width\n");
+    r = SendMessage(hwnd, LVM_GETITEMSPACING, TRUE, 0);
+    horiz = LOWORD(r);
+    vert = HIWORD(r);
+    ok(bounds.bottom - bounds.top == vert,
+        "Vertical spacing inconsistent (%d != %d)\n", bounds.bottom - bounds.top, vert);
     r = SendMessage(hwnd, LVM_GETITEMPOSITION, 0, (LPARAM)&pos);
     expect(TRUE, r);
 
@@ -3052,8 +3067,18 @@ static void test_hittest(void)
     test_lvm_subitemhittest(hwnd, x, y, -1, -1, LVHT_NOWHERE, FALSE, FALSE, FALSE);
     /* subitem returned with -1 item too */
     x = pos.x + 150;
-    y = -10;
+    y = bounds.top - vert;
     test_lvm_subitemhittest(hwnd, x, y, -1, 1, LVHT_NOWHERE, FALSE, FALSE, FALSE);
+    test_lvm_subitemhittest(hwnd, x, y - vert + 1, -1, 1, LVHT_NOWHERE, FALSE, FALSE, FALSE);
+    /* return values appear to underflow with negative indices */
+    i = -2;
+    y = y - vert;
+    while (i > -10) {
+        test_lvm_subitemhittest(hwnd, x, y, i, 1, LVHT_ONITEMLABEL, TRUE, FALSE, TRUE);
+        test_lvm_subitemhittest(hwnd, x, y - vert + 1, i, 1, LVHT_ONITEMLABEL, TRUE, FALSE, TRUE);
+        y = y - vert;
+        i--;
+    }
     /* parent client area is 100x100 by default */
     MoveWindow(hwnd, 0, 0, 300, 100, FALSE);
     x = pos.x + 150; /* outside column */
@@ -3269,6 +3294,7 @@ static void test_getitemrect(void)
     LVCOLUMNA col;
     INT order[2];
     POINT pt;
+    HDC hdc;
 
     /* rectangle isn't empty for empty text items */
     hwnd = create_listview_control(LVS_LIST);
@@ -3278,10 +3304,13 @@ static void test_getitemrect(void)
     r = SendMessage(hwnd, LVM_INSERTITEMA, 0, (LPARAM)&item);
     expect(0, r);
     rect.left = LVIR_LABEL;
-    SendMessage(hwnd, LVM_GETITEMRECT, 0, (LPARAM)&rect);
+    r = SendMessage(hwnd, LVM_GETITEMRECT, 0, (LPARAM)&rect);
+    expect(TRUE, r);
     expect(0, rect.left);
     expect(0, rect.top);
-    todo_wine expect(96, rect.right);
+    hdc = GetDC(hwnd);
+    todo_wine expect(GetDeviceCaps(hdc, LOGPIXELSX), rect.right);
+    ReleaseDC(hwnd, hdc);
     DestroyWindow(hwnd);
 
     hwnd = create_listview_control(LVS_REPORT);
@@ -4109,6 +4138,7 @@ static void test_getcolumnwidth(void)
     DWORD_PTR style;
     LVCOLUMNA col;
     LVITEMA itema;
+    HDC hdc;
 
     /* default column width */
     hwnd = create_listview_control(LVS_ICON);
@@ -4132,7 +4162,9 @@ static void test_getcolumnwidth(void)
     memset(&itema, 0, sizeof(itema));
     SendMessage(hwnd, LVM_INSERTITEMA, 0, (LPARAM)&itema);
     ret = SendMessage(hwnd, LVM_GETCOLUMNWIDTH, 0, 0);
-    todo_wine expect(96, ret);
+    hdc = GetDC(hwnd);
+    todo_wine expect(GetDeviceCaps(hdc, LOGPIXELSX), ret);
+    ReleaseDC(hwnd, hdc);
     DestroyWindow(hwnd);
 }
 
@@ -4515,6 +4547,37 @@ static void test_createdragimage(void)
     DestroyWindow(list);
 }
 
+static void test_dispinfo(void)
+{
+    static const char testA[] = "TEST";
+    WCHAR buff[10];
+    LVITEMA item;
+    HWND hwnd;
+    INT ret;
+
+    hwnd = create_listview_control(LVS_ICON);
+    ok(hwnd != 0, "failed to create listview window\n");
+
+    insert_item(hwnd, 0);
+
+    memset(&item, 0, sizeof(item));
+    item.pszText = LPSTR_TEXTCALLBACKA;
+    ret = SendMessageA(hwnd, LVM_SETITEMTEXTA, 0, (LPARAM)&item);
+    ok(ret, "got %d\n", ret);
+
+    g_disp_A_to_W = TRUE;
+    item.pszText = (char*)buff;
+    item.cchTextMax = sizeof(buff)/sizeof(WCHAR);
+    ret = SendMessageA(hwnd, LVM_GETITEMTEXTA, 0, (LPARAM)&item);
+    ok(ret == sizeof(testA)-1, "got %d, expected 4\n", ret);
+    g_disp_A_to_W = FALSE;
+
+    ok(memcmp(item.pszText, testA, sizeof(testA)) == 0,
+        "got %s, expected %s\n", item.pszText, testA);
+
+    DestroyWindow(hwnd);
+}
+
 START_TEST(listview)
 {
     HMODULE hComctl32;
@@ -4578,6 +4641,7 @@ START_TEST(listview)
     test_hover();
     test_destroynotify();
     test_createdragimage();
+    test_dispinfo();
 
     if (!load_v6_module(&ctx_cookie, &hCtx))
     {

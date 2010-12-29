@@ -27,8 +27,6 @@
 
 #include "config.h"
 #include "wine/port.h"
-#include "wine/unicode.h"
-#include "wine/debug.h"
 
 #include <string.h>
 #include <stdlib.h>
@@ -44,6 +42,10 @@
 #include <commdlg.h>
 #include <cpl.h>
 
+#include "wine/unicode.h"
+#include "wine/list.h"
+#include "wine/debug.h"
+#include "appwiz.h"
 #include "res.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(appwizcpl);
@@ -51,7 +53,9 @@ WINE_DEFAULT_DEBUG_CHANNEL(appwizcpl);
 /* define a maximum length for various buffers we use */
 #define MAX_STRING_LEN    1024
 
-typedef struct APPINFO {
+typedef struct APPINFO
+{
+    struct list entry;
     int id;
 
     LPWSTR title;
@@ -66,12 +70,10 @@ typedef struct APPINFO {
 
     HKEY regroot;
     WCHAR regkey[MAX_STRING_LEN];
-
-    struct APPINFO *next;
 } APPINFO;
 
-static struct APPINFO *AppInfo = NULL;
-static HINSTANCE hInst;
+static struct list app_list = LIST_INIT( app_list );
+HINSTANCE hInst;
 
 static WCHAR btnRemove[MAX_STRING_LEN];
 static WCHAR btnModifyRemove[MAX_STRING_LEN];
@@ -97,6 +99,7 @@ static const WCHAR URLUpdateInfoW[] = {'U','R','L','U','p','d','a','t','e','I',
 static const WCHAR CommentsW[] = {'C','o','m','m','e','n','t','s',0};
 static const WCHAR UninstallCommandlineW[] = {'U','n','i','n','s','t','a','l','l',
     'S','t','r','i','n','g',0};
+static const WCHAR WindowsInstallerW[] = {'W','i','n','d','o','w','s','I','n','s','t','a','l','l','e','r',0};
 
 static const WCHAR PathUninstallW[] = {
         'S','o','f','t','w','a','r','e','\\',
@@ -129,19 +132,13 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason,
  */
 static void FreeAppInfo(APPINFO *info)
 {
-    while (info)
-    {
-        APPINFO *next_info = info->next;
-
-        HeapFree(GetProcessHeap(), 0, info->title);
-        HeapFree(GetProcessHeap(), 0, info->path);
-        HeapFree(GetProcessHeap(), 0, info->path_modify);
-        HeapFree(GetProcessHeap(), 0, info->icon);
-        HeapFree(GetProcessHeap(), 0, info->publisher);
-        HeapFree(GetProcessHeap(), 0, info->version);
-        HeapFree(GetProcessHeap(), 0, info);
-        info = next_info;
-    }
+    HeapFree(GetProcessHeap(), 0, info->title);
+    HeapFree(GetProcessHeap(), 0, info->path);
+    HeapFree(GetProcessHeap(), 0, info->path_modify);
+    HeapFree(GetProcessHeap(), 0, info->icon);
+    HeapFree(GetProcessHeap(), 0, info->publisher);
+    HeapFree(GetProcessHeap(), 0, info->version);
+    HeapFree(GetProcessHeap(), 0, info);
 }
 
 /******************************************************************************
@@ -156,11 +153,11 @@ static BOOL ReadApplicationsFromRegistry(HKEY root)
     HKEY hkeyUninst, hkeyApp;
     int i, id = 0;
     DWORD sizeOfSubKeyName, displen, uninstlen;
-    DWORD dwNoModify, dwType;
+    DWORD dwNoModify, dwType, value;
     WCHAR subKeyName[256];
     WCHAR key_app[MAX_STRING_LEN];
-    WCHAR *p;
-    APPINFO *iter = AppInfo;
+    WCHAR *p, *command;
+    APPINFO *info = NULL;
     LPWSTR iconPtr;
     BOOL ret = FALSE;
 
@@ -174,12 +171,6 @@ static BOOL ReadApplicationsFromRegistry(HKEY root)
 
     sizeOfSubKeyName = sizeof(subKeyName) / sizeof(subKeyName[0]);
 
-    if (iter)
-    {
-        /* find the end of the list */
-        for (iter = AppInfo; iter->next; iter = iter->next);
-    }
-
     for (i = 0; RegEnumKeyExW(hkeyUninst, i, subKeyName, &sizeOfSubKeyName, NULL,
         NULL, NULL, NULL) != ERROR_NO_MORE_ITEMS; ++i)
     {
@@ -188,38 +179,38 @@ static BOOL ReadApplicationsFromRegistry(HKEY root)
 
         displen = 0;
         uninstlen = 0;
-
-        if ((RegQueryValueExW(hkeyApp, DisplayNameW, 0, 0, NULL, &displen) ==
-            ERROR_SUCCESS) && (RegQueryValueExW(hkeyApp, UninstallCommandlineW,
-            0, 0, NULL, &uninstlen) == ERROR_SUCCESS))
+        if (!RegQueryValueExW(hkeyApp, DisplayNameW, 0, 0, NULL, &displen))
         {
-            /* if we already have iter, allocate the next entry */
-            if (iter)
+            if (!RegQueryValueExW(hkeyApp, WindowsInstallerW, NULL, &dwType, NULL, &value)
+                && dwType == REG_DWORD && value == 1)
             {
-                iter->next = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY,
-                    sizeof(struct APPINFO));
+                static const WCHAR fmtW[] = {'m','s','i','e','x','e','c',' ','/','x','%','s',0};
+                int len = lstrlenW(fmtW) + lstrlenW(subKeyName);
 
-                if (!iter->next)
-                    goto err;
-
-                iter = iter->next;
+                if (!(command = HeapAlloc(GetProcessHeap(), 0, len * sizeof(WCHAR)))) goto err;
+                wsprintfW(command, fmtW, subKeyName);
+            }
+            else if (!RegQueryValueExW(hkeyApp, UninstallCommandlineW, 0, 0, NULL, &uninstlen))
+            {
+                if (!(command = HeapAlloc(GetProcessHeap(), 0, uninstlen))) goto err;
+                RegQueryValueExW(hkeyApp, UninstallCommandlineW, 0, 0, (LPBYTE)command, &uninstlen);
             }
             else
             {
-                /* if not, start the list */
-                iter = AppInfo = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY,
-                    sizeof(struct APPINFO));
-
-                if (!iter)
-                    goto err;
+                RegCloseKey(hkeyApp);
+                sizeOfSubKeyName = sizeof(subKeyName) / sizeof(subKeyName[0]);
+                continue;
             }
 
-            iter->title = HeapAlloc(GetProcessHeap(), 0, displen);
+            info = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(struct APPINFO));
+            if (!info) goto err;
 
-            if (!iter->title)
+            info->title = HeapAlloc(GetProcessHeap(), 0, displen);
+
+            if (!info->title)
                 goto err;
 
-            RegQueryValueExW(hkeyApp, DisplayNameW, 0, 0, (LPBYTE)iter->title,
+            RegQueryValueExW(hkeyApp, DisplayNameW, 0, 0, (LPBYTE)info->title,
                 &displen);
 
             /* now get DisplayIcon */
@@ -227,57 +218,49 @@ static BOOL ReadApplicationsFromRegistry(HKEY root)
             RegQueryValueExW(hkeyApp, DisplayIconW, 0, 0, NULL, &displen);
 
             if (displen == 0)
-                iter->icon = 0;
+                info->icon = 0;
             else
             {
-                iter->icon = HeapAlloc(GetProcessHeap(), 0, displen);
+                info->icon = HeapAlloc(GetProcessHeap(), 0, displen);
 
-                if (!iter->icon)
+                if (!info->icon)
                     goto err;
 
-                RegQueryValueExW(hkeyApp, DisplayIconW, 0, 0, (LPBYTE)iter->icon,
+                RegQueryValueExW(hkeyApp, DisplayIconW, 0, 0, (LPBYTE)info->icon,
                     &displen);
 
                 /* separate the index from the icon name, if supplied */
-                iconPtr = strchrW(iter->icon, ',');
+                iconPtr = strchrW(info->icon, ',');
 
                 if (iconPtr)
                 {
                     *iconPtr++ = 0;
-                    iter->iconIdx = atoiW(iconPtr);
+                    info->iconIdx = atoiW(iconPtr);
                 }
             }
-
-            iter->path = HeapAlloc(GetProcessHeap(), 0, uninstlen);
-
-            if (!iter->path)
-                goto err;
-
-            RegQueryValueExW(hkeyApp, UninstallCommandlineW, 0, 0,
-                (LPBYTE)iter->path, &uninstlen);
 
             /* publisher, version */
             if (RegQueryValueExW(hkeyApp, PublisherW, 0, 0, NULL, &displen) ==
                 ERROR_SUCCESS)
             {
-                iter->publisher = HeapAlloc(GetProcessHeap(), 0, displen);
+                info->publisher = HeapAlloc(GetProcessHeap(), 0, displen);
 
-                if (!iter->publisher)
+                if (!info->publisher)
                     goto err;
 
-                RegQueryValueExW(hkeyApp, PublisherW, 0, 0, (LPBYTE)iter->publisher,
+                RegQueryValueExW(hkeyApp, PublisherW, 0, 0, (LPBYTE)info->publisher,
                     &displen);
             }
 
             if (RegQueryValueExW(hkeyApp, DisplayVersionW, 0, 0, NULL, &displen) ==
                 ERROR_SUCCESS)
             {
-                iter->version = HeapAlloc(GetProcessHeap(), 0, displen);
+                info->version = HeapAlloc(GetProcessHeap(), 0, displen);
 
-                if (!iter->version)
+                if (!info->version)
                     goto err;
 
-                RegQueryValueExW(hkeyApp, DisplayVersionW, 0, 0, (LPBYTE)iter->version,
+                RegQueryValueExW(hkeyApp, DisplayVersionW, 0, 0, (LPBYTE)info->version,
                     &displen);
             }
 
@@ -292,28 +275,36 @@ static BOOL ReadApplicationsFromRegistry(HKEY root)
                 dwNoModify = 0;
             }
 
-            /* Some installers incorrectly create a REG_SZ instead of a REG_DWORD - check for
-               ASCII 49, which equals 1 */
+            /* Some installers incorrectly create a REG_SZ instead of a REG_DWORD */
             if (dwType == REG_SZ)
-                dwNoModify = (dwNoModify == 49) ? 1 : 0;
+                dwNoModify = (*(BYTE *)&dwNoModify == '1');
 
             /* Fetch the modify path */
-            if ((dwNoModify == 0) && (RegQueryValueExW(hkeyApp, ModifyPathW, 0, 0, NULL, &displen)
-                == ERROR_SUCCESS))
+            if (!dwNoModify)
             {
-                iter->path_modify = HeapAlloc(GetProcessHeap(), 0, displen);
+                if (!RegQueryValueExW(hkeyApp, WindowsInstallerW, NULL, &dwType, NULL, &value)
+                    && dwType == REG_DWORD && value == 1)
+                {
+                    static const WCHAR fmtW[] = {'m','s','i','e','x','e','c',' ','/','i','%','s',0};
+                    int len = lstrlenW(fmtW) + lstrlenW(subKeyName);
 
-                if (!iter->path_modify)
-                    goto err;
-
-                RegQueryValueExW(hkeyApp, ModifyPathW, 0, 0, (LPBYTE)iter->path_modify, &displen);
+                    if (!(info->path_modify = HeapAlloc(GetProcessHeap(), 0, len * sizeof(WCHAR)))) goto err;
+                    wsprintfW(info->path_modify, fmtW, subKeyName);
+                }
+                else if (!RegQueryValueExW(hkeyApp, ModifyPathW, 0, 0, NULL, &displen))
+                {
+                    if (!(info->path_modify = HeapAlloc(GetProcessHeap(), 0, displen))) goto err;
+                    RegQueryValueExW(hkeyApp, ModifyPathW, 0, 0, (LPBYTE)info->path_modify, &displen);
+                }
             }
 
             /* registry key */
-            iter->regroot = root;
-            lstrcpyW(iter->regkey, subKeyName);
+            info->regroot = root;
+            lstrcpyW(info->regkey, subKeyName);
+            info->path = command;
 
-            iter->id = id++;
+            info->id = id++;
+            list_add_tail( &app_list, &info->entry );
         }
 
         RegCloseKey(hkeyApp);
@@ -325,7 +316,7 @@ static BOOL ReadApplicationsFromRegistry(HKEY root)
 
 err:
     RegCloseKey(hkeyApp);
-    FreeAppInfo(iter);
+    if (info) FreeAppInfo(info);
 
 end:
     RegCloseKey(hkeyUninst);
@@ -345,7 +336,7 @@ static void AddApplicationsToList(HWND hWnd, HIMAGELIST hList)
     HICON hIcon;
     int index;
 
-    for (iter = AppInfo; iter; iter = iter->next)
+    LIST_FOR_EACH_ENTRY( iter, &app_list, APPINFO, entry )
     {
         if (!iter->title[0]) continue;
 
@@ -392,8 +383,12 @@ static void RemoveItemsFromList(HWND hWnd)
  */
 static inline void EmptyList(void)
 {
-    FreeAppInfo(AppInfo);
-    AppInfo = NULL;
+    APPINFO *info, *next;
+    LIST_FOR_EACH_ENTRY_SAFE( info, next, &app_list, APPINFO, entry )
+    {
+        list_remove( &info->entry );
+        FreeAppInfo( info );
+    }
 }
 
 /******************************************************************************
@@ -406,7 +401,7 @@ static void UpdateButtons(HWND hWnd)
 {
     APPINFO *iter;
     LVITEMW lvItem;
-    DWORD selitem = SendDlgItemMessageW(hWnd, IDL_PROGRAMS, LVM_GETNEXTITEM, -1,
+    LRESULT selitem = SendDlgItemMessageW(hWnd, IDL_PROGRAMS, LVM_GETNEXTITEM, -1,
        LVNI_FOCUSED | LVNI_SELECTED);
     BOOL enable_modify = FALSE;
 
@@ -417,7 +412,7 @@ static void UpdateButtons(HWND hWnd)
 
         if (SendDlgItemMessageW(hWnd, IDL_PROGRAMS, LVM_GETITEMW, 0, (LPARAM) &lvItem))
         {
-            for (iter = AppInfo; iter; iter = iter->next)
+            LIST_FOR_EACH_ENTRY( iter, &app_list, APPINFO, entry )
             {
                 if (iter->id == lvItem.lParam)
                 {
@@ -504,7 +499,7 @@ static void UninstallProgram(int id, DWORD button)
     LoadStringW(hInst, IDS_UNINSTALL_FAILED, sUninstallFailed,
         sizeof(sUninstallFailed) / sizeof(sUninstallFailed[0]));
 
-    for (iter = AppInfo; iter; iter = iter->next)
+    LIST_FOR_EACH_ENTRY( iter, &app_list, APPINFO, entry )
     {
         if (iter->id == id)
         {
@@ -606,7 +601,7 @@ static BOOL CALLBACK SupportInfoDlgProc(HWND hWnd, UINT msg, WPARAM wParam, LPAR
     switch(msg)
     {
         case WM_INITDIALOG:
-            for (iter = AppInfo; iter; iter = iter->next)
+            LIST_FOR_EACH_ENTRY( iter, &app_list, APPINFO, entry )
             {
                 if (iter->id == (int) lParam)
                 {
@@ -953,6 +948,22 @@ static void StartApplet(HWND hWnd)
     PropertySheetW (&psh);
 }
 
+static LONG start_params(const WCHAR *params)
+{
+    static const WCHAR install_geckoW[] = {'i','n','s','t','a','l','l','_','g','e','c','k','o',0};
+
+    if(!params)
+        return FALSE;
+
+    if(!strcmpW(params, install_geckoW)) {
+        install_wine_gecko();
+        return TRUE;
+    }
+
+    WARN("unknown param %s\n", debugstr_w(params));
+    return FALSE;
+}
+
 /******************************************************************************
  * Name       : CPlApplet
  * Description: Entry point for Control Panel applets
@@ -978,6 +989,9 @@ LONG CALLBACK CPlApplet(HWND hwndCPL, UINT message, LPARAM lParam1, LPARAM lPara
 
         case CPL_GETCOUNT:
             return 1;
+
+        case CPL_STARTWPARMSW:
+            return start_params((const WCHAR *)lParam2);
 
         case CPL_INQUIRE:
         {

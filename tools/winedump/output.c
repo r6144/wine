@@ -248,7 +248,7 @@ void  output_c_preamble (void)
 
   if (globals.forward_dll)
     fprintf (cfile,
-           "            DLL = LoadLibraryA(\"%s\");\n"
+           "            hDLL = LoadLibraryA(\"%s\");\n"
            "            TRACE(\"Forwarding DLL (%s) loaded (%%p)\\n\", hDLL);\n",
            globals.forward_dll, globals.forward_dll);
   else
@@ -330,7 +330,7 @@ void  output_c_symbol (const parsed_symbol *sym)
     return;
   }
 
-  is_void = !strcmp (sym->return_text, "void");
+  is_void = !strcasecmp (sym->return_text, "void");
 
   output_prototype (cfile, sym);
   fputs ("\n{\n", cfile);
@@ -451,13 +451,11 @@ void  output_makefile (void)
     puts ("Creating makefile");
 
   fprintf (makefile,
-           "# Generated from %s by winedump.\nTOPSRCDIR = @top_srcdir@\n"
-           "TOPOBJDIR = ../..\nSRCDIR    = @srcdir@\nVPATH     = @srcdir@\n"
+           "# Generated from %s by winedump.\n"
            "MODULE    = %s.dll\n", globals.input_name, OUTPUT_DLL_NAME);
 
-  fprintf (makefile, "IMPORTS   = kernel32");
   if (globals.forward_dll)
-    fprintf (makefile, " %s", globals.forward_dll);
+    fprintf (makefile, "IMPORTS   = %s", globals.forward_dll);
 
   fprintf (makefile, "\n\nC_SRCS = \\\n\t%s_main.c\n\n@MAKE_DLL_RULES@\n\n",
            OUTPUT_DLL_NAME);

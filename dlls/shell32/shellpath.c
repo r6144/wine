@@ -24,6 +24,8 @@
  *
  */
 
+#define COBJMACROS
+
 #include "config.h"
 #include "wine/port.h"
 
@@ -40,6 +42,7 @@
 #include "winuser.h"
 
 #include "shlobj.h"
+#include "shtypes.h"
 #include "shresdef.h"
 #include "shell32_main.h"
 #include "undocshell.h"
@@ -48,8 +51,13 @@
 #include "shlwapi.h"
 #include "xdg.h"
 #include "sddl.h"
+#define INITGUID
+#include "knownfolders.h"
+#include "shobjidl.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(shell);
+
+static const BOOL is_win64 = sizeof(void *) > sizeof(int);
 
 /*
 	########## Combining and Constructing paths ##########
@@ -766,6 +774,7 @@ static const WCHAR Common_DesktopW[] = {'C','o','m','m','o','n',' ','D','e','s',
 static const WCHAR Common_DocumentsW[] = {'C','o','m','m','o','n',' ','D','o','c','u','m','e','n','t','s','\0'};
 static const WCHAR Common_FavoritesW[] = {'C','o','m','m','o','n',' ','F','a','v','o','r','i','t','e','s','\0'};
 static const WCHAR CommonFilesDirW[] = {'C','o','m','m','o','n','F','i','l','e','s','D','i','r','\0'};
+static const WCHAR CommonFilesDirX86W[] = {'C','o','m','m','o','n','F','i','l','e','s','D','i','r',' ','(','x','8','6',')','\0'};
 static const WCHAR CommonMusicW[] = {'C','o','m','m','o','n','M','u','s','i','c','\0'};
 static const WCHAR CommonPicturesW[] = {'C','o','m','m','o','n','P','i','c','t','u','r','e','s','\0'};
 static const WCHAR Common_ProgramsW[] = {'C','o','m','m','o','n',' ','P','r','o','g','r','a','m','s','\0'};
@@ -773,6 +782,7 @@ static const WCHAR Common_StartUpW[] = {'C','o','m','m','o','n',' ','S','t','a',
 static const WCHAR Common_Start_MenuW[] = {'C','o','m','m','o','n',' ','S','t','a','r','t',' ','M','e','n','u','\0'};
 static const WCHAR Common_TemplatesW[] = {'C','o','m','m','o','n',' ','T','e','m','p','l','a','t','e','s','\0'};
 static const WCHAR CommonVideoW[] = {'C','o','m','m','o','n','V','i','d','e','o','\0'};
+static const WCHAR ContactsW[] = {'C','o','n','t','a','c','t','s','\0'};
 static const WCHAR CookiesW[] = {'C','o','o','k','i','e','s','\0'};
 static const WCHAR DesktopW[] = {'D','e','s','k','t','o','p','\0'};
 static const WCHAR FavoritesW[] = {'F','a','v','o','r','i','t','e','s','\0'};
@@ -786,6 +796,7 @@ static const WCHAR NetHoodW[] = {'N','e','t','H','o','o','d','\0'};
 static const WCHAR PersonalW[] = {'P','e','r','s','o','n','a','l','\0'};
 static const WCHAR PrintHoodW[] = {'P','r','i','n','t','H','o','o','d','\0'};
 static const WCHAR ProgramFilesDirW[] = {'P','r','o','g','r','a','m','F','i','l','e','s','D','i','r','\0'};
+static const WCHAR ProgramFilesDirX86W[] = {'P','r','o','g','r','a','m','F','i','l','e','s','D','i','r',' ','(','x','8','6',')','\0'};
 static const WCHAR ProgramsW[] = {'P','r','o','g','r','a','m','s','\0'};
 static const WCHAR RecentW[] = {'R','e','c','e','n','t','\0'};
 static const WCHAR ResourcesW[] = {'R','e','s','o','u','r','c','e','s','\0'};
@@ -793,6 +804,8 @@ static const WCHAR SendToW[] = {'S','e','n','d','T','o','\0'};
 static const WCHAR StartUpW[] = {'S','t','a','r','t','U','p','\0'};
 static const WCHAR Start_MenuW[] = {'S','t','a','r','t',' ','M','e','n','u','\0'};
 static const WCHAR TemplatesW[] = {'T','e','m','p','l','a','t','e','s','\0'};
+static const WCHAR UsersW[] = {'U','s','e','r','s','\0'};
+static const WCHAR UsersPublicW[] = {'U','s','e','r','s','\\','P','u','b','l','i','c','\0'};
 static const WCHAR DefaultW[] = {'.','D','e','f','a','u','l','t','\0'};
 static const WCHAR AllUsersProfileW[] = {'%','A','L','L','U','S','E','R','S','P','R','O','F','I','L','E','%','\0'};
 static const WCHAR UserProfileW[] = {'%','U','S','E','R','P','R','O','F','I','L','E','%','\0'};
@@ -818,6 +831,7 @@ typedef enum _CSIDL_Type {
 
 typedef struct
 {
+    const KNOWNFOLDERID *id;
     CSIDL_Type type;
     LPCWSTR    szValueName;
     LPCWSTR    szDefaultPath; /* fallback string or resource ID */
@@ -826,317 +840,692 @@ typedef struct
 static const CSIDL_DATA CSIDL_Data[] =
 {
     { /* 0x00 - CSIDL_DESKTOP */
+        &FOLDERID_Desktop,
         CSIDL_Type_User,
         DesktopW,
         MAKEINTRESOURCEW(IDS_DESKTOPDIRECTORY)
     },
     { /* 0x01 - CSIDL_INTERNET */
+        &FOLDERID_InternetFolder,
         CSIDL_Type_Disallowed,
         NULL,
         NULL
     },
     { /* 0x02 - CSIDL_PROGRAMS */
+        &FOLDERID_Programs,
         CSIDL_Type_User,
         ProgramsW,
         MAKEINTRESOURCEW(IDS_PROGRAMS)
     },
     { /* 0x03 - CSIDL_CONTROLS (.CPL files) */
+        &FOLDERID_ControlPanelFolder,
         CSIDL_Type_SystemPath,
         NULL,
         NULL
     },
     { /* 0x04 - CSIDL_PRINTERS */
+        &FOLDERID_PrintersFolder,
         CSIDL_Type_SystemPath,
         NULL,
         NULL
     },
     { /* 0x05 - CSIDL_PERSONAL */
+        &GUID_NULL,
         CSIDL_Type_User,
         PersonalW,
         MAKEINTRESOURCEW(IDS_PERSONAL)
     },
     { /* 0x06 - CSIDL_FAVORITES */
+        &FOLDERID_Favorites,
         CSIDL_Type_User,
         FavoritesW,
         MAKEINTRESOURCEW(IDS_FAVORITES)
     },
     { /* 0x07 - CSIDL_STARTUP */
+        &FOLDERID_Startup,
         CSIDL_Type_User,
         StartUpW,
         MAKEINTRESOURCEW(IDS_STARTUP)
     },
     { /* 0x08 - CSIDL_RECENT */
+        &FOLDERID_Recent,
         CSIDL_Type_User,
         RecentW,
         MAKEINTRESOURCEW(IDS_RECENT)
     },
     { /* 0x09 - CSIDL_SENDTO */
+        &FOLDERID_SendTo,
         CSIDL_Type_User,
         SendToW,
         MAKEINTRESOURCEW(IDS_SENDTO)
     },
     { /* 0x0a - CSIDL_BITBUCKET - Recycle Bin */
+        &FOLDERID_RecycleBinFolder,
         CSIDL_Type_Disallowed,
         NULL,
         NULL,
     },
     { /* 0x0b - CSIDL_STARTMENU */
+        &FOLDERID_StartMenu,
         CSIDL_Type_User,
         Start_MenuW,
         MAKEINTRESOURCEW(IDS_STARTMENU)
     },
     { /* 0x0c - CSIDL_MYDOCUMENTS */
+        &GUID_NULL,
         CSIDL_Type_Disallowed, /* matches WinXP--can't get its path */
         NULL,
         NULL
     },
     { /* 0x0d - CSIDL_MYMUSIC */
+        &FOLDERID_Music,
         CSIDL_Type_User,
         My_MusicW,
         MAKEINTRESOURCEW(IDS_MYMUSIC)
     },
     { /* 0x0e - CSIDL_MYVIDEO */
+        &FOLDERID_Videos,
         CSIDL_Type_User,
         My_VideoW,
         MAKEINTRESOURCEW(IDS_MYVIDEO)
     },
     { /* 0x0f - unassigned */
+        &GUID_NULL,
         CSIDL_Type_Disallowed,
         NULL,
         NULL,
     },
     { /* 0x10 - CSIDL_DESKTOPDIRECTORY */
+        &FOLDERID_Desktop,
         CSIDL_Type_User,
         DesktopW,
         MAKEINTRESOURCEW(IDS_DESKTOPDIRECTORY)
     },
     { /* 0x11 - CSIDL_DRIVES */
+        &FOLDERID_ComputerFolder,
         CSIDL_Type_Disallowed,
         NULL,
         NULL,
     },
     { /* 0x12 - CSIDL_NETWORK */
+        &FOLDERID_NetworkFolder,
         CSIDL_Type_Disallowed,
         NULL,
         NULL,
     },
     { /* 0x13 - CSIDL_NETHOOD */
+        &FOLDERID_NetHood,
         CSIDL_Type_User,
         NetHoodW,
         MAKEINTRESOURCEW(IDS_NETHOOD)
     },
     { /* 0x14 - CSIDL_FONTS */
+        &FOLDERID_Fonts,
         CSIDL_Type_WindowsPath,
         FontsW,
         FontsW
     },
     { /* 0x15 - CSIDL_TEMPLATES */
+        &FOLDERID_Templates,
         CSIDL_Type_User,
         TemplatesW,
         MAKEINTRESOURCEW(IDS_TEMPLATES)
     },
     { /* 0x16 - CSIDL_COMMON_STARTMENU */
+        &FOLDERID_CommonStartMenu,
         CSIDL_Type_AllUsers,
         Common_Start_MenuW,
         MAKEINTRESOURCEW(IDS_STARTMENU)
     },
     { /* 0x17 - CSIDL_COMMON_PROGRAMS */
+        &FOLDERID_CommonPrograms,
         CSIDL_Type_AllUsers,
         Common_ProgramsW,
         MAKEINTRESOURCEW(IDS_PROGRAMS)
     },
     { /* 0x18 - CSIDL_COMMON_STARTUP */
+        &FOLDERID_CommonStartup,
         CSIDL_Type_AllUsers,
         Common_StartUpW,
         MAKEINTRESOURCEW(IDS_STARTUP)
     },
     { /* 0x19 - CSIDL_COMMON_DESKTOPDIRECTORY */
+        &FOLDERID_PublicDesktop,
         CSIDL_Type_AllUsers,
         Common_DesktopW,
         MAKEINTRESOURCEW(IDS_DESKTOPDIRECTORY)
     },
     { /* 0x1a - CSIDL_APPDATA */
+        &FOLDERID_RoamingAppData,
         CSIDL_Type_User,
         AppDataW,
         MAKEINTRESOURCEW(IDS_APPDATA)
     },
     { /* 0x1b - CSIDL_PRINTHOOD */
+        &FOLDERID_PrintHood,
         CSIDL_Type_User,
         PrintHoodW,
         MAKEINTRESOURCEW(IDS_PRINTHOOD)
     },
     { /* 0x1c - CSIDL_LOCAL_APPDATA */
+        &FOLDERID_LocalAppData,
         CSIDL_Type_User,
         Local_AppDataW,
         MAKEINTRESOURCEW(IDS_LOCAL_APPDATA)
     },
     { /* 0x1d - CSIDL_ALTSTARTUP */
+        &GUID_NULL,
         CSIDL_Type_NonExistent,
         NULL,
         NULL
     },
     { /* 0x1e - CSIDL_COMMON_ALTSTARTUP */
+        &GUID_NULL,
         CSIDL_Type_NonExistent,
         NULL,
         NULL
     },
     { /* 0x1f - CSIDL_COMMON_FAVORITES */
+        &FOLDERID_Favorites,
         CSIDL_Type_AllUsers,
         Common_FavoritesW,
         MAKEINTRESOURCEW(IDS_FAVORITES)
     },
     { /* 0x20 - CSIDL_INTERNET_CACHE */
+        &FOLDERID_InternetCache,
         CSIDL_Type_User,
         CacheW,
         MAKEINTRESOURCEW(IDS_INTERNET_CACHE)
     },
     { /* 0x21 - CSIDL_COOKIES */
+        &FOLDERID_Cookies,
         CSIDL_Type_User,
         CookiesW,
         MAKEINTRESOURCEW(IDS_COOKIES)
     },
     { /* 0x22 - CSIDL_HISTORY */
+        &FOLDERID_History,
         CSIDL_Type_User,
         HistoryW,
         MAKEINTRESOURCEW(IDS_HISTORY)
     },
     { /* 0x23 - CSIDL_COMMON_APPDATA */
+        &FOLDERID_ProgramData,
         CSIDL_Type_AllUsers,
         Common_AppDataW,
         MAKEINTRESOURCEW(IDS_APPDATA)
     },
     { /* 0x24 - CSIDL_WINDOWS */
+        &FOLDERID_Windows,
         CSIDL_Type_WindowsPath,
         NULL,
         NULL
     },
     { /* 0x25 - CSIDL_SYSTEM */
+        &FOLDERID_System,
         CSIDL_Type_SystemPath,
         NULL,
         NULL
     },
     { /* 0x26 - CSIDL_PROGRAM_FILES */
+        &FOLDERID_ProgramFiles,
         CSIDL_Type_CurrVer,
         ProgramFilesDirW,
         MAKEINTRESOURCEW(IDS_PROGRAM_FILES)
     },
     { /* 0x27 - CSIDL_MYPICTURES */
+        &FOLDERID_Pictures,
         CSIDL_Type_User,
         My_PicturesW,
         MAKEINTRESOURCEW(IDS_MYPICTURES)
     },
     { /* 0x28 - CSIDL_PROFILE */
+        &FOLDERID_Profile,
         CSIDL_Type_User,
         NULL,
         NULL
     },
     { /* 0x29 - CSIDL_SYSTEMX86 */
+        &FOLDERID_SystemX86,
         CSIDL_Type_SystemX86Path,
         NULL,
         NULL
     },
     { /* 0x2a - CSIDL_PROGRAM_FILESX86 */
-        CSIDL_Type_NonExistent,
-        NULL,
-        NULL
+        &FOLDERID_ProgramFilesX86,
+        CSIDL_Type_CurrVer,
+        ProgramFilesDirX86W,
+        MAKEINTRESOURCEW(IDS_PROGRAM_FILESX86)
     },
     { /* 0x2b - CSIDL_PROGRAM_FILES_COMMON */
+        &FOLDERID_ProgramFilesCommon,
         CSIDL_Type_CurrVer,
         CommonFilesDirW,
         MAKEINTRESOURCEW(IDS_PROGRAM_FILES_COMMON)
     },
     { /* 0x2c - CSIDL_PROGRAM_FILES_COMMONX86 */
-        CSIDL_Type_NonExistent,
-        NULL,
-        NULL
+        &FOLDERID_ProgramFilesCommonX86,
+        CSIDL_Type_CurrVer,
+        CommonFilesDirX86W,
+        MAKEINTRESOURCEW(IDS_PROGRAM_FILES_COMMONX86)
     },
     { /* 0x2d - CSIDL_COMMON_TEMPLATES */
+        &FOLDERID_CommonTemplates,
         CSIDL_Type_AllUsers,
         Common_TemplatesW,
         MAKEINTRESOURCEW(IDS_TEMPLATES)
     },
     { /* 0x2e - CSIDL_COMMON_DOCUMENTS */
+        &FOLDERID_PublicDocuments,
         CSIDL_Type_AllUsers,
         Common_DocumentsW,
         MAKEINTRESOURCEW(IDS_COMMON_DOCUMENTS)
     },
     { /* 0x2f - CSIDL_COMMON_ADMINTOOLS */
+        &FOLDERID_CommonAdminTools,
         CSIDL_Type_AllUsers,
         Common_Administrative_ToolsW,
         MAKEINTRESOURCEW(IDS_ADMINTOOLS)
     },
     { /* 0x30 - CSIDL_ADMINTOOLS */
+        &FOLDERID_AdminTools,
         CSIDL_Type_User,
         Administrative_ToolsW,
         MAKEINTRESOURCEW(IDS_ADMINTOOLS)
     },
     { /* 0x31 - CSIDL_CONNECTIONS */
+        &FOLDERID_ConnectionsFolder,
         CSIDL_Type_Disallowed,
         NULL,
         NULL
     },
     { /* 0x32 - unassigned */
+        &GUID_NULL,
         CSIDL_Type_Disallowed,
         NULL,
         NULL
     },
     { /* 0x33 - unassigned */
+        &GUID_NULL,
         CSIDL_Type_Disallowed,
         NULL,
         NULL
     },
     { /* 0x34 - unassigned */
+        &GUID_NULL,
         CSIDL_Type_Disallowed,
         NULL,
         NULL
     },
     { /* 0x35 - CSIDL_COMMON_MUSIC */
+        &FOLDERID_PublicMusic,
         CSIDL_Type_AllUsers,
         CommonMusicW,
         MAKEINTRESOURCEW(IDS_COMMON_MUSIC)
     },
     { /* 0x36 - CSIDL_COMMON_PICTURES */
+        &FOLDERID_PublicPictures,
         CSIDL_Type_AllUsers,
         CommonPicturesW,
         MAKEINTRESOURCEW(IDS_COMMON_PICTURES)
     },
     { /* 0x37 - CSIDL_COMMON_VIDEO */
+        &FOLDERID_PublicVideos,
         CSIDL_Type_AllUsers,
         CommonVideoW,
         MAKEINTRESOURCEW(IDS_COMMON_VIDEO)
     },
     { /* 0x38 - CSIDL_RESOURCES */
+        &FOLDERID_ResourceDir,
         CSIDL_Type_WindowsPath,
         NULL,
         ResourcesW
     },
     { /* 0x39 - CSIDL_RESOURCES_LOCALIZED */
+        &FOLDERID_LocalizedResourcesDir,
         CSIDL_Type_NonExistent,
         NULL,
         NULL
     },
     { /* 0x3a - CSIDL_COMMON_OEM_LINKS */
-        CSIDL_Type_NonExistent,
+        &FOLDERID_CommonOEMLinks,
+        CSIDL_Type_AllUsers,
         NULL,
-        NULL
+        MAKEINTRESOURCEW(IDS_COMMON_OEM_LINKS)
     },
     { /* 0x3b - CSIDL_CDBURN_AREA */
+        &FOLDERID_CDBurning,
         CSIDL_Type_User,
         CD_BurningW,
         MAKEINTRESOURCEW(IDS_CDBURN_AREA)
     },
     { /* 0x3c unassigned */
+        &GUID_NULL,
         CSIDL_Type_Disallowed,
         NULL,
         NULL
     },
     { /* 0x3d - CSIDL_COMPUTERSNEARME */
+        &GUID_NULL,
         CSIDL_Type_Disallowed, /* FIXME */
         NULL,
         NULL
     },
     { /* 0x3e - CSIDL_PROFILES */
+        &GUID_NULL,
         CSIDL_Type_Disallowed, /* oddly, this matches WinXP */
+        NULL,
+        NULL
+    },
+    { /* 0x3f */
+        &FOLDERID_AddNewPrograms,
+        CSIDL_Type_Disallowed,
+        NULL,
+        NULL
+    },
+    { /* 0x40 */
+        &FOLDERID_AppUpdates,
+        CSIDL_Type_Disallowed,
+        NULL,
+        NULL
+    },
+    { /* 0x41 */
+        &FOLDERID_ChangeRemovePrograms,
+        CSIDL_Type_Disallowed,
+        NULL,
+        NULL
+    },
+    { /* 0x42 */
+        &FOLDERID_ConflictFolder,
+        CSIDL_Type_Disallowed,
+        NULL,
+        NULL
+    },
+    { /* 0x43 */
+        &FOLDERID_Contacts,
+        CSIDL_Type_User,
+        ContactsW,
+        MAKEINTRESOURCEW(IDS_CONTACTS)
+    },
+    { /* 0x44 */
+        &FOLDERID_DeviceMetadataStore,
+        CSIDL_Type_Disallowed, /* FIXME */
+        NULL,
+        NULL
+    },
+    { /* 0x45 */
+        &FOLDERID_Documents,
+        CSIDL_Type_User,
+        NULL,
+        MAKEINTRESOURCEW(IDS_DOCUMENTS)
+    },
+    { /* 0x46 */
+        &FOLDERID_DocumentsLibrary,
+        CSIDL_Type_Disallowed, /* FIXME */
+        NULL,
+        NULL
+    },
+    { /* 0x47 */
+        &FOLDERID_Downloads,
+        CSIDL_Type_User,
+        NULL,
+        MAKEINTRESOURCEW(IDS_DOWNLOADS)
+    },
+    { /* 0x48 */
+        &FOLDERID_Games,
+        CSIDL_Type_Disallowed,
+        NULL,
+        NULL
+    },
+    { /* 0x49 */
+        &FOLDERID_GameTasks,
+        CSIDL_Type_Disallowed, /* FIXME */
+        NULL,
+        NULL
+    },
+    { /* 0x4a */
+        &FOLDERID_HomeGroup,
+        CSIDL_Type_Disallowed,
+        NULL,
+        NULL
+    },
+    { /* 0x4b */
+        &FOLDERID_ImplicitAppShortcuts,
+        CSIDL_Type_Disallowed, /* FIXME */
+        NULL,
+        NULL
+    },
+    { /* 0x4c */
+        &FOLDERID_Libraries,
+        CSIDL_Type_Disallowed, /* FIXME */
+        NULL,
+        NULL
+    },
+    { /* 0x4d */
+        &FOLDERID_Links,
+        CSIDL_Type_User,
+        NULL,
+        MAKEINTRESOURCEW(IDS_LINKS)
+    },
+    { /* 0x4e */
+        &FOLDERID_LocalAppDataLow,
+        CSIDL_Type_User,
+        NULL,
+        MAKEINTRESOURCEW(IDS_LOCAL_APPDATA_LOW)
+    },
+    { /* 0x4f */
+        &FOLDERID_MusicLibrary,
+        CSIDL_Type_Disallowed, /* FIXME */
+        NULL,
+        NULL
+    },
+    { /* 0x50 */
+        &FOLDERID_OriginalImages,
+        CSIDL_Type_Disallowed, /* FIXME */
+        NULL,
+        NULL
+    },
+    { /* 0x51 */
+        &FOLDERID_PhotoAlbums,
+        CSIDL_Type_User,
+        NULL,
+        MAKEINTRESOURCEW(IDS_PHOTO_ALBUMS)
+    },
+    { /* 0x52 */
+        &FOLDERID_PicturesLibrary,
+        CSIDL_Type_Disallowed, /* FIXME */
+        NULL,
+        NULL
+    },
+    { /* 0x53 */
+        &FOLDERID_Playlists,
+        CSIDL_Type_User,
+        NULL,
+        MAKEINTRESOURCEW(IDS_PLAYLISTS)
+    },
+    { /* 0x54 */
+        &FOLDERID_ProgramFilesX64,
+        CSIDL_Type_NonExistent,
+        NULL,
+        NULL
+    },
+    { /* 0x55 */
+        &FOLDERID_ProgramFilesCommonX64,
+        CSIDL_Type_NonExistent,
+        NULL,
+        NULL
+    },
+    { /* 0x56 */
+        &FOLDERID_Public,
+        CSIDL_Type_CurrVer, /* FIXME */
+        NULL,
+        UsersPublicW
+    },
+    { /* 0x57 */
+        &FOLDERID_PublicDownloads,
+        CSIDL_Type_AllUsers,
+        NULL,
+        MAKEINTRESOURCEW(IDS_PUBLIC_DOWNLOADS)
+    },
+    { /* 0x58 */
+        &FOLDERID_PublicGameTasks,
+        CSIDL_Type_AllUsers,
+        NULL,
+        MAKEINTRESOURCEW(IDS_PUBLIC_GAME_TASKS)
+    },
+    { /* 0x59 */
+        &FOLDERID_PublicLibraries,
+        CSIDL_Type_AllUsers,
+        NULL,
+        MAKEINTRESOURCEW(IDS_PUBLIC_LIBRARIES)
+    },
+    { /* 0x5a */
+        &FOLDERID_PublicRingtones,
+        CSIDL_Type_AllUsers,
+        NULL,
+        MAKEINTRESOURCEW(IDS_PUBLIC_RINGTONES)
+    },
+    { /* 0x5b */
+        &FOLDERID_QuickLaunch,
+        CSIDL_Type_Disallowed, /* FIXME */
+        NULL,
+        NULL
+    },
+    { /* 0x5c */
+        &FOLDERID_RecordedTVLibrary,
+        CSIDL_Type_Disallowed, /* FIXME */
+        NULL,
+        NULL
+    },
+    { /* 0x5d */
+        &FOLDERID_Ringtones,
+        CSIDL_Type_Disallowed, /* FIXME */
+        NULL,
+        NULL
+    },
+    { /* 0x5e */
+        &FOLDERID_SampleMusic,
+        CSIDL_Type_AllUsers,
+        NULL,
+        MAKEINTRESOURCEW(IDS_SAMPLE_MUSIC)
+    },
+    { /* 0x5f */
+        &FOLDERID_SamplePictures,
+        CSIDL_Type_AllUsers,
+        NULL,
+        MAKEINTRESOURCEW(IDS_SAMPLE_PICTURES)
+    },
+    { /* 0x60 */
+        &FOLDERID_SamplePlaylists,
+        CSIDL_Type_AllUsers,
+        NULL,
+        MAKEINTRESOURCEW(IDS_SAMPLE_PLAYLISTS)
+    },
+    { /* 0x61 */
+        &FOLDERID_SampleVideos,
+        CSIDL_Type_AllUsers,
+        NULL,
+        MAKEINTRESOURCEW(IDS_SAMPLE_VIDEOS)
+    },
+    { /* 0x62 */
+        &FOLDERID_SavedGames,
+        CSIDL_Type_User,
+        NULL,
+        MAKEINTRESOURCEW(IDS_SAVED_GAMES)
+    },
+    { /* 0x63 */
+        &FOLDERID_SavedSearches,
+        CSIDL_Type_User,
+        NULL,
+        MAKEINTRESOURCEW(IDS_SAVED_SEARCHES)
+    },
+    { /* 0x64 */
+        &FOLDERID_SEARCH_CSC,
+        CSIDL_Type_Disallowed,
+        NULL,
+        NULL
+    },
+    { /* 0x65 */
+        &FOLDERID_SEARCH_MAPI,
+        CSIDL_Type_Disallowed,
+        NULL,
+        NULL
+    },
+    { /* 0x66 */
+        &FOLDERID_SearchHome,
+        CSIDL_Type_Disallowed,
+        NULL,
+        NULL
+    },
+    { /* 0x67 */
+        &FOLDERID_SidebarDefaultParts,
+        CSIDL_Type_Disallowed, /* FIXME */
+        NULL,
+        NULL
+    },
+    { /* 0x68 */
+        &FOLDERID_SidebarParts,
+        CSIDL_Type_Disallowed, /* FIXME */
+        NULL,
+        NULL
+    },
+    { /* 0x69 */
+        &FOLDERID_SyncManagerFolder,
+        CSIDL_Type_Disallowed,
+        NULL,
+        NULL
+    },
+    { /* 0x6a */
+        &FOLDERID_SyncResultsFolder,
+        CSIDL_Type_Disallowed,
+        NULL,
+        NULL
+    },
+    { /* 0x6b */
+        &FOLDERID_SyncSetupFolder,
+        CSIDL_Type_Disallowed,
+        NULL,
+        NULL
+    },
+    { /* 0x6c */
+        &FOLDERID_UserPinned,
+        CSIDL_Type_Disallowed, /* FIXME */
+        NULL,
+        NULL
+    },
+    { /* 0x6d */
+        &FOLDERID_UserProfiles,
+        CSIDL_Type_CurrVer,
+        UsersW,
+        MAKEINTRESOURCEW(IDS_USER_PROFILES)
+    },
+    { /* 0x6e */
+        &FOLDERID_UserProgramFiles,
+        CSIDL_Type_Disallowed, /* FIXME */
+        NULL,
+        NULL
+    },
+    { /* 0x6f */
+        &FOLDERID_UserProgramFilesCommon,
+        CSIDL_Type_Disallowed, /* FIXME */
+        NULL,
+        NULL
+    },
+    { /* 0x70 */
+        &FOLDERID_UsersFiles,
+        CSIDL_Type_Disallowed,
+        NULL,
+        NULL
+    },
+    { /* 0x71 */
+        &FOLDERID_UsersLibraries,
+        CSIDL_Type_Disallowed,
+        NULL,
+        NULL
+    },
+    { /* 0x72 */
+        &FOLDERID_VideosLibrary,
+        CSIDL_Type_Disallowed, /* FIXME */
         NULL,
         NULL
     }
@@ -1250,6 +1639,25 @@ static HRESULT _SHGetDefaultValue(BYTE folder, LPWSTR pszPath)
     if (!pszPath)
         return E_INVALIDARG;
 
+    if (!is_win64)
+    {
+        BOOL is_wow64;
+
+        switch (folder)
+        {
+        case CSIDL_PROGRAM_FILES:
+        case CSIDL_PROGRAM_FILESX86:
+            IsWow64Process( GetCurrentProcess(), &is_wow64 );
+            folder = is_wow64 ? CSIDL_PROGRAM_FILESX86 : CSIDL_PROGRAM_FILES;
+            break;
+        case CSIDL_PROGRAM_FILES_COMMON:
+        case CSIDL_PROGRAM_FILES_COMMONX86:
+            IsWow64Process( GetCurrentProcess(), &is_wow64 );
+            folder = is_wow64 ? CSIDL_PROGRAM_FILES_COMMONX86 : CSIDL_PROGRAM_FILES_COMMON;
+            break;
+        }
+    }
+
     if (CSIDL_Data[folder].szDefaultPath &&
      IS_INTRESOURCE(CSIDL_Data[folder].szDefaultPath))
     {
@@ -1335,8 +1743,22 @@ static HRESULT _SHGetCurrentVersionPath(DWORD dwFlags, BYTE folder,
             {
                 hr = _SHGetDefaultValue(folder, pszPath);
                 dwType = REG_EXPAND_SZ;
-                RegSetValueExW(hKey, CSIDL_Data[folder].szValueName, 0, dwType,
-                 (LPBYTE)pszPath, (strlenW(pszPath)+1)*sizeof(WCHAR));
+                switch (folder)
+                {
+                case CSIDL_PROGRAM_FILESX86:
+                case CSIDL_PROGRAM_FILES_COMMONX86:
+                    /* these two should never be set on 32-bit setups */
+                    if (!is_win64)
+                    {
+                        BOOL is_wow64;
+                        IsWow64Process( GetCurrentProcess(), &is_wow64 );
+                        if (!is_wow64) break;
+                    }
+                    /* fall through */
+                default:
+                    RegSetValueExW(hKey, CSIDL_Data[folder].szValueName, 0, dwType,
+                                   (LPBYTE)pszPath, (strlenW(pszPath)+1)*sizeof(WCHAR));
+                }
             }
             else
             {
@@ -2501,4 +2923,521 @@ HRESULT WINAPI SHGetSpecialFolderLocation(
 
     hr = SHGetFolderLocation(hwndOwner, nFolder, NULL, 0, ppidl);
     return hr;
+}
+
+static int csidl_from_id( const KNOWNFOLDERID *id )
+{
+    int i;
+    for (i = 0; i < sizeof(CSIDL_Data) / sizeof(CSIDL_Data[0]); i++)
+        if (IsEqualGUID( CSIDL_Data[i].id, id )) return i;
+    return -1;
+}
+
+/*************************************************************************
+ * SHGetKnownFolderPath           [SHELL32.@]
+ */
+HRESULT WINAPI SHGetKnownFolderPath(REFKNOWNFOLDERID rfid, DWORD flags, HANDLE token, PWSTR *path)
+{
+    HRESULT hr;
+    WCHAR folder[MAX_PATH];
+    int index = csidl_from_id( rfid );
+
+    TRACE("%s, 0x%08x, %p, %p\n", debugstr_guid(rfid), flags, token, path);
+
+    if (index < 0)
+        return E_INVALIDARG;
+
+    if (flags & KF_FLAG_CREATE)
+        index |= CSIDL_FLAG_CREATE;
+
+    if (flags & KF_FLAG_DONT_VERIFY)
+        index |= CSIDL_FLAG_DONT_VERIFY;
+
+    if (flags & KF_FLAG_NO_ALIAS)
+        index |= CSIDL_FLAG_NO_ALIAS;
+
+    if (flags & KF_FLAG_INIT)
+        index |= CSIDL_FLAG_PER_USER_INIT;
+
+    if (flags & ~(KF_FLAG_CREATE|KF_FLAG_DONT_VERIFY|KF_FLAG_NO_ALIAS|KF_FLAG_INIT))
+    {
+        FIXME("flags 0x%08x not supported\n", flags);
+        return E_INVALIDARG;
+    }
+
+    hr = SHGetFolderPathW( NULL, index, token, 0, folder );
+    if (SUCCEEDED(hr))
+    {
+        *path = CoTaskMemAlloc( (strlenW( folder ) + 1) * sizeof(WCHAR) );
+        if (!*path)
+            return E_OUTOFMEMORY;
+        strcpyW( *path, folder );
+    }
+    return hr;
+}
+
+/*************************************************************************
+ * SHGetFolderPathEx           [SHELL32.@]
+ */
+HRESULT WINAPI SHGetFolderPathEx(REFKNOWNFOLDERID rfid, DWORD flags, HANDLE token, LPWSTR path, DWORD len)
+{
+    HRESULT hr;
+    WCHAR *buffer;
+
+    TRACE("%s, 0x%08x, %p, %p, %u\n", debugstr_guid(rfid), flags, token, path, len);
+
+    if (!path || !len) return E_INVALIDARG;
+
+    hr = SHGetKnownFolderPath( rfid, flags, token, &buffer );
+    if (SUCCEEDED( hr ))
+    {
+        if (strlenW( buffer ) + 1 > len)
+        {
+            CoTaskMemFree( buffer );
+            return HRESULT_FROM_WIN32( ERROR_INSUFFICIENT_BUFFER );
+        }
+        strcpyW( path, buffer );
+        CoTaskMemFree( buffer );
+    }
+    return hr;
+}
+
+struct knownfolder
+{
+    const struct IKnownFolderVtbl *vtbl;
+    LONG refs;
+    KNOWNFOLDERID id;
+};
+
+static inline struct knownfolder *impl_from_IKnownFolder( IKnownFolder *iface )
+{
+    return (struct knownfolder *)((char *)iface - FIELD_OFFSET( struct knownfolder, vtbl ));
+}
+
+static ULONG WINAPI knownfolder_AddRef(
+    IKnownFolder *iface )
+{
+    struct knownfolder *knownfolder = impl_from_IKnownFolder( iface );
+    return InterlockedIncrement( &knownfolder->refs );
+}
+
+static ULONG WINAPI knownfolder_Release(
+    IKnownFolder *iface )
+{
+    struct knownfolder *knownfolder = impl_from_IKnownFolder( iface );
+    LONG refs = InterlockedDecrement( &knownfolder->refs );
+    if (!refs)
+    {
+        TRACE("destroying %p\n", knownfolder);
+        HeapFree( GetProcessHeap(), 0, knownfolder );
+    }
+    return refs;
+}
+
+static HRESULT WINAPI knownfolder_QueryInterface(
+    IKnownFolder *iface,
+    REFIID riid,
+    void **ppv )
+{
+    struct knownfolder *This = impl_from_IKnownFolder( iface );
+
+    TRACE("%p %s %p\n", This, debugstr_guid( riid ), ppv );
+
+    if ( IsEqualGUID( riid, &IID_IKnownFolder ) ||
+         IsEqualGUID( riid, &IID_IUnknown ) )
+    {
+        *ppv = iface;
+    }
+    else
+    {
+        FIXME("interface %s not implemented\n", debugstr_guid(riid));
+        return E_NOINTERFACE;
+    }
+    IKnownFolder_AddRef( iface );
+    return S_OK;
+}
+
+static HRESULT knowfolder_set_id(
+    IKnownFolder *iface,
+    const KNOWNFOLDERID *kfid)
+{
+    struct knownfolder *knownfolder = impl_from_IKnownFolder( iface );
+
+    TRACE("%s\n", debugstr_guid(kfid));
+
+    knownfolder->id = *kfid;
+    return S_OK;
+}
+
+static HRESULT WINAPI knownfolder_GetId(
+    IKnownFolder *iface,
+    KNOWNFOLDERID *pkfid)
+{
+    struct knownfolder *knownfolder = impl_from_IKnownFolder( iface );
+
+    TRACE("%p\n", pkfid);
+
+    *pkfid = knownfolder->id;
+    return S_OK;
+}
+
+static HRESULT WINAPI knownfolder_GetCategory(
+    IKnownFolder *iface,
+    KF_CATEGORY *pCategory)
+{
+    FIXME("%p\n", pCategory);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI knownfolder_GetShellItem(
+    IKnownFolder *iface,
+    DWORD dwFlags,
+    REFIID riid,
+    void **ppv)
+{
+    FIXME("0x%08x, %s, %p\n", dwFlags, debugstr_guid(riid), ppv);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI knownfolder_GetPath(
+    IKnownFolder *iface,
+    DWORD dwFlags,
+    LPWSTR *ppszPath)
+{
+    struct knownfolder *knownfolder = impl_from_IKnownFolder( iface );
+
+    TRACE("0x%08x, %p\n", dwFlags, ppszPath);
+    return SHGetKnownFolderPath( &knownfolder->id, dwFlags, NULL, ppszPath );
+}
+
+static HRESULT WINAPI knownfolder_SetPath(
+    IKnownFolder *iface,
+    DWORD dwFlags,
+    LPCWSTR pszPath)
+{
+    FIXME("0x%08x, %p\n", dwFlags, debugstr_w(pszPath));
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI knownfolder_GetIDList(
+    IKnownFolder *iface,
+    DWORD dwFlags,
+    PIDLIST_ABSOLUTE *ppidl)
+{
+    FIXME("0x%08x, %p\n", dwFlags, ppidl);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI knownfolder_GetFolderType(
+    IKnownFolder *iface,
+    FOLDERTYPEID *pftid)
+{
+    FIXME("%p\n", pftid);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI knownfolder_GetRedirectionCapabilities(
+    IKnownFolder *iface,
+    KF_REDIRECTION_CAPABILITIES *pCapabilities)
+{
+    FIXME("%p\n", pCapabilities);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI knownfolder_GetFolderDefinition(
+    IKnownFolder *iface,
+    KNOWNFOLDER_DEFINITION *pKFD)
+{
+    FIXME("%p\n", pKFD);
+    return E_NOTIMPL;
+}
+
+static const struct IKnownFolderVtbl knownfolder_vtbl =
+{
+    knownfolder_QueryInterface,
+    knownfolder_AddRef,
+    knownfolder_Release,
+    knownfolder_GetId,
+    knownfolder_GetCategory,
+    knownfolder_GetShellItem,
+    knownfolder_GetPath,
+    knownfolder_SetPath,
+    knownfolder_GetIDList,
+    knownfolder_GetFolderType,
+    knownfolder_GetRedirectionCapabilities,
+    knownfolder_GetFolderDefinition
+};
+
+static HRESULT knownfolder_create( void **ppv )
+{
+    struct knownfolder *kf;
+
+    kf = HeapAlloc( GetProcessHeap(), 0, sizeof(*kf) );
+    if (!kf) return E_OUTOFMEMORY;
+
+    kf->vtbl = &knownfolder_vtbl;
+    kf->refs = 1;
+    memset( &kf->id, 0, sizeof(kf->id) );
+
+    *ppv = &kf->vtbl;
+
+    TRACE("returning iface %p\n", *ppv);
+    return S_OK;
+}
+
+struct foldermanager
+{
+    const struct IKnownFolderManagerVtbl *vtbl;
+    LONG refs;
+    UINT num_ids;
+    KNOWNFOLDERID *ids;
+};
+
+static inline struct foldermanager *impl_from_IKnownFolderManager( IKnownFolderManager *iface )
+{
+    return (struct foldermanager *)((char *)iface - FIELD_OFFSET( struct foldermanager, vtbl ));
+}
+
+static ULONG WINAPI foldermanager_AddRef(
+    IKnownFolderManager *iface )
+{
+    struct foldermanager *foldermanager = impl_from_IKnownFolderManager( iface );
+    return InterlockedIncrement( &foldermanager->refs );
+}
+
+static ULONG WINAPI foldermanager_Release(
+    IKnownFolderManager *iface )
+{
+    struct foldermanager *foldermanager = impl_from_IKnownFolderManager( iface );
+    LONG refs = InterlockedDecrement( &foldermanager->refs );
+    if (!refs)
+    {
+        TRACE("destroying %p\n", foldermanager);
+        HeapFree( GetProcessHeap(), 0, foldermanager->ids );
+        HeapFree( GetProcessHeap(), 0, foldermanager );
+    }
+    return refs;
+}
+
+static HRESULT WINAPI foldermanager_QueryInterface(
+    IKnownFolderManager *iface,
+    REFIID riid,
+    void **ppv )
+{
+    struct foldermanager *This = impl_from_IKnownFolderManager( iface );
+
+    TRACE("%p %s %p\n", This, debugstr_guid( riid ), ppv );
+
+    if ( IsEqualGUID( riid, &IID_IKnownFolderManager ) ||
+         IsEqualGUID( riid, &IID_IUnknown ) )
+    {
+        *ppv = iface;
+    }
+    else
+    {
+        FIXME("interface %s not implemented\n", debugstr_guid(riid));
+        return E_NOINTERFACE;
+    }
+    IKnownFolderManager_AddRef( iface );
+    return S_OK;
+}
+
+static HRESULT WINAPI foldermanager_FolderIdFromCsidl(
+    IKnownFolderManager *iface,
+    int nCsidl,
+    KNOWNFOLDERID *pfid)
+{
+    TRACE("%d, %p\n", nCsidl, pfid);
+
+    if (nCsidl >= sizeof(CSIDL_Data) / sizeof(CSIDL_Data[0]))
+        return E_INVALIDARG;
+    *pfid = *CSIDL_Data[nCsidl].id;
+    return S_OK;
+}
+
+static HRESULT WINAPI foldermanager_FolderIdToCsidl(
+    IKnownFolderManager *iface,
+    REFKNOWNFOLDERID rfid,
+    int *pnCsidl)
+{
+    int csidl;
+
+    TRACE("%s, %p\n", debugstr_guid(rfid), pnCsidl);
+
+    csidl = csidl_from_id( rfid );
+    if (csidl == -1) return E_INVALIDARG;
+    *pnCsidl = csidl;
+    return S_OK;
+}
+
+static HRESULT WINAPI foldermanager_GetFolderIds(
+    IKnownFolderManager *iface,
+    KNOWNFOLDERID **ppKFId,
+    UINT *pCount)
+{
+    struct foldermanager *fm = impl_from_IKnownFolderManager( iface );
+
+    TRACE("%p, %p\n", ppKFId, pCount);
+
+    *ppKFId = fm->ids;
+    *pCount = fm->num_ids;
+    return S_OK;
+}
+
+static BOOL is_knownfolder( struct foldermanager *fm, const KNOWNFOLDERID *id )
+{
+    UINT i;
+
+    for (i = 0; i < fm->num_ids; i++)
+        if (IsEqualGUID( &fm->ids[i], id )) return TRUE;
+
+    return FALSE;
+}
+
+static HRESULT WINAPI foldermanager_GetFolder(
+    IKnownFolderManager *iface,
+    REFKNOWNFOLDERID rfid,
+    IKnownFolder **ppkf)
+{
+    struct foldermanager *fm = impl_from_IKnownFolderManager( iface );
+    HRESULT hr;
+
+    TRACE("%s, %p\n", debugstr_guid(rfid), ppkf);
+
+    if (!is_knownfolder( fm, rfid ))
+    {
+        WARN("unknown folder\n");
+        return E_INVALIDARG;
+    }
+    hr = knownfolder_create( (void **)ppkf );
+    if (SUCCEEDED( hr ))
+        hr = knowfolder_set_id( *ppkf, rfid );
+
+    return hr;
+}
+
+static HRESULT WINAPI foldermanager_GetFolderByName(
+    IKnownFolderManager *iface,
+    LPCWSTR pszCanonicalName,
+    IKnownFolder **ppkf)
+{
+    FIXME("%s, %p\n", debugstr_w(pszCanonicalName), ppkf);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI foldermanager_RegisterFolder(
+    IKnownFolderManager *iface,
+    REFKNOWNFOLDERID rfid,
+    KNOWNFOLDER_DEFINITION const *pKFD)
+{
+    FIXME("%p, %p\n", rfid, pKFD);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI foldermanager_UnregisterFolder(
+    IKnownFolderManager *iface,
+    REFKNOWNFOLDERID rfid)
+{
+    FIXME("%p\n", rfid);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI foldermanager_FindFolderFromPath(
+    IKnownFolderManager *iface,
+    LPCWSTR pszPath,
+    FFFP_MODE mode,
+    IKnownFolder **ppkf)
+{
+    FIXME("%s, 0x%08x, %p\n", debugstr_w(pszPath), mode, ppkf);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI foldermanager_FindFolderFromIDList(
+    IKnownFolderManager *iface,
+    PCIDLIST_ABSOLUTE pidl,
+    IKnownFolder **ppkf)
+{
+    FIXME("%p, %p\n", pidl, ppkf);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI foldermanager_Redirect(
+    IKnownFolderManager *iface,
+    REFKNOWNFOLDERID rfid,
+    HWND hwnd,
+    KF_REDIRECT_FLAGS flags,
+    LPCWSTR pszTargetPath,
+    UINT cFolders,
+    KNOWNFOLDERID const *pExclusion,
+    LPWSTR *ppszError)
+{
+    FIXME("%p, %p, 0x%08x, %s, %u, %p, %p\n", rfid, hwnd, flags,
+          debugstr_w(pszTargetPath), cFolders, pExclusion, ppszError);
+    return E_NOTIMPL;
+}
+
+static const struct IKnownFolderManagerVtbl foldermanager_vtbl =
+{
+    foldermanager_QueryInterface,
+    foldermanager_AddRef,
+    foldermanager_Release,
+    foldermanager_FolderIdFromCsidl,
+    foldermanager_FolderIdToCsidl,
+    foldermanager_GetFolderIds,
+    foldermanager_GetFolder,
+    foldermanager_GetFolderByName,
+    foldermanager_RegisterFolder,
+    foldermanager_UnregisterFolder,
+    foldermanager_FindFolderFromPath,
+    foldermanager_FindFolderFromIDList,
+    foldermanager_Redirect
+};
+
+static HRESULT foldermanager_create( void **ppv )
+{
+    UINT i, j;
+    struct foldermanager *fm;
+
+    fm = HeapAlloc( GetProcessHeap(), 0, sizeof(*fm) );
+    if (!fm) return E_OUTOFMEMORY;
+
+    fm->vtbl = &foldermanager_vtbl;
+    fm->refs = 1;
+    fm->num_ids = 0;
+
+    for (i = 0; i < sizeof(CSIDL_Data) / sizeof(CSIDL_Data[0]); i++)
+    {
+        if (!IsEqualGUID( CSIDL_Data[i].id, &GUID_NULL )) fm->num_ids++;
+    }
+    fm->ids = HeapAlloc( GetProcessHeap(), 0, fm->num_ids * sizeof(KNOWNFOLDERID) );
+    if (!fm->ids)
+    {
+        HeapFree( GetProcessHeap(), 0, fm );
+        return E_OUTOFMEMORY;
+    }
+    for (i = j = 0; i < sizeof(CSIDL_Data) / sizeof(CSIDL_Data[0]); i++)
+    {
+        if (!IsEqualGUID( CSIDL_Data[i].id, &GUID_NULL ))
+        {
+            fm->ids[j] = *CSIDL_Data[i].id;
+            j++;
+        }
+    }
+    TRACE("found %u known folders\n", fm->num_ids);
+    *ppv = &fm->vtbl;
+
+    TRACE("returning iface %p\n", *ppv);
+    return S_OK;
+}
+
+HRESULT WINAPI KnownFolderManager_Constructor( IUnknown *punk, REFIID riid, void **ppv )
+{
+    TRACE("%p, %s, %p\n", punk, debugstr_guid(riid), ppv);
+
+    if (!ppv)
+        return E_POINTER;
+    if (punk)
+        return CLASS_E_NOAGGREGATION;
+
+    return foldermanager_create( ppv );
 }

@@ -1,11 +1,7 @@
 EXTRADEFS = -D_SHDOCVW_
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = shdocvw.dll
 IMPORTLIB = shdocvw
-IMPORTS   = uuid shell32 shlwapi user32 gdi32 advapi32
+IMPORTS   = uuid shell32 comctl32 shlwapi user32 gdi32 advapi32
 DELAYIMPORTS = version urlmon ole32 oleaut32
 
 C_SRCS = \
@@ -29,8 +25,26 @@ C_SRCS = \
 	webbrowser.c
 
 RC_SRCS = \
+	De.rc \
 	En.rc \
+	Es.rc \
+	Fr.rc \
+	He.rc \
+	It.rc \
+	Ko.rc \
+	Lt.rc \
+	Nl.rc \
+	Pl.rc \
+	Pt.rc \
+	Ro.rc \
+	Si.rc \
+	Sr.rc \
+	Sv.rc \
+	Uk.rc \
 	shdocvw.rc
+
+SVG_SRCS = \
+	ietoolbar.svg
 
 IDL_TLB_SRCS = shdocvw_v1.idl
 

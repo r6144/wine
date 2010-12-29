@@ -33,6 +33,7 @@
 #include "wingdi.h"
 #include "winuser.h"
 #include "dshow.h"
+#include "wine/strmbase.h"
 #include "wine/list.h"
 
 #define MEDIATIME_FROM_BYTES(x) ((LONGLONG)(x) * 10000000)
@@ -62,24 +63,12 @@ HRESULT SeekingPassThru_create(IUnknown *pUnkOuter, LPVOID *ppObj);
 
 HRESULT EnumMonikerImpl_Create(IMoniker ** ppMoniker, ULONG nMonikerCount, IEnumMoniker ** ppEnum);
 
-typedef struct tagENUMEDIADETAILS
-{
-	ULONG cMediaTypes;
-	AM_MEDIA_TYPE * pMediaTypes;
-} ENUMMEDIADETAILS;
-
-typedef HRESULT (* FNOBTAINPIN)(IBaseFilter *iface, ULONG pos, IPin **pin, DWORD *lastsynctick);
-
-HRESULT IEnumPinsImpl_Construct(IEnumPins ** ppEnum, FNOBTAINPIN receive_pin, IBaseFilter *base);
-HRESULT IEnumMediaTypesImpl_Construct(const ENUMMEDIADETAILS * pDetails, IEnumMediaTypes ** ppEnum);
 HRESULT IEnumRegFiltersImpl_Construct(REGFILTER * pInRegFilters, const ULONG size, IEnumRegFilters ** ppEnum);
 HRESULT IEnumFiltersImpl_Construct(IBaseFilter ** ppFilters, ULONG nFilters, IEnumFilters ** ppEnum);
 
 extern const char * qzdebugstr_guid(const GUID * id);
+extern void video_unregister_windowclass(void) DECLSPEC_HIDDEN;
 
-HRESULT CopyMediaType(AM_MEDIA_TYPE * pDest, const AM_MEDIA_TYPE *pSrc);
-void FreeMediaType(AM_MEDIA_TYPE * pmt);
-void DeleteMediaType(AM_MEDIA_TYPE * pmt);
 BOOL CompareMediaTypes(const AM_MEDIA_TYPE * pmt1, const AM_MEDIA_TYPE * pmt2, BOOL bWildcards);
 void dump_AM_MEDIA_TYPE(const AM_MEDIA_TYPE * pmt);
 HRESULT updatehres( HRESULT original, HRESULT new );

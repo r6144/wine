@@ -24,19 +24,19 @@
 #include "ddraw.h"
 #include "d3d.h"
 
-HWND window;
-IDirectDraw7        *DirectDraw = NULL;
-IDirectDrawSurface7 *Surface;
-IDirectDrawSurface7 *depth_buffer;
-IDirect3D7          *Direct3D = NULL;
-IDirect3DDevice7    *Direct3DDevice = NULL;
+static HWND window;
+static IDirectDraw7        *DirectDraw;
+static IDirectDrawSurface7 *Surface;
+static IDirectDrawSurface7 *depth_buffer;
+static IDirect3D7          *Direct3D;
+static IDirect3DDevice7    *Direct3DDevice;
 
-IDirectDraw *DirectDraw1 = NULL;
-IDirectDrawSurface *Surface1 = NULL;
-IDirect3D *Direct3D1 = NULL;
-IDirect3DDevice *Direct3DDevice1 = NULL;
-IDirect3DExecuteBuffer *ExecuteBuffer = NULL;
-IDirect3DViewport *Viewport = NULL;
+static IDirectDraw *DirectDraw1;
+static IDirectDrawSurface *Surface1;
+static IDirect3D *Direct3D1;
+static IDirect3DDevice *Direct3DDevice1;
+static IDirect3DExecuteBuffer *ExecuteBuffer;
+static IDirect3DViewport *Viewport;
 
 static BOOL refdevice = FALSE;
 
@@ -356,14 +356,14 @@ static void lighting_test(IDirect3DDevice7 *device)
         ok(hr == D3D_OK, "IDirect3DDevice7_EndScene failed with %08x\n", hr);
     }
 
-    color = getPixelColor(device, 160, 360); /* lower left quad - unlit without normals */
-    ok(color == 0x00ff0000, "Unlit quad without normals has color %08x\n", color);
-    color = getPixelColor(device, 160, 120); /* upper left quad - lit without normals */
-    ok(color == 0x00000000, "Lit quad without normals has color %08x\n", color);
-    color = getPixelColor(device, 480, 360); /* lower left quad - unlit width normals */
-    ok(color == 0x000000ff, "Unlit quad width normals has color %08x\n", color);
-    color = getPixelColor(device, 480, 120); /* upper left quad - lit width normals */
-    ok(color == 0x00000000, "Lit quad width normals has color %08x\n", color);
+    color = getPixelColor(device, 160, 360); /* Lower left quad - unlit without normals */
+    ok(color == 0x00ff0000, "Unlit quad without normals has color 0x%08x, expected 0x00ff0000.\n", color);
+    color = getPixelColor(device, 160, 120); /* Upper left quad - lit without normals */
+    ok(color == 0x00000000, "Lit quad without normals has color 0x%08x, expected 0x00000000.\n", color);
+    color = getPixelColor(device, 480, 360); /* Lower right quad - unlit with normals */
+    ok(color == 0x000000ff, "Unlit quad with normals has color 0x%08x, expected 0x000000ff.\n", color);
+    color = getPixelColor(device, 480, 120); /* Upper right quad - lit with normals */
+    ok(color == 0x00000000, "Lit quad with normals has color 0x%08x, expected 0x00000000.\n", color);
 
     hr = IDirect3DDevice7_SetRenderState(device, D3DRENDERSTATE_LIGHTING, FALSE);
     ok(hr == D3D_OK, "IDirect3DDevice7_SetRenderState returned %08x\n", hr);
@@ -672,7 +672,7 @@ static void offscreen_test(IDirect3DDevice7 *device)
     DWORD color;
     DDSURFACEDESC2 ddsd;
 
-    static const float quad[][5] = {
+    static float quad[][5] = {
         {-0.5f, -0.5f, 0.1f, 0.0f, 0.0f},
         {-0.5f,  0.5f, 0.1f, 0.0f, 1.0f},
         { 0.5f, -0.5f, 0.1f, 1.0f, 0.0f},
@@ -795,7 +795,7 @@ static void alpha_test(IDirect3DDevice7 *device)
         { 1.0f,  0.0f,   0.1f,                          0xc00000ff},
         { 1.0f,  1.0f,   0.1f,                          0xc00000ff},
     };
-    static const float composite_quad[][5] = {
+    static float composite_quad[][5] = {
         { 0.0f, -1.0f, 0.1f, 0.0f, 1.0f},
         { 0.0f,  1.0f, 0.1f, 0.0f, 0.0f},
         { 1.0f, -1.0f, 0.1f, 1.0f, 1.0f},
@@ -2920,6 +2920,127 @@ static void depth_clamp_test(IDirect3DDevice7 *device)
     ok(SUCCEEDED(hr), "SetViewport failed, hr %#x.\n", hr);
 }
 
+static void DX1_BackBufferFlipTest(void)
+{
+    HRESULT hr;
+    IDirectDraw *DirectDraw1 = NULL;
+    IDirectDrawSurface *Primary = NULL;
+    IDirectDrawSurface *Backbuffer = NULL;
+    WNDCLASS wc = {0};
+    DDSURFACEDESC ddsd;
+    DDBLTFX ddbltfx;
+    COLORREF color;
+    const DWORD white = 0xffffff;
+    const DWORD red = 0xff0000;
+    BOOL attached = FALSE;
+
+    wc.lpfnWndProc = DefWindowProc;
+    wc.lpszClassName = "DX1_BackBufferFlipTest_wc";
+    RegisterClass(&wc);
+    window = CreateWindow("DX1_BackBufferFlipTest_wc", "DX1_BackBufferFlipTest",
+                            WS_MAXIMIZE | WS_VISIBLE | WS_CAPTION , 0, 0, 640, 480, 0, 0, 0, 0);
+
+    hr = DirectDrawCreate( NULL, &DirectDraw1, NULL );
+    ok(hr==DD_OK || hr==DDERR_NODIRECTDRAWSUPPORT, "DirectDrawCreate returned: %x\n", hr);
+    if(FAILED(hr)) goto out;
+
+    hr = IDirectDraw_SetCooperativeLevel(DirectDraw1, window, DDSCL_EXCLUSIVE | DDSCL_FULLSCREEN);
+    ok(hr==DD_OK, "SetCooperativeLevel returned: %x\n", hr);
+    if(FAILED(hr)) goto out;
+
+    hr = IDirectDraw_SetDisplayMode(DirectDraw1, 640, 480, 32);
+    if(FAILED(hr)) {
+        /* 24 bit is fine too */
+        hr = IDirectDraw_SetDisplayMode(DirectDraw1, 640, 480, 24);
+    }
+    ok(hr==DD_OK || hr == DDERR_UNSUPPORTED, "SetDisplayMode returned: %x\n", hr);
+    if (FAILED(hr)) {
+        goto out;
+    }
+
+    memset(&ddsd, 0, sizeof(DDSURFACEDESC));
+    ddsd.dwSize = sizeof(DDSURFACEDESC);
+    ddsd.dwFlags = DDSD_CAPS;
+    ddsd.ddsCaps.dwCaps = DDSCAPS_PRIMARYSURFACE;
+
+    hr = IDirectDraw_CreateSurface(DirectDraw1, &ddsd, &Primary, NULL);
+    ok(hr==DD_OK, "IDirectDraw_CreateSurface returned: %08x\n", hr);
+
+    memset(&ddsd, 0, sizeof(DDSURFACEDESC));
+    ddsd.dwSize = sizeof(DDSURFACEDESC);
+    ddsd.dwFlags = DDSD_CAPS | DDSD_WIDTH | DDSD_HEIGHT | DDSD_PIXELFORMAT;
+    ddsd.ddsCaps.dwCaps = DDSCAPS_BACKBUFFER;
+    ddsd.dwWidth = 640;
+    ddsd.dwHeight = 480;
+    ddsd.ddpfPixelFormat.dwSize = sizeof(ddsd.ddpfPixelFormat);
+    ddsd.ddpfPixelFormat.dwFlags = DDPF_RGB;
+    U1(ddsd.ddpfPixelFormat).dwRGBBitCount      = 32;
+    U2(ddsd.ddpfPixelFormat).dwRBitMask         = 0x00ff0000;
+    U3(ddsd.ddpfPixelFormat).dwGBitMask         = 0x0000ff00;
+    U4(ddsd.ddpfPixelFormat).dwBBitMask         = 0x000000ff;
+
+    hr = IDirectDraw_CreateSurface(DirectDraw1, &ddsd, &Backbuffer, NULL);
+    ok(hr==DD_OK, "IDirectDraw_CreateSurface returned: %08x\n", hr);
+    if(FAILED(hr)) goto out;
+
+    hr = IDirectDrawSurface_AddAttachedSurface(Primary, Backbuffer);
+    todo_wine ok(hr == DD_OK || broken(hr == DDERR_CANNOTATTACHSURFACE),
+       "Attaching a back buffer to a front buffer returned %08x\n", hr);
+    if (FAILED(hr)) goto out;
+
+    attached = TRUE;
+
+    memset(&ddbltfx, 0, sizeof(ddbltfx));
+    ddbltfx.dwSize = sizeof(ddbltfx);
+    U5(ddbltfx).dwFillColor = red;
+    hr = IDirectDrawSurface_Blt(Backbuffer, NULL, NULL, NULL, DDBLT_COLORFILL | DDBLT_WAIT, &ddbltfx);
+    ok(hr == DD_OK, "IDirectDrawSurface_Blt returned: %x\n", hr);
+
+    U5(ddbltfx).dwFillColor = white;
+    hr = IDirectDrawSurface_Blt(Primary, NULL, NULL, NULL, DDBLT_COLORFILL | DDBLT_WAIT, &ddbltfx);
+    ok(hr == DD_OK, "IDirectDrawSurface_Blt returned: %x\n", hr);
+
+    /* Check it out */
+    color = getPixelColor_GDI(Primary, 5, 5);
+    ok(GetRValue(color) == 0xFF && GetGValue(color) == 0xFF && GetBValue(color) == 0xFF,
+            "got R %02X G %02X B %02X, expected R FF G FF B FF\n",
+            GetRValue(color), GetGValue(color), GetBValue(color));
+
+    color = getPixelColor_GDI(Backbuffer, 5, 5);
+    ok(GetRValue(color) == 0xFF && GetGValue(color) == 0 && GetBValue(color) == 0,
+            "got R %02X G %02X B %02X, expected R FF G 00 B 00\n",
+            GetRValue(color), GetGValue(color), GetBValue(color));
+
+    hr = IDirectDrawSurface_Flip(Primary, NULL, DDFLIP_WAIT);
+    todo_wine ok(hr == DD_OK, "IDirectDrawSurface_Flip returned 0x%08x\n", hr);
+
+    if (hr == DD_OK)
+    {
+        color = getPixelColor_GDI(Primary, 5, 5);
+        ok(GetRValue(color) == 0xFF && GetGValue(color) == 0 && GetBValue(color) == 0,
+                "got R %02X G %02X B %02X, expected R FF G 00 B 00\n",
+                GetRValue(color), GetGValue(color), GetBValue(color));
+
+        color = getPixelColor_GDI(Backbuffer, 5, 5);
+        ok((GetRValue(color) == 0xFF && GetGValue(color) == 0xFF && GetBValue(color) == 0xFF) ||
+           broken(GetRValue(color) == 0xFF && GetGValue(color) == 0 && GetBValue(color) == 0),  /* broken driver */
+                "got R %02X G %02X B %02X, expected R FF G FF B FF\n",
+                GetRValue(color), GetGValue(color), GetBValue(color));
+    }
+
+    out:
+
+    if (Backbuffer)
+    {
+        if (attached)
+            IDirectDrawSurface_DeleteAttachedSurface(Primary, 0, Backbuffer);
+        IDirectDrawSurface_Release(Backbuffer);
+    }
+    if (Primary) IDirectDrawSurface_Release(Primary);
+    if (DirectDraw1) IDirectDraw_Release(DirectDraw1);
+    if (window) DestroyWindow(window);
+}
+
 START_TEST(visual)
 {
     HRESULT hr;
@@ -2983,6 +3104,7 @@ START_TEST(visual)
 
     D3D3_ViewportClearTest();
     p8_primary_test();
+    DX1_BackBufferFlipTest();
 
     return ;
 

@@ -268,9 +268,12 @@ static void test_get_adapter_displaymode_ex(void)
 
     memset(&startmode, 0, sizeof(startmode));
     startmode.dmSize = sizeof(startmode);
-    startmode.dmFields = DM_DISPLAYORIENTATION;
-    startmode.dmDisplayOrientation = DMDO_180;
+    retval = pEnumDisplaySettingsExA(NULL, ENUM_CURRENT_SETTINGS, &startmode, 0);
+    ok(retval, "Failed to retrieve current display mode, retval %d.\n", retval);
+    if (!retval) goto out;
 
+    startmode.dmFields = DM_DISPLAYORIENTATION | DM_PELSWIDTH | DM_PELSHEIGHT;
+    S2(U1(startmode)).dmDisplayOrientation = DMDO_180;
     retval = pChangeDisplaySettingsExA(NULL, &startmode, NULL, 0, NULL);
 
     if(retval == DISP_CHANGE_BADMODE)
@@ -282,7 +285,7 @@ static void test_get_adapter_displaymode_ex(void)
     ok(retval == DISP_CHANGE_SUCCESSFUL,"ChangeDisplaySettingsEx failed with %d\n", retval);
     /* try retrieve orientation info with EnumDisplaySettingsEx*/
     startmode.dmFields = 0;
-    startmode.dmDisplayOrientation = 0;
+    S2(U1(startmode)).dmDisplayOrientation = 0;
     ok(pEnumDisplaySettingsExA(NULL, ENUM_CURRENT_SETTINGS, &startmode, EDS_ROTATEDMODE), "EnumDisplaySettingsEx failed\n");
 
     /*now that orientation has changed start tests for GetAdapterDisplayModeEx: invalid Size*/
@@ -310,12 +313,28 @@ static void test_get_adapter_displaymode_ex(void)
     /* don't know yet how to test for ScanLineOrdering, just testing that it is set to a value by GetAdapterDisplayModeEx*/
     todo_wine ok(mode_ex.ScanLineOrdering != 0, "ScanLineOrdering returned 0\n");
     /* check that orientation is returned correctly by GetAdapterDisplayModeEx and EnumDisplaySettingsEx*/
-    todo_wine ok(startmode.dmDisplayOrientation == DMDO_180 && rotation == D3DDISPLAYROTATION_180, "rotation is %d instead of %d\n", rotation, startmode.dmDisplayOrientation);
+    todo_wine ok(S2(U1(startmode)).dmDisplayOrientation == DMDO_180 && rotation == D3DDISPLAYROTATION_180, "rotation is %d instead of %d\n", rotation, S2(U1(startmode)).dmDisplayOrientation);
+
+    trace("GetAdapterDisplayModeEx returned Width = %d,Height = %d, RefreshRate = %d, Format = %x, ScanLineOrdering = %x, rotation = %d\n",
+          mode_ex.Width, mode_ex.Height, mode_ex.RefreshRate, mode_ex.Format, mode_ex.ScanLineOrdering, rotation);
+
+    /* test GetAdapterDisplayModeEx with null pointer for D3DDISPLAYROTATION */
+    memset(&mode_ex, 0, sizeof(mode_ex));
+    mode_ex.Size = sizeof(D3DDISPLAYMODEEX);
+
+    hr = IDirect3D9Ex_GetAdapterDisplayModeEx(d3d9ex, D3DADAPTER_DEFAULT, &mode_ex, NULL);
+    todo_wine ok(SUCCEEDED(hr), "GetAdapterDisplayModeEx failed, hr %#x.\n", hr);
+
+    ok(mode_ex.Size == sizeof(D3DDISPLAYMODEEX), "size is %d\n", mode_ex.Size);
+    todo_wine ok(mode_ex.Width == mode.Width, "width is %d instead of %d\n", mode_ex.Width, mode.Width);
+    todo_wine ok(mode_ex.Height == mode.Height, "height is %d instead of %d\n", mode_ex.Height, mode.Height);
+    todo_wine ok(mode_ex.RefreshRate == mode.RefreshRate, "RefreshRate is %d instead of %d\n", mode_ex.RefreshRate, mode.RefreshRate);
+    todo_wine ok(mode_ex.Format == mode.Format, "format is %x instead of %x\n", mode_ex.Format, mode.Format);
+    /* don't know yet how to test for ScanLineOrdering, just testing that it is set to a value by GetAdapterDisplayModeEx*/
+    todo_wine ok(mode_ex.ScanLineOrdering != 0, "ScanLineOrdering returned 0\n");
 
     /* return to the default mode */
     pChangeDisplaySettingsExA(NULL, NULL, NULL, 0, NULL);
-    trace("GetAdapterDisplayModeEx returned Width = %d,Height = %d, RefreshRate = %d, Format = %x, ScanLineOrdering = %x, rotation = %d\n",
-          mode_ex.Width, mode_ex.Height, mode_ex.RefreshRate, mode_ex.Format, mode_ex.ScanLineOrdering, rotation);
 out:
     IDirect3D9_Release(d3d9);
     IDirect3D9Ex_Release(d3d9ex);

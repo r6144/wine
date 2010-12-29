@@ -1,8 +1,4 @@
 EXTRADEFS = -D__WINE__ -DWINE_NO_UNICODE_MACROS
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = winefile.exe
 APPMODE   = -mwindows
 IMPORTS   = uuid shell32 comdlg32 comctl32 ole32 mpr version user32 gdi32 advapi32
@@ -18,6 +14,7 @@ RC_SRCS = \
 	En.rc \
 	Es.rc \
 	Fr.rc \
+	He.rc \
 	Hu.rc \
 	It.rc \
 	Ja.rc \
@@ -35,6 +32,8 @@ RC_SRCS = \
 	Uk.rc \
 	Zh.rc \
 	rsrc.rc
+
+MANPAGE = winefile.man
 
 SVG_SRCS = winefile.svg
 

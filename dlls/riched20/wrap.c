@@ -271,7 +271,7 @@ static ME_DisplayItem *ME_SplitByBacktracking(ME_WrapContext *wc, ME_DisplayItem
   {
     if (wc->pLastSplittableRun->member.run.nFlags & (MERF_GRAPHICS|MERF_TAB))
     {
-      wc->pt = wc->ptLastSplittableRun;
+      wc->pt = wc->pLastSplittableRun->member.run.pt;
       return wc->pLastSplittableRun;
     }
     else if (wc->pLastSplittableRun->member.run.nFlags & MERF_SPLITTABLE)
@@ -299,7 +299,7 @@ static ME_DisplayItem *ME_SplitByBacktracking(ME_WrapContext *wc, ME_DisplayItem
     else
     {
       /* restart from the first run beginning with spaces */
-      wc->pt = wc->ptLastSplittableRun;
+      wc->pt = wc->pLastSplittableRun->member.run.pt;
       return wc->pLastSplittableRun;
     }
   }
@@ -349,7 +349,6 @@ static ME_DisplayItem *ME_WrapHandleRun(ME_WrapContext *wc, ME_DisplayItem *p)
       return p->next;
 
     if (run->nFlags & MERF_WHITESPACE) {
-      p->member.run.nFlags |= MERF_SKIPPED;
       wc->pt.x += run->nWidth;
       /* skip runs consisting of only whitespaces */
       return p->next;
@@ -362,7 +361,9 @@ static ME_DisplayItem *ME_WrapHandleRun(ME_WrapContext *wc, ME_DisplayItem *p)
       if (black) {
         wc->bOverflown = FALSE;
         pp = ME_SplitRun(wc, p, black);
-        p->member.run.nFlags |= MERF_SKIPPED;
+        ME_CalcRunExtent(wc->context, &wc->pPara->member.para,
+                         wc->nRow ? wc->nLeftMargin : wc->nFirstMargin,
+                         &pp->member.run);
         ME_InsertRowStart(wc, pp);
         return pp;
       }
@@ -451,7 +452,6 @@ static ME_DisplayItem *ME_WrapHandleRun(ME_WrapContext *wc, ME_DisplayItem *p)
     || ((run->nFlags & (MERF_GRAPHICS|MERF_TAB)) && (p != wc->pRowStart)))
   {
     wc->pLastSplittableRun = p;
-    wc->ptLastSplittableRun = wc->pt;
   }
   wc->pt.x += run->nWidth;
   return p->next;
@@ -589,7 +589,6 @@ static void ME_PrepareParagraphForWrapping(ME_Context *c, ME_DisplayItem *tp) {
           else
             break;
         }
-        p->member.run.nFlags &= ~MERF_CALCBYWRAP;
         break;
       default:
         break;

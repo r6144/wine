@@ -125,10 +125,11 @@ dnl
 AC_DEFUN([WINE_CHECK_MINGW_PROG],
 [case "$host_cpu" in
   i[[3456789]]86*)
-    ac_prefix_list="m4_foreach([ac_wine_prefix],[pc-mingw32, mingw32msvc, mingw32],
+    ac_prefix_list="m4_foreach([ac_wine_prefix],[w64-mingw32, pc-mingw32, mingw32msvc, mingw32],
                         m4_foreach([ac_wine_cpu],[i686,i586,i486,i386],[ac_wine_cpu-ac_wine_prefix-$2 ]))" ;;
   x86_64)
-    ac_prefix_list="m4_foreach([ac_wine_prefix],[pc-mingw32,w64-mingw32],[x86_64-ac_wine_prefix-$2 ])" ;;
+    ac_prefix_list="m4_foreach([ac_wine_prefix],[pc-mingw32, w64-mingw32, mingw32msvc],
+                        m4_foreach([ac_wine_cpu],[x86_64,amd64],[ac_wine_cpu-ac_wine_prefix-$2 ]))" ;;
   *)
     ac_prefix_list="" ;;
 esac
@@ -146,7 +147,7 @@ AC_DEFUN([WINE_CONFIG_HELPERS],
 .INIT: Makefile
 .MAKEFILEDEPS:
 all: Makefile
-Makefile: Makefile.in Make.rules config.status
+Makefile: Makefile.in Make.vars.in Make.rules config.status
 	@./config.status Make.tmp Makefile"
 
 AC_SUBST(ALL_WINETEST_DEPENDS,["# Test binaries"])
@@ -164,19 +165,33 @@ wine_fn_append_rule ()
 
 wine_fn_all_dir_rules ()
 {
-    wine_fn_append_file ALL_DIRS $[1]
+    ac_dir=$[1]
+    ac_alldeps=$[2]
+    ac_makedep="\$(MAKEDEP)"
+    ac_input=Make.vars.in:$ac_dir/Makefile.in
+    if test $ac_dir != tools
+    then
+        dnl makedep is in tools so tools makefile cannot depend on it
+        ac_alldeps="$[2] $ac_makedep"
+    fi
+    case $[2] in
+      *.in) ac_input=$ac_input:$[2] ;;
+      *) ac_makedep="$[2] $ac_makedep" ;;
+    esac
+
+    wine_fn_append_file ALL_DIRS $ac_dir
     wine_fn_append_rule ALL_MAKEFILE_DEPENDS \
-"__clean__: $[1]/__clean__
-.PHONY: $[1]/__clean__
-$[1]/__clean__: $[1]/Makefile
-	@cd $[1] && \$(MAKE) clean
-	\$(RM) $[1]/Makefile
-$[1]/Makefile: $[1]/Makefile.in config.status $[2]
-	@./config.status --file $[1]/Makefile && cd $[1] && \$(MAKE) depend
-depend: $[1]/__depend__
-.PHONY: $[1]/__depend__
-$[1]/__depend__: \$(MAKEDEP) dummy
-	@./config.status --file $[1]/Makefile && cd $[1] && \$(MAKE) depend"
+"__clean__: $ac_dir/__clean__
+.PHONY: $ac_dir/__clean__
+$ac_dir/__clean__: $ac_dir/Makefile
+	@cd $ac_dir && \$(MAKE) clean
+	\$(RM) $ac_dir/Makefile
+$ac_dir/Makefile: $ac_dir/Makefile.in Make.vars.in config.status $ac_alldeps
+	@./config.status --file $ac_dir/Makefile:$ac_input && cd $ac_dir && \$(MAKE) depend
+depend: $ac_dir/__depend__
+.PHONY: $ac_dir/__depend__
+$ac_dir/__depend__: $ac_makedep dummy
+	@./config.status --file $ac_dir/Makefile:$ac_input && cd $ac_dir && \$(MAKE) depend"
 }
 
 wine_fn_config_makefile ()
@@ -185,7 +200,7 @@ wine_fn_config_makefile ()
     ac_enable=$[2]
     AS_VAR_IF([$ac_enable],[no],[return 0])
 
-    wine_fn_all_dir_rules $ac_dir "Make.rules \$(MAKEDEP)"
+    wine_fn_all_dir_rules $ac_dir Make.rules
     wine_fn_append_rule ALL_MAKEFILE_DEPENDS \
 "all: $ac_dir
 .PHONY: $ac_dir
@@ -205,15 +220,11 @@ wine_fn_config_lib ()
 {
     ac_name=$[1]
     ac_dir=dlls/$ac_name
-    wine_fn_all_dir_rules $ac_dir "dlls/Makeimplib.rules \$(MAKEDEP)"
+    wine_fn_all_dir_rules $ac_dir dlls/Makeimplib.rules
     wine_fn_append_rule ALL_MAKEFILE_DEPENDS \
 "all __builddeps__: $ac_dir
-__buildcrossdeps__: $ac_dir/lib$ac_name.cross.a
-$ac_dir $ac_dir/lib$ac_name.cross.a: $ac_dir/Makefile tools/widl tools/winebuild tools/winegcc include
-$ac_dir: dummy
+$ac_dir: $ac_dir/Makefile tools/widl tools/winebuild tools/winegcc include dummy
 	@cd $ac_dir && \$(MAKE)
-$ac_dir/lib$ac_name.cross.a: dummy
-	@cd $ac_dir && \$(MAKE) lib$ac_name.cross.a
 install install-dev:: $ac_dir
 	@cd $ac_dir && \$(MAKE) install
 uninstall:: $ac_dir/Makefile
@@ -222,93 +233,119 @@ uninstall:: $ac_dir/Makefile
 
 wine_fn_config_dll ()
 {
-    ac_dir=$[1]
+    ac_name=$[1]
+    ac_dir=dlls/$ac_name
     ac_enable=$[2]
     ac_implib=$[3]
     ac_implibsrc=$[4]
-    ac_file="dlls/$ac_dir/lib$ac_implib"
+    ac_file=$ac_dir/lib$ac_implib
     ac_deps="tools/widl tools/winebuild tools/winegcc include"
+    ac_implibflags=""
 
-    wine_fn_all_dir_rules dlls/$ac_dir "dlls/Makedll.rules \$(MAKEDEP)"
+    case $ac_name in
+      *16) ac_implibflags=" -m16" ;;
+    esac
+
+    wine_fn_all_dir_rules $ac_dir dlls/Makedll.rules
 
     AS_VAR_IF([$ac_enable],[no],
               dnl enable_win16 is special in that it disables import libs too
               [test "$ac_enable" != enable_win16 || return 0],
               [wine_fn_append_rule ALL_MAKEFILE_DEPENDS \
-"all: dlls/$ac_dir
-.PHONY: dlls/$ac_dir
-dlls/$ac_dir: dlls/$ac_dir/Makefile __builddeps__ dummy
-	@cd dlls/$ac_dir && \$(MAKE)
-install:: dlls/$ac_dir/Makefile __builddeps__ 
-	@cd dlls/$ac_dir && \$(MAKE) install
-install-lib:: dlls/$ac_dir/Makefile __builddeps__ 
-	@cd dlls/$ac_dir && \$(MAKE) install-lib
-uninstall manpages htmlpages sgmlpages xmlpages:: dlls/$ac_dir/Makefile
-	@cd dlls/$ac_dir && \$(MAKE) \$[@]"])
+"all: $ac_dir
+.PHONY: $ac_dir
+$ac_dir: $ac_dir/Makefile __builddeps__ dummy
+	@cd $ac_dir && \$(MAKE)
+install:: $ac_dir/Makefile __builddeps__ 
+	@cd $ac_dir && \$(MAKE) install
+install-lib:: $ac_dir/Makefile __builddeps__ 
+	@cd $ac_dir && \$(MAKE) install-lib
+uninstall manpages htmlpages sgmlpages xmlpages:: $ac_dir/Makefile
+	@cd $ac_dir && \$(MAKE) \$[@]"])
 
     if test -n "$ac_implibsrc"
     then
         wine_fn_append_rule ALL_MAKEFILE_DEPENDS \
 "__builddeps__: $ac_file.$IMPLIBEXT $ac_file.$STATIC_IMPLIBEXT
-__buildcrossdeps__: $ac_file.cross.a
 $ac_file.$IMPLIBEXT $ac_file.$STATIC_IMPLIBEXT $ac_file.cross.a: $ac_deps
-$ac_file.def: dlls/$ac_dir/$ac_dir.spec dlls/$ac_dir/Makefile
-	@cd dlls/$ac_dir && \$(MAKE) \`basename \$[@]\`
-$ac_file.$STATIC_IMPLIBEXT $ac_file.cross.a: dlls/$ac_dir/Makefile dummy
-	@cd dlls/$ac_dir && \$(MAKE) \`basename \$[@]\`
-install-dev:: dlls/$ac_dir/Makefile __builddeps__ 
-	@cd dlls/$ac_dir && \$(MAKE) install-dev"
+$ac_file.def: $ac_dir/$ac_name.spec $ac_dir/Makefile
+	@cd $ac_dir && \$(MAKE) lib$ac_implib.def
+$ac_file.$STATIC_IMPLIBEXT: $ac_dir/Makefile dummy
+	@cd $ac_dir && \$(MAKE) lib$ac_implib.$STATIC_IMPLIBEXT
+install-dev:: $ac_dir/Makefile __builddeps__ 
+	@cd $ac_dir && \$(MAKE) install-dev"
+        if test "x$CROSSTEST_DISABLE" = x
+        then
+            wine_fn_append_rule ALL_MAKEFILE_DEPENDS \
+"__builddeps__: $ac_file.cross.a
+$ac_file.cross.a: $ac_dir/Makefile dummy
+	@cd $ac_dir && \$(MAKE) lib$ac_implib.cross.a"
+        fi
+
     elif test -n "$ac_implib"
     then
         wine_fn_append_rule ALL_MAKEFILE_DEPENDS \
 "__builddeps__: $ac_file.$IMPLIBEXT
-__buildcrossdeps__: $ac_file.cross.a
-$ac_file.$IMPLIBEXT $ac_file.cross.a: dlls/$ac_dir/$ac_dir.spec dlls/$ac_dir/Makefile $ac_deps
-	@cd dlls/$ac_dir && \$(MAKE) \`basename \$[@]\`
-install-dev:: dlls/$ac_dir/Makefile __builddeps__ 
-	@cd dlls/$ac_dir && \$(MAKE) install-dev"
+$ac_file.def: $ac_dir/$ac_name.spec $ac_dir/Makefile \$(WINEBUILD)
+	\$(WINEBUILD) \$(TARGETFLAGS)$ac_implibflags -w --def -o \$[@] --export \$(srcdir)/$ac_dir/$ac_name.spec
+$ac_file.a: $ac_dir/$ac_name.spec $ac_dir/Makefile \$(WINEBUILD)
+	\$(WINEBUILD) \$(TARGETFLAGS)$ac_implibflags -w --implib -o \$[@] --export \$(srcdir)/$ac_dir/$ac_name.spec
+install-dev:: $ac_dir/Makefile __builddeps__ 
+	@cd $ac_dir && \$(MAKE) install-dev"
+        if test "x$CROSSTEST_DISABLE" = x
+        then
+            wine_fn_append_rule ALL_MAKEFILE_DEPENDS \
+"__builddeps__: $ac_file.cross.a
+$ac_file.cross.a: $ac_dir/$ac_name.spec $ac_dir/Makefile \$(WINEBUILD)
+	\$(WINEBUILD) \$(CROSSTARGET:%=-b %)$ac_implibflags -w --implib -o \$[@] --export \$(srcdir)/$ac_dir/$ac_name.spec"
+        fi
 
-        if test "$ac_dir" != "$ac_implib"
+        if test "$ac_name" != "$ac_implib"
         then
             wine_fn_append_rule ALL_MAKEFILE_DEPENDS \
 "__builddeps__: dlls/lib$ac_implib.$IMPLIBEXT
-__buildcrossdeps__: dlls/lib$ac_implib.cross.a
 dlls/lib$ac_implib.$IMPLIBEXT: $ac_file.$IMPLIBEXT
-	\$(RM) \$[@] && \$(LN_S) $ac_dir/lib$ac_implib.$IMPLIBEXT \$[@]
-dlls/lib$ac_implib.cross.a: $ac_file.cross.a
-	\$(RM) \$[@] && \$(LN_S) $ac_dir/lib$ac_implib.cross.a \$[@]
+	\$(RM) \$[@] && \$(LN_S) $ac_name/lib$ac_implib.$IMPLIBEXT \$[@]
 clean::
 	\$(RM) dlls/lib$ac_implib.$IMPLIBEXT"
+            if test "x$CROSSTEST_DISABLE" = x
+            then
+                wine_fn_append_rule ALL_MAKEFILE_DEPENDS \
+"__builddeps__: dlls/lib$ac_implib.cross.a
+dlls/lib$ac_implib.cross.a: $ac_file.cross.a
+	\$(RM) \$[@] && \$(LN_S) $ac_name/lib$ac_implib.cross.a \$[@]"
+            fi
         fi
     fi
 }
 
 wine_fn_config_program ()
 {
-    ac_dir=$[1]
+    ac_name=$[1]
+    ac_dir=programs/$ac_name
     ac_enable=$[2]
     ac_install=$[3]
-    wine_fn_all_dir_rules programs/$ac_dir "programs/Makeprog.rules \$(MAKEDEP)"
+    wine_fn_all_dir_rules $ac_dir programs/Makeprog.rules
 
     AS_VAR_IF([$ac_enable],[no],,[wine_fn_append_rule ALL_MAKEFILE_DEPENDS \
-"all: programs/$ac_dir
-.PHONY: programs/$ac_dir
-programs/$ac_dir: programs/$ac_dir/Makefile __builddeps__ dummy
-	@cd programs/$ac_dir && \$(MAKE)"
+"all: $ac_dir
+.PHONY: $ac_dir
+$ac_dir: $ac_dir/Makefile __builddeps__ dummy
+	@cd $ac_dir && \$(MAKE)"
 
     test -n "$ac_install" || return
     wine_fn_append_rule ALL_MAKEFILE_DEPENDS \
-"install install-lib:: programs/$ac_dir/Makefile __builddeps__
-	@cd programs/$ac_dir && \$(MAKE) install
-uninstall:: programs/$ac_dir/Makefile
-	@cd programs/$ac_dir && \$(MAKE) uninstall"
+"install install-lib:: $ac_dir/Makefile __builddeps__
+	@cd $ac_dir && \$(MAKE) install
+uninstall:: $ac_dir/Makefile
+	@cd $ac_dir && \$(MAKE) uninstall"
     if test "$ac_install" = installbin -a -n "$DLLEXT" -a "x$enable_tools" != xno
     then
         wine_fn_append_rule ALL_MAKEFILE_DEPENDS \
 "install install-lib:: tools \$(DESTDIR)\$(bindir)
-	\$(INSTALL_SCRIPT) tools/wineapploader \$(DESTDIR)\$(bindir)/$ac_dir
+	\$(INSTALL_SCRIPT) tools/wineapploader \$(DESTDIR)\$(bindir)/$ac_name
 uninstall::
-	\$(RM) \$(DESTDIR)\$(bindir)/$ac_dir"
+	\$(RM) \$(DESTDIR)\$(bindir)/$ac_name"
     fi])
 }
 
@@ -318,40 +355,39 @@ wine_fn_config_test ()
     ac_name=$[2]
     wine_fn_append_file ALL_TEST_BINARIES $ac_name.exe
     wine_fn_append_rule ALL_WINETEST_DEPENDS \
-"$ac_name.exe: \$(TOPOBJDIR)/$ac_dir/$ac_name.exe$DLLEXT
-	cp \$(TOPOBJDIR)/$ac_dir/$ac_name.exe$DLLEXT \$[@] && \$(STRIP) \$[@]
+"$ac_name.exe: \$(top_builddir)/$ac_dir/$ac_name.exe$DLLEXT
+	cp \$(top_builddir)/$ac_dir/$ac_name.exe$DLLEXT \$[@] && \$(STRIP) \$[@]
 $ac_name.rc:
 	echo \"$ac_name.exe TESTRES \\\"$ac_name.exe\\\"\" >\$[@] || (\$(RM) \$[@] && false)
 $ac_name.res: $ac_name.rc $ac_name.exe"
-    wine_fn_all_dir_rules $ac_dir "Maketest.rules \$(MAKEDEP)"
+    wine_fn_all_dir_rules $ac_dir Maketest.rules
 
     AS_VAR_IF([enable_tests],[no],,[wine_fn_append_rule ALL_MAKEFILE_DEPENDS \
 "all programs/winetest: $ac_dir
 .PHONY: $ac_dir
 $ac_dir: $ac_dir/Makefile __builddeps__ dummy
 	@cd $ac_dir && \$(MAKE)
-crosstest: $ac_dir/__crosstest__
-.PHONY: $ac_dir/__crosstest__
-$ac_dir/__crosstest__: $ac_dir/Makefile __buildcrossdeps__ dummy
-	@cd $ac_dir && \$(MAKE) crosstest
 test: $ac_dir/__test__
 .PHONY: $ac_dir/__test__
 $ac_dir/__test__: dummy
 	@cd $ac_dir && \$(MAKE) test
 testclean::
-	\$(RM) $ac_dir/*.ok"])
+	\$(RM) $ac_dir/*.ok"
+
+        if test "x$CROSSTEST_DISABLE" = x
+        then
+            wine_fn_append_rule ALL_MAKEFILE_DEPENDS \
+"crosstest: $ac_dir/__crosstest__
+.PHONY: $ac_dir/__crosstest__
+$ac_dir/__crosstest__: $ac_dir/Makefile __builddeps__ dummy
+	@cd $ac_dir && \$(MAKE) crosstest"
+        fi])
 }
 
 wine_fn_config_tool ()
 {
     ac_dir=$[1]
-    ac_deps="Make.rules"
-    if test "$ac_dir" != tools
-    then
-        dnl makedep is in tools so tools makefile cannot depend on it
-        ac_deps="$ac_deps \$(MAKEDEP)"
-    fi
-    wine_fn_all_dir_rules $ac_dir "$ac_deps"
+    wine_fn_all_dir_rules $ac_dir Make.rules
 
     AS_VAR_IF([enable_tools],[no],,[case $ac_dir in
       dnl tools directory has both install-lib and install-dev
@@ -372,7 +408,10 @@ install-dev:: $ac_dir
 all __tooldeps__: $ac_dir
 .PHONY: $ac_dir
 $ac_dir: $ac_dir/Makefile libs/port dummy
-	@cd $ac_dir && \$(MAKE)"])
+	@cd $ac_dir && \$(MAKE)"
+      case $ac_dir in
+        tools/winebuild) wine_fn_append_rule ALL_MAKEFILE_DEPENDS "\$(WINEBUILD): $ac_dir" ;;
+      esac])
 }
 
 wine_fn_config_makerules ()
@@ -394,7 +433,14 @@ wine_fn_config_symlink ()
 	@./config.status $ac_link
 distclean::
 	\$(RM) $ac_link"
-}])
+}
+
+if test "x$CROSSTEST_DISABLE" != x
+then
+    wine_fn_append_rule ALL_MAKEFILE_DEPENDS \
+"crosstest:
+	@echo \"crosstest is not supported (mingw not installed?)\" && false"
+fi])
 
 dnl **** Define helper function to append a file to a makefile file list ****
 dnl

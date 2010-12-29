@@ -35,7 +35,7 @@ static const WCHAR default_valueW[] = {'[','o','b','j','e','c','t',' ','O','b','
 static HRESULT Object_toString(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, DISPPARAMS *dp,
         VARIANT *retv, jsexcept_t *ei, IServiceProvider *sp)
 {
-    DispatchEx *jsdisp;
+    jsdisp_t *jsdisp;
     const WCHAR *str;
 
     static const WCHAR formatW[] = {'[','o','b','j','e','c','t',' ','%','s',']',0};
@@ -52,7 +52,7 @@ static HRESULT Object_toString(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, D
     static const WCHAR stringW[] = {'S','t','r','i','n','g',0};
     /* Keep in sync with jsclass_t enum */
     static const WCHAR *names[] = {objectW, arrayW, booleanW, dateW, errorW,
-        functionW, NULL, mathW, numberW, objectW, regexpW, stringW, objectW};
+        functionW, NULL, mathW, numberW, objectW, regexpW, stringW, objectW, objectW};
 
     TRACE("\n");
 
@@ -151,7 +151,7 @@ static HRESULT Object_value(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, DISP
     return S_OK;
 }
 
-static void Object_destructor(DispatchEx *dispex)
+static void Object_destructor(jsdisp_t *dispex)
 {
     heap_free(dispex);
 }
@@ -186,7 +186,7 @@ static HRESULT ObjectConstr_value(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags
         if(arg_cnt(dp)) {
             VARIANT *arg = get_arg(dp,0);
 
-            if(V_VT(arg) != VT_EMPTY && V_VT(arg) != VT_NULL) {
+            if(V_VT(arg) != VT_EMPTY && V_VT(arg) != VT_NULL && (V_VT(arg) != VT_DISPATCH || V_DISPATCH(arg))) {
                 IDispatch *disp;
 
                 hres = to_object(ctx, arg, &disp);
@@ -204,14 +204,16 @@ static HRESULT ObjectConstr_value(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags
         }
         /* fall through */
     case DISPATCH_CONSTRUCT: {
-        DispatchEx *obj;
+        jsdisp_t *obj;
 
         hres = create_object(ctx, NULL, &obj);
         if(FAILED(hres))
             return hres;
 
-        V_VT(retv) = VT_DISPATCH;
-        V_DISPATCH(retv) = (IDispatch*)_IDispatchEx_(obj);
+        if(retv)
+            var_set_jsdisp(retv, obj);
+        else
+            jsdisp_release(obj);
         break;
     }
 
@@ -223,7 +225,7 @@ static HRESULT ObjectConstr_value(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags
     return S_OK;
 }
 
-HRESULT create_object_constr(script_ctx_t *ctx, DispatchEx *object_prototype, DispatchEx **ret)
+HRESULT create_object_constr(script_ctx_t *ctx, jsdisp_t *object_prototype, jsdisp_t **ret)
 {
     static const WCHAR ObjectW[] = {'O','b','j','e','c','t',0};
 
@@ -231,17 +233,17 @@ HRESULT create_object_constr(script_ctx_t *ctx, DispatchEx *object_prototype, Di
             object_prototype, ret);
 }
 
-HRESULT create_object_prototype(script_ctx_t *ctx, DispatchEx **ret)
+HRESULT create_object_prototype(script_ctx_t *ctx, jsdisp_t **ret)
 {
     return create_dispex(ctx, &Object_info, NULL, ret);
 }
 
-HRESULT create_object(script_ctx_t *ctx, DispatchEx *constr, DispatchEx **ret)
+HRESULT create_object(script_ctx_t *ctx, jsdisp_t *constr, jsdisp_t **ret)
 {
-    DispatchEx *object;
+    jsdisp_t *object;
     HRESULT hres;
 
-    object = heap_alloc_zero(sizeof(DispatchEx));
+    object = heap_alloc_zero(sizeof(jsdisp_t));
     if(!object)
         return E_OUTOFMEMORY;
 

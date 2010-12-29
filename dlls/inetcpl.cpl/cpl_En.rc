@@ -1,0 +1,62 @@
+/*
+ * English resources for the Internet control panel applet
+ *
+ * Copyright 2010 Detlef Riekenberg
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
+ *
+ */
+
+#include "inetcpl.h"
+
+LANGUAGE LANG_ENGLISH, SUBLANG_DEFAULT
+
+STRINGTABLE DISCARDABLE
+BEGIN
+    IDS_CPL_NAME        "Internet Settings"
+    IDS_CPL_INFO        "Configure Wine Internet Browser and related settings" 
+END
+
+/* "General" propsheet */
+IDD_GENERAL DIALOG  0, 0, 320, 220
+STYLE WS_CAPTION | WS_CHILD | WS_DISABLED
+FONT 8, "MS Shell Dlg"
+CAPTION "General"
+BEGIN
+
+    GROUPBOX    " Home page ", IDC_STATIC, 4, 4, 312, 52
+    LTEXT       "You can choose the address that will be used as your home page.",
+                IDC_STATIC, 58, 10, 252, 10
+    EDITTEXT    IDC_HOME_EDIT, 58, 22, 252, 12, WS_VISIBLE | ES_AUTOHSCROLL
+    PUSHBUTTON  "&Current page", IDC_HOME_CURRENT, 58, 36, 80, 14
+    PUSHBUTTON  "&Default page", IDC_HOME_DEFAULT, 144, 36, 80, 14
+    PUSHBUTTON  "&Blank page", IDC_HOME_BLANK, 230, 36, 80, 14
+
+END
+
+/* "Content" propsheet */
+IDD_CONTENT DIALOG  0, 0, 320, 220
+STYLE WS_CAPTION | WS_CHILD | WS_DISABLED
+FONT 8, "MS Shell Dlg"
+CAPTION "Content"
+BEGIN
+
+    GROUPBOX    " Certificates ", IDC_STATIC, 4, 4, 312, 50
+    LTEXT       "Certificates are used for your personal identification and to identify certificate authorities and publishers.",
+                IDC_STATIC, 58, 14, 252, 18
+    PUSHBUTTON  "Certificates...", IDC_CERT, 146, 34, 80, 14
+    PUSHBUTTON	"Publishers...", IDC_CERT_PUBLISHER, 230, 34, 80, 14
+
+END

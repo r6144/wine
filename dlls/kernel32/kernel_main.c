@@ -31,7 +31,6 @@
 #include "winbase.h"
 #include "wincon.h"
 #include "winternl.h"
-#include "wownt32.h"
 
 #include "wine/library.h"
 #include "kernel_private.h"
@@ -96,24 +95,7 @@ static BOOL process_attach( HMODULE module )
     /* Setup computer name */
     COMPUTERNAME_Init();
 
-    /* convert value from server:
-     * + 0 => INVALID_HANDLE_VALUE
-     * + console handle needs to be mapped
-     */
-    if (!params->hStdInput)
-        params->hStdInput = INVALID_HANDLE_VALUE;
-    else if (VerifyConsoleIoHandle(console_handle_map(params->hStdInput)))
-        params->hStdInput = console_handle_map(params->hStdInput);
-
-    if (!params->hStdOutput)
-        params->hStdOutput = INVALID_HANDLE_VALUE;
-    else if (VerifyConsoleIoHandle(console_handle_map(params->hStdOutput)))
-        params->hStdOutput = console_handle_map(params->hStdOutput);
-
-    if (!params->hStdError)
-        params->hStdError = INVALID_HANDLE_VALUE;
-    else if (VerifyConsoleIoHandle(console_handle_map(params->hStdError)))
-        params->hStdError = console_handle_map(params->hStdError);
+    CONSOLE_Init(params);
 
     /* copy process information from ntdll */
     ENV_CopyStartupInformation();
@@ -128,7 +110,7 @@ static BOOL process_attach( HMODULE module )
     /* finish the process initialisation for console bits, if needed */
     __wine_set_signal_handler(SIGINT, CONSOLE_HandleCtrlC);
 
-    if (params->ConsoleHandle == (HANDLE)1)  /* FIXME */
+    if (params->ConsoleHandle == KERNEL32_CONSOLE_ALLOC)
     {
         HMODULE mod = GetModuleHandleA(0);
         if (RtlImageNtHeader(mod)->OptionalHeader.Subsystem == IMAGE_SUBSYSTEM_WINDOWS_CUI)
@@ -155,6 +137,7 @@ BOOL WINAPI DllMain( HINSTANCE hinst, DWORD reason, LPVOID reserved )
         return process_attach( hinst );
     case DLL_PROCESS_DETACH:
         WritePrivateProfileSectionW( NULL, NULL, NULL );
+        CONSOLE_Exit();
         break;
     }
     return TRUE;
@@ -222,4 +205,20 @@ ULONGLONG WINAPI GetTickCount64(void)
 DWORD WINAPI GetTickCount(void)
 {
     return GetTickCount64();
+}
+
+/******************************************************************************
+ *           GetSystemRegistryQuota       (KERNEL32.@)
+ */
+BOOL WINAPI GetSystemRegistryQuota(PDWORD pdwQuotaAllowed, PDWORD pdwQuotaUsed)
+{
+    FIXME("(%p, %p) faking reported quota values\n", pdwQuotaAllowed, pdwQuotaUsed);
+
+    if (pdwQuotaAllowed)
+        *pdwQuotaAllowed = 2 * 1000 * 1000 * 1000; /* 2 GB */
+
+    if (pdwQuotaUsed)
+        *pdwQuotaUsed = 100 * 1000 * 1000; /* 100 MB */
+
+    return TRUE;
 }

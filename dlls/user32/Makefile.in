@@ -1,11 +1,7 @@
 EXTRADEFS = -D_USER32_ -D_WINABLE_
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = user32.dll
 IMPORTLIB = user32
-IMPORTS   = gdi32 advapi32
+IMPORTS   = gdi32 version advapi32
 DELAYIMPORTS = imm32
 
 C_SRCS = \
@@ -65,6 +61,7 @@ RC_SRCS = \
 	resources/user32_Es.rc \
 	resources/user32_Fi.rc \
 	resources/user32_Fr.rc \
+	resources/user32_He.rc \
 	resources/user32_Hu.rc \
 	resources/user32_It.rc \
 	resources/user32_Ja.rc \

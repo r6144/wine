@@ -21,13 +21,12 @@
 #include "config.h"
 
 #include <stdarg.h>
-#include <assert.h>
 #include "windef.h"
 #include "winbase.h"
 #include "winuser.h"
 #include "winnls.h"
 #include "ole2.h"
-#include "msxml2.h"
+#include "msxml6.h"
 #include "wininet.h"
 #include "urlmon.h"
 #include "winreg.h"

@@ -95,7 +95,7 @@ static void dump(const void* ptr, unsigned len)
  * Process CodeView type information.
  */
 
-#define MAX_BUILTIN_TYPES	0x0604
+#define MAX_BUILTIN_TYPES	0x06FF
 #define FIRST_DEFINABLE_TYPE    0x1000
 
 static struct symt*     cv_basic_types[MAX_BUILTIN_TYPES];
@@ -145,37 +145,68 @@ static void codeview_init_basic_types(struct module* module)
     cv_basic_types[T_UINT8]  = &symt_new_basic(module, btUInt,  "UINT8", 8)->symt;
     cv_basic_types[T_HRESULT]= &symt_new_basic(module, btUInt,  "HRESULT", 4)->symt;
 
-    cv_basic_types[T_32PVOID]   = &symt_new_pointer(module, cv_basic_types[T_VOID])->symt;
-    cv_basic_types[T_32PCHAR]   = &symt_new_pointer(module, cv_basic_types[T_CHAR])->symt;
-    cv_basic_types[T_32PSHORT]  = &symt_new_pointer(module, cv_basic_types[T_SHORT])->symt;
-    cv_basic_types[T_32PLONG]   = &symt_new_pointer(module, cv_basic_types[T_LONG])->symt;
-    cv_basic_types[T_32PQUAD]   = &symt_new_pointer(module, cv_basic_types[T_QUAD])->symt;
-    cv_basic_types[T_32PUCHAR]  = &symt_new_pointer(module, cv_basic_types[T_UCHAR])->symt;
-    cv_basic_types[T_32PUSHORT] = &symt_new_pointer(module, cv_basic_types[T_USHORT])->symt;
-    cv_basic_types[T_32PULONG]  = &symt_new_pointer(module, cv_basic_types[T_ULONG])->symt;
-    cv_basic_types[T_32PUQUAD]  = &symt_new_pointer(module, cv_basic_types[T_UQUAD])->symt;
-    cv_basic_types[T_32PBOOL08] = &symt_new_pointer(module, cv_basic_types[T_BOOL08])->symt;
-    cv_basic_types[T_32PBOOL16] = &symt_new_pointer(module, cv_basic_types[T_BOOL16])->symt;
-    cv_basic_types[T_32PBOOL32] = &symt_new_pointer(module, cv_basic_types[T_BOOL32])->symt;
-    cv_basic_types[T_32PBOOL64] = &symt_new_pointer(module, cv_basic_types[T_BOOL64])->symt;
-    cv_basic_types[T_32PREAL32] = &symt_new_pointer(module, cv_basic_types[T_REAL32])->symt;
-    cv_basic_types[T_32PREAL64] = &symt_new_pointer(module, cv_basic_types[T_REAL64])->symt;
-    cv_basic_types[T_32PREAL80] = &symt_new_pointer(module, cv_basic_types[T_REAL80])->symt;
-    cv_basic_types[T_32PRCHAR]  = &symt_new_pointer(module, cv_basic_types[T_RCHAR])->symt;
-    cv_basic_types[T_32PWCHAR]  = &symt_new_pointer(module, cv_basic_types[T_WCHAR])->symt;
-    cv_basic_types[T_32PINT2]   = &symt_new_pointer(module, cv_basic_types[T_INT2])->symt;
-    cv_basic_types[T_32PUINT2]  = &symt_new_pointer(module, cv_basic_types[T_UINT2])->symt;
-    cv_basic_types[T_32PINT4]   = &symt_new_pointer(module, cv_basic_types[T_INT4])->symt;
-    cv_basic_types[T_32PUINT4]  = &symt_new_pointer(module, cv_basic_types[T_UINT4])->symt;
-    cv_basic_types[T_32PINT8]   = &symt_new_pointer(module, cv_basic_types[T_INT8])->symt;
-    cv_basic_types[T_32PUINT8]  = &symt_new_pointer(module, cv_basic_types[T_UINT8])->symt;
-    cv_basic_types[T_32PHRESULT]= &symt_new_pointer(module, cv_basic_types[T_HRESULT])->symt;
+    if (sizeof(void*) == 4)
+    {
+        cv_basic_types[T_32PVOID]   = &symt_new_pointer(module, cv_basic_types[T_VOID])->symt;
+        cv_basic_types[T_32PCHAR]   = &symt_new_pointer(module, cv_basic_types[T_CHAR])->symt;
+        cv_basic_types[T_32PSHORT]  = &symt_new_pointer(module, cv_basic_types[T_SHORT])->symt;
+        cv_basic_types[T_32PLONG]   = &symt_new_pointer(module, cv_basic_types[T_LONG])->symt;
+        cv_basic_types[T_32PQUAD]   = &symt_new_pointer(module, cv_basic_types[T_QUAD])->symt;
+        cv_basic_types[T_32PUCHAR]  = &symt_new_pointer(module, cv_basic_types[T_UCHAR])->symt;
+        cv_basic_types[T_32PUSHORT] = &symt_new_pointer(module, cv_basic_types[T_USHORT])->symt;
+        cv_basic_types[T_32PULONG]  = &symt_new_pointer(module, cv_basic_types[T_ULONG])->symt;
+        cv_basic_types[T_32PUQUAD]  = &symt_new_pointer(module, cv_basic_types[T_UQUAD])->symt;
+        cv_basic_types[T_32PBOOL08] = &symt_new_pointer(module, cv_basic_types[T_BOOL08])->symt;
+        cv_basic_types[T_32PBOOL16] = &symt_new_pointer(module, cv_basic_types[T_BOOL16])->symt;
+        cv_basic_types[T_32PBOOL32] = &symt_new_pointer(module, cv_basic_types[T_BOOL32])->symt;
+        cv_basic_types[T_32PBOOL64] = &symt_new_pointer(module, cv_basic_types[T_BOOL64])->symt;
+        cv_basic_types[T_32PREAL32] = &symt_new_pointer(module, cv_basic_types[T_REAL32])->symt;
+        cv_basic_types[T_32PREAL64] = &symt_new_pointer(module, cv_basic_types[T_REAL64])->symt;
+        cv_basic_types[T_32PREAL80] = &symt_new_pointer(module, cv_basic_types[T_REAL80])->symt;
+        cv_basic_types[T_32PRCHAR]  = &symt_new_pointer(module, cv_basic_types[T_RCHAR])->symt;
+        cv_basic_types[T_32PWCHAR]  = &symt_new_pointer(module, cv_basic_types[T_WCHAR])->symt;
+        cv_basic_types[T_32PINT2]   = &symt_new_pointer(module, cv_basic_types[T_INT2])->symt;
+        cv_basic_types[T_32PUINT2]  = &symt_new_pointer(module, cv_basic_types[T_UINT2])->symt;
+        cv_basic_types[T_32PINT4]   = &symt_new_pointer(module, cv_basic_types[T_INT4])->symt;
+        cv_basic_types[T_32PUINT4]  = &symt_new_pointer(module, cv_basic_types[T_UINT4])->symt;
+        cv_basic_types[T_32PINT8]   = &symt_new_pointer(module, cv_basic_types[T_INT8])->symt;
+        cv_basic_types[T_32PUINT8]  = &symt_new_pointer(module, cv_basic_types[T_UINT8])->symt;
+        cv_basic_types[T_32PHRESULT]= &symt_new_pointer(module, cv_basic_types[T_HRESULT])->symt;
 
-    /* The .pdb file can refer to 64 bit pointers values even on 32 bits applications. */
-    udt = symt_new_udt(module, "PVOID64", 8, UdtStruct);
-    symt_add_udt_element(module, udt, "ptr64_low", cv_basic_types[T_LONG], 0, 32);
-    symt_add_udt_element(module, udt, "ptr64_high", cv_basic_types[T_LONG], 32, 32);
-    cv_basic_types[0x603]= &udt->symt;
+        /* The .pdb file can refer to 64 bit pointers values even on 32 bits applications. */
+        udt = symt_new_udt(module, "PVOID64", 8, UdtStruct);
+        symt_add_udt_element(module, udt, "ptr64_low", cv_basic_types[T_LONG], 0, 32);
+        symt_add_udt_element(module, udt, "ptr64_high", cv_basic_types[T_LONG], 32, 32);
+        cv_basic_types[T_64PVOID]= &udt->symt;
+    }
+    else
+    {
+        cv_basic_types[T_64PVOID]   = &symt_new_pointer(module, cv_basic_types[T_VOID])->symt;
+        cv_basic_types[T_64PCHAR]   = &symt_new_pointer(module, cv_basic_types[T_CHAR])->symt;
+        cv_basic_types[T_64PSHORT]  = &symt_new_pointer(module, cv_basic_types[T_SHORT])->symt;
+        cv_basic_types[T_64PLONG]   = &symt_new_pointer(module, cv_basic_types[T_LONG])->symt;
+        cv_basic_types[T_64PQUAD]   = &symt_new_pointer(module, cv_basic_types[T_QUAD])->symt;
+        cv_basic_types[T_64PUCHAR]  = &symt_new_pointer(module, cv_basic_types[T_UCHAR])->symt;
+        cv_basic_types[T_64PUSHORT] = &symt_new_pointer(module, cv_basic_types[T_USHORT])->symt;
+        cv_basic_types[T_64PULONG]  = &symt_new_pointer(module, cv_basic_types[T_ULONG])->symt;
+        cv_basic_types[T_64PUQUAD]  = &symt_new_pointer(module, cv_basic_types[T_UQUAD])->symt;
+        cv_basic_types[T_64PBOOL08] = &symt_new_pointer(module, cv_basic_types[T_BOOL08])->symt;
+        cv_basic_types[T_64PBOOL16] = &symt_new_pointer(module, cv_basic_types[T_BOOL16])->symt;
+        cv_basic_types[T_64PBOOL32] = &symt_new_pointer(module, cv_basic_types[T_BOOL32])->symt;
+        cv_basic_types[T_64PBOOL64] = &symt_new_pointer(module, cv_basic_types[T_BOOL64])->symt;
+        cv_basic_types[T_64PREAL32] = &symt_new_pointer(module, cv_basic_types[T_REAL32])->symt;
+        cv_basic_types[T_64PREAL64] = &symt_new_pointer(module, cv_basic_types[T_REAL64])->symt;
+        cv_basic_types[T_64PREAL80] = &symt_new_pointer(module, cv_basic_types[T_REAL80])->symt;
+        cv_basic_types[T_64PRCHAR]  = &symt_new_pointer(module, cv_basic_types[T_RCHAR])->symt;
+        cv_basic_types[T_64PWCHAR]  = &symt_new_pointer(module, cv_basic_types[T_WCHAR])->symt;
+        cv_basic_types[T_64PINT2]   = &symt_new_pointer(module, cv_basic_types[T_INT2])->symt;
+        cv_basic_types[T_64PUINT2]  = &symt_new_pointer(module, cv_basic_types[T_UINT2])->symt;
+        cv_basic_types[T_64PINT4]   = &symt_new_pointer(module, cv_basic_types[T_INT4])->symt;
+        cv_basic_types[T_64PUINT4]  = &symt_new_pointer(module, cv_basic_types[T_UINT4])->symt;
+        cv_basic_types[T_64PINT8]   = &symt_new_pointer(module, cv_basic_types[T_INT8])->symt;
+        cv_basic_types[T_64PUINT8]  = &symt_new_pointer(module, cv_basic_types[T_UINT8])->symt;
+        cv_basic_types[T_64PHRESULT]= &symt_new_pointer(module, cv_basic_types[T_HRESULT])->symt;
+    }
 }
 
 static int leaf_as_variant(VARIANT* v, const unsigned short int* leaf)
@@ -1293,8 +1324,8 @@ static int codeview_parse_type_table(struct codeview_type_parse* ctp)
 /*========================================================================
  * Process CodeView line number information.
  */
-static unsigned codeview_get_address(const struct msc_debug_info* msc_dbg,
-                                     unsigned seg, unsigned offset);
+static unsigned long codeview_get_address(const struct msc_debug_info* msc_dbg,
+                                          unsigned seg, unsigned offset);
 
 static void codeview_snarf_linetab(const struct msc_debug_info* msc_dbg, const BYTE* linetab,
                                    int size, BOOL pascal_str)
@@ -1307,7 +1338,7 @@ static void codeview_snarf_linetab(const struct msc_debug_info* msc_dbg, const B
     const unsigned short*       linenos;
     const struct startend*      start;
     unsigned                    source;
-    unsigned                    addr, func_addr0;
+    unsigned long               addr, func_addr0;
     struct symt_function*       func;
     const struct codeview_linetab_block* ltb;
 
@@ -1348,7 +1379,7 @@ static void codeview_snarf_linetab(const struct msc_debug_info* msc_dbg, const B
                     /* FIXME: at least labels support line numbers */
                     if (!func || func->symt.tag != SymTagFunction)
                     {
-                        WARN("--not a func at %04x:%08x %x tag=%d\n",
+                        WARN("--not a func at %04x:%08x %lx tag=%d\n",
                              ltb->seg, ltb->offsets[k], addr, func ? func->symt.tag : -1);
                         func = NULL;
                         break;
@@ -1365,7 +1396,7 @@ static void codeview_snarf_linetab2(const struct msc_debug_info* msc_dbg, const 
                                     const char* strimage, DWORD strsize)
 {
     unsigned    i;
-    DWORD       addr;
+    DWORD_PTR       addr;
     const struct codeview_linetab2*     lt2;
     const struct codeview_linetab2*     lt2_files = NULL;
     const struct codeview_lt2blk_lines* lines_blk;
@@ -1409,7 +1440,7 @@ static void codeview_snarf_linetab2(const struct msc_debug_info* msc_dbg, const 
             /* FIXME: at least labels support line numbers */
             if (!func || func->symt.tag != SymTagFunction)
             {
-                WARN("--not a func at %04x:%08x %x tag=%d\n",
+                WARN("--not a func at %04x:%08x %lx tag=%d\n",
                      lines_blk->seg, lines_blk->start, addr, func ? func->symt.tag : -1);
                 break;
             }
@@ -1452,8 +1483,8 @@ static unsigned int codeview_map_offset(const struct msc_debug_info* msc_dbg,
     return 0;
 }
 
-static unsigned codeview_get_address(const struct msc_debug_info* msc_dbg, 
-                                     unsigned seg, unsigned offset)
+static unsigned long codeview_get_address(const struct msc_debug_info* msc_dbg,
+                                          unsigned seg, unsigned offset)
 {
     int			        nsect = msc_dbg->nsect;
     const IMAGE_SECTION_HEADER* sectp = msc_dbg->sectp;
@@ -1471,7 +1502,7 @@ static inline void codeview_add_variable(const struct msc_debug_info* msc_dbg,
 {
     if (name && *name)
     {
-        unsigned        address = codeview_get_address(msc_dbg, segment, offset);
+        unsigned long   address = codeview_get_address(msc_dbg, segment, offset);
 
         if (force || !symt_find_nearest(msc_dbg->module, address))
         {
@@ -1638,16 +1669,16 @@ static int codeview_snarf(const struct msc_debug_info* msc_dbg, const BYTE* root
                                 codeview_get_type(sym->stack_v3.symtype, FALSE),
                                 sym->stack_v3.name);
             break;
-	case S_BPREL_XXXX_V3:
+	case S_REGREL_V3:
             loc.kind = loc_regrel;
-            loc.reg = 0; /* FIXME */
-            loc.offset = sym->stack_xxxx_v3.offset;
-            WARN("Supposed stack variable %s (%d)\n", sym->stack_xxxx_v3.name, sym->stack_xxxx_v3.unknown);
+            loc.reg = sym->regrel_v3.reg;
+            loc.offset = sym->regrel_v3.offset;
             symt_add_func_local(msc_dbg->module, curr_func,
-                                sym->stack_xxxx_v3.offset > 0 ? DataIsParam : DataIsLocal,
+                                /* FIXME this is wrong !!! */
+                                sym->regrel_v3.offset > 0 ? DataIsParam : DataIsLocal,
                                 &loc, block,
-                                codeview_get_type(sym->stack_xxxx_v3.symtype, FALSE),
-                                sym->stack_xxxx_v3.name);
+                                codeview_get_type(sym->regrel_v3.symtype, FALSE),
+                                sym->regrel_v3.name);
             break;
 
         case S_REGISTER_V1:

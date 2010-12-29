@@ -26,34 +26,21 @@
 
 #include "config.h"
 #include "wine/port.h"
-#include "wine/debug.h"
-
-#include <assert.h>
-#include <stdarg.h>
-#include <string.h>
-#include <stdlib.h>
-
-#define COBJMACROS
-
-#include "windef.h"
-#include "winbase.h"
-#include "winerror.h"
-#include "wingdi.h"
-#include "wine/exception.h"
-#include "winreg.h"
-
-#include "ddraw.h"
-#include "d3d.h"
 
 #define DDRAW_INIT_GUID
 #include "ddraw_private.h"
+#include "rpcproxy.h"
 
-static typeof(WineDirect3DCreate) *pWineDirect3DCreate;
+#include "wine/exception.h"
+#include "winreg.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(ddraw);
 
 /* The configured default surface */
 WINED3DSURFTYPE DefaultSurfaceType = SURFACE_UNKNOWN;
+
+typeof(WineDirect3DCreateClipper) *pWineDirect3DCreateClipper DECLSPEC_HIDDEN;
+typeof(WineDirect3DCreate) *pWineDirect3DCreate DECLSPEC_HIDDEN;
 
 /* DDraw list and critical section */
 static struct list global_ddraw_list = LIST_INIT(global_ddraw_list);
@@ -67,8 +54,121 @@ static CRITICAL_SECTION_DEBUG ddraw_cs_debug =
 };
 CRITICAL_SECTION ddraw_cs = { &ddraw_cs_debug, -1, 0, 0, 0, 0 };
 
+static HINSTANCE instance;
+
 /* value of ForceRefreshRate */
 DWORD force_refresh_rate = 0;
+
+/* Handle table functions */
+BOOL ddraw_handle_table_init(struct ddraw_handle_table *t, UINT initial_size)
+{
+    t->entries = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, initial_size * sizeof(*t->entries));
+    if (!t->entries)
+    {
+        ERR("Failed to allocate handle table memory.\n");
+        return FALSE;
+    }
+    t->free_entries = NULL;
+    t->table_size = initial_size;
+    t->entry_count = 0;
+
+    return TRUE;
+}
+
+void ddraw_handle_table_destroy(struct ddraw_handle_table *t)
+{
+    HeapFree(GetProcessHeap(), 0, t->entries);
+    memset(t, 0, sizeof(*t));
+}
+
+DWORD ddraw_allocate_handle(struct ddraw_handle_table *t, void *object, enum ddraw_handle_type type)
+{
+    struct ddraw_handle_entry *entry;
+
+    if (t->free_entries)
+    {
+        DWORD idx = t->free_entries - t->entries;
+        /* Use a free handle */
+        entry = t->free_entries;
+        if (entry->type != DDRAW_HANDLE_FREE)
+        {
+            ERR("Handle %#x (%p) is in the free list, but has type %#x.\n", idx, entry->object, entry->type);
+            return DDRAW_INVALID_HANDLE;
+        }
+        t->free_entries = entry->object;
+        entry->object = object;
+        entry->type = type;
+
+        return idx;
+    }
+
+    if (!(t->entry_count < t->table_size))
+    {
+        /* Grow the table */
+        UINT new_size = t->table_size + (t->table_size >> 1);
+        struct ddraw_handle_entry *new_entries = HeapReAlloc(GetProcessHeap(),
+                0, t->entries, new_size * sizeof(*t->entries));
+        if (!new_entries)
+        {
+            ERR("Failed to grow the handle table.\n");
+            return DDRAW_INVALID_HANDLE;
+        }
+        t->entries = new_entries;
+        t->table_size = new_size;
+    }
+
+    entry = &t->entries[t->entry_count];
+    entry->object = object;
+    entry->type = type;
+
+    return t->entry_count++;
+}
+
+void *ddraw_free_handle(struct ddraw_handle_table *t, DWORD handle, enum ddraw_handle_type type)
+{
+    struct ddraw_handle_entry *entry;
+    void *object;
+
+    if (handle == DDRAW_INVALID_HANDLE || handle >= t->entry_count)
+    {
+        WARN("Invalid handle %#x passed.\n", handle);
+        return NULL;
+    }
+
+    entry = &t->entries[handle];
+    if (entry->type != type)
+    {
+        WARN("Handle %#x (%p) is not of type %#x.\n", handle, entry->object, type);
+        return NULL;
+    }
+
+    object = entry->object;
+    entry->object = t->free_entries;
+    entry->type = DDRAW_HANDLE_FREE;
+    t->free_entries = entry;
+
+    return object;
+}
+
+void *ddraw_get_object(struct ddraw_handle_table *t, DWORD handle, enum ddraw_handle_type type)
+{
+    struct ddraw_handle_entry *entry;
+
+    if (handle == DDRAW_INVALID_HANDLE || handle >= t->entry_count)
+    {
+        WARN("Invalid handle %#x passed.\n", handle);
+        return NULL;
+    }
+
+    entry = &t->entries[handle];
+    if (entry->type != type)
+    {
+        WARN("Handle %#x (%p) is not of type %#x.\n", handle, entry->object, type);
+        return NULL;
+    }
+
+    return entry->object;
+}
 
 /*
  * Helper Function for DDRAW_Create and DirectDrawCreateClipper for
@@ -124,14 +224,12 @@ DDRAW_Create(const GUID *guid,
              IUnknown *UnkOuter,
              REFIID iid)
 {
-    IDirectDrawImpl *This = NULL;
-    HRESULT hr;
-    IWineD3D *wineD3D = NULL;
-    IWineD3DDevice *wineD3DDevice = NULL;
-    HDC hDC;
     WINED3DDEVTYPE devicetype;
+    IDirectDrawImpl *This;
+    HRESULT hr;
 
-    TRACE("(%s,%p,%p)\n", debugstr_guid(guid), DD, UnkOuter);
+    TRACE("driver_guid %s, ddraw %p, outer_unknown %p, interface_iid %s.\n",
+            debugstr_guid(guid), DD, UnkOuter, debugstr_guid(iid));
 
     *DD = NULL;
 
@@ -167,99 +265,19 @@ DDRAW_Create(const GUID *guid,
         return E_OUTOFMEMORY;
     }
 
-    /* The interfaces:
-     * IDirectDraw and IDirect3D are the same object,
-     * QueryInterface is used to get other interfaces.
-     */
-    This->lpVtbl = &IDirectDraw7_Vtbl;
-    This->IDirectDraw_vtbl = &IDirectDraw1_Vtbl;
-    This->IDirectDraw2_vtbl = &IDirectDraw2_Vtbl;
-    This->IDirectDraw3_vtbl = &IDirectDraw3_Vtbl;
-    This->IDirectDraw4_vtbl = &IDirectDraw4_Vtbl;
-    This->IDirect3D_vtbl = &IDirect3D1_Vtbl;
-    This->IDirect3D2_vtbl = &IDirect3D2_Vtbl;
-    This->IDirect3D3_vtbl = &IDirect3D3_Vtbl;
-    This->IDirect3D7_vtbl = &IDirect3D7_Vtbl;
-    This->device_parent_vtbl = &ddraw_wined3d_device_parent_vtbl;
-
-    /* See comments in IDirectDrawImpl_CreateNewSurface for a description
-     * of this member.
-     * Read from a registry key, should add a winecfg option later
-     */
-    This->ImplType = DefaultSurfaceType;
-
-    /* Get the current screen settings */
-    hDC = GetDC(0);
-    This->orig_bpp = GetDeviceCaps(hDC, BITSPIXEL) * GetDeviceCaps(hDC, PLANES);
-    ReleaseDC(0, hDC);
-    This->orig_width = GetSystemMetrics(SM_CXSCREEN);
-    This->orig_height = GetSystemMetrics(SM_CYSCREEN);
-
-    if (!LoadWineD3D())
+    hr = ddraw_init(This, devicetype);
+    if (FAILED(hr))
     {
-        ERR("Couldn't load WineD3D - OpenGL libs not present?\n");
-        hr = DDERR_NODIRECTDRAWSUPPORT;
-        goto err_out;
+        WARN("Failed to initialize ddraw object, hr %#x.\n", hr);
+        HeapFree(GetProcessHeap(), 0, This);
+        return hr;
     }
 
-    /* Initialize WineD3D
-     *
-     * All Rendering (2D and 3D) is relayed to WineD3D,
-     * but DirectDraw specific management, like DDSURFACEDESC and DDPIXELFORMAT
-     * structure handling is handled in this lib.
-     */
-    wineD3D = pWineDirect3DCreate(7 /* DXVersion */, (IUnknown *) This /* Parent */);
-    if(!wineD3D)
-    {
-        ERR("Failed to initialise WineD3D\n");
-        hr = E_OUTOFMEMORY;
-        goto err_out;
-    }
-    This->wineD3D = wineD3D;
-    TRACE("WineD3D created at %p\n", wineD3D);
-
-    /* Initialized member...
-     *
-     * It is set to false at creation time, and set to true in
-     * IDirectDraw7::Initialize. Its sole purpose is to return DD_OK on
-     * initialize only once
-     */
-    This->initialized = FALSE;
-
-    /* Initialize WineD3DDevice
-     *
-     * It is used for screen setup, surface and palette creation
-     * When a Direct3DDevice7 is created, the D3D capabilities of WineD3D are
-     * initialized
-     */
-    hr = IWineD3D_CreateDevice(wineD3D, 0 /* D3D_ADAPTER_DEFAULT */, devicetype, NULL /* FocusWindow, don't know yet */,
-            0 /* BehaviorFlags */, (IUnknown *)This, (IWineD3DDeviceParent *)&This->device_parent_vtbl, &wineD3DDevice);
-    if(FAILED(hr))
-    {
-        ERR("Failed to create a wineD3DDevice, result = %x\n", hr);
-        goto err_out;
-    }
-    This->wineD3DDevice = wineD3DDevice;
-    TRACE("wineD3DDevice created at %p\n", This->wineD3DDevice);
-
-    /* Get the amount of video memory */
-    This->total_vidmem = IWineD3DDevice_GetAvailableTextureMem(This->wineD3DDevice);
-
-    list_init(&This->surface_list);
-    list_add_head(&global_ddraw_list, &This->ddraw_list_entry);
-
-    /* Call QueryInterface to get the pointer to the requested interface. This also initializes
-     * The required refcount
-     */
     hr = IDirectDraw7_QueryInterface((IDirectDraw7 *)This, iid, DD);
-    if(SUCCEEDED(hr)) return DD_OK;
+    IDirectDraw7_Release((IDirectDraw7 *)This);
+    if (SUCCEEDED(hr)) list_add_head(&global_ddraw_list, &This->ddraw_list_entry);
+    else WARN("Failed to query interface %s from ddraw object %p.\n", debugstr_guid(iid), This);
 
-err_out:
-    /* Let's hope we never need this ;) */
-    if(wineD3DDevice) IWineD3DDevice_Release(wineD3DDevice);
-    if(wineD3D) IWineD3D_Release(wineD3D);
-    HeapFree(GetProcessHeap(), 0, This->decls);
-    HeapFree(GetProcessHeap(), 0, This);
     return hr;
 }
 
@@ -278,7 +296,9 @@ DirectDrawCreate(GUID *GUID,
                  IUnknown *UnkOuter)
 {
     HRESULT hr;
-    TRACE("(%s,%p,%p)\n", debugstr_guid(GUID), DD, UnkOuter);
+
+    TRACE("driver_guid %s, ddraw %p, outer_unknown %p.\n",
+            debugstr_guid(GUID), DD, UnkOuter);
 
     EnterCriticalSection(&ddraw_cs);
     hr = DDRAW_Create(GUID, (void **) DD, UnkOuter, &IID_IDirectDraw);
@@ -302,7 +322,9 @@ DirectDrawCreateEx(GUID *GUID,
                    IUnknown *UnkOuter)
 {
     HRESULT hr;
-    TRACE("(%s,%p,%s,%p)\n", debugstr_guid(GUID), DD, debugstr_guid(iid), UnkOuter);
+
+    TRACE("driver_guid %s, ddraw %p, interface_iid %s, outer_unknown %p.\n",
+            debugstr_guid(GUID), DD, debugstr_guid(iid), UnkOuter);
 
     if (!IsEqualGUID(iid, &IID_IDirectDraw7))
         return DDERR_INVALIDPARAMS;
@@ -333,11 +355,9 @@ DirectDrawCreateEx(GUID *GUID,
  *
  *
  ***********************************************************************/
-HRESULT WINAPI
-DirectDrawEnumerateA(LPDDENUMCALLBACKA Callback,
-                     LPVOID Context)
+HRESULT WINAPI DirectDrawEnumerateA(LPDDENUMCALLBACKA Callback, void *Context)
 {
-    TRACE("(%p, %p)\n", Callback, Context);
+    TRACE("callback %p, context %p.\n", Callback, Context);
 
     TRACE(" Enumerating default DirectDraw HAL interface\n");
     /* We only have one driver */
@@ -367,12 +387,9 @@ DirectDrawEnumerateA(LPDDENUMCALLBACKA Callback,
  * The Flag member is not supported right now.
  *
  ***********************************************************************/
-HRESULT WINAPI
-DirectDrawEnumerateExA(LPDDENUMCALLBACKEXA Callback,
-                       LPVOID Context,
-                       DWORD Flags)
+HRESULT WINAPI DirectDrawEnumerateExA(LPDDENUMCALLBACKEXA Callback, void *Context, DWORD Flags)
 {
-    TRACE("(%p, %p, 0x%08x)\n", Callback, Context, Flags);
+    TRACE("callback %p, context %p, flags %#x.\n", Callback, Context, Flags);
 
     if (Flags & ~(DDENUM_ATTACHEDSECONDARYDEVICES |
                   DDENUM_DETACHEDSECONDARYDEVICES |
@@ -410,13 +427,11 @@ DirectDrawEnumerateExA(LPDDENUMCALLBACKEXA Callback,
  * This function is not implemented on Windows.
  *
  ***********************************************************************/
-HRESULT WINAPI
-DirectDrawEnumerateW(LPDDENUMCALLBACKW Callback,
-                     LPVOID Context)
+HRESULT WINAPI DirectDrawEnumerateW(LPDDENUMCALLBACKW callback, void *context)
 {
-    TRACE("(%p, %p)\n", Callback, Context);
+    TRACE("callback %p, context %p.\n", callback, context);
 
-    if (!Callback)
+    if (!callback)
         return DDERR_INVALIDPARAMS;
     else
         return DDERR_UNSUPPORTED;
@@ -429,12 +444,9 @@ DirectDrawEnumerateW(LPDDENUMCALLBACKW Callback,
  * This function is not implemented on Windows.
  *
  ***********************************************************************/
-HRESULT WINAPI
-DirectDrawEnumerateExW(LPDDENUMCALLBACKEXW Callback,
-                       LPVOID Context,
-                       DWORD Flags)
+HRESULT WINAPI DirectDrawEnumerateExW(LPDDENUMCALLBACKEXW callback, void *context, DWORD flags)
 {
-    TRACE("(%p, %p, 0x%x)\n", Callback, Context, Flags);
+    TRACE("callback %p, context %p, flags %#x.\n", callback, context, flags);
 
     return DDERR_UNSUPPORTED;
 }
@@ -463,7 +475,7 @@ CF_CreateDirectDraw(IUnknown* UnkOuter, REFIID iid,
 {
     HRESULT hr;
 
-    TRACE("(%p,%s,%p)\n", UnkOuter, debugstr_guid(iid), obj);
+    TRACE("outer_unknown %p, riid %s, object %p.\n", UnkOuter, debugstr_guid(iid), obj);
 
     EnterCriticalSection(&ddraw_cs);
     hr = DDRAW_Create(NULL, obj, UnkOuter, iid);
@@ -491,6 +503,8 @@ CF_CreateDirectDrawClipper(IUnknown* UnkOuter, REFIID riid,
 {
     HRESULT hr;
     IDirectDrawClipper *Clip;
+
+    TRACE("outer_unknown %p, riid %s, object %p.\n", UnkOuter, debugstr_guid(riid), obj);
 
     EnterCriticalSection(&ddraw_cs);
     hr = DirectDrawCreateClipper(0, &Clip, UnkOuter);
@@ -535,7 +549,7 @@ IDirectDrawClassFactoryImpl_QueryInterface(IClassFactory *iface,
 {
     IClassFactoryImpl *This = (IClassFactoryImpl *)iface;
 
-    TRACE("(%p)->(%s,%p)\n", This, debugstr_guid(riid), obj);
+    TRACE("iface %p, riid %s, object %p.\n", iface, debugstr_guid(riid), obj);
 
     if (IsEqualGUID(riid, &IID_IUnknown)
         || IsEqualGUID(riid, &IID_IClassFactory))
@@ -564,7 +578,7 @@ IDirectDrawClassFactoryImpl_AddRef(IClassFactory *iface)
     IClassFactoryImpl *This = (IClassFactoryImpl *)iface;
     ULONG ref = InterlockedIncrement(&This->ref);
 
-    TRACE("(%p)->() incrementing from %d.\n", This, ref - 1);
+    TRACE("%p increasing refcount to %u.\n", This, ref);
 
     return ref;
 }
@@ -584,7 +598,8 @@ IDirectDrawClassFactoryImpl_Release(IClassFactory *iface)
 {
     IClassFactoryImpl *This = (IClassFactoryImpl *)iface;
     ULONG ref = InterlockedDecrement(&This->ref);
-    TRACE("(%p)->() decrementing from %d.\n", This, ref+1);
+
+    TRACE("%p decreasing refcount to %u.\n", This, ref);
 
     if (ref == 0)
         HeapFree(GetProcessHeap(), 0, This);
@@ -613,7 +628,8 @@ IDirectDrawClassFactoryImpl_CreateInstance(IClassFactory *iface,
 {
     IClassFactoryImpl *This = (IClassFactoryImpl *)iface;
 
-    TRACE("(%p)->(%p,%s,%p)\n",This,UnkOuter,debugstr_guid(riid),obj);
+    TRACE("iface %p, outer_unknown %p, riid %s, object %p.\n",
+            iface, UnkOuter, debugstr_guid(riid), obj);
 
     return This->pfnCreateInstance(UnkOuter, riid, obj);
 }
@@ -630,11 +646,10 @@ IDirectDrawClassFactoryImpl_CreateInstance(IClassFactory *iface,
  *  S_OK, because it's a stub
  *
  *******************************************************************************/
-static HRESULT WINAPI
-IDirectDrawClassFactoryImpl_LockServer(IClassFactory *iface,BOOL dolock)
+static HRESULT WINAPI IDirectDrawClassFactoryImpl_LockServer(IClassFactory *iface, BOOL dolock)
 {
-    IClassFactoryImpl *This = (IClassFactoryImpl *)iface;
-    FIXME("(%p)->(%d),stub!\n",This,dolock);
+    FIXME("iface %p, dolock %#x stub!\n", iface, dolock);
+
     return S_OK;
 }
 
@@ -672,22 +687,23 @@ HRESULT WINAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID *ppv)
     unsigned int i;
     IClassFactoryImpl *factory;
 
-    TRACE("(%s,%s,%p)\n", debugstr_guid(rclsid), debugstr_guid(riid), ppv);
+    TRACE("rclsid %s, riid %s, object %p.\n",
+            debugstr_guid(rclsid), debugstr_guid(riid), ppv);
 
-    if ( !IsEqualGUID( &IID_IClassFactory, riid )
-	 && ! IsEqualGUID( &IID_IUnknown, riid) )
-	return E_NOINTERFACE;
+    if (!IsEqualGUID(&IID_IClassFactory, riid)
+            && !IsEqualGUID(&IID_IUnknown, riid))
+        return E_NOINTERFACE;
 
     for (i=0; i < sizeof(object_creation)/sizeof(object_creation[0]); i++)
     {
-	if (IsEqualGUID(object_creation[i].clsid, rclsid))
-	    break;
+        if (IsEqualGUID(object_creation[i].clsid, rclsid))
+            break;
     }
 
     if (i == sizeof(object_creation)/sizeof(object_creation[0]))
     {
-	FIXME("%s: no class found.\n", debugstr_guid(rclsid));
-	return CLASS_E_CLASSNOTAVAILABLE;
+        FIXME("%s: no class found.\n", debugstr_guid(rclsid));
+        return CLASS_E_CLASSNOTAVAILABLE;
     }
 
     factory = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*factory));
@@ -712,7 +728,26 @@ HRESULT WINAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID *ppv)
  */
 HRESULT WINAPI DllCanUnloadNow(void)
 {
+    TRACE("\n");
+
     return S_FALSE;
+}
+
+
+/***********************************************************************
+ *		DllRegisterServer (DDRAW.@)
+ */
+HRESULT WINAPI DllRegisterServer(void)
+{
+    return __wine_register_resources( instance, NULL );
+}
+
+/***********************************************************************
+ *		DllUnregisterServer (DDRAW.@)
+ */
+HRESULT WINAPI DllUnregisterServer(void)
+{
+    return __wine_unregister_resources( instance, NULL );
 }
 
 /*******************************************************************************
@@ -881,6 +916,7 @@ DllMain(HINSTANCE hInstDLL,
             RegCloseKey( hkey );
         }
 
+        instance = hInstDLL;
         DisableThreadLibraryCalls(hInstDLL);
     }
     else if (Reason == DLL_PROCESS_DETACH)

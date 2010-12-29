@@ -748,7 +748,10 @@ static const ustr2astr_t ustr2astr[] = {
     {  8,  6, 12, "------------", 12, 12, 12, "abcdef", FALSE, 5, 6, 6, "abcde",  STATUS_BUFFER_OVERFLOW},
     {  8,  7, 12, "------------", 12, 12, 12, "abcdef", FALSE, 6, 7, 7, "abcdef", STATUS_SUCCESS},
     {  8,  7, 12, "------------",  0, 12, 12,  NULL,    FALSE, 0, 7, 0, "",       STATUS_SUCCESS},
+#if 0
+    /* crashes on japanese and chinese XP */
     {  0,  0, 12, NULL,           10, 10, 12,  NULL,    FALSE, 5, 0, 0, NULL,     STATUS_BUFFER_OVERFLOW},
+#endif
 };
 #define NB_USTR2ASTR (sizeof(ustr2astr)/sizeof(*ustr2astr))
 
@@ -1841,7 +1844,7 @@ static void test_RtlGUIDFromString(void)
 
   ret = pRtlGUIDFromString(&str, &guid);
   ok(ret == 0, "expected ret=0, got 0x%0x\n", ret);
-  ok(memcmp(&guid, &IID_Endianess, sizeof(guid)) == 0, "Endianess broken\n");
+  ok(IsEqualGUID(&guid, &IID_Endianess), "Endianess broken\n");
 
   str.Length = str.MaximumLength = sizeof(szGuid2) - sizeof(WCHAR);
   str.Buffer = (LPWSTR)szGuid2;

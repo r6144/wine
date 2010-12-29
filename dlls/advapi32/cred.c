@@ -754,7 +754,7 @@ static BOOL credential_matches_filter(HKEY hkeyCred, LPCWSTR filter)
 
 static DWORD registry_enumerate_credentials(HKEY hkeyMgr, LPCWSTR filter,
                                             LPWSTR target_name,
-                                            DWORD target_name_len, BYTE key_data[KEY_SIZE],
+                                            DWORD target_name_len, const BYTE key_data[KEY_SIZE],
                                             PCREDENTIALW *credentials, char **buffer,
                                             DWORD *len, DWORD *count)
 {
@@ -925,7 +925,7 @@ static DWORD mac_delete_credential(LPCWSTR TargetName)
  *
  */
 
-static INT convert_PCREDENTIALW_to_PCREDENTIALA(const CREDENTIALW *CredentialW, PCREDENTIALA CredentialA, INT len)
+static INT convert_PCREDENTIALW_to_PCREDENTIALA(const CREDENTIALW *CredentialW, PCREDENTIALA CredentialA, DWORD len)
 {
     char *buffer;
     INT string_len;
@@ -1582,7 +1582,8 @@ BOOL WINAPI CredReadDomainCredentialsA(PCREDENTIAL_TARGET_INFORMATIONA TargetInf
                                        DWORD Flags, DWORD *Size, PCREDENTIALA **Credentials)
 {
     PCREDENTIAL_TARGET_INFORMATIONW TargetInformationW;
-    INT len, i;
+    INT len;
+    DWORD i;
     WCHAR *buffer, *end;
     BOOL ret;
     PCREDENTIALW* CredentialsW;

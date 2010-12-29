@@ -778,6 +778,7 @@ static void	WCUSER_Paint(const struct inner_data* data)
 {
     PAINTSTRUCT		ps;
 
+    if (data->in_set_config) return; /* in order to avoid some flicker */
     BeginPaint(data->hWnd, &ps);
     BitBlt(ps.hdc, 0, 0,
            data->curcfg.win_width * data->curcfg.cell_width,
@@ -800,11 +801,13 @@ static void WCUSER_Scroll(struct inner_data* data, int pos, BOOL horz)
 {
     if (horz)
     {
+        ScrollWindow(data->hWnd, (data->curcfg.win_pos.X - pos) * data->curcfg.cell_width, 0, NULL, NULL);
 	SetScrollPos(data->hWnd, SB_HORZ, pos, TRUE);
 	data->curcfg.win_pos.X = pos;
     }
     else
     {
+        ScrollWindow(data->hWnd, 0, (data->curcfg.win_pos.Y - pos) * data->curcfg.cell_height, NULL, NULL);
 	SetScrollPos(data->hWnd, SB_VERT, pos, TRUE);
 	data->curcfg.win_pos.Y = pos;
     }
@@ -1177,7 +1180,7 @@ static LRESULT CALLBACK WCUSER_Proc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
             pt.y = (short)HIWORD(lParam);
             ClientToScreen(hWnd, &pt);
             WCUSER_SetMenuDetails(data, PRIVATE(data)->hPopMenu);
-            TrackPopupMenu(PRIVATE(data)->hPopMenu, TPM_LEFTALIGN|TPM_TOPALIGN,
+            TrackPopupMenu(PRIVATE(data)->hPopMenu, TPM_LEFTALIGN|TPM_TOPALIGN|TPM_RIGHTBUTTON,
                            pt.x, pt.y, 0, hWnd, NULL);
         }
         else
@@ -1211,29 +1214,23 @@ static LRESULT CALLBACK WCUSER_Proc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
 	break;
     case WM_HSCROLL:
         {
-            int	pos = data->curcfg.win_pos.X;
+            struct config_data  cfg = data->curcfg;
 
             switch (LOWORD(wParam))
             {
-            case SB_PAGEUP: 	pos -= 8; 		break;
-            case SB_PAGEDOWN: 	pos += 8; 		break;
-            case SB_LINEUP: 	pos--;			break;
-            case SB_LINEDOWN: 	pos++;	 		break;
-            case SB_THUMBTRACK: pos = HIWORD(wParam);	break;
-            default: 					break;
+            case SB_PAGEUP: 	cfg.win_pos.X -= 8; 		break;
+            case SB_PAGEDOWN: 	cfg.win_pos.X += 8; 		break;
+            case SB_LINEUP: 	cfg.win_pos.X--;		break;
+            case SB_LINEDOWN: 	cfg.win_pos.X++; 		break;
+            case SB_THUMBTRACK: cfg.win_pos.X = HIWORD(wParam);	break;
+            default: 					        break;
             }
-            if (pos < 0) pos = 0;
-            if (pos > data->curcfg.sb_width - data->curcfg.win_width)
-                pos = data->curcfg.sb_width - data->curcfg.win_width;
-            if (pos != data->curcfg.win_pos.X)
+            if (cfg.win_pos.X < 0) cfg.win_pos.X = 0;
+            if (cfg.win_pos.X > data->curcfg.sb_width - data->curcfg.win_width)
+                cfg.win_pos.X = data->curcfg.sb_width - data->curcfg.win_width;
+            if (cfg.win_pos.X != data->curcfg.win_pos.X)
             {
-                ScrollWindow(hWnd, (data->curcfg.win_pos.X - pos) * data->curcfg.cell_width, 0,
-                             NULL, NULL);
-                data->curcfg.win_pos.X = pos;
-                SetScrollPos(hWnd, SB_HORZ, pos, TRUE);
-                UpdateWindow(hWnd);
-                WCUSER_PosCursor(data);
-                WINECON_NotifyWindowChange(data);
+                WINECON_SetConfig(data, &cfg);
             }
         }
 	break;
@@ -1246,40 +1243,33 @@ static LRESULT CALLBACK WCUSER_Proc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
         /* else fallthrough */
     case WM_VSCROLL:
         {
-	    int	pos = data->curcfg.win_pos.Y;
+	    struct config_data  cfg = data->curcfg;
 
             if (uMsg == WM_MOUSEWHEEL)
             {
                 UINT scrollLines = 3;
                 SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &scrollLines, 0);
                 scrollLines *= -GET_WHEEL_DELTA_WPARAM(wParam) / WHEEL_DELTA;
-                pos += scrollLines;
+                cfg.win_pos.Y += scrollLines;
             } else {
                 switch (LOWORD(wParam))
                 {
-                case SB_PAGEUP: 	pos -= 8; 		break;
-                case SB_PAGEDOWN: 	pos += 8; 		break;
-                case SB_LINEUP: 	pos--;			break;
-                case SB_LINEDOWN: 	pos++;	 		break;
-                case SB_THUMBTRACK: pos = HIWORD(wParam);	break;
-                default: 					break;
+                case SB_PAGEUP:     cfg.win_pos.Y -= 8; 		break;
+                case SB_PAGEDOWN:   cfg.win_pos.Y += 8; 		break;
+                case SB_LINEUP:     cfg.win_pos.Y--;			break;
+                case SB_LINEDOWN:   cfg.win_pos.Y++;	 		break;
+                case SB_THUMBTRACK: cfg.win_pos.Y = HIWORD(wParam);	break;
+                default: 					        break;
                 }
             }
 
-	    if (pos < 0) pos = 0;
-	    if (pos > data->curcfg.sb_height - data->curcfg.win_height)
-                pos = data->curcfg.sb_height - data->curcfg.win_height;
-	    if (pos != data->curcfg.win_pos.Y)
+	    if (cfg.win_pos.Y < 0) cfg.win_pos.Y = 0;
+	    if (cfg.win_pos.Y > data->curcfg.sb_height - data->curcfg.win_height)
+                cfg.win_pos.Y = data->curcfg.sb_height - data->curcfg.win_height;
+	    if (cfg.win_pos.Y != data->curcfg.win_pos.Y)
 	    {
-		ScrollWindow(hWnd, 0, (data->curcfg.win_pos.Y - pos) * data->curcfg.cell_height,
-                             NULL, NULL);
-		data->curcfg.win_pos.Y = pos;
-		SetScrollPos(hWnd, SB_VERT, pos, TRUE);
-		UpdateWindow(hWnd);
-		WCUSER_PosCursor(data);
-		WINECON_NotifyWindowChange(data);
+                WINECON_SetConfig(data, &cfg);
 	    }
-
         }
         break;
     case WM_SYSCOMMAND:
@@ -1340,6 +1330,10 @@ static LRESULT CALLBACK WCUSER_Proc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
         if (!HIWORD(lParam)) return DefWindowProcW(hWnd, uMsg, wParam, lParam);
 	WCUSER_SetMenuDetails(data, GetSystemMenu(data->hWnd, FALSE));
 	break;
+    case WM_SIZE:
+        WINECON_ResizeWithContainer(data, LOWORD(lParam) / data->curcfg.cell_width,
+                                    HIWORD(lParam) / data->curcfg.cell_height);
+        break;
     default:
         return DefWindowProcW(hWnd, uMsg, wParam, lParam);
     }

@@ -1,19 +1,20 @@
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = appwiz.cpl
-IMPORTS   = comctl32 advapi32 shell32 user32 comdlg32
+IMPORTS   = uuid urlmon advpack comctl32 advapi32 shell32 user32 comdlg32
+EXTRADEFS = -DINSTALL_DATADIR="\"$(datadir)\""
 
 C_SRCS = \
+	addons.c \
 	appwiz.c
 
 RC_SRCS = \
+	Bg.rc \
 	Da.rc \
 	De.rc \
 	En.rc \
 	Es.rc \
+	Fi.rc \
 	Fr.rc \
+	He.rc \
 	Hu.rc \
 	It.rc \
 	Ja.rc \
@@ -28,6 +29,7 @@ RC_SRCS = \
 	Si.rc \
 	Sr.rc \
 	Sv.rc \
+	Tr.rc \
 	Uk.rc \
 	Zh.rc \
 	appwiz.rc

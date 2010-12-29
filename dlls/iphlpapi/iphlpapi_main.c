@@ -200,6 +200,30 @@ DWORD WINAPI AllocateAndGetIpAddrTableFromStack(PMIB_IPADDRTABLE *ppIpAddrTable,
 
 
 /******************************************************************
+ *    CancelIPChangeNotify (IPHLPAPI.@)
+ *
+ * Cancel a previous notification created by NotifyAddrChange or
+ * NotifyRouteChange.
+ *
+ * PARAMS
+ *  overlapped [In]  overlapped structure that notifies the caller
+ *
+ * RETURNS
+ *  Success: TRUE
+ *  Failure: FALSE
+ *
+ * FIXME
+ *  Stub, returns FALSE.
+ */
+BOOL WINAPI CancelIPChangeNotify(LPOVERLAPPED overlapped)
+{
+  FIXME("(overlapped %p): stub\n", overlapped);
+  return FALSE;
+}
+
+
+
+/******************************************************************
  *    CreateIpForwardEntry (IPHLPAPI.@)
  *
  * Create a route in the local computer's IP table.
@@ -608,6 +632,16 @@ static DWORD typeFromMibType(DWORD mib_type)
     }
 }
 
+static DWORD connectionTypeFromMibType(DWORD mib_type)
+{
+    switch (mib_type)
+    {
+    case MIB_IF_TYPE_PPP:       return NET_IF_CONNECTION_DEMAND;
+    case MIB_IF_TYPE_SLIP:      return NET_IF_CONNECTION_DEMAND;
+    default:                    return NET_IF_CONNECTION_DEDICATED;
+    }
+}
+
 static ULONG v4addressesFromIndex(DWORD index, DWORD **addrs, ULONG *num_addrs)
 {
     ULONG ret, i, j;
@@ -632,34 +666,140 @@ static ULONG v4addressesFromIndex(DWORD index, DWORD **addrs, ULONG *num_addrs)
     return ERROR_SUCCESS;
 }
 
-static ULONG adapterAddressesFromIndex(ULONG family, DWORD index, IP_ADAPTER_ADDRESSES *aa, ULONG *size)
+static char *debugstr_ipv4(const in_addr_t *in_addr, char *buf)
 {
-    ULONG ret, i, num_v4addrs = 0, num_v6addrs = 0, total_size;
+    const BYTE *addrp;
+    char *p = buf;
+
+    for (addrp = (const BYTE *)in_addr;
+     addrp - (const BYTE *)in_addr < sizeof(*in_addr);
+     addrp++)
+    {
+        if (addrp == (const BYTE *)in_addr + sizeof(*in_addr) - 1)
+            sprintf(p, "%d", *addrp);
+        else
+            p += sprintf(p, "%d.", *addrp);
+    }
+    return buf;
+}
+
+static char *debugstr_ipv6(const struct WS_sockaddr_in6 *sin, char *buf)
+{
+    const IN6_ADDR *addr = &sin->sin6_addr;
+    char *p = buf;
+    int i;
+    BOOL in_zero = FALSE;
+
+    for (i = 0; i < 7; i++)
+    {
+        if (!addr->u.Word[i])
+        {
+            if (i == 0)
+                *p++ = ':';
+            if (!in_zero)
+            {
+                *p++ = ':';
+                in_zero = TRUE;
+            }
+        }
+        else
+        {
+            p += sprintf(p, "%x:", ntohs(addr->u.Word[i]));
+            in_zero = FALSE;
+        }
+    }
+    sprintf(p, "%x", ntohs(addr->u.Word[7]));
+    return buf;
+}
+
+static ULONG count_v4_gateways(DWORD index, PMIB_IPFORWARDTABLE routeTable)
+{
+    DWORD i, num_gateways = 0;
+
+    for (i = 0; i < routeTable->dwNumEntries; i++)
+    {
+        if (routeTable->table[i].dwForwardIfIndex == index &&
+            routeTable->table[i].dwForwardType == MIB_IPROUTE_TYPE_INDIRECT)
+            num_gateways++;
+    }
+    return num_gateways;
+}
+
+static PMIB_IPFORWARDROW findIPv4Gateway(DWORD index,
+                                         PMIB_IPFORWARDTABLE routeTable)
+{
+    DWORD i;
+    PMIB_IPFORWARDROW row = NULL;
+
+    for (i = 0; !row && i < routeTable->dwNumEntries; i++)
+    {
+        if (routeTable->table[i].dwForwardIfIndex == index &&
+            routeTable->table[i].dwForwardType == MIB_IPROUTE_TYPE_INDIRECT)
+            row = &routeTable->table[i];
+    }
+    return row;
+}
+
+static ULONG adapterAddressesFromIndex(ULONG family, ULONG flags, DWORD index,
+                                       IP_ADAPTER_ADDRESSES *aa, ULONG *size)
+{
+    ULONG ret = ERROR_SUCCESS, i, num_v4addrs = 0, num_v4_gateways = 0, num_v6addrs = 0, total_size;
     DWORD *v4addrs = NULL;
     SOCKET_ADDRESS *v6addrs = NULL;
+    PMIB_IPFORWARDTABLE routeTable = NULL;
 
-    if (family == AF_INET)
-        ret = v4addressesFromIndex(index, &v4addrs, &num_v4addrs);
-    else if (family == AF_INET6)
-        ret = v6addressesFromIndex(index, &v6addrs, &num_v6addrs);
-    else if (family == AF_UNSPEC)
+    if (family == WS_AF_INET)
     {
-        ret = v4addressesFromIndex(index, &v4addrs, &num_v4addrs);
-        if (!ret)
+        if (!(flags & GAA_FLAG_SKIP_UNICAST))
+            ret = v4addressesFromIndex(index, &v4addrs, &num_v4addrs);
+        if (!ret && flags & GAA_FLAG_INCLUDE_ALL_GATEWAYS)
+        {
+            ret = AllocateAndGetIpForwardTableFromStack(&routeTable, FALSE,
+                                                        GetProcessHeap(), 0);
+            if (!ret)
+                num_v4_gateways = count_v4_gateways(index, routeTable);
+        }
+    }
+    else if (family == WS_AF_INET6)
+    {
+        if (!(flags & GAA_FLAG_SKIP_UNICAST))
             ret = v6addressesFromIndex(index, &v6addrs, &num_v6addrs);
+    }
+    else if (family == WS_AF_UNSPEC)
+    {
+        if (!(flags & GAA_FLAG_SKIP_UNICAST))
+            ret = v4addressesFromIndex(index, &v4addrs, &num_v4addrs);
+        if (!ret && flags & GAA_FLAG_INCLUDE_ALL_GATEWAYS)
+        {
+            ret = AllocateAndGetIpForwardTableFromStack(&routeTable, FALSE,
+                                                        GetProcessHeap(), 0);
+            if (!ret)
+            {
+                num_v4_gateways = count_v4_gateways(index, routeTable);
+                if (!(flags & GAA_FLAG_SKIP_UNICAST))
+                    ret = v6addressesFromIndex(index, &v6addrs, &num_v6addrs);
+            }
+        }
     }
     else
     {
         FIXME("address family %u unsupported\n", family);
         ret = ERROR_NO_DATA;
     }
-    if (ret) return ret;
+    if (ret)
+    {
+        HeapFree(GetProcessHeap(), 0, routeTable);
+        return ret;
+    }
 
     total_size = sizeof(IP_ADAPTER_ADDRESSES);
     total_size += IF_NAMESIZE;
     total_size += IF_NAMESIZE * sizeof(WCHAR);
+    if (!(flags & GAA_FLAG_SKIP_FRIENDLY_NAME))
+        total_size += IF_NAMESIZE * sizeof(WCHAR);
     total_size += sizeof(IP_ADAPTER_UNICAST_ADDRESS) * num_v4addrs;
     total_size += sizeof(struct sockaddr_in) * num_v4addrs;
+    total_size += (sizeof(IP_ADAPTER_GATEWAY_ADDRESS) + sizeof(SOCKADDR_IN)) * num_v4_gateways;
     total_size += sizeof(IP_ADAPTER_UNICAST_ADDRESS) * num_v6addrs;
     total_size += sizeof(SOCKET_ADDRESS) * num_v6addrs;
     for (i = 0; i < num_v6addrs; i++)
@@ -679,20 +819,57 @@ static ULONG adapterAddressesFromIndex(ULONG family, DWORD index, IP_ADAPTER_ADD
         memcpy(ptr, name, IF_NAMESIZE);
         aa->AdapterName = ptr;
         ptr += IF_NAMESIZE;
-        aa->FriendlyName = (WCHAR *)ptr;
+        if (!(flags & GAA_FLAG_SKIP_FRIENDLY_NAME))
+        {
+            aa->FriendlyName = (WCHAR *)ptr;
+            for (src = name, dst = (WCHAR *)ptr; *src; src++, dst++)
+                *dst = *src;
+            *dst++ = 0;
+            ptr = (char *)dst;
+        }
+        aa->Description = (WCHAR *)ptr;
         for (src = name, dst = (WCHAR *)ptr; *src; src++, dst++)
             *dst = *src;
         *dst++ = 0;
         ptr = (char *)dst;
 
+        TRACE("%s: %d IPv4 addresses, %d IPv6 addresses:\n", name, num_v4addrs,
+              num_v6addrs);
+        if (num_v4_gateways)
+        {
+            PMIB_IPFORWARDROW adapterRow;
+
+            if ((adapterRow = findIPv4Gateway(index, routeTable)))
+            {
+                PIP_ADAPTER_GATEWAY_ADDRESS gw;
+                PSOCKADDR_IN sin;
+
+                gw = (PIP_ADAPTER_GATEWAY_ADDRESS)ptr;
+                aa->FirstGatewayAddress = gw;
+
+                gw->u.s.Length = sizeof(IP_ADAPTER_GATEWAY_ADDRESS);
+                ptr += sizeof(IP_ADAPTER_GATEWAY_ADDRESS);
+                sin = (PSOCKADDR_IN)ptr;
+                sin->sin_family = AF_INET;
+                sin->sin_port = 0;
+                memcpy(&sin->sin_addr, &adapterRow->dwForwardNextHop,
+                       sizeof(DWORD));
+                gw->Address.lpSockaddr = (LPSOCKADDR)sin;
+                gw->Address.iSockaddrLength = sizeof(SOCKADDR_IN);
+                gw->Next = NULL;
+                ptr += sizeof(SOCKADDR_IN);
+            }
+        }
         if (num_v4addrs)
         {
             IP_ADAPTER_UNICAST_ADDRESS *ua;
             struct sockaddr_in *sa;
-
+            aa->Flags |= IP_ADAPTER_IPV4_ENABLED;
             ua = aa->FirstUnicastAddress = (IP_ADAPTER_UNICAST_ADDRESS *)ptr;
             for (i = 0; i < num_v4addrs; i++)
             {
+                char addr_buf[16];
+
                 memset(ua, 0, sizeof(IP_ADAPTER_UNICAST_ADDRESS));
                 ua->u.s.Length              = sizeof(IP_ADAPTER_UNICAST_ADDRESS);
                 ua->Address.iSockaddrLength = sizeof(struct sockaddr_in);
@@ -702,6 +879,8 @@ static ULONG adapterAddressesFromIndex(ULONG family, DWORD index, IP_ADAPTER_ADD
                 sa->sin_family      = AF_INET;
                 sa->sin_addr.s_addr = v4addrs[i];
                 sa->sin_port        = 0;
+                TRACE("IPv4 %d/%d: %s\n", i + 1, num_v4addrs,
+                      debugstr_ipv4(&sa->sin_addr.s_addr, addr_buf));
 
                 ptr += ua->u.s.Length + ua->Address.iSockaddrLength;
                 if (i < num_v4addrs - 1)
@@ -716,16 +895,20 @@ static ULONG adapterAddressesFromIndex(ULONG family, DWORD index, IP_ADAPTER_ADD
             IP_ADAPTER_UNICAST_ADDRESS *ua;
             struct WS_sockaddr_in6 *sa;
 
+            aa->Flags |= IP_ADAPTER_IPV6_ENABLED;
             if (aa->FirstUnicastAddress)
             {
                 for (ua = aa->FirstUnicastAddress; ua->Next; ua = ua->Next)
                     ;
                 ua->Next = (IP_ADAPTER_UNICAST_ADDRESS *)ptr;
+                ua = (IP_ADAPTER_UNICAST_ADDRESS *)ptr;
             }
             else
                 ua = aa->FirstUnicastAddress = (IP_ADAPTER_UNICAST_ADDRESS *)ptr;
             for (i = 0; i < num_v6addrs; i++)
             {
+                char addr_buf[46];
+
                 memset(ua, 0, sizeof(IP_ADAPTER_UNICAST_ADDRESS));
                 ua->u.s.Length              = sizeof(IP_ADAPTER_UNICAST_ADDRESS);
                 ua->Address.iSockaddrLength = v6addrs[i].iSockaddrLength;
@@ -733,6 +916,8 @@ static ULONG adapterAddressesFromIndex(ULONG family, DWORD index, IP_ADAPTER_ADD
 
                 sa = (struct WS_sockaddr_in6 *)ua->Address.lpSockaddr;
                 memcpy(sa, v6addrs[i].lpSockaddr, sizeof(*sa));
+                TRACE("IPv6 %d/%d: %s\n", i + 1, num_v6addrs,
+                      debugstr_ipv6(sa, addr_buf));
 
                 ptr += ua->u.s.Length + ua->Address.iSockaddrLength;
                 if (i < num_v6addrs - 1)
@@ -747,6 +932,7 @@ static ULONG adapterAddressesFromIndex(ULONG family, DWORD index, IP_ADAPTER_ADD
         getInterfacePhysicalByIndex(index, &buflen, aa->PhysicalAddress, &type);
         aa->PhysicalAddressLength = buflen;
         aa->IfType = typeFromMibType(type);
+        aa->ConnectionType = connectionTypeFromMibType(type);
 
         getInterfaceMtuByName(name, &aa->Mtu);
 
@@ -756,8 +942,98 @@ static ULONG adapterAddressesFromIndex(ULONG family, DWORD index, IP_ADAPTER_ADD
         else aa->OperStatus = IfOperStatusUnknown;
     }
     *size = total_size;
+    HeapFree(GetProcessHeap(), 0, routeTable);
     HeapFree(GetProcessHeap(), 0, v6addrs);
     HeapFree(GetProcessHeap(), 0, v4addrs);
+    return ERROR_SUCCESS;
+}
+
+static ULONG get_dns_server_addresses(PIP_ADAPTER_DNS_SERVER_ADDRESS address, ULONG *len)
+{
+    DWORD size;
+
+    initialise_resolver();
+    /* FIXME: no support for IPv6 DNS server addresses.  Doing so requires
+     * sizeof SOCKADDR_STORAGE instead, and using _res._u._ext.nsaddrs when
+     * available.
+     */
+    size = _res.nscount * (sizeof(IP_ADAPTER_DNS_SERVER_ADDRESS) + sizeof(SOCKADDR));
+    if (!address || *len < size)
+    {
+        *len = size;
+        return ERROR_BUFFER_OVERFLOW;
+    }
+    *len = size;
+    if (_res.nscount > 0)
+    {
+        PIP_ADAPTER_DNS_SERVER_ADDRESS addr;
+        int i;
+
+        for (i = 0, addr = address; i < _res.nscount && addr;
+             i++, addr = addr->Next)
+        {
+            SOCKADDR_IN *sin;
+
+            addr->Address.iSockaddrLength = sizeof(SOCKADDR);
+            addr->Address.lpSockaddr =
+             (LPSOCKADDR)((PBYTE)addr + sizeof(IP_ADAPTER_DNS_SERVER_ADDRESS));
+            sin = (SOCKADDR_IN *)addr->Address.lpSockaddr;
+            sin->sin_family = WS_AF_INET;
+            sin->sin_port = _res.nsaddr_list[i].sin_port;
+            memcpy(&sin->sin_addr, &_res.nsaddr_list[i].sin_addr, sizeof(sin->sin_addr));
+            if (i == _res.nscount - 1)
+                addr->Next = NULL;
+            else
+                addr->Next =
+                 (PIP_ADAPTER_DNS_SERVER_ADDRESS)((PBYTE)addr +
+                 sizeof(IP_ADAPTER_DNS_SERVER_ADDRESS) + sizeof(SOCKADDR));
+        }
+    }
+    return ERROR_SUCCESS;
+}
+
+static BOOL is_ip_address_string(const char *str)
+{
+    struct in_addr in;
+    int ret;
+
+    ret = inet_aton(str, &in);
+    return ret != 0;
+}
+
+static ULONG get_dns_suffix(WCHAR *suffix, ULONG *len)
+{
+    ULONG size, i;
+    char *found_suffix = NULL;
+
+    initialise_resolver();
+    /* Always return a NULL-terminated string, even if it's empty. */
+    size = sizeof(WCHAR);
+    for (i = 0, found_suffix = NULL;
+         !found_suffix && i < MAXDNSRCH + 1 && _res.dnsrch[i]; i++)
+    {
+        /* This uses a heuristic to select a DNS suffix:
+         * the first, non-IP address string is selected.
+         */
+        if (!is_ip_address_string(_res.dnsrch[i]))
+            found_suffix = _res.dnsrch[i];
+    }
+    if (found_suffix)
+        size += strlen(found_suffix) * sizeof(WCHAR);
+    if (!suffix || *len < size)
+    {
+        *len = size;
+        return ERROR_BUFFER_OVERFLOW;
+    }
+    *len = size;
+    if (found_suffix)
+    {
+        char *p;
+
+        for (p = found_suffix; *p; p++)
+            *suffix++ = *p;
+    }
+    *suffix = 0;
     return ERROR_SUCCESS;
 }
 
@@ -765,7 +1041,9 @@ ULONG WINAPI GetAdaptersAddresses(ULONG family, ULONG flags, PVOID reserved,
                                   PIP_ADAPTER_ADDRESSES aa, PULONG buflen)
 {
     InterfaceIndexTable *table;
-    ULONG i, size, total_size, ret = ERROR_NO_DATA;
+    ULONG i, size, dns_server_size, dns_suffix_size, total_size, ret = ERROR_NO_DATA;
+
+    TRACE("(%d, %08x, %p, %p, %p)\n", family, flags, reserved, aa, buflen);
 
     if (!buflen) return ERROR_INVALID_PARAMETER;
 
@@ -779,19 +1057,36 @@ ULONG WINAPI GetAdaptersAddresses(ULONG family, ULONG flags, PVOID reserved,
     for (i = 0; i < table->numIndexes; i++)
     {
         size = 0;
-        if ((ret = adapterAddressesFromIndex(family, table->indexes[i], NULL, &size)))
+        if ((ret = adapterAddressesFromIndex(family, flags, table->indexes[i], NULL, &size)))
         {
             HeapFree(GetProcessHeap(), 0, table);
             return ret;
         }
         total_size += size;
     }
+    if (!(flags & GAA_FLAG_SKIP_DNS_SERVER))
+    {
+        /* Since DNS servers aren't really per adapter, get enough space for a
+         * single copy of them.
+         */
+        get_dns_server_addresses(NULL, &dns_server_size);
+        total_size += dns_server_size;
+    }
+    /* Since DNS suffix also isn't really per adapter, get enough space for a
+     * single copy of it.
+     */
+    get_dns_suffix(NULL, &dns_suffix_size);
+    total_size += dns_suffix_size;
     if (aa && *buflen >= total_size)
     {
         ULONG bytes_left = size = total_size;
+        PIP_ADAPTER_ADDRESSES first_aa = aa;
+        PIP_ADAPTER_DNS_SERVER_ADDRESS firstDns;
+        WCHAR *dnsSuffix;
+
         for (i = 0; i < table->numIndexes; i++)
         {
-            if ((ret = adapterAddressesFromIndex(family, table->indexes[i], aa, &size)))
+            if ((ret = adapterAddressesFromIndex(family, flags, table->indexes[i], aa, &size)))
             {
                 HeapFree(GetProcessHeap(), 0, table);
                 return ret;
@@ -802,6 +1097,24 @@ ULONG WINAPI GetAdaptersAddresses(ULONG family, ULONG flags, PVOID reserved,
                 aa = aa->Next;
                 size = bytes_left -= size;
             }
+        }
+        if (!(flags & GAA_FLAG_SKIP_DNS_SERVER))
+        {
+            firstDns = (PIP_ADAPTER_DNS_SERVER_ADDRESS)((BYTE *)aa + total_size - dns_server_size - dns_suffix_size);
+            get_dns_server_addresses(firstDns, &dns_server_size);
+            for (aa = first_aa; aa; aa = aa->Next)
+            {
+                if (aa->IfType != IF_TYPE_SOFTWARE_LOOPBACK && aa->OperStatus == IfOperStatusUp)
+                    aa->FirstDnsServerAddress = firstDns;
+            }
+        }
+        aa = first_aa;
+        dnsSuffix = (WCHAR *)((BYTE *)aa + total_size - dns_suffix_size);
+        get_dns_suffix(dnsSuffix, &dns_suffix_size);
+        for (; aa; aa = aa->Next)
+        {
+            if (aa->IfType != IF_TYPE_SOFTWARE_LOOPBACK && aa->OperStatus == IfOperStatusUp)
+                aa->DnsSuffix = dnsSuffix;
         }
         ret = ERROR_SUCCESS;
     }
@@ -907,7 +1220,7 @@ DWORD WINAPI GetBestRoute(DWORD dwDestAddr, DWORD dwSourceAddr, PMIB_IPFORWARDRO
         DWORD numShifts, mask;
 
         for (numShifts = 0, mask = table->table[ndx].dwForwardMask;
-         mask && !(mask & 1); mask >>= 1, numShifts++)
+         mask && mask & 1; mask >>= 1, numShifts++)
           ;
         if (numShifts > matchedBits) {
           matchedBits = numShifts;
@@ -1309,6 +1622,46 @@ DWORD WINAPI GetIpNetTable(PMIB_IPNETTABLE pIpNetTable, PULONG pdwSize, BOOL bOr
     return ret;
 }
 
+/* Gets the DNS server list into the list beginning at list.  Assumes that
+ * a single server address may be placed at list if *len is at least
+ * sizeof(IP_ADDR_STRING) long.  Otherwise, list->Next is set to firstDynamic,
+ * and assumes that all remaining DNS servers are contiguously located
+ * beginning at firstDynamic.  On input, *len is assumed to be the total number
+ * of bytes available for all DNS servers, and is ignored if list is NULL.
+ * On return, *len is set to the total number of bytes required for all DNS
+ * servers.
+ * Returns ERROR_BUFFER_OVERFLOW if *len is insufficient,
+ * ERROR_SUCCESS otherwise.
+ */
+static DWORD get_dns_server_list(PIP_ADDR_STRING list,
+ PIP_ADDR_STRING firstDynamic, DWORD *len)
+{
+  DWORD size;
+
+  initialise_resolver();
+  size = _res.nscount * sizeof(IP_ADDR_STRING);
+  if (!list || *len < size) {
+    *len = size;
+    return ERROR_BUFFER_OVERFLOW;
+  }
+  *len = size;
+  if (_res.nscount > 0) {
+    PIP_ADDR_STRING ptr;
+    int i;
+
+    for (i = 0, ptr = list; i < _res.nscount && ptr; i++, ptr = ptr->Next) {
+      toIPAddressString(_res.nsaddr_list[i].sin_addr.s_addr,
+       ptr->IpAddress.String);
+      if (i == _res.nscount - 1)
+        ptr->Next = NULL;
+      else if (i == 0)
+        ptr->Next = firstDynamic;
+      else
+        ptr->Next = (PIP_ADDR_STRING)((PBYTE)ptr + sizeof(IP_ADDR_STRING));
+    }
+  }
+  return ERROR_SUCCESS;
+}
 
 /******************************************************************
  *    GetNetworkParams (IPHLPAPI.@)
@@ -1330,7 +1683,7 @@ DWORD WINAPI GetIpNetTable(PMIB_IPNETTABLE pIpNetTable, PULONG pdwSize, BOOL bOr
  */
 DWORD WINAPI GetNetworkParams(PFIXED_INFO pFixedInfo, PULONG pOutBufLen)
 {
-  DWORD ret, size;
+  DWORD ret, size, serverListSize;
   LONG regReturn;
   HKEY hKey;
 
@@ -1338,9 +1691,8 @@ DWORD WINAPI GetNetworkParams(PFIXED_INFO pFixedInfo, PULONG pOutBufLen)
   if (!pOutBufLen)
     return ERROR_INVALID_PARAMETER;
 
-  initialise_resolver();
-  size = sizeof(FIXED_INFO) + (_res.nscount > 0 ? (_res.nscount  - 1) *
-   sizeof(IP_ADDR_STRING) : 0);
+  get_dns_server_list(NULL, NULL, &serverListSize);
+  size = sizeof(FIXED_INFO) + serverListSize - sizeof(IP_ADDR_STRING);
   if (!pFixedInfo || *pOutBufLen < size) {
     *pOutBufLen = size;
     return ERROR_BUFFER_OVERFLOW;
@@ -1351,22 +1703,11 @@ DWORD WINAPI GetNetworkParams(PFIXED_INFO pFixedInfo, PULONG pOutBufLen)
   GetComputerNameExA(ComputerNameDnsHostname, pFixedInfo->HostName, &size);
   size = sizeof(pFixedInfo->DomainName);
   GetComputerNameExA(ComputerNameDnsDomain, pFixedInfo->DomainName, &size);
-  if (_res.nscount > 0) {
-    PIP_ADDR_STRING ptr;
-    int i;
-
-    for (i = 0, ptr = &pFixedInfo->DnsServerList; i < _res.nscount && ptr;
-     i++, ptr = ptr->Next) {
-      toIPAddressString(_res.nsaddr_list[i].sin_addr.s_addr,
-       ptr->IpAddress.String);
-      if (i == _res.nscount - 1)
-        ptr->Next = NULL;
-      else if (i == 0)
-        ptr->Next = (PIP_ADDR_STRING)((LPBYTE)pFixedInfo + sizeof(FIXED_INFO));
-      else
-        ptr->Next = (PIP_ADDR_STRING)((PBYTE)ptr + sizeof(IP_ADDR_STRING));
-    }
-  }
+  get_dns_server_list(&pFixedInfo->DnsServerList,
+   (PIP_ADDR_STRING)((BYTE *)pFixedInfo + sizeof(FIXED_INFO)),
+   &serverListSize);
+  /* Assume the first DNS server in the list is the "current" DNS server: */
+  pFixedInfo->CurrentDnsServer = &pFixedInfo->DnsServerList;
   pFixedInfo->NodeType = HYBRID_NODETYPE;
   regReturn = RegOpenKeyExA(HKEY_LOCAL_MACHINE,
    "SYSTEM\\CurrentControlSet\\Services\\VxD\\MSTCP", 0, KEY_READ, &hKey);
@@ -1430,18 +1771,21 @@ DWORD WINAPI GetNumberOfInterfaces(PDWORD pdwNumIf)
  * RETURNS
  *  Success: NO_ERROR
  *  Failure: error code from winerror.h
- *
- * FIXME
- *  Stub, returns empty IP_PER_ADAPTER_INFO in every case.
  */
 DWORD WINAPI GetPerAdapterInfo(ULONG IfIndex, PIP_PER_ADAPTER_INFO pPerAdapterInfo, PULONG pOutBufLen)
 {
-  ULONG bytesNeeded = sizeof(IP_PER_ADAPTER_INFO);
+  ULONG bytesNeeded = sizeof(IP_PER_ADAPTER_INFO), serverListSize = 0;
+  DWORD ret = NO_ERROR;
 
   TRACE("(IfIndex %d, pPerAdapterInfo %p, pOutBufLen %p)\n", IfIndex, pPerAdapterInfo, pOutBufLen);
 
   if (!pOutBufLen) return ERROR_INVALID_PARAMETER;
 
+  if (!isIfIndexLoopback(IfIndex)) {
+    get_dns_server_list(NULL, NULL, &serverListSize);
+    if (serverListSize > sizeof(IP_ADDR_STRING))
+      bytesNeeded += serverListSize - sizeof(IP_ADDR_STRING);
+  }
   if (!pPerAdapterInfo || *pOutBufLen < bytesNeeded)
   {
     *pOutBufLen = bytesNeeded;
@@ -1449,7 +1793,14 @@ DWORD WINAPI GetPerAdapterInfo(ULONG IfIndex, PIP_PER_ADAPTER_INFO pPerAdapterIn
   }
 
   memset(pPerAdapterInfo, 0, bytesNeeded);
-  return NO_ERROR;
+  if (!isIfIndexLoopback(IfIndex)) {
+    ret = get_dns_server_list(&pPerAdapterInfo->DnsServerList,
+     (PIP_ADDR_STRING)((PBYTE)pPerAdapterInfo + sizeof(IP_PER_ADAPTER_INFO)),
+     &serverListSize);
+    /* Assume the first DNS server in the list is the "current" DNS server: */
+    pPerAdapterInfo->CurrentDnsServer = &pPerAdapterInfo->DnsServerList;
+  }
+  return ret;
 }
 
 

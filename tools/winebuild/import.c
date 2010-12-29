@@ -57,7 +57,6 @@ struct name_table
 };
 
 static struct name_table undef_symbols;    /* list of undefined symbols */
-static struct name_table ignore_symbols;   /* list of symbols to ignore */
 static struct name_table extra_ld_symbols; /* list of extra symbols that ld should resolve */
 static struct name_table delayed_imports;  /* list of delayed import dlls */
 static struct name_table ext_link_imports; /* list of external symbols to link to */
@@ -193,8 +192,7 @@ static char *try_library_path( const char *path, const char *name )
     char *buffer;
     int fd;
 
-    buffer = xmalloc( strlen(path) + strlen(name) + 9 );
-    sprintf( buffer, "%s/lib%s.def", path, name );
+    buffer = strmake( "%s/lib%s.def", path, name );
 
     /* check if the file exists */
     if ((fd = open( buffer, O_RDONLY )) != -1)
@@ -340,23 +338,6 @@ static void remove_import_dll( int index )
     free_imports( imp );
 }
 
-/* add a symbol to the ignored symbol list */
-/* if the name starts with '-' the symbol is removed instead */
-void add_ignore_symbol( const char *name )
-{
-    unsigned int i;
-
-    if (name[0] == '-')  /* remove it */
-    {
-        if (!name[1]) empty_name_table( &ignore_symbols );  /* remove everything */
-        else for (i = 0; i < ignore_symbols.count; i++)
-        {
-            if (!strcmp( ignore_symbols.names[i], name+1 )) remove_name( &ignore_symbols, i-- );
-        }
-    }
-    else add_name( &ignore_symbols, name );
-}
-
 /* add a symbol to the list of extra symbols that ld must resolve */
 void add_extra_ld_symbol( const char *name )
 {
@@ -476,6 +457,7 @@ static void check_undefined_exports( DLLSPEC *spec )
             case TYPE_STDCALL:
             case TYPE_CDECL:
             case TYPE_VARARGS:
+            case TYPE_THISCALL:
                 if (link_ext_symbols)
                 {
                     odp->flags |= FLAG_EXT_LINK;
@@ -525,23 +507,16 @@ static char *create_undef_symbols_file( DLLSPEC *spec )
 /* returns the name of the combined file */
 static const char *ldcombine_files( DLLSPEC *spec, char **argv )
 {
-    unsigned int i, len = 0;
-    const char *prog = get_ld_command();
-    char *cmd, *p, *ld_tmp_file, *undef_file;
-    int err;
+    char *ld_tmp_file, *undef_file;
+    struct strarray *args = get_ld_command();
 
     undef_file = create_undef_symbols_file( spec );
-    len += strlen(undef_file) + 1;
     ld_tmp_file = get_temp_file_name( output_file_name, ".o" );
-    for (i = 0; argv[i]; i++) len += strlen(argv[i]) + 1;
-    cmd = p = xmalloc( len + strlen(ld_tmp_file) + 8 + strlen(prog)  );
-    p += sprintf( cmd, "%s -r -o %s %s", prog, ld_tmp_file, undef_file );
-    for (i = 0; argv[i]; i++)
-        p += sprintf( p, " %s", argv[i] );
-    if (verbose) fprintf( stderr, "%s\n", cmd );
-    err = system( cmd );
-    if (err) fatal_error( "%s -r failed with status %d\n", prog, err );
-    free( cmd );
+
+    strarray_add( args, "-r", "-o", ld_tmp_file, undef_file, NULL );
+    strarray_addv( args, argv );
+    spawn( args );
+    strarray_free( args );
     return ld_tmp_file;
 }
 
@@ -564,8 +539,7 @@ void read_undef_symbols( DLLSPEC *spec, char **argv )
 
     name = ldcombine_files( spec, argv );
 
-    cmd = xmalloc( strlen(prog) + strlen(name) + 5 );
-    sprintf( cmd, "%s -u %s", prog, name );
+    cmd = strmake( "%s -u %s", prog, name );
     if (!(f = popen( cmd, "r" )))
         fatal_error( "Cannot execute '%s'\n", cmd );
 
@@ -591,7 +565,6 @@ void resolve_imports( DLLSPEC *spec )
     unsigned int j, removed;
     ORDDEF *odp;
 
-    sort_names( &ignore_symbols );
     check_undefined_forwards( spec );
 
     for (i = 0; i < nb_imports; i++)
@@ -600,7 +573,6 @@ void resolve_imports( DLLSPEC *spec )
 
         for (j = removed = 0; j < undef_symbols.count; j++)
         {
-            if (find_name( undef_symbols.names[j], &ignore_symbols )) continue;
             odp = find_export( undef_symbols.names[j], imp->exports, imp->nb_exports );
             if (odp)
             {
@@ -704,8 +676,10 @@ static void output_import_thunk( const char *name, const char *table, int pos )
         output( "\tjmp $31,($0)\n" );
         break;
     case CPU_ARM:
-        output( "\tmov r4, #%s\n", table );
-        output( "\tldr r15, [r4, #%d]\n", pos );
+        output( "\tldr IP,[PC,#0]\n");
+        output( "\tmov PC,PC\n");
+        output( "\t%s %s\n", get_asm_ptr_keyword(), table );
+        output( "\tldr PC,[IP,#%d]\n", pos);
         break;
     case CPU_POWERPC:
         output( "\tmr %s, %s\n", ppc_reg(0), ppc_reg(31) );
@@ -1020,9 +994,15 @@ static void output_delayed_import_thunks( const DLLSPEC *spec )
         output( "\tjmp $31,($0)\n" );
         break;
     case CPU_ARM:
-        output( "\tstmfd  sp!, {r4, r5, r6, r7, r8, r9, r10, lr}\n" );
-        output( "\tblx %s\n", asm_name("__wine_spec_delay_load") );
-        output( "\tldmfd  sp!, {r4, r5, r6, r7, r8, r9, r10, pc}\n" );
+        output( "\tstmfd  SP!, {r4-r10,FP,LR}\n" );
+        output( "\tmov LR,PC\n");
+        output( "\tadd LR,LR,#8\n");
+        output( "\tldr PC,[PC,#-4]\n");
+        output( "\t%s %s\n", get_asm_ptr_keyword(), asm_name("__wine_spec_delay_load") );
+        output( "\tmov IP,r0\n");
+        output( "\tldmfd  SP!, {r4-r10,FP,LR}\n" );
+        output( "\tldmfd  SP!, {r0-r3}\n" );
+        output( "\tmov PC,IP\n");
         break;
     case CPU_POWERPC:
         if (target_platform == PLATFORM_APPLE) extra_stack_storage = 56;
@@ -1108,7 +1088,17 @@ static void output_delayed_import_thunks( const DLLSPEC *spec )
                 output( "\tjmp $31,%s\n", asm_name("__wine_delay_load_asm") );
                 break;
             case CPU_ARM:
-                output( "\tb %s\n", asm_name("__wine_delay_load_asm") );
+                output( "\tstmfd  SP!, {r0-r3}\n" );
+                output( "\tmov r0, #%d\n", idx );
+                output( "\tmov r1, #16384\n" );
+                output( "\tmul r1, r0, r1\n" );
+                output( "\tmov r0, r1\n" );
+                output( "\tmov r1, #4\n" );
+                output( "\tmul r1, r0, r1\n" );
+                output( "\tmov r0, r1\n" );
+                output( "\tadd r0, #%d\n", j );
+                output( "\tldr PC,[PC,#-4]\n");
+                output( "\t%s %s\n", get_asm_ptr_keyword(), asm_name("__wine_delay_load_asm") );
                 break;
             case CPU_POWERPC:
                 switch(target_platform)
@@ -1188,9 +1178,9 @@ static void output_external_link_imports( DLLSPEC *spec )
 
     for (i = pos = 0; i < ext_link_imports.count; i++)
     {
-        char buffer[256];
-        sprintf( buffer, "__wine_spec_ext_link_%s", ext_link_imports.names[i] );
+        char *buffer = strmake( "__wine_spec_ext_link_%s", ext_link_imports.names[i] );
         output_import_thunk( buffer, ".L__wine_spec_external_links", pos );
+        free( buffer );
         pos += get_ptr_size();
     }
     output_function_size( "__wine_spec_external_link_thunks" );
@@ -1320,9 +1310,8 @@ void output_imports( DLLSPEC *spec )
 /* output an import library for a Win32 module and additional object files */
 void output_import_lib( DLLSPEC *spec, char **argv )
 {
-    char *dlltool, *def_file;
-    char *cmd;
-    int err;
+    struct strarray *args = strarray_init();
+    char *def_file;
 
     if (target_platform != PLATFORM_WINDOWS)
         fatal_error( "Unix-style import libraries not supported yet\n" );
@@ -1335,33 +1324,17 @@ void output_import_lib( DLLSPEC *spec, char **argv )
     fclose( output_file );
     output_file = NULL;
 
-    dlltool = find_tool( "dlltool", NULL );
-    cmd = xmalloc( strlen(dlltool) + strlen(output_file_name) + strlen(def_file) + 12 );
-    sprintf( cmd, "%s -k -l %s -d %s", dlltool, output_file_name, def_file );
-    if (verbose) fprintf( stderr, "%s\n", cmd );
-    err = system( cmd );
-    if (err) fatal_error( "%s failed with status %d\n", dlltool, err );
-    free( cmd );
-    free( dlltool );
+    strarray_add( args, find_tool( "dlltool", NULL ), "-k", "-l", output_file_name, "-d", def_file, NULL );
+    spawn( args );
+    strarray_free( args );
 
     if (argv[0])
     {
-        char *ar = find_tool( "ar", NULL );
-        int i, len;
-
-        for (i = len = 0; argv[i]; i++) len += strlen(argv[i]) + 1;
-        cmd = xmalloc( strlen(ar) + strlen(output_file_name) + len + 5 );
-        sprintf( cmd, "%s rs %s", ar, output_file_name );
-        for (i = 0; argv[i]; i++)
-        {
-            strcat( cmd, " " );
-            strcat( cmd, argv[i] );
-        }
-        if (verbose) fprintf( stderr, "%s\n", cmd );
-        err = system( cmd );
-        if (err) fatal_error( "%s failed with status %d\n", dlltool, err );
-        free( cmd );
-        free( ar );
+        args = strarray_init();
+        strarray_add( args, find_tool( "ar", NULL ), "rs", output_file_name, NULL );
+        strarray_addv( args, argv );
+        spawn( args );
+        strarray_free( args );
     }
     output_file_name = NULL;
 }

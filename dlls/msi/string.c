@@ -3,6 +3,7 @@
  *
  * Copyright 2002-2004, Mike McCormack for CodeWeavers
  * Copyright 2007 Robert Shearman for CodeWeavers
+ * Copyright 2010 Hans Leidekker for CodeWeavers
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -40,8 +41,6 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(msidb);
 
-#define LONG_STR_BYTES 3
-
 typedef struct _msistring
 {
     USHORT persistent_refcount;
@@ -59,15 +58,22 @@ struct string_table
     UINT *sorted;       /* index */
 };
 
+static BOOL validate_codepage( UINT codepage )
+{
+    if (codepage != CP_ACP && !IsValidCodePage( codepage ))
+    {
+        WARN("invalid codepage %u\n", codepage);
+        return FALSE;
+    }
+    return TRUE;
+}
+
 static string_table *init_stringtable( int entries, UINT codepage )
 {
     string_table *st;
 
-    if (codepage != CP_ACP && !IsValidCodePage(codepage))
-    {
-        ERR("invalid codepage %d\n", codepage);
+    if (!validate_codepage( codepage ))
         return NULL;
-    }
 
     st = msi_alloc( sizeof (string_table) );
     if( !st )
@@ -163,7 +169,7 @@ static int find_insert_index( const string_table *st, UINT string_id )
     while (low <= high)
     {
         i = (low + high) / 2;
-        c = lstrcmpW( st->strings[string_id].str, st->strings[st->sorted[i]].str );
+        c = strcmpW( st->strings[string_id].str, st->strings[st->sorted[i]].str );
 
         if (c < 0)
             high = i - 1;
@@ -403,7 +409,7 @@ UINT msi_string2idW( const string_table *st, LPCWSTR str, UINT *id )
     while (low <= high)
     {
         i = (low + high) / 2;
-        c = lstrcmpW( str, st->strings[st->sorted[i]].str );
+        c = strcmpW( str, st->strings[st->sorted[i]].str );
 
         if (c < 0)
             high = i - 1;
@@ -564,7 +570,7 @@ end:
     return st;
 }
 
-UINT msi_save_string_table( const string_table *st, IStorage *storage )
+UINT msi_save_string_table( const string_table *st, IStorage *storage, UINT *bytes_per_strref )
 {
     UINT i, datasize = 0, poolsize = 0, sz, used, r, codepage, n;
     UINT ret = ERROR_FUNCTION_FAILED;
@@ -593,8 +599,16 @@ UINT msi_save_string_table( const string_table *st, IStorage *storage )
 
     used = 0;
     codepage = st->codepage;
-    pool[0]=codepage&0xffff;
-    pool[1]=(codepage>>16);
+    pool[0] = codepage & 0xffff;
+    pool[1] = codepage >> 16;
+    if (st->maxcount > 0xffff)
+    {
+        pool[1] |= 0x8000;
+        *bytes_per_strref = LONG_STR_BYTES;
+    }
+    else
+        *bytes_per_strref = sizeof(USHORT);
+
     n = 1;
     for( i=1; i<st->maxcount; i++ )
     {
@@ -663,4 +677,19 @@ err:
     msi_free( pool );
 
     return ret;
+}
+
+UINT msi_get_string_table_codepage( const string_table *st )
+{
+    return st->codepage;
+}
+
+UINT msi_set_string_table_codepage( string_table *st, UINT codepage )
+{
+    if (validate_codepage( codepage ))
+    {
+        st->codepage = codepage;
+        return ERROR_SUCCESS;
+    }
+    return ERROR_FUNCTION_FAILED;
 }

@@ -36,14 +36,14 @@
 /* argument type flags for relay debugging */
 enum arg_types
 {
-    ARG_NONE = 0, /* indicates end of arg list */
-    ARG_WORD,     /* unsigned word */
-    ARG_SWORD,    /* signed word */
-    ARG_LONG,     /* long or segmented pointer */
-    ARG_PTR,      /* linear pointer */
-    ARG_STR,      /* linear pointer to null-terminated string */
-    ARG_SEGSTR,   /* segmented pointer to null-terminated string */
-    ARG_VARARG    /* start of varargs */
+    ARG16_NONE = 0, /* indicates end of arg list */
+    ARG16_WORD,     /* unsigned word */
+    ARG16_SWORD,    /* signed word */
+    ARG16_LONG,     /* long or segmented pointer */
+    ARG16_PTR,      /* linear pointer */
+    ARG16_STR,      /* linear pointer to null-terminated string */
+    ARG16_SEGSTR,   /* segmented pointer to null-terminated string */
+    ARG16_VARARG    /* start of varargs */
 };
 
 /* sequences of nops to fill a certain number of words */
@@ -62,6 +62,33 @@ static inline int is_function( const ORDDEF *odp )
             odp->type == TYPE_PASCAL ||
             odp->type == TYPE_VARARGS ||
             odp->type == TYPE_STUB);
+}
+
+static const char *get_args_str( const ORDDEF *odp )
+{
+    static char buffer[MAX_ARGUMENTS*2+1];
+    unsigned int i;
+
+    buffer[0] = 0;
+    for (i = 0; i < odp->u.func.nb_args; i++)
+    {
+        switch (odp->u.func.args[i])
+        {
+        case ARG_WORD:   strcat( buffer, "w" ); break;
+        case ARG_SWORD:  strcat( buffer, "s" ); break;
+        case ARG_SEGSTR: strcat( buffer, "T" ); break;
+        case ARG_STR:    strcat( buffer, "t" ); break;
+        case ARG_LONG:
+        case ARG_FLOAT:
+        case ARG_SEGPTR: strcat( buffer, "l" ); break;
+        case ARG_PTR:
+        case ARG_WSTR:
+        case ARG_INT128: strcat( buffer, "p" ); break;
+        case ARG_INT64:
+        case ARG_DOUBLE: strcat( buffer, "ll" ); break;
+        }
+    }
+    return buffer;
 }
 
 /*******************************************************************
@@ -195,14 +222,15 @@ static void output_resident_name( const char *string, int ordinal )
  */
 static const char *get_callfrom16_name( const ORDDEF *odp )
 {
-    static char buffer[80];
+    static char *buffer;
 
-    sprintf( buffer, "%s_%s_%s",
-             (odp->type == TYPE_PASCAL) ? "p" :
-             (odp->type == TYPE_VARARGS) ? "v" : "c",
-             (odp->flags & FLAG_REGISTER) ? "regs" :
-             (odp->flags & FLAG_RET16) ? "word" : "long",
-             odp->u.func.arg_types );
+    free( buffer );
+    buffer = strmake( "%s_%s_%s",
+                      (odp->type == TYPE_PASCAL) ? "p" :
+                      (odp->type == TYPE_VARARGS) ? "v" : "c",
+                      (odp->flags & FLAG_REGISTER) ? "regs" :
+                      (odp->flags & FLAG_RET16) ? "word" : "long",
+                      get_args_str(odp) );
     return buffer;
 }
 
@@ -230,7 +258,7 @@ static const char *get_relay_name( const ORDDEF *odp )
     default:
         assert(0);
     }
-    strcat( buffer, odp->u.func.arg_types );
+    strcat( buffer, get_args_str(odp) );
     for (p = buffer + 2; *p; p++)
     {
         /* map string types to the corresponding plain pointer type */
@@ -247,25 +275,30 @@ static const char *get_relay_name( const ORDDEF *odp )
  */
 static int get_function_argsize( const ORDDEF *odp )
 {
-    const char *args;
-    int argsize = 0;
+    unsigned int i, argsize = 0;
 
-    for (args = odp->u.func.arg_types; *args; args++)
+    for (i = 0; i < odp->u.func.nb_args; i++)
     {
-        switch (*args)
+        switch (odp->u.func.args[i])
         {
-        case 'w':  /* word */
-        case 's':  /* s_word */
+        case ARG_WORD:
+        case ARG_SWORD:
             argsize += 2;
             break;
-        case 'l':  /* long or segmented pointer */
-        case 'T':  /* segmented pointer to null-terminated string */
-        case 'p':  /* linear pointer */
-        case 't':  /* linear pointer to null-terminated string */
+        case ARG_SEGPTR:
+        case ARG_SEGSTR:
+        case ARG_LONG:
+        case ARG_PTR:
+        case ARG_STR:
+        case ARG_WSTR:
+        case ARG_FLOAT:
+        case ARG_INT128:
             argsize += 4;
             break;
-        default:
-            assert(0);
+        case ARG_INT64:
+        case ARG_DOUBLE:
+            argsize += 8;
+            break;
         }
     }
     return argsize;
@@ -301,13 +334,12 @@ static int get_function_argsize( const ORDDEF *odp )
  */
 static void output_call16_function( ORDDEF *odp )
 {
-    char name[256];
+    char *name;
     int i, pos, stack_words;
-    const char *args = odp->u.func.arg_types;
     int argsize = get_function_argsize( odp );
-    int needs_ldt = strchr( args, 'p' ) || strchr( args, 't' );
+    int needs_ldt = (strpbrk( get_args_str( odp ), "pt" ) != NULL);
 
-    sprintf( name, ".L__wine_spec_call16_%s", get_relay_name(odp) );
+    name = strmake( ".L__wine_spec_call16_%s", get_relay_name(odp) );
 
     output( "\t.align %d\n", get_alignment(4) );
     output( "\t%s\n", func_declaration(name) );
@@ -334,11 +366,13 @@ static void output_call16_function( ORDDEF *odp )
     }
 
     /* preserve 16-byte stack alignment */
-    stack_words += strlen(args);
+    stack_words += odp->u.func.nb_args;
+    for (i = 0; i < odp->u.func.nb_args; i++)
+        if (odp->u.func.args[i] == ARG_DOUBLE || odp->u.func.args[i] == ARG_INT64) stack_words++;
     if ((odp->flags & FLAG_REGISTER) || (odp->type == TYPE_VARARGS)) stack_words++;
     if (stack_words % 4) output( "\tsubl $%d,%%esp\n", 16 - 4 * (stack_words % 4) );
 
-    if (args[0] || odp->type == TYPE_VARARGS)
+    if (odp->u.func.nb_args || odp->type == TYPE_VARARGS)
         output( "\tmovl 12(%%ebp),%%ecx\n" );  /* args */
 
     if (odp->flags & FLAG_REGISTER)
@@ -352,33 +386,43 @@ static void output_call16_function( ORDDEF *odp )
     }
 
     pos = (odp->type == TYPE_PASCAL) ? 0 : argsize;
-    for (i = strlen(args) - 1; i >= 0; i--)
+    for (i = odp->u.func.nb_args - 1; i >= 0; i--)
     {
-        switch (args[i])
+        switch (odp->u.func.args[i])
         {
-        case 'w':  /* word */
+        case ARG_WORD:
             if (odp->type != TYPE_PASCAL) pos -= 2;
             output( "\tmovzwl %d(%%ecx),%%eax\n", pos );
             output( "\tpushl %%eax\n" );
             if (odp->type == TYPE_PASCAL) pos += 2;
             break;
 
-        case 's':  /* s_word */
+        case ARG_SWORD:
             if (odp->type != TYPE_PASCAL) pos -= 2;
             output( "\tmovswl %d(%%ecx),%%eax\n", pos );
             output( "\tpushl %%eax\n" );
             if (odp->type == TYPE_PASCAL) pos += 2;
             break;
 
-        case 'l':  /* long or segmented pointer */
-        case 'T':  /* segmented pointer to null-terminated string */
+        case ARG_INT64:
+        case ARG_DOUBLE:
+            if (odp->type != TYPE_PASCAL) pos -= 4;
+            output( "\tpushl %d(%%ecx)\n", pos );
+            if (odp->type == TYPE_PASCAL) pos += 4;
+            /* fall through */
+        case ARG_LONG:
+        case ARG_FLOAT:
+        case ARG_SEGPTR:
+        case ARG_SEGSTR:
             if (odp->type != TYPE_PASCAL) pos -= 4;
             output( "\tpushl %d(%%ecx)\n", pos );
             if (odp->type == TYPE_PASCAL) pos += 4;
             break;
 
-        case 'p':  /* linear pointer */
-        case 't':  /* linear pointer to null-terminated string */
+        case ARG_PTR:
+        case ARG_STR:
+        case ARG_WSTR:
+        case ARG_INT128:
             if (odp->type != TYPE_PASCAL) pos -= 4;
             output( "\tmovzwl %d(%%ecx),%%edx\n", pos + 2 ); /* sel */
             output( "\tshr $3,%%edx\n" );
@@ -387,9 +431,6 @@ static void output_call16_function( ORDDEF *odp )
             output( "\tpushl %%eax\n" );
             if (odp->type == TYPE_PASCAL) pos += 4;
             break;
-
-        default:
-            assert(0);
         }
     }
 
@@ -406,6 +447,7 @@ static void output_call16_function( ORDDEF *odp )
     output( "\tret\n" );
     output_cfi( ".cfi_endproc" );
     output_function_size( name );
+    free( name );
 }
 
 
@@ -421,6 +463,7 @@ static int callfrom16_type_compare( const void *e1, const void *e2 )
     int retval;
     int type1 = odp1->type;
     int type2 = odp2->type;
+    char args1[80];
 
     if (type1 == TYPE_STUB) type1 = TYPE_CDECL;
     if (type2 == TYPE_STUB) type2 = TYPE_CDECL;
@@ -432,7 +475,8 @@ static int callfrom16_type_compare( const void *e1, const void *e2 )
 
     if ((retval = type1 - type2) != 0) return retval;
 
-    return strcmp( odp1->u.func.arg_types, odp2->u.func.arg_types );
+    strcpy( args1, get_args_str( odp1 ));
+    return strcmp( args1, get_args_str( odp2 ));
 }
 
 
@@ -502,7 +546,7 @@ static void output_module16( DLLSPEC *spec )
         entry_point->name = NULL;
         entry_point->link_name = xstrdup( spec->init_func );
         entry_point->export_name = NULL;
-        entry_point->u.func.arg_types[0] = 0;
+        entry_point->u.func.nb_args = 0;
         assert( !spec->ordinals[0] );
         spec->ordinals[0] = entry_point;
     }
@@ -652,28 +696,39 @@ static void output_module16( DLLSPEC *spec )
     for ( i = 0; i < nb_funcs; i++ )
     {
         unsigned int arg_types[2];
-        int nop_words, argsize = 0;
+        int nop_words, pos, argsize = 0;
 
         if ( typelist[i]->type == TYPE_PASCAL )
             argsize = get_function_argsize( typelist[i] );
 
         /* build the arg types bit fields */
         arg_types[0] = arg_types[1] = 0;
-        for (j = 0; typelist[i]->u.func.arg_types[j]; j++)
+        for (j = pos = 0; j < typelist[i]->u.func.nb_args && pos < 20; j++, pos++)
         {
             int type = 0;
-            switch(typelist[i]->u.func.arg_types[j])
+            switch (typelist[i]->u.func.args[j])
             {
-            case 'w': type = ARG_WORD; break;
-            case 's': type = ARG_SWORD; break;
-            case 'l': type = ARG_LONG; break;
-            case 'p': type = ARG_PTR; break;
-            case 't': type = ARG_STR; break;
-            case 'T': type = ARG_SEGSTR; break;
+            case ARG_WORD:   type = ARG16_WORD; break;
+            case ARG_SWORD:  type = ARG16_SWORD; break;
+            case ARG_SEGPTR: type = ARG16_LONG; break;
+            case ARG_SEGSTR: type = ARG16_SEGSTR; break;
+            case ARG_LONG:   type = ARG16_LONG; break;
+            case ARG_PTR:    type = ARG16_PTR; break;
+            case ARG_STR:    type = ARG16_STR; break;
+            case ARG_WSTR:   type = ARG16_PTR; break;
+            case ARG_FLOAT:  type = ARG16_LONG; break;
+            case ARG_INT128: type = ARG16_PTR; break;
+            case ARG_INT64:
+            case ARG_DOUBLE:
+                type = ARG16_LONG;
+                arg_types[pos / 10] |= type << (3 * (pos % 10));
+                pos++;
+                break;
             }
-            arg_types[j / 10] |= type << (3 * (j % 10));
+            if (pos < 20) arg_types[pos / 10] |= type << (3 * (pos % 10));
         }
-        if (typelist[i]->type == TYPE_VARARGS) arg_types[j / 10] |= ARG_VARARG << (3 * (j % 10));
+        if (typelist[i]->type == TYPE_VARARGS && pos < 20)
+            arg_types[pos / 10] |= ARG16_VARARG << (3 * (pos % 10));
 
         output( ".L__wine_spec_callfrom16_%s:\n", get_callfrom16_name(typelist[i]) );
         output( "\tpushl $.L__wine_spec_call16_%s\n", get_relay_name(typelist[i]) );

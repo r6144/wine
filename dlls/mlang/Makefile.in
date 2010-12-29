@@ -1,7 +1,3 @@
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = mlang.dll
 IMPORTLIB = mlang
 IMPORTS   = uuid ole32 gdi32 advapi32
@@ -9,7 +5,8 @@ DELAYIMPORTS = oleaut32
 EXTRADEFS = -DCOM_NO_WINDOWS_H
 
 C_SRCS = \
-	mlang.c \
-	regsvr.c
+	mlang.c
+
+IDL_R_SRCS = mlang_classes.idl
 
 @MAKE_DLL_RULES@

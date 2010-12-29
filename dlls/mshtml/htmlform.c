@@ -47,6 +47,7 @@ static HRESULT htmlform_item(HTMLFormElement *This, int i, IDispatch **ret)
     nsIDOMNode *item;
     HTMLDOMNode *node;
     nsresult nsres;
+    HRESULT hres;
 
     nsres = nsIDOMHTMLFormElement_GetElements(This->nsform, &elements);
     if(NS_FAILED(nsres)) {
@@ -62,9 +63,9 @@ static HRESULT htmlform_item(HTMLFormElement *This, int i, IDispatch **ret)
     }
 
     if(item) {
-        node = get_node(This->element.node.doc, item, TRUE);
-        if(!node)
-            return E_OUTOFMEMORY;
+        hres = get_node(This->element.node.doc, item, TRUE, &node);
+        if(FAILED(hres))
+            return hres;
 
         IHTMLDOMNode_AddRef(HTMLDOMNODE(node));
         nsIDOMNode_Release(item);
@@ -188,30 +189,101 @@ static HRESULT WINAPI HTMLFormElement_get_dir(IHTMLFormElement *iface, BSTR *p)
 
 static HRESULT WINAPI HTMLFormElement_put_encoding(IHTMLFormElement *iface, BSTR v)
 {
+    static const WCHAR urlencodedW[] = {'a','p','p','l','i','c','a','t','i','o','n','/',
+        'x','-','w','w','w','-','f','o','r','m','-','u','r','l','e','n','c','o','d','e','d',0};
+    static const WCHAR dataW[] = {'m','u','l','t','i','p','a','r','t','/',
+        'f','o','r','m','-','d','a','t','a',0};
+    static const WCHAR plainW[] = {'t','e','x','t','/','p','l','a','i','n',0};
+
     HTMLFormElement *This = HTMLFORM_THIS(iface);
-    FIXME("(%p)->(%s)\n", This, wine_dbgstr_w(v));
-    return E_NOTIMPL;
+    nsAString encoding_str;
+    nsresult nsres;
+
+    TRACE("(%p)->(%s)\n", This, wine_dbgstr_w(v));
+
+    if(lstrcmpiW(v, urlencodedW) && lstrcmpiW(v, dataW) && lstrcmpiW(v, plainW)) {
+        WARN("incorrect enctype\n");
+        return E_INVALIDARG;
+    }
+
+    nsAString_InitDepend(&encoding_str, v);
+    nsres = nsIDOMHTMLFormElement_SetEnctype(This->nsform, &encoding_str);
+    nsAString_Finish(&encoding_str);
+    if(NS_FAILED(nsres))
+        return E_FAIL;
+
+    return S_OK;
 }
 
 static HRESULT WINAPI HTMLFormElement_get_encoding(IHTMLFormElement *iface, BSTR *p)
 {
     HTMLFormElement *This = HTMLFORM_THIS(iface);
-    FIXME("(%p)->(%p)\n", This, p);
-    return E_NOTIMPL;
+    nsAString encoding_str;
+    nsresult nsres;
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    nsAString_Init(&encoding_str, NULL);
+    nsres = nsIDOMHTMLFormElement_GetEnctype(This->nsform, &encoding_str);
+    if(NS_SUCCEEDED(nsres)) {
+        const PRUnichar *encoding;
+        nsAString_GetData(&encoding_str, &encoding);
+
+        *p = SysAllocString(encoding);
+        if(!*p)
+            return E_OUTOFMEMORY;
+    }else
+        return E_FAIL;
+
+    return S_OK;
 }
 
 static HRESULT WINAPI HTMLFormElement_put_method(IHTMLFormElement *iface, BSTR v)
 {
+    static const WCHAR postW[] = {'P','O','S','T',0};
+    static const WCHAR getW[] = {'G','E','T',0};
+
     HTMLFormElement *This = HTMLFORM_THIS(iface);
-    FIXME("(%p)->(%s)\n", This, wine_dbgstr_w(v));
-    return E_NOTIMPL;
+    nsAString method_str;
+    nsresult nsres;
+
+    TRACE("(%p)->(%s)\n", This, wine_dbgstr_w(v));
+
+    if(lstrcmpiW(v, postW) && lstrcmpiW(v, getW)) {
+        WARN("unrecognized method\n");
+        return E_INVALIDARG;
+    }
+
+    nsAString_InitDepend(&method_str, v);
+    nsres = nsIDOMHTMLFormElement_SetMethod(This->nsform, &method_str);
+    nsAString_Finish(&method_str);
+    if(NS_FAILED(nsres))
+        return E_FAIL;
+
+    return S_OK;
 }
 
 static HRESULT WINAPI HTMLFormElement_get_method(IHTMLFormElement *iface, BSTR *p)
 {
     HTMLFormElement *This = HTMLFORM_THIS(iface);
-    FIXME("(%p)->(%p)\n", This, p);
-    return E_NOTIMPL;
+    nsAString method_str;
+    nsresult nsres;
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    nsAString_Init(&method_str, NULL);
+    nsres = nsIDOMHTMLFormElement_GetMethod(This->nsform, &method_str);
+    if(NS_SUCCEEDED(nsres)) {
+        const PRUnichar *method;
+        nsAString_GetData(&method_str, &method);
+
+        *p = SysAllocString(method);
+        if(!*p)
+            return E_OUTOFMEMORY;
+    }else
+        return E_FAIL;
+
+    return S_OK;
 }
 
 static HRESULT WINAPI HTMLFormElement_get_elements(IHTMLFormElement *iface, IDispatch **p)
@@ -238,15 +310,44 @@ static HRESULT WINAPI HTMLFormElement_get_target(IHTMLFormElement *iface, BSTR *
 static HRESULT WINAPI HTMLFormElement_put_name(IHTMLFormElement *iface, BSTR v)
 {
     HTMLFormElement *This = HTMLFORM_THIS(iface);
-    FIXME("(%p)->(%s)\n", This, wine_dbgstr_w(v));
-    return E_NOTIMPL;
+    nsAString name_str;
+    nsresult nsres;
+
+    TRACE("(%p)->(%s)\n", This, wine_dbgstr_w(v));
+
+    nsAString_InitDepend(&name_str, v);
+    nsres = nsIDOMHTMLFormElement_SetName(This->nsform, &name_str);
+    nsAString_Finish(&name_str);
+    if(NS_FAILED(nsres))
+        return E_FAIL;
+
+    return S_OK;
 }
 
 static HRESULT WINAPI HTMLFormElement_get_name(IHTMLFormElement *iface, BSTR *p)
 {
     HTMLFormElement *This = HTMLFORM_THIS(iface);
-    FIXME("(%p)->(%p)\n", This, p);
-    return E_NOTIMPL;
+    nsAString name_str;
+    nsresult nsres;
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    nsAString_Init(&name_str, NULL);
+    nsres = nsIDOMHTMLFormElement_GetName(This->nsform, &name_str);
+    if(NS_SUCCEEDED(nsres)) {
+        const PRUnichar *name;
+        nsAString_GetData(&name_str, &name);
+
+        if(*name) {
+            *p = SysAllocString(name);
+            if(!*p)
+                return E_OUTOFMEMORY;
+        }else
+            *p = NULL;
+    }else
+        return E_FAIL;
+
+    return S_OK;
 }
 
 static HRESULT WINAPI HTMLFormElement_put_onsubmit(IHTMLFormElement *iface, VARIANT v)
@@ -538,6 +639,7 @@ static HRESULT HTMLFormElement_invoke(HTMLDOMNode *iface,
 static const NodeImplVtbl HTMLFormElementImplVtbl = {
     HTMLFormElement_QI,
     HTMLFormElement_destructor,
+    HTMLElement_clone,
     NULL,
     NULL,
     NULL,
@@ -561,19 +663,27 @@ static dispex_static_data_t HTMLFormElement_dispex = {
     HTMLFormElement_iface_tids
 };
 
-HTMLElement *HTMLFormElement_Create(HTMLDocumentNode *doc, nsIDOMHTMLElement *nselem)
+HRESULT HTMLFormElement_Create(HTMLDocumentNode *doc, nsIDOMHTMLElement *nselem, HTMLElement **elem)
 {
-    HTMLFormElement *ret = heap_alloc_zero(sizeof(HTMLFormElement));
+    HTMLFormElement *ret;
     nsresult nsres;
+
+    ret = heap_alloc_zero(sizeof(HTMLFormElement));
+    if(!ret)
+        return E_OUTOFMEMORY;
 
     ret->lpHTMLFormElementVtbl = &HTMLFormElementVtbl;
     ret->element.node.vtbl = &HTMLFormElementImplVtbl;
 
+    nsres = nsIDOMHTMLElement_QueryInterface(nselem, &IID_nsIDOMHTMLFormElement, (void**)&ret->nsform);
+    if(NS_FAILED(nsres)) {
+        ERR("Could not get nsIDOMHTMLFormElement interface: %08x\n", nsres);
+        heap_free(ret);
+        return E_FAIL;
+    }
+
     HTMLElement_Init(&ret->element, doc, nselem, &HTMLFormElement_dispex);
 
-    nsres = nsIDOMHTMLElement_QueryInterface(nselem, &IID_nsIDOMHTMLFormElement, (void**)&ret->nsform);
-    if(NS_FAILED(nsres))
-        ERR("Could not get nsIDOMHTMLFormElement interface: %08x\n", nsres);
-
-    return &ret->element;
+    *elem = &ret->element;
+    return S_OK;
 }

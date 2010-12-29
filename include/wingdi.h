@@ -3331,6 +3331,8 @@ typedef struct tagGLYPHSET {
   WCRANGE  ranges[1];
 } GLYPHSET, *PGLYPHSET, *LPGLYPHSET;
 
+#define GS_8BIT_INDICES 0x00000001
+
 WINGDIAPI INT         WINAPI AbortDoc(HDC);
 WINGDIAPI BOOL        WINAPI AbortPath(HDC);
 WINGDIAPI INT         WINAPI AddFontResourceA(LPCSTR);
@@ -3601,6 +3603,7 @@ WINGDIAPI BOOL        WINAPI LineDDA(INT,INT,INT,INT,LINEDDAPROC,LPARAM);
 WINGDIAPI BOOL        WINAPI LineTo(HDC,INT,INT);
 WINGDIAPI BOOL        WINAPI LPtoDP(HDC,LPPOINT,INT);
 WINGDIAPI BOOL        WINAPI MaskBlt(HDC,INT,INT,INT,INT,HDC,INT,INT,HBITMAP,INT,INT,DWORD);
+WINGDIAPI BOOL        WINAPI MirrorRgn(HWND,HRGN);
 WINGDIAPI BOOL        WINAPI ModifyWorldTransform(HDC,const XFORM *, DWORD);
 WINGDIAPI BOOL        WINAPI MoveToEx(HDC,INT,INT,LPPOINT);
 WINGDIAPI INT         WINAPI OffsetClipRgn(HDC,INT,INT);
@@ -3630,6 +3633,7 @@ WINGDIAPI UINT        WINAPI RealizePalette(HDC);
 WINGDIAPI BOOL        WINAPI Rectangle(HDC,INT,INT,INT,INT);
 WINGDIAPI BOOL        WINAPI RectInRegion(HRGN,const RECT *);
 WINGDIAPI BOOL        WINAPI RectVisible(HDC,const RECT*);
+WINGDIAPI BOOL        WINAPI RemoveFontMemResourceEx(HANDLE);
 WINGDIAPI BOOL        WINAPI RemoveFontResourceA(LPCSTR);
 WINGDIAPI BOOL        WINAPI RemoveFontResourceW(LPCWSTR);
 #define                      RemoveFontResource WINELIB_NAME_AW(RemoveFontResource)
@@ -3790,7 +3794,10 @@ typedef BOOL (CALLBACK *DCHOOKPROC)(HDC,WORD,DWORD_PTR,LPARAM);
 WINGDIAPI DWORD_PTR WINAPI GetDCHook(HDC,DCHOOKPROC*);
 WINGDIAPI BOOL      WINAPI SetDCHook(HDC,DCHOOKPROC,DWORD_PTR);
 WINGDIAPI WORD      WINAPI SetHookFlags(HDC,WORD);
-WINGDIAPI INT       WINAPI SelectVisRgn(HDC,HRGN);
+
+extern void CDECL __wine_make_gdi_object_system( HGDIOBJ handle, BOOL set );
+extern void CDECL __wine_set_visible_region( HDC hdc, HRGN hrgn, const RECT *vis_rect );
+
 #endif /* __WINESRC__ */
 
 #ifdef __cplusplus

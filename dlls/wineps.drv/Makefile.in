@@ -1,7 +1,3 @@
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = wineps.drv
 IMPORTS   = user32 gdi32 winspool advapi32
 EXTRAINCL = @FREETYPEINCL@ @CUPSINCL@
@@ -75,6 +71,7 @@ RC_SRCS= \
 	wps_En.rc \
 	wps_Es.rc \
 	wps_Fr.rc \
+	wps_He.rc \
 	wps_Hu.rc \
 	wps_It.rc \
 	wps_Ja.rc \
@@ -98,7 +95,7 @@ EXTRASUBDIRS = data
 @MAKE_DLL_RULES@
 
 install-ppd:: $(DESTDIR)$(datadir)/wine dummy
-	$(INSTALL_DATA) $(SRCDIR)/generic.ppd $(DESTDIR)$(datadir)/wine/generic.ppd
+	$(INSTALL_DATA) $(srcdir)/generic.ppd $(DESTDIR)$(datadir)/wine/generic.ppd
 
 .PHONY: install-ppd
 

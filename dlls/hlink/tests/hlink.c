@@ -57,6 +57,14 @@ DEFINE_EXPECT(IsSystemMoniker);
 DEFINE_EXPECT(BindToStorage);
 DEFINE_EXPECT(GetDisplayName);
 
+DEFINE_EXPECT(ComposeWith);
+DEFINE_EXPECT(OnNavigationComplete);
+DEFINE_EXPECT(Enum);
+DEFINE_EXPECT(Reduce);
+
+DEFINE_EXPECT(GetClassID);
+DEFINE_EXPECT(Save);
+
 static const char *debugstr_guid(REFIID riid)
 {
     static char buf[50];
@@ -437,7 +445,7 @@ static void test_persist(void)
 
     hr = HlinkCreateFromString(url, NULL, NULL, NULL,
                                0, NULL, &IID_IHlink, (LPVOID*) &lnk);
-    ok(hr == S_OK, "IHlinkCreateFromString failed with error 0x%08x\n", hr);
+    ok(hr == S_OK, "HlinkCreateFromString failed with error 0x%08x\n", hr);
     if (!lnk) {
         skip("Can't create lnk, skipping test_persist.\n");
         return;
@@ -449,7 +457,7 @@ static void test_persist(void)
 
     hr = HlinkCreateFromString(url, NULL, friendly_name, NULL,
                                0, NULL, &IID_IHlink, (LPVOID*) &lnk);
-    ok(hr == S_OK, "IHlinCreateFromString failed with error 0x%08x\n", hr);
+    ok(hr == S_OK, "HlinkCreateFromString failed with error 0x%08x\n", hr);
     test_persist_save_data("url + friendly name", lnk,
         expected_hlink_data2, sizeof(expected_hlink_data2),
         expected_hlink_data2_ie7, sizeof(expected_hlink_data2_ie7));
@@ -457,7 +465,7 @@ static void test_persist(void)
 
     hr = HlinkCreateFromString(url, location, friendly_name, NULL,
                                0, NULL, &IID_IHlink, (LPVOID*) &lnk);
-    ok(hr == S_OK, "IHlinCreateFromString failed with error 0x%08x\n", hr);
+    ok(hr == S_OK, "HlinkCreateFromString failed with error 0x%08x\n", hr);
     test_persist_save_data("url + friendly_name + location", lnk,
         expected_hlink_data3, sizeof(expected_hlink_data3),
         expected_hlink_data3_ie7, sizeof(expected_hlink_data3_ie7));
@@ -465,7 +473,7 @@ static void test_persist(void)
 
     hr = HlinkCreateFromString(rel_url, NULL, NULL, NULL,
                                0, NULL, &IID_IHlink, (LPVOID*) &lnk);
-    ok(hr == S_OK, "IHlinCreateFromString failed with error 0x%08x\n", hr);
+    ok(hr == S_OK, "HlinkCreateFromString failed with error 0x%08x\n", hr);
     test_persist_save_data("relative url", lnk,
         expected_hlink_data4, sizeof(expected_hlink_data4),
         expected_hlink_data4, sizeof(expected_hlink_data4));
@@ -473,7 +481,7 @@ static void test_persist(void)
 
     hr = HlinkCreateFromString(url, NULL, NULL, NULL,
                                0, NULL, &IID_IHlink, (LPVOID*) &lnk);
-    ok(hr == S_OK, "IHlinCreateFromString failed with error 0x%08x\n", hr);
+    ok(hr == S_OK, "HlinkCreateFromString failed with error 0x%08x\n", hr);
     hr = IHlink_SetTargetFrameName(lnk, target_frame_name);
     ok(hr == S_OK, "IHlink_SetTargetFrameName failed with error 0x%08x\n", hr);
     test_persist_save_data("url + target frame name", lnk,
@@ -483,7 +491,7 @@ static void test_persist(void)
 
     hr = HlinkCreateFromString(filename, NULL, NULL, NULL,
                                0, NULL, &IID_IHlink, (LPVOID*) &lnk);
-    ok(hr == S_OK, "IHlinCreateFromString failed with error 0x%08x\n", hr);
+    ok(hr == S_OK, "HlinkCreateFromString failed with error 0x%08x\n", hr);
     test_persist_save_data("filename", lnk,
         expected_hlink_data6, sizeof(expected_hlink_data6),
         expected_hlink_data6, sizeof(expected_hlink_data6));
@@ -813,8 +821,9 @@ static ULONG WINAPI Moniker_Release(IMoniker *iface)
 
 static HRESULT WINAPI Moniker_GetClassID(IMoniker *iface, CLSID *pClassID)
 {
-    ok(0, "unexpected call\n");
-    return E_NOTIMPL;
+    CHECK_EXPECT(GetClassID);
+    *pClassID = IID_IUnknown; /* not a valid CLSID */
+    return S_OK;
 }
 
 static HRESULT WINAPI Moniker_IsDirty(IMoniker *iface)
@@ -831,8 +840,8 @@ static HRESULT WINAPI Moniker_Load(IMoniker *iface, IStream *pStm)
 
 static HRESULT WINAPI Moniker_Save(IMoniker *iface, IStream *pStm, BOOL fClearDirty)
 {
-    ok(0, "unexpected call\n");
-    return E_NOTIMPL;
+    CHECK_EXPECT(Save);
+    return S_OK;
 }
 
 static HRESULT WINAPI Moniker_GetSizeMax(IMoniker *iface, ULARGE_INTEGER *pcbSize)
@@ -876,7 +885,7 @@ static HRESULT WINAPI Moniker_BindToStorage(IMoniker *iface, IBindCtx *pbc, IMon
 static HRESULT WINAPI Moniker_Reduce(IMoniker *iface, IBindCtx *pbc, DWORD dwReduceHowFar,
         IMoniker **ppmkToLeft, IMoniker **ppmkReduced)
 {
-    ok(0, "unexpected call\n");
+    CHECK_EXPECT(Reduce);
     return E_NOTIMPL;
 }
 
@@ -889,7 +898,7 @@ static HRESULT WINAPI Moniker_ComposeWith(IMoniker *iface, IMoniker *pmkRight,
 
 static HRESULT WINAPI Moniker_Enum(IMoniker *iface, BOOL fForwrd, IEnumMoniker **ppenumMoniker)
 {
-    ok(0, "unexpected call\n");
+    CHECK_EXPECT(Enum);
     return E_NOTIMPL;
 }
 
@@ -1442,6 +1451,374 @@ static void test_HashLink(void)
     }
 }
 
+static WCHAR site_monikerW[] = {'S','I','T','E','_','M','O','N','I','K','E','R',0};
+static WCHAR ref_monikerW[] = {'R','E','F','_','M','O','N','I','K','E','R',0};
+
+static HRESULT WINAPI hls_test_Moniker_BindToStorage(IMoniker *iface,
+        IBindCtx *pbc, IMoniker *toLeft, REFIID riid, void **obj)
+{
+    ok(0, "BTS: %p %p %p %p %p\n", iface, pbc, toLeft, riid, obj);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI hls_site_Moniker_ComposeWith(IMoniker *iface,
+        IMoniker *right, BOOL onlyIfNotGeneric, IMoniker **composite)
+{
+    LPOLESTR rightName;
+    HRESULT hres;
+
+    ok(onlyIfNotGeneric == 0, "Expected onlyIfNotGeneric to be FALSE\n");
+
+    CHECK_EXPECT(ComposeWith);
+
+    hres = IMoniker_GetDisplayName(right, NULL, NULL, &rightName);
+    ok(hres == S_OK, "GetDisplayName failed: %08x\n", hres);
+    ok(!lstrcmpW(rightName, ref_monikerW),
+            "Expected to get moniker set via SetMonikerReference, instead got: %s\n",
+            wine_dbgstr_w(rightName));
+    CoTaskMemFree(rightName);
+
+    *composite = NULL;
+
+    /* unlikely error code to verify this return result is used */
+    return E_OUTOFMEMORY;
+}
+
+static HRESULT WINAPI hls_site_Moniker_GetDisplayName(IMoniker *iface,
+        IBindCtx *pbc, IMoniker *toLeft, LPOLESTR *displayName)
+{
+    *displayName = CoTaskMemAlloc(sizeof(site_monikerW));
+    memcpy(*displayName, site_monikerW, sizeof(site_monikerW));
+    return S_OK;
+}
+
+static HRESULT WINAPI hls_ref_Moniker_GetDisplayName(IMoniker *iface,
+        IBindCtx *pbc, IMoniker *toLeft, LPOLESTR *displayName)
+{
+    *displayName = CoTaskMemAlloc(sizeof(ref_monikerW));
+    memcpy(*displayName, ref_monikerW, sizeof(ref_monikerW));
+    return S_OK;
+}
+
+static HRESULT WINAPI hls_test_Moniker_IsSystemMoniker(IMoniker *iface,
+        DWORD *mksys)
+{
+    return S_FALSE;
+}
+
+static IMonikerVtbl hls_site_MonikerVtbl = {
+    Moniker_QueryInterface,
+    Moniker_AddRef,
+    Moniker_Release,
+    Moniker_GetClassID,
+    Moniker_IsDirty,
+    Moniker_Load,
+    Moniker_Save,
+    Moniker_GetSizeMax,
+    Moniker_BindToObject,
+    hls_test_Moniker_BindToStorage,
+    Moniker_Reduce,
+    hls_site_Moniker_ComposeWith,
+    Moniker_Enum,
+    Moniker_IsEqual,
+    Moniker_Hash,
+    Moniker_IsRunning,
+    Moniker_GetTimeOfLastChange,
+    Moniker_Inverse,
+    Moniker_CommonPrefixWith,
+    Moniker_RelativePathTo,
+    hls_site_Moniker_GetDisplayName,
+    Moniker_ParseDisplayName,
+    hls_test_Moniker_IsSystemMoniker
+};
+
+static IMonikerVtbl hls_ref_MonikerVtbl = {
+    Moniker_QueryInterface,
+    Moniker_AddRef,
+    Moniker_Release,
+    Moniker_GetClassID,
+    Moniker_IsDirty,
+    Moniker_Load,
+    Moniker_Save,
+    Moniker_GetSizeMax,
+    Moniker_BindToObject,
+    hls_test_Moniker_BindToStorage,
+    Moniker_Reduce,
+    Moniker_ComposeWith,
+    Moniker_Enum,
+    Moniker_IsEqual,
+    Moniker_Hash,
+    Moniker_IsRunning,
+    Moniker_GetTimeOfLastChange,
+    Moniker_Inverse,
+    Moniker_CommonPrefixWith,
+    Moniker_RelativePathTo,
+    hls_ref_Moniker_GetDisplayName,
+    Moniker_ParseDisplayName,
+    hls_test_Moniker_IsSystemMoniker
+};
+
+static IMoniker hls_site_Moniker = { &hls_site_MonikerVtbl };
+static IMoniker hls_ref_Moniker = { &hls_ref_MonikerVtbl };
+
+static HRESULT WINAPI hls_QueryInterface(IHlinkSite *iface, REFGUID iid,
+        void **obj)
+{
+    ok(0, "QI: %p %s %p\n", iface, debugstr_guid(iid), obj);
+    return E_NOTIMPL;
+}
+
+static ULONG WINAPI hls_AddRef(IHlinkSite *iface)
+{
+    return 2;
+}
+
+static ULONG WINAPI hls_Release(IHlinkSite *iface)
+{
+    return 1;
+}
+
+static HRESULT WINAPI hls_QueryService(IHlinkSite *iface, DWORD siteData,
+        REFGUID service, REFIID riid, IUnknown **punk)
+{
+    ok(0, "QS: %p %x %s %s %p\n", iface, siteData, debugstr_guid(service),
+            debugstr_guid(riid), punk);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI hls_GetMoniker(IHlinkSite *iface, DWORD siteData,
+        DWORD assign, DWORD which, IMoniker **pmk)
+{
+    ok(siteData == 17, "Expected siteData == 17, got: %d\n", siteData);
+    *pmk = &hls_site_Moniker;
+    return S_OK;
+}
+
+static HRESULT WINAPI hls_ReadyToNavigate(IHlinkSite *iface, DWORD siteData,
+        DWORD reserved)
+{
+    ok(0, "RTN: %p %x %x\n", iface, siteData, reserved);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI hls_OnNavigationComplete(IHlinkSite *iface,
+        DWORD siteData, DWORD reserved, HRESULT error, LPCWSTR errorStr)
+{
+    CHECK_EXPECT(OnNavigationComplete);
+    ok(siteData == 17, "Expected siteData == 17, got: %d\n", siteData);
+    ok(error == E_OUTOFMEMORY, "Expected E_OUTOFMEMORY, got: %08x\n", error);
+    return E_NOTIMPL;
+}
+
+static IHlinkSiteVtbl HlinkSiteVtbl = {
+    hls_QueryInterface,
+    hls_AddRef,
+    hls_Release,
+    hls_QueryService,
+    hls_GetMoniker,
+    hls_ReadyToNavigate,
+    hls_OnNavigationComplete
+};
+
+static IHlinkSite HlinkSite = { &HlinkSiteVtbl };
+
+static void test_HlinkSite(void)
+{
+    IHlink *hl;
+    IMoniker *mon_ref;
+    IBindCtx *pbc;
+    HRESULT hres;
+
+    hres = HlinkCreateFromString(NULL, NULL, NULL, NULL, 0, NULL,
+            &IID_IHlink, (LPVOID*)&hl);
+    ok(hres == S_OK, "HlinkCreateFromString failed: %08x\n", hres);
+    getMonikerRef(hl, NULL, NULL);
+
+    hres = IHlink_SetHlinkSite(hl, &HlinkSite, 17);
+    ok(hres == S_OK, "SetHlinkSite failed: %08x\n", hres);
+    getMonikerRef(hl, NULL, NULL);
+    getStringRef(hl, NULL, NULL);
+
+    hres = IHlink_GetMonikerReference(hl, HLINKGETREF_RELATIVE, &mon_ref, NULL);
+    ok(hres == S_OK, "GetMonikerReference failed: %08x\n", hres);
+    ok(mon_ref == NULL, "Didn't get expected moniker, instead: %p\n", mon_ref);
+
+    hres = IHlink_GetMonikerReference(hl, HLINKGETREF_ABSOLUTE, &mon_ref, NULL);
+    ok(hres == S_OK, "GetMonikerReference failed: %08x\n", hres);
+    ok(mon_ref == &hls_site_Moniker, "Didn't get expected moniker, instead: %p\n", mon_ref);
+
+    SET_EXPECT(Reduce);
+    SET_EXPECT(Enum);
+    hres = IHlink_SetMonikerReference(hl, HLINKSETF_TARGET, &hls_ref_Moniker, NULL);
+    ok(hres == S_OK, "SetMonikerReference failed: %08x\n", hres);
+    todo_wine CHECK_CALLED(Reduce);
+    todo_wine CHECK_CALLED(Enum);
+
+    getMonikerRef(hl, &hls_ref_Moniker, NULL);
+
+    SET_EXPECT(Enum);
+    getStringRef(hl, ref_monikerW, NULL);
+    todo_wine CHECK_CALLED(Enum);
+
+    hres = IHlink_GetMonikerReference(hl, HLINKGETREF_RELATIVE, &mon_ref, NULL);
+    ok(hres == S_OK, "GetMonikerReference failed: %08x\n", hres);
+    ok(mon_ref == &hls_ref_Moniker, "Didn't get expected moniker, instead: %p\n", mon_ref);
+    IMoniker_Release(mon_ref);
+
+    SET_EXPECT(ComposeWith);
+    hres = IHlink_GetMonikerReference(hl, HLINKGETREF_ABSOLUTE, &mon_ref, NULL);
+    ok(hres == E_OUTOFMEMORY, "Expected E_OUTOFMEMORY, got: %08x\n", hres);
+    ok(mon_ref == NULL, "Shouldn't have got a Moniker, got: %p\n", mon_ref);
+    CHECK_CALLED(ComposeWith);
+
+    hres = CreateBindCtx(0, &pbc);
+    ok(hres == S_OK, "CreateBindCtx failed: %08x\n", hres);
+
+    SET_EXPECT(ComposeWith);
+    SET_EXPECT(OnNavigationComplete);
+    hres = IHlink_Navigate(hl, 0, pbc, NULL, NULL);
+    ok(hres == E_OUTOFMEMORY, "Navigate should've failed: %08x\n", hres);
+    CHECK_CALLED(ComposeWith);
+    CHECK_CALLED(OnNavigationComplete);
+
+    IBindCtx_Release(pbc);
+    IHlink_Release(hl);
+
+    SET_EXPECT(Reduce);
+    SET_EXPECT(Enum);
+    hres = HlinkCreateFromMoniker(&hls_ref_Moniker, NULL, NULL, &HlinkSite, 17,
+            NULL, &IID_IHlink, (LPVOID*)&hl);
+    ok(hres == S_OK, "HlinkCreateFromMoniker failed: %08x\n", hres);
+    todo_wine CHECK_CALLED(Reduce);
+    todo_wine CHECK_CALLED(Enum);
+    getMonikerRef(hl, &hls_ref_Moniker, NULL);
+    IHlink_Release(hl);
+
+    hres = HlinkCreateFromMoniker(NULL, NULL, NULL, &HlinkSite, 17,
+            NULL, &IID_IHlink, (LPVOID*)&hl);
+    ok(hres == S_OK, "HlinkCreateFromMoniker failed: %08x\n", hres);
+    getMonikerRef(hl, NULL, NULL);
+    IHlink_Release(hl);
+}
+
+static void test_HlinkClone(void)
+{
+    HRESULT hres;
+    IHlink *hl, *cloned = NULL;
+    IMoniker *dummy, *fnd_mk;
+    IHlinkSite *fnd_site;
+    WCHAR *fnd_name;
+    DWORD fnd_data;
+    const WCHAR one[] = {'1',0};
+    const WCHAR two[] = {'2',0};
+    const WCHAR name[] = {'a',0};
+
+    hres = HlinkClone(NULL, NULL, NULL, 0, NULL);
+    ok(hres == E_INVALIDARG, "Got wrong failure code: %08x\n", hres);
+
+    hres = HlinkCreateFromString(NULL, NULL, NULL, NULL, 0, NULL,
+            &IID_IHlink, (void**)&hl);
+    ok(hres == S_OK, "HlinkCreateFromString failed: %08x\n", hres);
+
+    hres = HlinkClone(hl, &IID_IHlink, NULL, 0, NULL);
+    ok(hres == E_INVALIDARG, "Got wrong failure code: %08x\n", hres);
+
+    if(0){ /* crash on Windows XP */
+        hres = HlinkClone(hl, NULL, NULL, 0, NULL);
+        ok(hres == E_INVALIDARG, "Got wrong failure code: %08x\n", hres);
+
+        hres = HlinkClone(hl, NULL, NULL, 0, (void**)&cloned);
+        ok(hres == E_INVALIDARG, "Got wrong failure code: %08x\n", hres);
+    }
+
+    hres = HlinkClone(hl, &IID_IHlink, NULL, 0, (void**)&cloned);
+    ok(hres == S_OK, "HlinkClone failed: %08x\n", hres);
+    ok(cloned != NULL, "Didn't get a clone\n");
+    getMonikerRef(cloned, NULL, NULL);
+    IHlink_Release(cloned);
+
+    IHlink_Release(hl);
+
+    SET_EXPECT(Reduce);
+    SET_EXPECT(Enum);
+    hres = HlinkCreateFromMoniker(&hls_ref_Moniker, two, NULL, NULL, 0, NULL, &IID_IHlink, (void**)&hl);
+    todo_wine CHECK_CALLED(Reduce);
+    todo_wine CHECK_CALLED(Enum);
+    ok(hres == S_OK, "HlinkCreateFromMoniker failed: 0x%08x\n", hres);
+    getMonikerRef(hl, &hls_ref_Moniker, two);
+
+    SET_EXPECT(Save);
+    SET_EXPECT(GetClassID);
+    cloned = (IHlink*)0xdeadbeef;
+    hres = HlinkClone(hl, &IID_IHlink, NULL, 0, (void**)&cloned);
+    /* fails because of invalid CLSID given by Moniker_GetClassID */
+    ok(hres == REGDB_E_CLASSNOTREG, "Wrong error code: %08x\n", hres);
+    ok(cloned == NULL, "Shouldn't have gotten a clone\n");
+    CHECK_CALLED(Save);
+    CHECK_CALLED(GetClassID);
+
+    IHlink_Release(hl);
+
+    hres = CreateItemMoniker(one, one, &dummy);
+    ok(hres == S_OK, "CreateItemMoniker failed: 0x%08x\n", hres);
+
+    hres = HlinkCreateFromMoniker(dummy, two, name, &HlinkSite, 17, NULL, &IID_IHlink, (void**)&hl);
+    ok(hres == S_OK, "HlinkCreateFromMoniker failed: 0x%08x\n", hres);
+    getMonikerRef(hl, dummy, two);
+
+    cloned = NULL;
+    hres = HlinkClone(hl, &IID_IHlink, NULL, 0, (void**)&cloned);
+    ok(hres == S_OK, "HlinkClone failed: %08x\n", hres);
+    ok(cloned != NULL, "Should have gotten a clone\n");
+
+    fnd_mk = getMonikerRef(cloned, (IMoniker*)0xFFFFFFFF, two);
+    ok(fnd_mk != NULL, "Expected non-null Moniker\n");
+    ok(fnd_mk != dummy, "Expected a new Moniker to be created\n");
+
+    fnd_name = NULL;
+    hres = IHlink_GetFriendlyName(cloned, HLFNAMEF_DEFAULT, &fnd_name);
+    ok(hres == S_OK, "GetFriendlyName failed: %08x\n", hres);
+    ok(fnd_name != NULL, "Expected friendly name to be non-NULL\n");
+    ok(lstrcmpW(fnd_name, name) == 0, "Expected friendly name to be %s, was %s\n",
+            wine_dbgstr_w(name), wine_dbgstr_w(fnd_name));
+    CoTaskMemFree(fnd_name);
+
+    fnd_site = (IHlinkSite*)0xdeadbeef;
+    fnd_data = 4;
+    hres = IHlink_GetHlinkSite(cloned, &fnd_site, &fnd_data);
+    ok(hres == S_OK, "GetHlinkSite failed: %08x\n", hres);
+    ok(fnd_site == NULL, "Expected NULL site\n");
+    ok(fnd_data == 4, "Expected site data to be 4, was: %d\n", fnd_data);
+
+    IHlink_Release(cloned);
+    IHlink_Release(hl);
+
+    hres = HlinkCreateFromMoniker(dummy, NULL, NULL, NULL, 0, NULL, &IID_IHlink, (void**)&hl);
+    ok(hres == S_OK, "HlinkCreateFromMoniker failed: 0x%08x\n", hres);
+    getMonikerRef(hl, dummy, NULL);
+
+    cloned = NULL;
+    hres = HlinkClone(hl, &IID_IHlink, &HlinkSite, 17, (void**)&cloned);
+    ok(hres == S_OK, "HlinkClone failed: %08x\n", hres);
+    ok(cloned != NULL, "Should have gotten a clone\n");
+
+    fnd_mk = getMonikerRef(cloned, (IMoniker*)0xFFFFFFFF, NULL);
+    ok(fnd_mk != NULL, "Expected non-null Moniker\n");
+    ok(fnd_mk != dummy, "Expected a new Moniker to be created\n");
+
+    fnd_site = (IHlinkSite*)0xdeadbeef;
+    fnd_data = 4;
+    hres = IHlink_GetHlinkSite(cloned, &fnd_site, &fnd_data);
+    ok(hres == S_OK, "GetHlinkSite failed: %08x\n", hres);
+    ok(fnd_site == &HlinkSite, "Expected found site to be HlinkSite, was: %p\n", fnd_site);
+    ok(fnd_data == 17, "Expected site data to be 17, was: %d\n", fnd_data);
+
+    IHlink_Release(cloned);
+    IHlink_Release(hl);
+
+    IMoniker_Release(dummy);
+}
+
 START_TEST(hlink)
 {
     CoInitialize(NULL);
@@ -1457,6 +1834,8 @@ START_TEST(hlink)
     test_HlinkGetSetStringReference();
     test_HlinkMoniker();
     test_HashLink();
+    test_HlinkSite();
+    test_HlinkClone();
 
     CoUninitialize();
 }

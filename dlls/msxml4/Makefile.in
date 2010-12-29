@@ -1,13 +1,13 @@
 EXTRADEFS = -DCOM_NO_WINDOWS_H
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = msxml4.dll
 IMPORTS   = ole32 advapi32
 
 C_SRCS = \
-	main.c \
-	regsvr.c
+	main.c
+
+IDL_TLB_SRCS = msxml4_tlb.idl
+IDL_R_SRCS   = msxml4_tlb.idl
+
+RC_SRCS = rsrc.rc
 
 @MAKE_DLL_RULES@

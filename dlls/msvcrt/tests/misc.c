@@ -25,6 +25,11 @@
 static int (__cdecl *prand_s)(unsigned int *);
 static int (__cdecl *pmemcpy_s)(void *, MSVCRT_size_t, void*, MSVCRT_size_t);
 static int (__cdecl *pI10_OUTPUT)(long double, int, int, void*);
+static int (__cdecl *pstrerror_s)(char *, MSVCRT_size_t, int);
+static int (__cdecl *p_get_doserrno)(int *);
+static int (__cdecl *p_get_errno)(int *);
+static int (__cdecl *p_set_doserrno)(int);
+static int (__cdecl *p_set_errno)(int);
 
 static void init(void)
 {
@@ -33,6 +38,11 @@ static void init(void)
     prand_s = (void *)GetProcAddress(hmod, "rand_s");
     pmemcpy_s = (void*)GetProcAddress(hmod, "memcpy_s");
     pI10_OUTPUT = (void*)GetProcAddress(hmod, "$I10_OUTPUT");
+    pstrerror_s = (void *)GetProcAddress(hmod, "strerror_s");
+    p_get_doserrno = (void *)GetProcAddress(hmod, "_get_doserrno");
+    p_get_errno = (void *)GetProcAddress(hmod, "_get_errno");
+    p_set_doserrno = (void *)GetProcAddress(hmod, "_set_doserrno");
+    p_set_errno = (void *)GetProcAddress(hmod, "_set_errno");
 }
 
 static void test_rand_s(void)
@@ -192,6 +202,155 @@ static void test_I10_OUTPUT(void)
     }
 }
 
+static void test_strerror_s(void)
+{
+    int ret;
+    char buf[256];
+
+    if (!pstrerror_s)
+    {
+        win_skip("strerror_s is not available\n");
+        return;
+    }
+
+    errno = EBADF;
+    ret = pstrerror_s(NULL, 0, 0);
+    ok(ret == EINVAL, "Expected strerror_s to return EINVAL, got %d\n", ret);
+    ok(errno == EINVAL, "Expected errno to be EINVAL, got %d\n", errno);
+
+    errno = EBADF;
+    ret = pstrerror_s(NULL, sizeof(buf), 0);
+    ok(ret == EINVAL, "Expected strerror_s to return EINVAL, got %d\n", ret);
+    ok(errno == EINVAL, "Expected errno to be EINVAL, got %d\n", errno);
+
+    memset(buf, 'X', sizeof(buf));
+    errno = EBADF;
+    ret = pstrerror_s(buf, 0, 0);
+    ok(ret == EINVAL, "Expected strerror_s to return EINVAL, got %d\n", ret);
+    ok(errno == EINVAL, "Expected errno to be EINVAL, got %d\n", errno);
+    ok(buf[0] == 'X', "Expected output buffer to be untouched\n");
+
+    memset(buf, 'X', sizeof(buf));
+    ret = pstrerror_s(buf, 1, 0);
+    ok(ret == 0, "Expected strerror_s to return 0, got %d\n", ret);
+    ok(strlen(buf) == 0, "Expected output buffer to be null terminated\n");
+
+    memset(buf, 'X', sizeof(buf));
+    ret = pstrerror_s(buf, 2, 0);
+    ok(ret == 0, "Expected strerror_s to return 0, got %d\n", ret);
+    ok(strlen(buf) == 1, "Expected output buffer to be truncated\n");
+
+    memset(buf, 'X', sizeof(buf));
+    ret = pstrerror_s(buf, sizeof(buf), 0);
+    ok(ret == 0, "Expected strerror_s to return 0, got %d\n", ret);
+
+    memset(buf, 'X', sizeof(buf));
+    ret = pstrerror_s(buf, sizeof(buf), -1);
+    ok(ret == 0, "Expected strerror_s to return 0, got %d\n", ret);
+}
+
+static void test__get_doserrno(void)
+{
+    int ret, out;
+
+    if (!p_get_doserrno)
+    {
+        win_skip("_get_doserrno is not available\n");
+        return;
+    }
+
+    _doserrno = ERROR_INVALID_CMM;
+    errno = EBADF;
+    ret = p_get_doserrno(NULL);
+    ok(ret == EINVAL, "Expected _get_doserrno to return EINVAL, got %d\n", ret);
+    ok(_doserrno = ERROR_INVALID_CMM, "Expected _doserrno to be ERROR_INVALID_CMM, got %d\n", _doserrno);
+    ok(errno == EBADF, "Expected errno to be EBADF, got %d\n", errno);
+
+    _doserrno = ERROR_INVALID_CMM;
+    errno = EBADF;
+    out = 0xdeadbeef;
+    ret = p_get_doserrno(&out);
+    ok(ret == 0, "Expected _get_doserrno to return 0, got %d\n", ret);
+    ok(out == ERROR_INVALID_CMM, "Expected output variable to be ERROR_INVAID_CMM, got %d\n", out);
+}
+
+static void test__get_errno(void)
+{
+    int ret, out;
+
+    if (!p_get_errno)
+    {
+        win_skip("_get_errno is not available\n");
+        return;
+    }
+
+    errno = EBADF;
+    ret = p_get_errno(NULL);
+    ok(ret == EINVAL, "Expected _get_errno to return EINVAL, got %d\n", ret);
+    ok(errno == EBADF, "Expected errno to be EBADF, got %d\n", errno);
+
+    errno = EBADF;
+    out = 0xdeadbeef;
+    ret = p_get_errno(&out);
+    ok(ret == 0, "Expected _get_errno to return 0, got %d\n", ret);
+    ok(out == EBADF, "Expected output variable to be EBADF, got %d\n", out);
+}
+
+static void test__set_doserrno(void)
+{
+    int ret;
+
+    if (!p_set_doserrno)
+    {
+        win_skip("_set_doserrno is not available\n");
+        return;
+    }
+
+    _doserrno = ERROR_INVALID_CMM;
+    ret = p_set_doserrno(ERROR_FILE_NOT_FOUND);
+    ok(ret == 0, "Expected _set_doserrno to return 0, got %d\n", ret);
+    ok(_doserrno == ERROR_FILE_NOT_FOUND,
+       "Expected _doserrno to be ERROR_FILE_NOT_FOUND, got %d\n", _doserrno);
+
+    _doserrno = ERROR_INVALID_CMM;
+    ret = p_set_doserrno(-1);
+    ok(ret == 0, "Expected _set_doserrno to return 0, got %d\n", ret);
+    ok(_doserrno == -1,
+       "Expected _doserrno to be -1, got %d\n", _doserrno);
+
+    _doserrno = ERROR_INVALID_CMM;
+    ret = p_set_doserrno(0xdeadbeef);
+    ok(ret == 0, "Expected _set_doserrno to return 0, got %d\n", ret);
+    ok(_doserrno == 0xdeadbeef,
+       "Expected _doserrno to be 0xdeadbeef, got %d\n", _doserrno);
+}
+
+static void test__set_errno(void)
+{
+    int ret;
+
+    if (!p_set_errno)
+    {
+        win_skip("_set_errno is not available\n");
+        return;
+    }
+
+    errno = EBADF;
+    ret = p_set_errno(EINVAL);
+    ok(ret == 0, "Expected _set_errno to return 0, got %d\n", ret);
+    ok(errno == EINVAL, "Expected errno to be EINVAL, got %d\n", errno);
+
+    errno = EBADF;
+    ret = p_set_errno(-1);
+    ok(ret == 0, "Expected _set_errno to return 0, got %d\n", ret);
+    ok(errno == -1, "Expected errno to be -1, got %d\n", errno);
+
+    errno = EBADF;
+    ret = p_set_errno(0xdeadbeef);
+    ok(ret == 0, "Expected _set_errno to return 0, got %d\n", ret);
+    ok(errno == 0xdeadbeef, "Expected errno to be 0xdeadbeef, got %d\n", errno);
+}
+
 START_TEST(misc)
 {
     init();
@@ -199,4 +358,9 @@ START_TEST(misc)
     test_rand_s();
     test_memcpy_s();
     test_I10_OUTPUT();
+    test_strerror_s();
+    test__get_doserrno();
+    test__get_errno();
+    test__set_doserrno();
+    test__set_errno();
 }

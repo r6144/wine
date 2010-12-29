@@ -25,6 +25,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
+#include <setjmp.h>
 
 #ifdef SONAME_LIBJPEG
 /* This is a hack, so jpeglib.h does not redefine INT32 and the like*/
@@ -54,6 +55,7 @@
 #include "wine/library.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(wincodecs);
+WINE_DECLARE_DEBUG_CHANNEL(jpeg);
 
 #ifdef SONAME_LIBJPEG
 
@@ -91,9 +93,41 @@ static void *load_libjpeg(void)
     return libjpeg_handle;
 }
 
+static void error_exit_fn(j_common_ptr cinfo)
+{
+    char message[JMSG_LENGTH_MAX];
+    if (ERR_ON(jpeg))
+    {
+        cinfo->err->format_message(cinfo, message);
+        ERR_(jpeg)("%s\n", message);
+    }
+    longjmp(*(jmp_buf*)cinfo->client_data, 1);
+}
+
+static void emit_message_fn(j_common_ptr cinfo, int msg_level)
+{
+    char message[JMSG_LENGTH_MAX];
+
+    if (msg_level < 0 && ERR_ON(jpeg))
+    {
+        cinfo->err->format_message(cinfo, message);
+        ERR_(jpeg)("%s\n", message);
+    }
+    else if (msg_level == 0 && WARN_ON(jpeg))
+    {
+        cinfo->err->format_message(cinfo, message);
+        WARN_(jpeg)("%s\n", message);
+    }
+    else if (msg_level > 0 && TRACE_ON(jpeg))
+    {
+        cinfo->err->format_message(cinfo, message);
+        TRACE_(jpeg)("%s\n", message);
+    }
+}
+
 typedef struct {
-    const IWICBitmapDecoderVtbl *lpVtbl;
-    const IWICBitmapFrameDecodeVtbl *lpFrameVtbl;
+    IWICBitmapDecoder IWICBitmapDecoder_iface;
+    IWICBitmapFrameDecode IWICBitmapFrameDecode_iface;
     LONG ref;
     BOOL initialized;
     BOOL cinfo_initialized;
@@ -106,20 +140,25 @@ typedef struct {
     CRITICAL_SECTION lock;
 } JpegDecoder;
 
+static inline JpegDecoder *impl_from_IWICBitmapDecoder(IWICBitmapDecoder *iface)
+{
+    return CONTAINING_RECORD(iface, JpegDecoder, IWICBitmapDecoder_iface);
+}
+
+static inline JpegDecoder *impl_from_IWICBitmapFrameDecode(IWICBitmapFrameDecode *iface)
+{
+    return CONTAINING_RECORD(iface, JpegDecoder, IWICBitmapFrameDecode_iface);
+}
+
 static inline JpegDecoder *decoder_from_decompress(j_decompress_ptr decompress)
 {
     return CONTAINING_RECORD(decompress, JpegDecoder, cinfo);
 }
 
-static inline JpegDecoder *decoder_from_frame(IWICBitmapFrameDecode *iface)
-{
-    return CONTAINING_RECORD(iface, JpegDecoder, lpFrameVtbl);
-}
-
 static HRESULT WINAPI JpegDecoder_QueryInterface(IWICBitmapDecoder *iface, REFIID iid,
     void **ppv)
 {
-    JpegDecoder *This = (JpegDecoder*)iface;
+    JpegDecoder *This = impl_from_IWICBitmapDecoder(iface);
     TRACE("(%p,%s,%p)\n", iface, debugstr_guid(iid), ppv);
 
     if (!ppv) return E_INVALIDARG;
@@ -140,7 +179,7 @@ static HRESULT WINAPI JpegDecoder_QueryInterface(IWICBitmapDecoder *iface, REFII
 
 static ULONG WINAPI JpegDecoder_AddRef(IWICBitmapDecoder *iface)
 {
-    JpegDecoder *This = (JpegDecoder*)iface;
+    JpegDecoder *This = impl_from_IWICBitmapDecoder(iface);
     ULONG ref = InterlockedIncrement(&This->ref);
 
     TRACE("(%p) refcount=%u\n", iface, ref);
@@ -150,7 +189,7 @@ static ULONG WINAPI JpegDecoder_AddRef(IWICBitmapDecoder *iface)
 
 static ULONG WINAPI JpegDecoder_Release(IWICBitmapDecoder *iface)
 {
-    JpegDecoder *This = (JpegDecoder*)iface;
+    JpegDecoder *This = impl_from_IWICBitmapDecoder(iface);
     ULONG ref = InterlockedDecrement(&This->ref);
 
     TRACE("(%p) refcount=%u\n", iface, ref);
@@ -224,8 +263,10 @@ static void source_mgr_term_source(j_decompress_ptr cinfo)
 static HRESULT WINAPI JpegDecoder_Initialize(IWICBitmapDecoder *iface, IStream *pIStream,
     WICDecodeOptions cacheOptions)
 {
-    JpegDecoder *This = (JpegDecoder*)iface;
+    JpegDecoder *This = impl_from_IWICBitmapDecoder(iface);
     int ret;
+    LARGE_INTEGER seek;
+    jmp_buf jmpbuf;
     TRACE("(%p,%p,%u)\n", iface, pIStream, cacheOptions);
 
     EnterCriticalSection(&This->lock);
@@ -236,7 +277,20 @@ static HRESULT WINAPI JpegDecoder_Initialize(IWICBitmapDecoder *iface, IStream *
         return WINCODEC_ERR_WRONGSTATE;
     }
 
-    This->cinfo.err = pjpeg_std_error(&This->jerr);
+    pjpeg_std_error(&This->jerr);
+
+    This->jerr.error_exit = error_exit_fn;
+    This->jerr.emit_message = emit_message_fn;
+
+    This->cinfo.err = &This->jerr;
+
+    This->cinfo.client_data = &jmpbuf;
+
+    if (setjmp(jmpbuf))
+    {
+        LeaveCriticalSection(&This->lock);
+        return E_FAIL;
+    }
 
     pjpeg_CreateDecompress(&This->cinfo, JPEG_LIB_VERSION, sizeof(struct jpeg_decompress_struct));
 
@@ -244,6 +298,9 @@ static HRESULT WINAPI JpegDecoder_Initialize(IWICBitmapDecoder *iface, IStream *
 
     This->stream = pIStream;
     IStream_AddRef(pIStream);
+
+    seek.QuadPart = 0;
+    IStream_Seek(This->stream, seek, STREAM_SEEK_SET, NULL);
 
     This->source_mgr.bytes_in_buffer = 0;
     This->source_mgr.init_source = source_mgr_init_source;
@@ -262,10 +319,24 @@ static HRESULT WINAPI JpegDecoder_Initialize(IWICBitmapDecoder *iface, IStream *
         return E_FAIL;
     }
 
-    if (This->cinfo.jpeg_color_space == JCS_GRAYSCALE)
+    switch (This->cinfo.jpeg_color_space)
+    {
+    case JCS_GRAYSCALE:
         This->cinfo.out_color_space = JCS_GRAYSCALE;
-    else
+        break;
+    case JCS_RGB:
+    case JCS_YCbCr:
         This->cinfo.out_color_space = JCS_RGB;
+        break;
+    case JCS_CMYK:
+    case JCS_YCCK:
+        This->cinfo.out_color_space = JCS_CMYK;
+        break;
+    default:
+        ERR("Unknown JPEG color space %i\n", This->cinfo.jpeg_color_space);
+        LeaveCriticalSection(&This->lock);
+        return E_FAIL;
+    }
 
     if (!pjpeg_start_decompress(&This->cinfo))
     {
@@ -341,7 +412,7 @@ static HRESULT WINAPI JpegDecoder_GetFrameCount(IWICBitmapDecoder *iface,
 static HRESULT WINAPI JpegDecoder_GetFrame(IWICBitmapDecoder *iface,
     UINT index, IWICBitmapFrameDecode **ppIBitmapFrame)
 {
-    JpegDecoder *This = (JpegDecoder*)iface;
+    JpegDecoder *This = impl_from_IWICBitmapDecoder(iface);
     TRACE("(%p,%u,%p)\n", iface, index, ppIBitmapFrame);
 
     if (!This->initialized) return WINCODEC_ERR_NOTINITIALIZED;
@@ -349,7 +420,7 @@ static HRESULT WINAPI JpegDecoder_GetFrame(IWICBitmapDecoder *iface,
     if (index != 0) return E_INVALIDARG;
 
     IWICBitmapDecoder_AddRef(iface);
-    *ppIBitmapFrame = (IWICBitmapFrameDecode*)&This->lpFrameVtbl;
+    *ppIBitmapFrame = &This->IWICBitmapFrameDecode_iface;
 
     return S_OK;
 }
@@ -396,20 +467,20 @@ static HRESULT WINAPI JpegDecoder_Frame_QueryInterface(IWICBitmapFrameDecode *if
 
 static ULONG WINAPI JpegDecoder_Frame_AddRef(IWICBitmapFrameDecode *iface)
 {
-    JpegDecoder *This = decoder_from_frame(iface);
+    JpegDecoder *This = impl_from_IWICBitmapFrameDecode(iface);
     return IUnknown_AddRef((IUnknown*)This);
 }
 
 static ULONG WINAPI JpegDecoder_Frame_Release(IWICBitmapFrameDecode *iface)
 {
-    JpegDecoder *This = decoder_from_frame(iface);
+    JpegDecoder *This = impl_from_IWICBitmapFrameDecode(iface);
     return IUnknown_Release((IUnknown*)This);
 }
 
 static HRESULT WINAPI JpegDecoder_Frame_GetSize(IWICBitmapFrameDecode *iface,
     UINT *puiWidth, UINT *puiHeight)
 {
-    JpegDecoder *This = decoder_from_frame(iface);
+    JpegDecoder *This = impl_from_IWICBitmapFrameDecode(iface);
     *puiWidth = This->cinfo.output_width;
     *puiHeight = This->cinfo.output_height;
     TRACE("(%p)->(%u,%u)\n", iface, *puiWidth, *puiHeight);
@@ -419,10 +490,12 @@ static HRESULT WINAPI JpegDecoder_Frame_GetSize(IWICBitmapFrameDecode *iface,
 static HRESULT WINAPI JpegDecoder_Frame_GetPixelFormat(IWICBitmapFrameDecode *iface,
     WICPixelFormatGUID *pPixelFormat)
 {
-    JpegDecoder *This = decoder_from_frame(iface);
+    JpegDecoder *This = impl_from_IWICBitmapFrameDecode(iface);
     TRACE("(%p,%p)\n", iface, pPixelFormat);
     if (This->cinfo.out_color_space == JCS_RGB)
         memcpy(pPixelFormat, &GUID_WICPixelFormat24bppBGR, sizeof(GUID));
+    else if (This->cinfo.out_color_space == JCS_CMYK)
+        memcpy(pPixelFormat, &GUID_WICPixelFormat32bppCMYK, sizeof(GUID));
     else /* This->cinfo.out_color_space == JCS_GRAYSCALE */
         memcpy(pPixelFormat, &GUID_WICPixelFormat8bppGray, sizeof(GUID));
     return S_OK;
@@ -445,14 +518,32 @@ static HRESULT WINAPI JpegDecoder_Frame_CopyPalette(IWICBitmapFrameDecode *iface
 static HRESULT WINAPI JpegDecoder_Frame_CopyPixels(IWICBitmapFrameDecode *iface,
     const WICRect *prc, UINT cbStride, UINT cbBufferSize, BYTE *pbBuffer)
 {
-    JpegDecoder *This = decoder_from_frame(iface);
+    JpegDecoder *This = impl_from_IWICBitmapFrameDecode(iface);
     UINT bpp;
     UINT stride;
     UINT data_size;
     UINT max_row_needed;
+    jmp_buf jmpbuf;
+    WICRect rect;
     TRACE("(%p,%p,%u,%u,%p)\n", iface, prc, cbStride, cbBufferSize, pbBuffer);
 
+    if (!prc)
+    {
+        rect.X = 0;
+        rect.Y = 0;
+        rect.Width = This->cinfo.output_width;
+        rect.Height = This->cinfo.output_height;
+        prc = &rect;
+    }
+    else
+    {
+        if (prc->X < 0 || prc->Y < 0 || prc->X+prc->Width > This->cinfo.output_width ||
+            prc->Y+prc->Height > This->cinfo.output_height)
+            return E_INVALIDARG;
+    }
+
     if (This->cinfo.out_color_space == JCS_GRAYSCALE) bpp = 8;
+    else if (This->cinfo.out_color_space == JCS_CMYK) bpp = 32;
     else bpp = 24;
 
     stride = bpp * This->cinfo.output_width;
@@ -471,6 +562,14 @@ static HRESULT WINAPI JpegDecoder_Frame_CopyPixels(IWICBitmapFrameDecode *iface,
             LeaveCriticalSection(&This->lock);
             return E_OUTOFMEMORY;
         }
+    }
+
+    This->cinfo.client_data = &jmpbuf;
+
+    if (setjmp(jmpbuf))
+    {
+        LeaveCriticalSection(&This->lock);
+        return E_FAIL;
     }
 
     while (max_row_needed > This->cinfo.output_scanline)
@@ -510,6 +609,11 @@ static HRESULT WINAPI JpegDecoder_Frame_CopyPixels(IWICBitmapFrameDecode *iface,
                 }
             }
         }
+
+        if (This->cinfo.out_color_space == JCS_CMYK && This->cinfo.saw_Adobe_marker)
+            /* Adobe JPEG's have inverted CMYK data. */
+            for (i=0; i<data_size; i++)
+                This->image_data[i] ^= 0xff;
     }
 
     LeaveCriticalSection(&This->lock);
@@ -574,8 +678,8 @@ HRESULT JpegDecoder_CreateInstance(IUnknown *pUnkOuter, REFIID iid, void** ppv)
     This = HeapAlloc(GetProcessHeap(), 0, sizeof(JpegDecoder));
     if (!This) return E_OUTOFMEMORY;
 
-    This->lpVtbl = &JpegDecoder_Vtbl;
-    This->lpFrameVtbl = &JpegDecoder_Frame_Vtbl;
+    This->IWICBitmapDecoder_iface.lpVtbl = &JpegDecoder_Vtbl;
+    This->IWICBitmapFrameDecode_iface.lpVtbl = &JpegDecoder_Frame_Vtbl;
     This->ref = 1;
     This->initialized = FALSE;
     This->cinfo_initialized = FALSE;

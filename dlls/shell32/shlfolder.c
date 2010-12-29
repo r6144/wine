@@ -271,7 +271,7 @@ HRESULT SHELL32_BindToChild (LPCITEMIDLIST pidlRoot,
 
     TRACE("(%p %s %p %s %p)\n", pidlRoot, debugstr_w(pathRoot), pidlComplete, debugstr_guid(riid), ppvOut);
 
-    if (!pidlRoot || !ppvOut || !pidlComplete || !pidlComplete->mkid.cb)
+    if (!pidlRoot || !ppvOut || _ILIsEmpty(pidlComplete))
         return E_INVALIDARG;
 
     *ppvOut = NULL;
@@ -281,6 +281,9 @@ HRESULT SHELL32_BindToChild (LPCITEMIDLIST pidlRoot,
     if ((clsid = _ILGetGUIDPointer (pidlChild))) {
         /* virtual folder */
         hr = SHELL32_CoCreateInitSF (pidlRoot, pathRoot, pidlChild, clsid, (LPVOID *)&pSF);
+    } else if (_ILIsValue(pidlChild)) {
+        /* Don't bind to files */
+        hr = HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND);
     } else {
         /* file system folder */
         CLSID clsidFolder = CLSID_ShellFSFolder;

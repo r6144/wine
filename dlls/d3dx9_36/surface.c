@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009 Tony Wasserka
+ * Copyright (C) 2009-2010 Tony Wasserka
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -26,6 +26,10 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(d3dx);
 
+
+/* Wine-specific WIC GUIDs */
+
+DEFINE_GUID(GUID_WineContainerFormatTga, 0x0c44fda1,0xa5c5,0x4298,0x96,0x85,0x47,0x3f,0xc1,0x7c,0xd3,0x22);
 
 /************************************************************
  * D3DXGetImageInfoFromFileInMemory
@@ -55,8 +59,10 @@ HRESULT WINAPI D3DXGetImageInfoFromFileInMemory(LPCVOID data, UINT datasize, D3D
     IWICStream *stream;
     HRESULT hr;
     HRESULT initresult;
+    static int warn_once;
 
-    FIXME("(%p, %d, %p): partially implemented\n", data, datasize, info);
+    if (!warn_once++)
+        FIXME("(%p, %d, %p): partially implemented\n", data, datasize, info);
 
     /* TODO: Add support for (or at least detect) TGA, DDS, PPM and DIB */
 
@@ -93,6 +99,9 @@ HRESULT WINAPI D3DXGetImageInfoFromFileInMemory(LPCVOID data, UINT datasize, D3D
             } else if(IsEqualGUID(&container_format, &GUID_ContainerFormatJpeg)) {
                 TRACE("File type is JPG\n");
                 info->ImageFileFormat = D3DXIFF_JPG;
+            } else if(IsEqualGUID(&container_format, &GUID_WineContainerFormatTga)) {
+                TRACE("File type is TGA\n");
+                info->ImageFileFormat = D3DXIFF_TGA;
             } else {
                 WARN("Unsupported image file format %s\n", debugstr_guid(&container_format));
                 hr = D3DXERR_INVALIDDATA;
@@ -304,11 +313,115 @@ HRESULT WINAPI D3DXLoadSurfaceFromFileInMemory(LPDIRECT3DSURFACE9 pDestSurface,
                                                D3DCOLOR Colorkey,
                                                D3DXIMAGE_INFO *pSrcInfo)
 {
-    FIXME("(%p, %p, %p, %p, %d, %p, %d, %x, %p): stub\n", pDestSurface, pDestPalette,
-        pDestRect, pSrcData, SrcDataSize, pSrcRect, dwFilter, Colorkey, pSrcInfo);
+    D3DXIMAGE_INFO imginfo;
+    HRESULT hr;
 
-    if( !pDestSurface || !pSrcData | !SrcDataSize ) return D3DERR_INVALIDCALL;
-    return E_NOTIMPL;
+    IWICImagingFactory *factory;
+    IWICBitmapDecoder *decoder;
+    IWICBitmapFrameDecode *bitmapframe;
+    IWICStream *stream;
+
+    const PixelFormatDesc *formatdesc;
+    WICRect wicrect;
+    RECT rect;
+
+    TRACE("(%p, %p, %p, %p, %d, %p, %d, %x, %p)\n", pDestSurface, pDestPalette, pDestRect, pSrcData,
+        SrcDataSize, pSrcRect, dwFilter, Colorkey, pSrcInfo);
+
+    if (!pDestSurface || !pSrcData | !SrcDataSize)
+        return D3DERR_INVALIDCALL;
+
+    hr = D3DXGetImageInfoFromFileInMemory(pSrcData, SrcDataSize, &imginfo);
+
+    if (FAILED(hr))
+        return hr;
+
+    CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+
+    if (FAILED(CoCreateInstance(&CLSID_WICImagingFactory, NULL, CLSCTX_INPROC_SERVER, &IID_IWICImagingFactory, (void**)&factory)))
+        goto cleanup_err;
+
+    if (FAILED(IWICImagingFactory_CreateStream(factory, &stream)))
+    {
+        IWICImagingFactory_Release(factory);
+        goto cleanup_err;
+    }
+
+    IWICStream_InitializeFromMemory(stream, (BYTE*)pSrcData, SrcDataSize);
+
+    hr = IWICImagingFactory_CreateDecoderFromStream(factory, (IStream*)stream, NULL, 0, &decoder);
+
+    IStream_Release(stream);
+    IWICImagingFactory_Release(factory);
+
+    if (FAILED(hr))
+        goto cleanup_err;
+
+    hr = IWICBitmapDecoder_GetFrame(decoder, 0, &bitmapframe);
+
+    if (FAILED(hr))
+        goto cleanup_bmp;
+
+    if (pSrcRect)
+    {
+        wicrect.X = pSrcRect->left;
+        wicrect.Y = pSrcRect->top;
+        wicrect.Width = pSrcRect->right - pSrcRect->left;
+        wicrect.Height = pSrcRect->bottom - pSrcRect->top;
+    }
+    else
+    {
+        wicrect.X = 0;
+        wicrect.Y = 0;
+        wicrect.Width = imginfo.Width;
+        wicrect.Height = imginfo.Height;
+    }
+
+    SetRect(&rect, 0, 0, wicrect.Width, wicrect.Height);
+
+    formatdesc = get_format_info(imginfo.Format);
+
+    if (formatdesc->format == D3DFMT_UNKNOWN)
+    {
+        FIXME("Unsupported pixel format\n");
+        hr = D3DXERR_INVALIDDATA;
+    }
+    else
+    {
+        BYTE *buffer;
+        DWORD pitch;
+
+        pitch = formatdesc->bytes_per_pixel * wicrect.Width;
+        buffer = HeapAlloc(GetProcessHeap(), 0, pitch * wicrect.Height);
+
+        hr = IWICBitmapFrameDecode_CopyPixels(bitmapframe, &wicrect, pitch,
+                                              pitch * wicrect.Height, buffer);
+
+        if (SUCCEEDED(hr))
+        {
+            hr = D3DXLoadSurfaceFromMemory(pDestSurface, pDestPalette, pDestRect,
+                                           buffer, imginfo.Format, pitch,
+                                           NULL, &rect, dwFilter, Colorkey);
+        }
+
+        HeapFree(GetProcessHeap(), 0, buffer);
+    }
+
+    IWICBitmapFrameDecode_Release(bitmapframe);
+
+cleanup_bmp:
+    IWICBitmapDecoder_Release(decoder);
+
+cleanup_err:
+    CoUninitialize();
+
+    if (FAILED(hr))
+        return D3DXERR_INVALIDDATA;
+
+    if (pSrcInfo)
+        *pSrcInfo = imginfo;
+
+    return D3D_OK;
 }
 
 /************************************************************
@@ -446,77 +559,194 @@ HRESULT WINAPI D3DXLoadSurfaceFromResourceW(LPDIRECT3DSURFACE9 pDestSurface,
 
 
 /************************************************************
+ * helper functions for D3DXLoadSurfaceFromMemory
+ */
+struct argb_conversion_info
+{
+    CONST PixelFormatDesc *srcformat;
+    CONST PixelFormatDesc *destformat;
+    DWORD srcshift[4], destshift[4];
+    DWORD srcmask[4], destmask[4];
+    BOOL process_channel[4];
+    DWORD channelmask;
+};
+
+static void init_argb_conversion_info(CONST PixelFormatDesc *srcformat, CONST PixelFormatDesc *destformat, struct argb_conversion_info *info)
+{
+    UINT i;
+    ZeroMemory(info->process_channel, 4 * sizeof(BOOL));
+    info->channelmask = 0;
+
+    info->srcformat  =  srcformat;
+    info->destformat = destformat;
+
+    for(i = 0;i < 4;i++) {
+        /* srcshift is used to extract the _relevant_ components */
+        info->srcshift[i]  =  srcformat->shift[i] + max( srcformat->bits[i] - destformat->bits[i], 0);
+
+        /* destshift is used to move the components to the correct position */
+        info->destshift[i] = destformat->shift[i] + max(destformat->bits[i] -  srcformat->bits[i], 0);
+
+        info->srcmask[i]  = ((1 <<  srcformat->bits[i]) - 1) <<  srcformat->shift[i];
+        info->destmask[i] = ((1 << destformat->bits[i]) - 1) << destformat->shift[i];
+
+        /* channelmask specifies bits which aren't used in the source format but in the destination one */
+        if(destformat->bits[i]) {
+            if(srcformat->bits[i]) info->process_channel[i] = TRUE;
+            else info->channelmask |= info->destmask[i];
+        }
+    }
+}
+
+/************************************************************
+ * get_relevant_argb_components
+ *
+ * Extracts the relevant components from the source color and
+ * drops the less significant bits if they aren't used by the destination format.
+ */
+static void get_relevant_argb_components(CONST struct argb_conversion_info *info, CONST DWORD col, DWORD *out)
+{
+    UINT i = 0;
+    for(;i < 4;i++)
+        if(info->process_channel[i])
+            out[i] = (col & info->srcmask[i]) >> info->srcshift[i];
+}
+
+/************************************************************
+ * make_argb_color
+ *
+ * Recombines the output of get_relevant_argb_components and converts
+ * it to the destination format.
+ */
+static void make_argb_color(CONST struct argb_conversion_info *info, CONST DWORD *in, DWORD *out)
+{
+    UINT i;
+    *out = 0;
+
+    for(i = 0;i < 4;i++) {
+        if(info->process_channel[i]) {
+            /* necessary to make sure that e.g. an X4R4G4B4 white maps to an R8G8B8 white instead of 0xf0f0f0 */
+            signed int shift;
+            for(shift = info->destshift[i]; shift > info->destformat->shift[i]; shift -= info->srcformat->bits[i]) *out |= in[i] << shift;
+            *out |= (in[i] >> (info->destformat->shift[i] - shift)) << info->destformat->shift[i];
+        }
+    }
+    *out |= info->channelmask;   /* new channels are set to their maximal value */
+}
+
+/************************************************************
  * copy_simple_data
  *
  * Copies the source buffer to the destination buffer, performing
  * any necessary format conversion and color keying.
+ * Pixels outsize the source rect are blacked out.
  * Works only for ARGB formats with 1 - 4 bytes per pixel.
  */
-static void copy_simple_data(CONST BYTE *src,  UINT  srcpitch, POINT  srcsize, CONST PixelFormatDesc  *srcformat,
-                             CONST BYTE *dest, UINT destpitch, POINT destsize, CONST PixelFormatDesc *destformat,
-                             DWORD dwFilter)
+static void copy_simple_data(CONST BYTE *src, UINT srcpitch, POINT srcsize,
+                             CONST PixelFormatDesc *srcformat,
+                             BYTE *dest, UINT destpitch, POINT destsize,
+                             CONST PixelFormatDesc *destformat,
+                             D3DCOLOR colorkey)
 {
-    DWORD srcshift[4], destshift[4];
-    DWORD srcmask[4], destmask[4];
-    BOOL process_channel[4];
-    DWORD channels[4];
-    DWORD channelmask = 0;
-
+    struct argb_conversion_info conv_info, ck_conv_info;
+    DWORD channels[4], pixel;
     UINT minwidth, minheight;
-    BYTE *srcptr, *destptr;
-    UINT i, x, y;
+    UINT x, y;
 
     ZeroMemory(channels, sizeof(channels));
-    ZeroMemory(process_channel, sizeof(process_channel));
-
-    for(i = 0;i < 4;i++) {
-        /* srcshift is used to extract the _relevant_ components */
-        srcshift[i]  =  srcformat->shift[i] + max( srcformat->bits[i] - destformat->bits[i], 0);
-
-        /* destshift is used to move the components to the correct position */
-        destshift[i] = destformat->shift[i] + max(destformat->bits[i] -  srcformat->bits[i], 0);
-
-        srcmask[i]  = ((1 <<  srcformat->bits[i]) - 1) <<  srcformat->shift[i];
-        destmask[i] = ((1 << destformat->bits[i]) - 1) << destformat->shift[i];
-
-        /* channelmask specifies bits which aren't used in the source format but in the destination one */
-        if(destformat->bits[i]) {
-            if(srcformat->bits[i]) process_channel[i] = TRUE;
-            else channelmask |= destmask[i];
-        }
-    }
+    init_argb_conversion_info(srcformat, destformat, &conv_info);
 
     minwidth  = (srcsize.x < destsize.x) ? srcsize.x : destsize.x;
     minheight = (srcsize.y < destsize.y) ? srcsize.y : destsize.y;
 
+    if(colorkey) {
+        /* color keys are always represented in D3DFMT_A8R8G8B8 format */
+        const PixelFormatDesc *ckformatdesc;
+
+        ckformatdesc = get_format_info(D3DFMT_A8R8G8B8);
+        init_argb_conversion_info(srcformat, ckformatdesc, &ck_conv_info);
+    }
+
     for(y = 0;y < minheight;y++) {
-        srcptr  = (BYTE*)( src + y *  srcpitch);
-        destptr = (BYTE*)(dest + y * destpitch);
+        const BYTE *srcptr = src + y *  srcpitch;
+        BYTE *destptr = dest + y * destpitch;
         for(x = 0;x < minwidth;x++) {
             /* extract source color components */
-            if(srcformat->type == FORMAT_ARGB) {
-                const DWORD col = *(DWORD*)srcptr;
-                for(i = 0;i < 4;i++)
-                    if(process_channel[i])
-                        channels[i] = (col & srcmask[i]) >> srcshift[i];
-            }
+            if(srcformat->type == FORMAT_ARGB) get_relevant_argb_components(&conv_info, *(const DWORD*)srcptr, channels);
 
             /* recombine the components */
-            if(destformat->type == FORMAT_ARGB) {
-                DWORD* const pixel = (DWORD*)destptr;
-                *pixel = 0;
+            if(destformat->type == FORMAT_ARGB) make_argb_color(&conv_info, channels, (DWORD*)destptr);
 
-                for(i = 0;i < 4;i++) {
-                    if(process_channel[i]) {
-                        /* necessary to make sure that e.g. an X4R4G4B4 white maps to an R8G8B8 white instead of 0xf0f0f0 */
-                        signed int shift;
-                        for(shift = destshift[i]; shift > destformat->shift[i]; shift -= srcformat->bits[i]) *pixel |= channels[i] << shift;
-                        *pixel |= (channels[i] >> (destformat->shift[i] - shift)) << destformat->shift[i];
-                    }
-                }
-                *pixel |= channelmask;   /* new channels are set to their maximal value */
+            if(colorkey) {
+                get_relevant_argb_components(&ck_conv_info, *(const DWORD*)srcptr, channels);
+                make_argb_color(&ck_conv_info, channels, &pixel);
+                if(pixel == colorkey)
+                    /* make this pixel transparent */
+                    *(DWORD *)destptr &= ~conv_info.destmask[0];
             }
+
             srcptr  +=  srcformat->bytes_per_pixel;
+            destptr += destformat->bytes_per_pixel;
+        }
+
+        if(srcsize.x < destsize.x) /* black out remaining pixels */
+            ZeroMemory(destptr, destformat->bytes_per_pixel * (destsize.x - srcsize.x));
+    }
+    if(srcsize.y < destsize.y) /* black out remaining pixels */
+        ZeroMemory(dest + srcsize.y * destpitch, destpitch * (destsize.y - srcsize.y));
+}
+
+/************************************************************
+ * point_filter_simple_data
+ *
+ * Copies the source buffer to the destination buffer, performing
+ * any necessary format conversion, color keying and stretching
+ * using a point filter.
+ * Works only for ARGB formats with 1 - 4 bytes per pixel.
+ */
+static void point_filter_simple_data(CONST BYTE *src, UINT srcpitch, POINT srcsize,
+                                     CONST PixelFormatDesc *srcformat,
+                                     BYTE *dest, UINT destpitch, POINT destsize,
+                                     CONST PixelFormatDesc *destformat,
+                                     D3DCOLOR colorkey)
+{
+    struct argb_conversion_info conv_info, ck_conv_info;
+    DWORD channels[4], pixel;
+
+    UINT x, y;
+
+    ZeroMemory(channels, sizeof(channels));
+    init_argb_conversion_info(srcformat, destformat, &conv_info);
+
+    if(colorkey) {
+        /* color keys are always represented in D3DFMT_A8R8G8B8 format */
+        const PixelFormatDesc *ckformatdesc;
+
+        ckformatdesc = get_format_info(D3DFMT_A8R8G8B8);
+        init_argb_conversion_info(srcformat, ckformatdesc, &ck_conv_info);
+    }
+
+    for(y = 0;y < destsize.y;y++) {
+        BYTE *destptr = dest + y * destpitch;
+        const BYTE *bufptr = src + srcpitch * (y * srcsize.y / destsize.y);
+
+        for(x = 0;x < destsize.x;x++) {
+            const BYTE *srcptr = bufptr + (x * srcsize.x / destsize.x) * srcformat->bytes_per_pixel;
+
+            /* extract source color components */
+            if(srcformat->type == FORMAT_ARGB) get_relevant_argb_components(&conv_info, *(const DWORD*)srcptr, channels);
+
+            /* recombine the components */
+            if(destformat->type == FORMAT_ARGB) make_argb_color(&conv_info, channels, (DWORD*)destptr);
+
+            if(colorkey) {
+                get_relevant_argb_components(&ck_conv_info, *(const DWORD*)srcptr, channels);
+                make_argb_color(&ck_conv_info, channels, &pixel);
+                if(pixel == colorkey)
+                    /* make this pixel transparent */
+                    *(DWORD *)destptr &= ~conv_info.destmask[0];
+            }
+
             destptr += destformat->bytes_per_pixel;
         }
     }
@@ -544,7 +774,8 @@ static void copy_simple_data(CONST BYTE *src,  UINT  srcpitch, POINT  srcsize, C
  *   Success: D3D_OK, if we successfully load the pixel data into our surface or
  *                    if pSrcMemory is NULL but the other parameters are valid
  *   Failure: D3DERR_INVALIDCALL, if pDestSurface, SrcPitch or pSrcRect are NULL or
- *                                if SrcFormat is an invalid format (other than D3DFMT_UNKNOWN)
+ *                                if SrcFormat is an invalid format (other than D3DFMT_UNKNOWN) or
+ *                                if DestRect is invalid
  *            D3DXERR_INVALIDDATA, if we fail to lock pDestSurface
  *            E_FAIL, if SrcFormat is D3DFMT_UNKNOWN or the dimensions of pSrcRect are invalid
  *
@@ -576,7 +807,7 @@ HRESULT WINAPI D3DXLoadSurfaceFromMemory(LPDIRECT3DSURFACE9 pDestSurface,
     if( !pDestSurface || !pSrcMemory || !pSrcRect ) return D3DERR_INVALIDCALL;
     if(SrcFormat == D3DFMT_UNKNOWN || pSrcRect->left >= pSrcRect->right || pSrcRect->top >= pSrcRect->bottom) return E_FAIL;
 
-    if(dwFilter != D3DX_FILTER_NONE) return E_NOTIMPL;
+    if(dwFilter == D3DX_DEFAULT) dwFilter = D3DX_FILTER_TRIANGLE | D3DX_FILTER_DITHER;
 
     IDirect3DSurface9_GetDesc(pDestSurface, &surfdesc);
 
@@ -591,16 +822,27 @@ HRESULT WINAPI D3DXLoadSurfaceFromMemory(LPDIRECT3DSURFACE9 pDestSurface,
         destsize.x = surfdesc.Width;
         destsize.y = surfdesc.Height;
     } else {
+        if(pDestRect->left > pDestRect->right || pDestRect->right > surfdesc.Width) return D3DERR_INVALIDCALL;
+        if(pDestRect->top > pDestRect->bottom || pDestRect->bottom > surfdesc.Height) return D3DERR_INVALIDCALL;
+        if(pDestRect->left < 0 || pDestRect->top < 0) return D3DERR_INVALIDCALL;
         destsize.x = pDestRect->right - pDestRect->left;
         destsize.y = pDestRect->bottom - pDestRect->top;
+        if(destsize.x == 0 || destsize.y == 0) return D3D_OK;
     }
 
     hr = IDirect3DSurface9_LockRect(pDestSurface, &lockrect, pDestRect, 0);
     if(FAILED(hr)) return D3DXERR_INVALIDDATA;
 
-    copy_simple_data((CONST BYTE*)pSrcMemory, SrcPitch, srcsize, srcformatdesc,
-                     (CONST BYTE*)lockrect.pBits, lockrect.Pitch, destsize, destformatdesc,
-                     dwFilter);
+    if((dwFilter & 0xF) == D3DX_FILTER_NONE) {
+        copy_simple_data(pSrcMemory, SrcPitch, srcsize, srcformatdesc,
+                         lockrect.pBits, lockrect.Pitch, destsize, destformatdesc,
+                         Colorkey);
+    } else /*if((dwFilter & 0xF) == D3DX_FILTER_POINT) */ {
+        /* always apply a point filter until D3DX_FILTER_LINEAR, D3DX_FILTER_TRIANGLE and D3DX_FILTER_BOX are implemented */
+        point_filter_simple_data(pSrcMemory, SrcPitch, srcsize, srcformatdesc,
+                                 lockrect.pBits, lockrect.Pitch, destsize, destformatdesc,
+                                 Colorkey);
+    }
 
     IDirect3DSurface9_UnlockRect(pDestSurface);
     return D3D_OK;

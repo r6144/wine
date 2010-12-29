@@ -32,6 +32,7 @@
 #include "winreg.h"
 #include "shlwapi.h"
 #include "shlguid.h"
+#include "rpcproxy.h"
 
 #include "browseui.h"
 
@@ -59,10 +60,15 @@ static const struct {
 
 typedef struct tagClassFactory
 {
-    const IClassFactoryVtbl *vtbl;
+    IClassFactory IClassFactory_iface;
     LONG   ref;
     LPFNCONSTRUCTOR ctor;
 } ClassFactory;
+
+static inline ClassFactory *impl_from_IClassFactory(IClassFactory *iface)
+{
+    return CONTAINING_RECORD(iface, ClassFactory, IClassFactory_iface);
+}
 
 static void ClassFactory_Destructor(ClassFactory *This)
 {
@@ -86,13 +92,13 @@ static HRESULT WINAPI ClassFactory_QueryInterface(IClassFactory *iface, REFIID r
 
 static ULONG WINAPI ClassFactory_AddRef(IClassFactory *iface)
 {
-    ClassFactory *This = (ClassFactory *)iface;
+    ClassFactory *This = impl_from_IClassFactory(iface);
     return InterlockedIncrement(&This->ref);
 }
 
 static ULONG WINAPI ClassFactory_Release(IClassFactory *iface)
 {
-    ClassFactory *This = (ClassFactory *)iface;
+    ClassFactory *This = impl_from_IClassFactory(iface);
     ULONG ret = InterlockedDecrement(&This->ref);
 
     if (ret == 0)
@@ -102,7 +108,7 @@ static ULONG WINAPI ClassFactory_Release(IClassFactory *iface)
 
 static HRESULT WINAPI ClassFactory_CreateInstance(IClassFactory *iface, IUnknown *punkOuter, REFIID iid, LPVOID *ppvOut)
 {
-    ClassFactory *This = (ClassFactory *)iface;
+    ClassFactory *This = impl_from_IClassFactory(iface);
     HRESULT ret;
     IUnknown *obj;
 
@@ -117,7 +123,7 @@ static HRESULT WINAPI ClassFactory_CreateInstance(IClassFactory *iface, IUnknown
 
 static HRESULT WINAPI ClassFactory_LockServer(IClassFactory *iface, BOOL fLock)
 {
-    ClassFactory *This = (ClassFactory *)iface;
+    ClassFactory *This = impl_from_IClassFactory(iface);
 
     TRACE("(%p)->(%x)\n", This, fLock);
 
@@ -143,7 +149,7 @@ static const IClassFactoryVtbl ClassFactoryVtbl = {
 static HRESULT ClassFactory_Constructor(LPFNCONSTRUCTOR ctor, LPVOID *ppvOut)
 {
     ClassFactory *This = heap_alloc(sizeof(ClassFactory));
-    This->vtbl = &ClassFactoryVtbl;
+    This->IClassFactory_iface.lpVtbl = &ClassFactoryVtbl;
     This->ref = 1;
     This->ctor = ctor;
     *ppvOut = This;
@@ -183,15 +189,28 @@ HRESULT WINAPI DllCanUnloadNow(void)
  */
 HRESULT WINAPI DllGetVersion(DLLVERSIONINFO *info)
 {
-    if (info->cbSize != sizeof(DLLVERSIONINFO)) FIXME("support DLLVERSIONINFO2\n");
+    if(info->cbSize == sizeof(DLLVERSIONINFO) ||
+       info->cbSize == sizeof(DLLVERSIONINFO2))
+    {
+        /* this is what IE6 on Windows 98 reports */
+        info->dwMajorVersion = 6;
+        info->dwMinorVersion = 0;
+        info->dwBuildNumber = 2600;
+        info->dwPlatformID = DLLVER_PLATFORM_WINDOWS;
+        if(info->cbSize == sizeof(DLLVERSIONINFO2))
+        {
+            DLLVERSIONINFO2 *info2 = (DLLVERSIONINFO2*) info;
+            info2->dwFlags = 0;
+            info2->ullVersion = MAKEDLLVERULL(info->dwMajorVersion,
+                                              info->dwMinorVersion,
+                                              info->dwBuildNumber,
+                                              0); /* FIXME: correct hotfix number */
+        }
+        return S_OK;
+    }
 
-    /* this is what IE6 on Windows 98 reports */
-    info->dwMajorVersion = 6;
-    info->dwMinorVersion = 0;
-    info->dwBuildNumber = 2600;
-    info->dwPlatformID = DLLVER_PLATFORM_WINDOWS;
-
-    return NOERROR;
+    WARN("wrong DLLVERSIONINFO size from app.\n");
+    return E_INVALIDARG;
 }
 
 /***********************************************************************
@@ -220,4 +239,20 @@ HRESULT WINAPI DllInstall(BOOL bInstall, LPCWSTR cmdline)
 {
     FIXME("(%s, %s): stub\n", bInstall ? "TRUE" : "FALSE", debugstr_w(cmdline));
     return S_OK;
+}
+
+/***********************************************************************
+ *		DllRegisterServer (BROWSEUI.@)
+ */
+HRESULT WINAPI DllRegisterServer(void)
+{
+    return __wine_register_resources( BROWSEUI_hinstance, NULL );
+}
+
+/***********************************************************************
+ *		DllUnregisterServer (BROWSEUI.@)
+ */
+HRESULT WINAPI DllUnregisterServer(void)
+{
+    return __wine_unregister_resources( BROWSEUI_hinstance, NULL );
 }

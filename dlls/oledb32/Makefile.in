@@ -1,16 +1,13 @@
 EXTRADEFS = -DCOM_NO_WINDOWS_H
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = oledb32.dll
 IMPORTS   = uuid oleaut32 ole32 user32 advapi32
 
 C_SRCS = \
 	convert.c \
-	main.c \
-	regsvr.c
+	main.c
 
 IDL_I_SRCS = convert.idl
+
+IDL_R_SRCS = oledb32_classes.idl
 
 @MAKE_DLL_RULES@

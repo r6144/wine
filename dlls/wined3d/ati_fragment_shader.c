@@ -273,11 +273,7 @@ static GLuint register_for_arg(DWORD arg, const struct wined3d_gl_info *gl_info,
              * instruction writing to reg0. Afterwards texture0 is not used any longer.
              * If we're reading from current
              */
-            if(stage == 0) {
-                ret = GL_PRIMARY_COLOR;
-            } else {
-                ret = GL_REG_0_ATI;
-            }
+            ret = stage ? GL_REG_0_ATI : GL_PRIMARY_COLOR;
             break;
 
         case WINED3DTA_TEXTURE:
@@ -517,9 +513,12 @@ static GLuint gen_ati_shader(const struct texture_stage_op op[MAX_TEXTURES], con
     }
 
     /* Pass 4: Generate the arithmetic instructions */
-    for(stage = 0; stage < MAX_TEXTURES; stage++) {
-        if(op[stage].cop == WINED3DTOP_DISABLE) {
-            if(stage == 0) {
+    for (stage = 0; stage < MAX_TEXTURES; ++stage)
+    {
+        if (op[stage].cop == WINED3DTOP_DISABLE)
+        {
+            if (!stage)
+            {
                 /* Handle complete texture disabling gracefully */
                 wrap_op1(gl_info, GL_MOV_ATI, GL_REG_0_ATI, GL_NONE, GL_NONE,
                          GL_PRIMARY_COLOR, GL_NONE, GL_NONE);
@@ -679,7 +678,8 @@ static GLuint gen_ati_shader(const struct texture_stage_op op[MAX_TEXTURES], con
         switch(op[stage].aop) {
             case WINED3DTOP_DISABLE:
                 /* Get the primary color to the output if on stage 0, otherwise leave register 0 untouched */
-                if(stage == 0) {
+                if (!stage)
+                {
                     wrap_op1(gl_info, GL_MOV_ATI, GL_REG_0_ATI, GL_ALPHA, GL_NONE,
                              GL_PRIMARY_COLOR, GL_NONE, GL_NONE);
                 }
@@ -838,7 +838,7 @@ static void set_tex_op_atifs(DWORD state, IWineD3DStateBlockImpl *stateblock, st
         {
             GL_EXTCALL(glActiveTextureARB(GL_TEXTURE0_ARB + mapped_stage));
             checkGLcall("glActiveTextureARB");
-            texture_activate_dimensions(i, stateblock, context);
+            texture_activate_dimensions(stateblock->state.textures[i], gl_info);
         }
     }
 
@@ -849,7 +849,7 @@ static void state_texfactor_atifs(DWORD state, IWineD3DStateBlockImpl *statebloc
 {
     const struct wined3d_gl_info *gl_info = context->gl_info;
     float col[4];
-    D3DCOLORTOGLFLOAT4(stateblock->renderState[WINED3DRS_TEXTUREFACTOR], col);
+    D3DCOLORTOGLFLOAT4(stateblock->state.render_states[WINED3DRS_TEXTUREFACTOR], col);
 
     GL_EXTCALL(glSetFragmentShaderConstantATI(ATI_FFP_CONST_TFACTOR, col));
     checkGLcall("glSetFragmentShaderConstantATI(ATI_FFP_CONST_TFACTOR, col)");
@@ -861,10 +861,10 @@ static void set_bumpmat(DWORD state, IWineD3DStateBlockImpl *stateblock, struct 
     const struct wined3d_gl_info *gl_info = context->gl_info;
     float mat[2][2];
 
-    mat[0][0] = *((float *) &stateblock->textureState[stage][WINED3DTSS_BUMPENVMAT00]);
-    mat[1][0] = *((float *) &stateblock->textureState[stage][WINED3DTSS_BUMPENVMAT01]);
-    mat[0][1] = *((float *) &stateblock->textureState[stage][WINED3DTSS_BUMPENVMAT10]);
-    mat[1][1] = *((float *) &stateblock->textureState[stage][WINED3DTSS_BUMPENVMAT11]);
+    mat[0][0] = *((float *)&stateblock->state.texture_states[stage][WINED3DTSS_BUMPENVMAT00]);
+    mat[1][0] = *((float *)&stateblock->state.texture_states[stage][WINED3DTSS_BUMPENVMAT01]);
+    mat[0][1] = *((float *)&stateblock->state.texture_states[stage][WINED3DTSS_BUMPENVMAT10]);
+    mat[1][1] = *((float *)&stateblock->state.texture_states[stage][WINED3DTSS_BUMPENVMAT11]);
     /* GL_ATI_fragment_shader allows only constants from 0.0 to 1.0, but the bumpmat
      * constants can be in any range. While they should stay between [-1.0 and 1.0] because
      * Shader Model 1.x pixel shaders are clamped to that range negative values are used occasionally,
@@ -887,12 +887,13 @@ static void textransform(DWORD state, IWineD3DStateBlockImpl *stateblock, struct
     }
 }
 
-static void atifs_apply_pixelshader(DWORD state, IWineD3DStateBlockImpl *stateblock, struct wined3d_context *context)
+static void atifs_apply_pixelshader(DWORD state_id, IWineD3DStateBlockImpl *stateblock, struct wined3d_context *context)
 {
+    const struct wined3d_state *state = &stateblock->state;
     IWineD3DDeviceImpl *device = stateblock->device;
-    BOOL use_vshader = use_vs(stateblock);
+    BOOL use_vshader = use_vs(state);
 
-    context->last_was_pshader = use_ps(stateblock);
+    context->last_was_pshader = use_ps(state);
     /* The ATIFS code does not support pixel shaders currently, but we have to provide a state handler
      * to call shader_select to select a vertex shader if one is applied because the vertex shader state
      * may defer calling the shader backend if the pshader state is dirty.
@@ -912,6 +913,12 @@ static void atifs_apply_pixelshader(DWORD state, IWineD3DStateBlockImpl *statebl
     }
 }
 
+static void atifs_srgbwriteenable(DWORD state, IWineD3DStateBlockImpl *stateblock, struct wined3d_context *context)
+{
+    if (stateblock->state.render_states[WINED3DRS_SRGBWRITEENABLE])
+        WARN("sRGB writes are not supported by this fragment pipe.\n");
+}
+
 static const struct StateEntryTemplate atifs_fragmentstate_template[] = {
     {STATE_RENDER(WINED3DRS_TEXTUREFACTOR),               { STATE_RENDER(WINED3DRS_TEXTUREFACTOR),              state_texfactor_atifs   }, WINED3D_GL_EXT_NONE             },
     {STATE_RENDER(WINED3DRS_FOGCOLOR),                    { STATE_RENDER(WINED3DRS_FOGCOLOR),                   state_fogcolor          }, WINED3D_GL_EXT_NONE             },
@@ -921,6 +928,7 @@ static const struct StateEntryTemplate atifs_fragmentstate_template[] = {
     {STATE_RENDER(WINED3DRS_FOGVERTEXMODE),               { STATE_RENDER(WINED3DRS_FOGENABLE),                  NULL                    }, WINED3D_GL_EXT_NONE             },
     {STATE_RENDER(WINED3DRS_FOGSTART),                    { STATE_RENDER(WINED3DRS_FOGSTART),                   state_fogstartend       }, WINED3D_GL_EXT_NONE             },
     {STATE_RENDER(WINED3DRS_FOGEND),                      { STATE_RENDER(WINED3DRS_FOGSTART),                   NULL                    }, WINED3D_GL_EXT_NONE             },
+    {STATE_RENDER(WINED3DRS_SRGBWRITEENABLE),             { STATE_RENDER(WINED3DRS_SRGBWRITEENABLE),            atifs_srgbwriteenable   }, WINED3D_GL_EXT_NONE             },
     {STATE_TEXTURESTAGE(0, WINED3DTSS_COLOROP),           { STATE_TEXTURESTAGE(0, WINED3DTSS_COLOROP),          set_tex_op_atifs        }, WINED3D_GL_EXT_NONE             },
     {STATE_TEXTURESTAGE(0, WINED3DTSS_COLORARG1),         { STATE_TEXTURESTAGE(0, WINED3DTSS_COLOROP),          NULL                    }, WINED3D_GL_EXT_NONE             },
     {STATE_TEXTURESTAGE(0, WINED3DTSS_COLORARG2),         { STATE_TEXTURESTAGE(0, WINED3DTSS_COLOROP),          NULL                    }, WINED3D_GL_EXT_NONE             },
@@ -1046,7 +1054,8 @@ static const struct StateEntryTemplate atifs_fragmentstate_template[] = {
 };
 
 /* Context activation is done by the caller. */
-static void atifs_enable(IWineD3DDevice *iface, BOOL enable) {
+static void atifs_enable(BOOL enable)
+{
     ENTER_GL();
     if(enable) {
         glEnable(GL_FRAGMENT_SHADER_ATI);
@@ -1105,20 +1114,21 @@ static void atifs_get_caps(const struct wined3d_gl_info *gl_info, struct fragmen
     caps->MaxSimultaneousTextures = 6;
 }
 
-static HRESULT atifs_alloc(IWineD3DDevice *iface) {
-    IWineD3DDeviceImpl *This = (IWineD3DDeviceImpl *) iface;
+static HRESULT atifs_alloc(IWineD3DDeviceImpl *device)
+{
     struct atifs_private_data *priv;
 
-    This->fragment_priv = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(struct atifs_private_data));
-    if(!This->fragment_priv) {
+    device->fragment_priv = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(struct atifs_private_data));
+    if (!device->fragment_priv)
+    {
         ERR("Out of memory\n");
         return E_OUTOFMEMORY;
     }
-    priv = This->fragment_priv;
+    priv = device->fragment_priv;
     if (wine_rb_init(&priv->fragment_shaders, &wined3d_ffp_frag_program_rb_functions) == -1)
     {
         ERR("Failed to initialize rbtree.\n");
-        HeapFree(GetProcessHeap(), 0, This->fragment_priv);
+        HeapFree(GetProcessHeap(), 0, device->fragment_priv);
         return E_OUTOFMEMORY;
     }
     return WINED3D_OK;
@@ -1139,14 +1149,14 @@ static void atifs_free_ffpshader(struct wine_rb_entry *entry, void *context)
 }
 
 /* Context activation is done by the caller. */
-static void atifs_free(IWineD3DDevice *iface) {
-    IWineD3DDeviceImpl *This = (IWineD3DDeviceImpl *) iface;
-    struct atifs_private_data *priv = This->fragment_priv;
+static void atifs_free(IWineD3DDeviceImpl *device)
+{
+    struct atifs_private_data *priv = device->fragment_priv;
 
-    wine_rb_destroy(&priv->fragment_shaders, atifs_free_ffpshader, This);
+    wine_rb_destroy(&priv->fragment_shaders, atifs_free_ffpshader, device);
 
     HeapFree(GetProcessHeap(), 0, priv);
-    This->fragment_priv = NULL;
+    device->fragment_priv = NULL;
 }
 
 static BOOL atifs_color_fixup_supported(struct color_fixup_desc fixup)

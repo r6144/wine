@@ -5,7 +5,7 @@
  * Copyright 2002-2004 Raphael Junqueira
  * Copyright 2005 Oliver Stieber
  * Copyright 2007-2008 Stefan Dösinger for CodeWeavers
- * Copyright 2009 Henri Verbeet for CodeWeavers
+ * Copyright 2009-2010 Henri Verbeet for CodeWeavers
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -28,14 +28,14 @@
 WINE_DEFAULT_DEBUG_CHANNEL(d3d_texture);
 
 HRESULT basetexture_init(IWineD3DBaseTextureImpl *texture, UINT layer_count, UINT level_count,
-        WINED3DRESOURCETYPE resource_type, IWineD3DDeviceImpl *device, UINT size, DWORD usage,
-        const struct wined3d_format_desc *format_desc, WINED3DPOOL pool, IUnknown *parent,
+        WINED3DRESOURCETYPE resource_type, IWineD3DDeviceImpl *device, DWORD usage,
+        const struct wined3d_format *format, WINED3DPOOL pool, void *parent,
         const struct wined3d_parent_ops *parent_ops)
 {
     HRESULT hr;
 
     hr = resource_init((IWineD3DResource *)texture, resource_type, device,
-            size, usage, format_desc, pool, parent, parent_ops);
+            0, usage, format, pool, parent, parent_ops);
     if (FAILED(hr))
     {
         WARN("Failed to initialize resource, returning %#x\n", hr);
@@ -60,7 +60,7 @@ HRESULT basetexture_init(IWineD3DBaseTextureImpl *texture, UINT layer_count, UIN
     texture->baseTexture.is_srgb = FALSE;
     texture->baseTexture.pow2Matrix_identity = TRUE;
 
-    if (texture->resource.format_desc->Flags & WINED3DFMT_FLAG_FILTERING)
+    if (texture->resource.format->flags & WINED3DFMT_FLAG_FILTERING)
     {
         texture->baseTexture.minMipLookup = minMipLookup;
         texture->baseTexture.magLookup = magLookup;
@@ -74,28 +74,24 @@ HRESULT basetexture_init(IWineD3DBaseTextureImpl *texture, UINT layer_count, UIN
     return WINED3D_OK;
 }
 
-void basetexture_cleanup(IWineD3DBaseTexture *iface)
+void basetexture_cleanup(IWineD3DBaseTextureImpl *texture)
 {
-    basetexture_unload(iface);
-    HeapFree(GetProcessHeap(), 0, ((IWineD3DBaseTextureImpl *)iface)->baseTexture.sub_resources);
-    resource_cleanup((IWineD3DResource *)iface);
+    basetexture_unload(texture);
+    HeapFree(GetProcessHeap(), 0, texture->baseTexture.sub_resources);
+    resource_cleanup((IWineD3DResource *)texture);
 }
 
-IWineD3DResourceImpl *basetexture_get_sub_resource(IWineD3DBaseTextureImpl *texture, UINT layer, UINT level)
+IWineD3DResourceImpl *basetexture_get_sub_resource(IWineD3DBaseTextureImpl *texture, UINT sub_resource_idx)
 {
-    if (layer >= texture->baseTexture.layer_count)
+    UINT sub_count = texture->baseTexture.level_count * texture->baseTexture.layer_count;
+
+    if (sub_resource_idx >= sub_count)
     {
-        WARN("layer %u >= layer_count %u.\n", layer, texture->baseTexture.layer_count);
+        WARN("sub_resource_idx %u >= sub_count %u.\n", sub_resource_idx, sub_count);
         return NULL;
     }
 
-    if (level >= texture->baseTexture.level_count)
-    {
-        WARN("level %u >= level_count %u.\n", level, texture->baseTexture.level_count);
-        return NULL;
-    }
-
-    return texture->baseTexture.sub_resources[layer * texture->baseTexture.level_count + level];
+    return texture->baseTexture.sub_resources[sub_resource_idx];
 }
 
 /* A GL context is provided by the caller */
@@ -107,28 +103,28 @@ static void gltexture_delete(struct gl_texture *tex)
     tex->name = 0;
 }
 
-void basetexture_unload(IWineD3DBaseTexture *iface)
+void basetexture_unload(IWineD3DBaseTextureImpl *texture)
 {
-    IWineD3DTextureImpl *This = (IWineD3DTextureImpl *)iface;
-    IWineD3DDeviceImpl *device = This->resource.device;
+    IWineD3DDeviceImpl *device = texture->resource.device;
     struct wined3d_context *context = NULL;
 
-    if (This->baseTexture.texture_rgb.name || This->baseTexture.texture_srgb.name)
+    if (texture->baseTexture.texture_rgb.name || texture->baseTexture.texture_srgb.name)
     {
         context = context_acquire(device, NULL);
     }
 
-    if(This->baseTexture.texture_rgb.name) {
-        gltexture_delete(&This->baseTexture.texture_rgb);
-    }
-    if(This->baseTexture.texture_srgb.name) {
-        gltexture_delete(&This->baseTexture.texture_srgb);
-    }
+    if (texture->baseTexture.texture_rgb.name)
+        gltexture_delete(&texture->baseTexture.texture_rgb);
+
+    if (texture->baseTexture.texture_srgb.name)
+        gltexture_delete(&texture->baseTexture.texture_srgb);
 
     if (context) context_release(context);
 
-    This->baseTexture.texture_rgb.dirty = TRUE;
-    This->baseTexture.texture_srgb.dirty = TRUE;
+    texture->baseTexture.texture_rgb.dirty = TRUE;
+    texture->baseTexture.texture_srgb.dirty = TRUE;
+
+    resource_unload((IWineD3DResourceImpl *)texture);
 }
 
 DWORD basetexture_set_lod(IWineD3DBaseTexture *iface, DWORD LODNew)
@@ -171,18 +167,17 @@ DWORD basetexture_get_lod(IWineD3DBaseTexture *iface)
     return This->baseTexture.LOD;
 }
 
-DWORD basetexture_get_level_count(IWineD3DBaseTexture *iface)
+DWORD basetexture_get_level_count(IWineD3DBaseTextureImpl *texture)
 {
-    IWineD3DBaseTextureImpl *This = (IWineD3DBaseTextureImpl *)iface;
-    TRACE("iface %p, returning %u.\n", iface, This->baseTexture.level_count);
-    return This->baseTexture.level_count;
+    TRACE("texture %p, returning %u.\n", texture, texture->baseTexture.level_count);
+    return texture->baseTexture.level_count;
 }
 
 HRESULT basetexture_set_autogen_filter_type(IWineD3DBaseTexture *iface, WINED3DTEXTUREFILTERTYPE FilterType)
 {
   IWineD3DBaseTextureImpl *This = (IWineD3DBaseTextureImpl *)iface;
   IWineD3DDeviceImpl *device = This->resource.device;
-  UINT textureDimensions = IWineD3DBaseTexture_GetTextureDimensions(iface);
+  GLenum textureDimensions = This->baseTexture.target;
 
   if (!(This->resource.usage & WINED3DUSAGE_AUTOGENMIPMAP)) {
       TRACE("(%p) : returning invalid call\n", This);
@@ -239,20 +234,15 @@ void basetexture_generate_mipmaps(IWineD3DBaseTexture *iface)
     FIXME("iface %p stub!\n", iface);
 }
 
-BOOL basetexture_set_dirty(IWineD3DBaseTexture *iface, BOOL dirty)
+BOOL basetexture_set_dirty(IWineD3DBaseTextureImpl *texture, BOOL dirty)
 {
     BOOL old;
-    IWineD3DBaseTextureImpl *This = (IWineD3DBaseTextureImpl *)iface;
-    old = This->baseTexture.texture_rgb.dirty || This->baseTexture.texture_srgb.dirty;
-    This->baseTexture.texture_rgb.dirty = dirty;
-    This->baseTexture.texture_srgb.dirty = dirty;
-    return old;
-}
 
-BOOL basetexture_get_dirty(IWineD3DBaseTexture *iface)
-{
-    IWineD3DBaseTextureImpl *This = (IWineD3DBaseTextureImpl *)iface;
-    return This->baseTexture.texture_rgb.dirty || This->baseTexture.texture_srgb.dirty;
+    old = texture->baseTexture.texture_rgb.dirty || texture->baseTexture.texture_srgb.dirty;
+    texture->baseTexture.texture_rgb.dirty = dirty;
+    texture->baseTexture.texture_srgb.dirty = dirty;
+
+    return old;
 }
 
 /* Context activation is done by the caller. */
@@ -260,7 +250,7 @@ HRESULT basetexture_bind(IWineD3DBaseTexture *iface, BOOL srgb, BOOL *set_surfac
 {
     IWineD3DBaseTextureImpl *This = (IWineD3DBaseTextureImpl *)iface;
     HRESULT hr = WINED3D_OK;
-    UINT textureDimensions;
+    GLenum textureDimensions;
     BOOL isNewTexture = FALSE;
     struct gl_texture *gl_tex;
     TRACE("(%p) : About to bind texture\n", This);
@@ -272,10 +262,11 @@ HRESULT basetexture_bind(IWineD3DBaseTexture *iface, BOOL srgb, BOOL *set_surfac
         gl_tex = &This->baseTexture.texture_rgb;
     }
 
-    textureDimensions = IWineD3DBaseTexture_GetTextureDimensions(iface);
+    textureDimensions = This->baseTexture.target;
     ENTER_GL();
     /* Generate a texture name if we don't already have one */
-    if (gl_tex->name == 0) {
+    if (!gl_tex->name)
+    {
         *set_surface_desc = TRUE;
         glGenTextures(1, &gl_tex->name);
         checkGLcall("glGenTextures");
@@ -300,7 +291,7 @@ HRESULT basetexture_bind(IWineD3DBaseTexture *iface, BOOL srgb, BOOL *set_surfac
         gl_tex->states[WINED3DTEXSTA_MAXANISOTROPY] = 1;
         gl_tex->states[WINED3DTEXSTA_SRGBTEXTURE]   = 0;
         gl_tex->states[WINED3DTEXSTA_SHADOW]        = FALSE;
-        IWineD3DBaseTexture_SetDirty(iface, TRUE);
+        basetexture_set_dirty(This, TRUE);
         isNewTexture = TRUE;
 
         if(This->resource.usage & WINED3DUSAGE_AUTOGENMIPMAP) {
@@ -317,7 +308,8 @@ HRESULT basetexture_bind(IWineD3DBaseTexture *iface, BOOL srgb, BOOL *set_surfac
     }
 
     /* Bind the texture */
-    if (gl_tex->name != 0) {
+    if (gl_tex->name)
+    {
         glBindTexture(textureDimensions, gl_tex->name);
         checkGLcall("glBindTexture");
         if (isNewTexture) {
@@ -380,18 +372,17 @@ static void apply_wrap(const struct wined3d_gl_info *gl_info, GLenum target,
 
 /* GL locking is done by the caller (state handler) */
 void basetexture_apply_state_changes(IWineD3DBaseTexture *iface,
-        const DWORD textureStates[WINED3D_HIGHEST_TEXTURE_STATE + 1],
         const DWORD samplerStates[WINED3D_HIGHEST_SAMPLER_STATE + 1],
         const struct wined3d_gl_info *gl_info)
 {
     IWineD3DBaseTextureImpl *This = (IWineD3DBaseTextureImpl *)iface;
+    GLenum textureDimensions = This->baseTexture.target;
     DWORD state;
-    GLint textureDimensions = IWineD3DBaseTexture_GetTextureDimensions(iface);
     BOOL cond_np2 = IWineD3DBaseTexture_IsCondNP2(iface);
     DWORD aniso;
     struct gl_texture *gl_tex;
 
-    TRACE("iface %p, textureStates %p, samplerStates %p\n", iface, textureStates, samplerStates);
+    TRACE("iface %p, samplerStates %p\n", iface, samplerStates);
 
     if(This->baseTexture.is_srgb) {
         gl_tex = &This->baseTexture.texture_srgb;
@@ -426,7 +417,7 @@ void basetexture_apply_state_changes(IWineD3DBaseTexture *iface,
         D3DCOLORTOGLFLOAT4(state, col);
         TRACE("Setting border color for %u to %x\n", textureDimensions, state);
         glTexParameterfv(textureDimensions, GL_TEXTURE_BORDER_COLOR, &col[0]);
-        checkGLcall("glTexParameteri(..., GL_TEXTURE_BORDER_COLOR, ...)");
+        checkGLcall("glTexParameterfv(..., GL_TEXTURE_BORDER_COLOR, ...)");
         gl_tex->states[WINED3DTEXSTA_BORDERCOLOR] = state;
     }
 
@@ -518,10 +509,10 @@ void basetexture_apply_state_changes(IWineD3DBaseTexture *iface,
         gl_tex->states[WINED3DTEXSTA_MAXANISOTROPY] = aniso;
     }
 
-    if (!(This->resource.format_desc->Flags & WINED3DFMT_FLAG_SHADOW)
+    if (!(This->resource.format->flags & WINED3DFMT_FLAG_SHADOW)
             != !gl_tex->states[WINED3DTEXSTA_SHADOW])
     {
-        if (This->resource.format_desc->Flags & WINED3DFMT_FLAG_SHADOW)
+        if (This->resource.format->flags & WINED3DFMT_FLAG_SHADOW)
         {
             glTexParameteri(textureDimensions, GL_DEPTH_TEXTURE_MODE_ARB, GL_LUMINANCE);
             glTexParameteri(textureDimensions, GL_TEXTURE_COMPARE_MODE_ARB, GL_COMPARE_R_TO_TEXTURE_ARB);

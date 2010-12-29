@@ -1,7 +1,7 @@
 echo Tests for cmd's builtin commands
-@echo off
 
-echo ------------ Testing 'echo' --------------
+@echo on
+echo ------------ Testing 'echo' [ON] --------------
 echo word
 echo 'singlequotedword'
 echo "doublequotedword"
@@ -9,6 +9,24 @@ echo "doublequotedword"
 echo "/?"
 echo.
 echo .
+echo.word
+echo .word
+echo word@space@
+echo word@space@@space@
+
+@echo off
+echo ------------ Testing 'echo' [OFF] --------------
+echo word
+echo 'singlequotedword'
+echo "doublequotedword"
+@echo at-echoed-word
+echo "/?"
+echo.
+echo .
+echo.word
+echo .word
+echo word@space@
+echo word@space@@space@
 
 echo ------------ Testing 'set' --------------
 echo set "FOO=bar" should not include the quotes in the variable value
@@ -70,3 +88,6 @@ echo goto with a leading space worked
 if c==c goto dest3
 	:dest3
 echo goto with a leading tab worked
+if d==d goto dest4
+:dest4@space@
+echo goto with a following space worked

@@ -1,8 +1,4 @@
 EXTRADEFS = -D_SHELL32_ -DCOM_NO_WINDOWS_H
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = shell32.dll
 IMPORTLIB = shell32
 IMPORTS   = uuid shlwapi comctl32 user32 gdi32 advapi32
@@ -23,6 +19,7 @@ C_SRCS = \
 	debughlp.c \
 	dialogs.c \
 	dragdrophelper.c \
+	ebrowser.c \
 	enumidlist.c \
 	folders.c \
 	iconcache.c \
@@ -67,6 +64,7 @@ RC_SRCS = \
 	shell32_Es.rc \
 	shell32_Fi.rc \
 	shell32_Fr.rc \
+	shell32_He.rc \
 	shell32_Hu.rc \
 	shell32_It.rc \
 	shell32_Ja.rc \
@@ -108,14 +106,4 @@ SVG_SRCS = \
 	shortcut.svg \
 	trash_file.svg
 
-EXTRA_OBJS = authors.o
-
 @MAKE_DLL_RULES@
-
-authors.c: $(TOPSRCDIR)/AUTHORS
-	(LC_ALL=C; export LC_ALL; echo 'const char * const SHELL_Authors[] = {' && \
-	 sed -e '1,2d' -e 's/\(.*\)/  \"\1\",/' $(TOPSRCDIR)/AUTHORS && \
-	 echo '  0 };') >$@ || ($(RM) $@ && false)
-
-clean::
-	$(RM) authors.c

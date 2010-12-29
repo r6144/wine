@@ -41,7 +41,8 @@ typedef struct _itemTest {
 
 static inline void _test_items_ok(LPCWSTR string, DWORD cchString,
                          SCRIPT_CONTROL *Control, SCRIPT_STATE *State,
-                         DWORD nItems, const itemTest* items, BOOL nItemsToDo)
+                         DWORD nItems, const itemTest* items, BOOL nItemsToDo,
+                         INT nItemsBroken)
 {
     HRESULT hr;
     int x, outnItems;
@@ -49,6 +50,11 @@ static inline void _test_items_ok(LPCWSTR string, DWORD cchString,
 
     hr = ScriptItemize(string, cchString, 15, Control, State, outpItems, &outnItems);
     winetest_ok(!hr, "ScriptItemize should return S_OK not %08x\n", hr);
+    if (nItemsBroken && broken(nItemsBroken == outnItems))
+    {
+        winetest_win_skip("This test broken on this platform\n");
+        return;
+    }
     if (nItemsToDo)
         todo_wine winetest_ok(outnItems == nItems, "Wrong number of items\n");
     else
@@ -72,10 +78,12 @@ static inline void _test_items_ok(LPCWSTR string, DWORD cchString,
             todo_wine winetest_ok(outpItems[x].a.s.uBidiLevel == items[x].uBidiLevel, "%i:Wrong BidiLevel\n",x);
         else
             winetest_ok(outpItems[x].a.s.uBidiLevel == items[x].uBidiLevel, "%i:Wrong BidiLevel(%i)\n",x,outpItems[x].a.s.uBidiLevel);
+        if (x != outnItems)
+            winetest_ok(outpItems[x].a.eScript != SCRIPT_UNDEFINED, "%i: Undefined script\n",x);
     }
 }
 
-#define test_items_ok(a,b,c,d,e,f,g) (winetest_set_location(__FILE__,__LINE__), 0) ? 0 : _test_items_ok(a,b,c,d,e,f,g)
+#define test_items_ok(a,b,c,d,e,f,g,h) (winetest_set_location(__FILE__,__LINE__), 0) ? 0 : _test_items_ok(a,b,c,d,e,f,g,h)
 
 
 static void test_ScriptItemize( void )
@@ -84,11 +92,34 @@ static void test_ScriptItemize( void )
     static const itemTest t11[2] = {{{0,0,0,0},0,0,0,0},{{0,0,0,0},4,0,0,0}};
     static const itemTest t12[2] = {{{0,0,0,0},0,0,0,2},{{0,0,0,0},4,0,0,0}};
 
+    static const WCHAR test1b[] = {' ', ' ', ' ', ' ',0};
+    static const itemTest t1b1[2] = {{{0,0,0,0},0,0,0,0},{{0,0,0,0},4,0,0,0}};
+    static const itemTest t1b2[2] = {{{0,0,0,0},0,1,1,1},{{0,0,0,0},4,0,0,0}};
+
     /* Arabic, English*/
     static const WCHAR test2[] = {'1','2','3','-','5','2',0x064a,0x064f,0x0633,0x0627,0x0648,0x0650,0x064a,'7','1','.',0};
     static const itemTest t21[7] = {{{0,0,0,0},0,0,0,0},{{0,0,0,0},3,0,0,0},{{0,0,0,0},4,0,0,0},{{0,0,0,0},6,1,1,1},{{0,0,0,0},13,0,0,0},{{0,0,0,0},15,0,0,0},{{0,0,0,0},16,0,0,0}};
     static const itemTest t22[5] = {{{0,0,0,1},0,0,0,2},{{0,0,0,0},6,1,1,1},{{0,0,1,0},13,0,1,2},{{0,0,0,0},15,0,0,0},{{0,0,0,0},16,0,0,0}};
     static const itemTest t23[5] = {{{0,0,1,0},0,0,1,2},{{0,0,0,0},6,1,1,1},{{0,0,1,0},13,0,1,2},{{0,0,0,0},15,1,1,1},{{0,0,0,0},16,0,0,0}};
+
+    static const WCHAR test2b[] = {'A','B','C','-','D','E','F',' ',0x0621,0x0623,0x0624,0};
+    static const itemTest t2b1[5] = {{{0,0,0,0},0,0,0,0},{{0,0,0,0},3,0,0,0},{{0,0,0,0},4,0,0,0},{{0,0,0,0},8,1,1,1},{{0,0,0,0},11,0,0,0}};
+    static const itemTest t2b2[5] = {{{0,0,0,0},0,0,0,2},{{0,0,0,0},3,0,0,2},{{0,0,0,0},4,0,0,2},{{0,0,0,0},7,1,1,1},{{0,0,0,0},11,0,0,0}};
+    static const itemTest t2b3[3] = {{{0,0,0,0},0,0,0,2},{{0,0,0,0},7,1,1,1},{{0,0,0,0},11,0,0,0}};
+
+    /* leading space */
+    static const WCHAR test2c[] = {' ',0x0621,0x0623,0x0624,'A','B','C','-','D','E','F',0};
+    static const itemTest t2c1[5] = {{{0,0,0,0},0,1,1,1},{{0,0,0,0},4,0,0,0},{{0,0,0,0},7,0,0,0},{{0,0,0,0},8,0,0,0},{{0,0,0,0},11,0,0,0}};
+    static const itemTest t2c2[6] = {{{0,0,0,0},0,0,0,0},{{0,0,0,0},1,1,1,1},{{0,0,0,0},4,0,0,0},{{0,0,0,0},7,0,0,0},{{0,0,0,0},8,0,0,0},{{0,0,0,0},11,0,0,0}};
+    static const itemTest t2c3[5] = {{{0,0,0,0},0,1,1,1},{{0,0,0,0},4,0,0,2},{{0,0,0,0},7,0,0,2},{{0,0,0,0},8,0,0,2},{{0,0,0,0},11,0,0,0}};
+    static const itemTest t2c4[3] = {{{0,0,0,0},0,1,1,1},{{0,0,0,0},4,0,0,2},{{0,0,0,0},11,0,0,0}};
+
+    /* trailing space */
+    static const WCHAR test2d[] = {'A','B','C','-','D','E','F',0x0621,0x0623,0x0624,' ',0};
+    static const itemTest t2d1[5] = {{{0,0,0,0},0,0,0,0},{{0,0,0,0},3,0,0,0},{{0,0,0,0},4,0,0,0},{{0,0,0,0},7,1,1,1},{{0,0,0,0},11,0,0,0}};
+    static const itemTest t2d2[6] = {{{0,0,0,0},0,0,0,0},{{0,0,0,0},3,0,0,0},{{0,0,0,0},4,0,0,0},{{0,0,0,0},7,1,1,1},{{0,0,0,0},10,0,0,0},{{0,0,0,0},11,0,0,0}};
+    static const itemTest t2d3[5] = {{{0,0,0,0},0,0,0,2},{{0,0,0,0},3,0,0,2},{{0,0,0,0},4,0,0,2},{{0,0,0,0},7,1,1,1},{{0,0,0,0},11,0,0,0}};
+    static const itemTest t2d4[3] = {{{0,0,0,0},0,0,0,2},{{0,0,0,0},7,1,1,1},{{0,0,0,0},11,0,0,0}};
 
     /* Thai */
     static const WCHAR test3[] =
@@ -103,7 +134,8 @@ static void test_ScriptItemize( void )
     static const WCHAR test4[]  = {'1','2','3','-','5','2',' ','i','s',' ','7','1','.',0};
 
     static const itemTest t41[6] = {{{0,0,0,0},0,0,0,0},{{0,0,0,0},3,0,0,0},{{0,0,0,0},4,0,0,0},{{0,0,0,0},7,0,0,0},{{0,0,0,0},10,0,0,0},{{0,0,0,0},12,0,0,0}};
-    static const itemTest t42[5] = {{{0,0,1,0},0,0,1,2},{{0,0,0,0},6,1,1,1},{{0,0,0,0},7,0,0,2},{{1,0,0,1},10,0,0,2},{{1,0,0,0},12,0,0,0}};
+    static const itemTest t42[5] = {{{0,0,1,0},0,0,1,2},{{0,0,0,0},6,1,1,1},{{0,0,0,0},7,0,0,2},{{0,0,0,0},10,0,0,2},{{0,0,0,0},12,0,0,0}};
+    static const itemTest t43[4] = {{{0,0,1,0},0,0,1,2},{{0,0,0,0},6,1,1,1},{{0,0,0,0},7,0,0,2},{{0,0,0,0},12,0,0,0}};
 
     /* Arabic */
     static const WCHAR test5[]  =
@@ -117,6 +149,7 @@ static void test_ScriptItemize( void )
     static const WCHAR test6[]  = {0x05e9, 0x05dc, 0x05d5, 0x05dd, '.',0};
     static const itemTest t61[3] = {{{0,0,0,0},0,1,1,1},{{0,0,0,0},4,0,0,0},{{0,0,0,0},5,0,0,0}};
     static const itemTest t62[3] = {{{0,0,0,0},0,1,1,1},{{0,0,0,0},4,1,1,1},{{0,0,0,0},5,0,0,0}};
+    static const itemTest t63[2] = {{{0,0,0,0},0,1,1,1},{{0,0,0,0},5,0,0,0}};
     static const WCHAR test7[]  = {'p','a','r','t',' ','o','n','e',' ',0x05d7, 0x05dc, 0x05e7, ' ', 0x05e9, 0x05ea, 0x05d9, 0x05d9, 0x05dd, ' ','p','a','r','t',' ','t','h','r','e','e', 0};
     static const itemTest t71[4] = {{{0,0,0,0},0,0,0,0},{{0,0,0,0},9,1,1,1},{{0,0,0,0},19,0,0,0},{{0,0,0,0},29,0,0,0}};
     static const itemTest t72[4] = {{{0,0,0,0},0,0,0,0},{{0,0,0,0},9,1,1,1},{{0,0,0,0},18,0,0,0},{{0,0,0,0},29,0,0,0}};
@@ -128,6 +161,7 @@ static void test_ScriptItemize( void )
     static const WCHAR test9[] = {0x0710, 0x0712, 0x0712, 0x0714, '.',0};
     static const itemTest t91[3] = {{{0,0,0,0},0,1,1,1},{{0,0,0,0},4,0,0,0},{{0,0,0,0},5,0,0,0}};
     static const itemTest t92[3] = {{{0,0,0,0},0,1,1,1},{{0,0,0,0},4,1,1,1},{{0,0,0,0},5,0,0,0}};
+    static const itemTest t93[2] = {{{0,0,0,0},0,1,1,1},{{0,0,0,0},5,0,0,0}};
 
     static const WCHAR test10[] = {0x0717, 0x0718, 0x071a, 0x071b,0};
     static const itemTest t101[2] = {{{0,0,0,0},0,1,1,1},{{0,0,0,0},4,0,0,0}};
@@ -153,40 +187,69 @@ static void test_ScriptItemize( void )
     hr = ScriptItemize(test1, 0, 10, NULL, NULL, items, &nItems);
     ok (hr == E_INVALIDARG, "ScriptItemize should return E_INVALIDARG if cInChars is 0\n");
 
-    test_items_ok(test1,4,NULL,NULL,1,t11,FALSE);
-    test_items_ok(test2,16,NULL,NULL,6,t21,FALSE);
-    test_items_ok(test3,41,NULL,NULL,1,t31,FALSE);
-    test_items_ok(test4,12,NULL,NULL,5,t41,FALSE);
-    test_items_ok(test5,38,NULL,NULL,1,t51,FALSE);
-    test_items_ok(test6,5,NULL,NULL,2,t61,FALSE);
-    test_items_ok(test7,29,NULL,NULL,3,t71,FALSE);
-    test_items_ok(test8,4,NULL,NULL,1,t81,FALSE);
-    test_items_ok(test9,5,NULL,NULL,2,t91,FALSE);
-    test_items_ok(test10,4,NULL,NULL,1,t101,FALSE);
+    test_items_ok(test1,4,NULL,NULL,1,t11,FALSE,0);
+    test_items_ok(test1b,4,NULL,NULL,1,t1b1,FALSE,0);
+    test_items_ok(test2,16,NULL,NULL,6,t21,FALSE,0);
+    test_items_ok(test2b,11,NULL,NULL,4,t2b1,FALSE,0);
+    test_items_ok(test2c,11,NULL,NULL,4,t2c1,FALSE,0);
+    test_items_ok(test2d,11,NULL,NULL,4,t2d1,FALSE,0);
+    test_items_ok(test3,41,NULL,NULL,1,t31,FALSE,0);
+    test_items_ok(test4,12,NULL,NULL,5,t41,FALSE,0);
+    test_items_ok(test5,38,NULL,NULL,1,t51,FALSE,0);
+    test_items_ok(test6,5,NULL,NULL,2,t61,FALSE,0);
+    test_items_ok(test7,29,NULL,NULL,3,t71,FALSE,0);
+    test_items_ok(test8,4,NULL,NULL,1,t81,FALSE,0);
+    test_items_ok(test9,5,NULL,NULL,2,t91,FALSE,0);
+    test_items_ok(test10,4,NULL,NULL,1,t101,FALSE,0);
 
     State.uBidiLevel = 0;
-    test_items_ok(test1,4,&Control,&State,1,t11,FALSE);
-    test_items_ok(test2,16,&Control,&State,4,t22,FALSE);
-    test_items_ok(test3,41,&Control,&State,1,t31,FALSE);
-    test_items_ok(test4,12,&Control,&State,5,t41,FALSE);
-    test_items_ok(test5,38,&Control,&State,1,t51,FALSE);
-    test_items_ok(test6,5,&Control,&State,2,t61,FALSE);
-    test_items_ok(test7,29,&Control,&State,3,t72,FALSE);
-    test_items_ok(test8,4,&Control,&State,1,t81,FALSE);
-    test_items_ok(test9,5,&Control,&State,2,t91,FALSE);
-    test_items_ok(test10,4,&Control,&State,1,t101,FALSE);
+    test_items_ok(test1,4,&Control,&State,1,t11,FALSE,0);
+    test_items_ok(test1b,4,&Control,&State,1,t1b1,FALSE,0);
+    test_items_ok(test2,16,&Control,&State,4,t22,FALSE,0);
+    test_items_ok(test2b,11,&Control,&State,4,t2b1,FALSE,0);
+    test_items_ok(test2c,11,&Control,&State,5,t2c2,FALSE,0);
+    test_items_ok(test2d,11,&Control,&State,5,t2d2,FALSE,0);
+    test_items_ok(test3,41,&Control,&State,1,t31,FALSE,0);
+    test_items_ok(test4,12,&Control,&State,5,t41,FALSE,0);
+    test_items_ok(test5,38,&Control,&State,1,t51,FALSE,0);
+    test_items_ok(test6,5,&Control,&State,2,t61,FALSE,0);
+    test_items_ok(test7,29,&Control,&State,3,t72,FALSE,0);
+    test_items_ok(test8,4,&Control,&State,1,t81,FALSE,0);
+    test_items_ok(test9,5,&Control,&State,2,t91,FALSE,0);
+    test_items_ok(test10,4,&Control,&State,1,t101,FALSE,0);
 
     State.uBidiLevel = 1;
-    test_items_ok(test1,4,&Control,&State,1,t12,FALSE);
-    test_items_ok(test2,16,&Control,&State,4,t23,FALSE);
-    test_items_ok(test3,41,&Control,&State,1,t32,FALSE);
-    test_items_ok(test4,12,&Control,&State,4,t42,TRUE);
-    test_items_ok(test5,38,&Control,&State,1,t51,FALSE);
-    test_items_ok(test6,5,&Control,&State,2,t62,FALSE);
-    test_items_ok(test7,29,&Control,&State,3,t73,FALSE);
-    test_items_ok(test8,4,&Control,&State,1,t81,FALSE);
-    test_items_ok(test9,5,&Control,&State,2,t92,FALSE);
-    test_items_ok(test10,4,&Control,&State,1,t101,FALSE);
+    test_items_ok(test1,4,&Control,&State,1,t12,FALSE,0);
+    test_items_ok(test1b,4,&Control,&State,1,t1b2,FALSE,0);
+    test_items_ok(test2,16,&Control,&State,4,t23,FALSE,0);
+    test_items_ok(test2b,11,&Control,&State,4,t2b2,FALSE,0);
+    test_items_ok(test2c,11,&Control,&State,4,t2c3,FALSE,0);
+    test_items_ok(test2d,11,&Control,&State,4,t2d3,FALSE,0);
+    test_items_ok(test3,41,&Control,&State,1,t32,FALSE,0);
+    test_items_ok(test4,12,&Control,&State,4,t42,FALSE,0);
+    test_items_ok(test5,38,&Control,&State,1,t51,FALSE,0);
+    test_items_ok(test6,5,&Control,&State,2,t62,FALSE,0);
+    test_items_ok(test7,29,&Control,&State,3,t73,FALSE,0);
+    test_items_ok(test8,4,&Control,&State,1,t81,FALSE,0);
+    test_items_ok(test9,5,&Control,&State,2,t92,FALSE,0);
+    test_items_ok(test10,4,&Control,&State,1,t101,FALSE,0);
+
+    State.uBidiLevel = 1;
+    Control.fMergeNeutralItems = TRUE;
+    test_items_ok(test1,4,&Control,&State,1,t12,FALSE,0);
+    test_items_ok(test1b,4,&Control,&State,1,t1b2,FALSE,0);
+    test_items_ok(test2,16,&Control,&State,4,t23,FALSE,0);
+    test_items_ok(test2b,11,&Control,&State,2,t2b3,FALSE,4);
+    test_items_ok(test2c,11,&Control,&State,2,t2c4,FALSE,4);
+    test_items_ok(test2d,11,&Control,&State,2,t2d4,FALSE,4);
+    test_items_ok(test3,41,&Control,&State,1,t32,FALSE,0);
+    test_items_ok(test4,12,&Control,&State,3,t43,FALSE,4);
+    test_items_ok(test5,38,&Control,&State,1,t51,FALSE,0);
+    test_items_ok(test6,5,&Control,&State,1,t63,FALSE,2);
+    test_items_ok(test7,29,&Control,&State,3,t73,FALSE,0);
+    test_items_ok(test8,4,&Control,&State,1,t81,FALSE,0);
+    test_items_ok(test9,5,&Control,&State,1,t93,FALSE,2);
+    test_items_ok(test10,4,&Control,&State,1,t101,FALSE,0);
 }
 
 
@@ -407,7 +470,7 @@ static void test_ScriptItemIzeShapePlace(HDC hdc, unsigned short pwOutGlyphs[256
     trace("number of script properties %d\n", iMaxProps);
     ok (iMaxProps > 0, "Number of scripts returned should not be 0\n");
     if  (iMaxProps > 0)
-         ok( ppSp[5]->langid == 9, "Langid[5] not = to 9\n"); /* Check a known value to ensure   */
+         ok( ppSp[0]->langid == 0, "Langid[0] not = to 0\n"); /* Check a known value to ensure   */
                                                               /* ptrs work                       */
 
     /* This is a valid test that will cause parsing to take place                             */
@@ -1243,7 +1306,8 @@ static void test_ScriptStringXtoCP_CPtoX(HDC hdc)
  */
 
     HRESULT         hr;
-    WCHAR           teststr1[] = {'T', 'e', 's', 't', 'e', 'a', 'b', ' ', 'a', '\0'};
+    static const WCHAR teststr1[]  = {0x05e9, 'i', 0x05dc, 'n', 0x05d5, 'e', 0x05dd, '.',0};
+    static const BOOL rtl[] = {1, 0, 1, 0, 1, 0, 1, 0};
     void            *String = (WCHAR *) &teststr1;      /* ScriptStringAnalysis needs void */
     int             String_len = (sizeof(teststr1)/sizeof(WCHAR))-1;
     int             Glyphs = String_len * 2 + 16;       /* size of buffer as recommended  */
@@ -1260,6 +1324,7 @@ static void test_ScriptStringXtoCP_CPtoX(HDC hdc)
     int             iTrailing;
     int             Cp;                                  /* Character position in string */
     int             X;
+    int             trail,lead;
     BOOL            fTrailing;
 
     /* Test with hdc, this should be a valid test
@@ -1293,75 +1358,104 @@ static void test_ScriptStringXtoCP_CPtoX(HDC hdc)
              * returns the beginning of the next character and iTrailing is FALSE.  So for this
              * loop iTrailing will be FALSE in both cases.
              */
-            fTrailing = FALSE;
-            hr = ScriptStringCPtoX(ssa, Cp, fTrailing, &X);
+            hr = ScriptStringCPtoX(ssa, Cp, TRUE, &trail);
             ok(hr == S_OK, "ScriptStringCPtoX should return S_OK not %08x\n", hr);
-            hr = ScriptStringXtoCP(ssa, X, &Ch, &iTrailing);
-            ok(hr == S_OK, "ScriptStringXtoCP should return S_OK not %08x\n", hr);
-            ok(Cp == Ch, "ScriptStringXtoCP should return Ch = %d not %d for X = %d\n", Cp, Ch, X);
-            ok(iTrailing == FALSE, "ScriptStringXtoCP should return iTrailing = 0 not %d for X = %d\n", 
-                                  iTrailing, X);
-            fTrailing = TRUE;
-            hr = ScriptStringCPtoX(ssa, Cp, fTrailing, &X);
+            hr = ScriptStringCPtoX(ssa, Cp, FALSE, &lead);
             ok(hr == S_OK, "ScriptStringCPtoX should return S_OK not %08x\n", hr);
-            hr = ScriptStringXtoCP(ssa, X, &Ch, &iTrailing);
-            ok(hr == S_OK, "ScriptStringXtoCP should return S_OK not %08x\n", hr);
+            if (rtl[Cp])
+                ok(lead > trail, "Leading values should be after trialing for rtl chracters(%i)\n",Cp);
+            else
+                ok(lead < trail, "Trailing values should be after leading for ltr chracters(%i)\n",Cp);
 
-            /*
-             * Check that character position returned by ScriptStringXtoCP in Ch matches the
-             * one input to ScriptStringCPtoX.  This means that the Cp to X position and back
-             * again works
-             */
-            ok(Cp + 1 == Ch, "ScriptStringXtoCP should return Ch = %d not %d for X = %d\n", Cp + 1, Ch, X);
-            ok(iTrailing == FALSE, "ScriptStringXtoCP should return iTrailing = 0 not %d for X = %d\n", 
-                                   iTrailing, X);
+            /* move by 1 pixel so that we are not inbetween 2 characters.  That could result in being the lead of a rtl and
+               at the same time the trail of an ltr */
+
+            /* inside the leading edge */
+            X = lead;
+            if (rtl[Cp]) X--; else X++;
+            hr = ScriptStringXtoCP(ssa, X, &Ch, &iTrailing);
+            ok(hr == S_OK, "ScriptStringXtoCP should return S_OK not %08x\n", hr);
+            ok(Cp == Ch, "ScriptStringXtoCP should return Ch = %d not %d for X = %d\n", Cp, Ch, trail);
+            ok(iTrailing == FALSE, "ScriptStringXtoCP should return iTrailing = 0 not %d for X = %d\n",
+                                  iTrailing, X);
+
+            /* inside the trailing edge */
+            X = trail;
+            if (rtl[Cp]) X++; else X--;
+            hr = ScriptStringXtoCP(ssa, X, &Ch, &iTrailing);
+            ok(hr == S_OK, "ScriptStringXtoCP should return S_OK not %08x\n", hr);
+            ok(Cp == Ch, "ScriptStringXtoCP should return Ch = %d not %d for X = %d\n", Cp, Ch, trail);
+            ok(iTrailing == TRUE, "ScriptStringXtoCP should return iTrailing = 1 not %d for X = %d\n",
+                                  iTrailing, X);
+
+            /* outside the "trailing" edge */
+            if (Cp < String_len-1)
+            {
+                if (rtl[Cp]) X = lead; else X = trail;
+                X++;
+                hr = ScriptStringXtoCP(ssa, X, &Ch, &iTrailing);
+                ok(hr == S_OK, "ScriptStringXtoCP should return S_OK not %08x\n", hr);
+                ok(Cp + 1 == Ch, "ScriptStringXtoCP should return Ch = %d not %d for X = %d\n", Cp + 1, Ch, trail);
+                if (rtl[Cp+1])
+                    ok(iTrailing == TRUE, "ScriptStringXtoCP should return iTrailing = 1 not %d for X = %d\n",
+                                          iTrailing, X);
+                else
+                    ok(iTrailing == FALSE, "ScriptStringXtoCP should return iTrailing = 0 not %d for X = %d\n",
+                                          iTrailing, X);
+            }
+
+            /* outside the "leading" edge */
+            if (Cp != 0)
+            {
+                if (rtl[Cp]) X = trail; else X = lead;
+                X--;
+                hr = ScriptStringXtoCP(ssa, X, &Ch, &iTrailing);
+                ok(hr == S_OK, "ScriptStringXtoCP should return S_OK not %08x\n", hr);
+                ok(Cp - 1 == Ch, "ScriptStringXtoCP should return Ch = %d not %d for X = %d\n", Cp - 1, Ch, trail);
+                if (Cp != 0  && rtl[Cp-1])
+                    ok(iTrailing == FALSE, "ScriptStringXtoCP should return iTrailing = 0 not %d for X = %d\n",
+                                          iTrailing, X);
+                else
+                    ok(iTrailing == TRUE, "ScriptStringXtoCP should return iTrailing = 1 not %d for X = %d\n",
+                                          iTrailing, X);
+            }
         }
-        /*
-         * This test is to check that if the X position is just inside the trailing edge of the
-         * character then iTrailing will indicate the trailing edge, ie. TRUE
-         */
-        fTrailing = TRUE;
-        Cp = 3;
-        hr = ScriptStringCPtoX(ssa, Cp, fTrailing, &X);
-        ok(hr == S_OK, "ScriptStringCPtoX should return S_OK not %08x\n", hr);
-        X--;                                /* put X just inside the trailing edge */
-        hr = ScriptStringXtoCP(ssa, X, &Ch, &iTrailing);
-        ok(hr == S_OK, "ScriptStringXtoCP should return S_OK not %08x\n", hr);
-        ok(Cp == Ch, "ScriptStringXtoCP should return Ch = %d not %d for X = %d\n", Cp, Ch, X);
-        ok(iTrailing == TRUE, "ScriptStringXtoCP should return iTrailing = 1 not %d for X = %d\n", 
-                                  iTrailing, X);
 
-        /*
-         * This test is to check that if the X position is just outside the trailing edge of the
-         * character then iTrailing will indicate the leading edge, ie. FALSE, and Ch will indicate
-         * the next character, ie. Cp + 1 
-         */
-        fTrailing = TRUE;
-        Cp = 3;
-        hr = ScriptStringCPtoX(ssa, Cp, fTrailing, &X);
-        ok(hr == S_OK, "ScriptStringCPtoX should return S_OK not %08x\n", hr);
-        X++;                                /* put X just outside the trailing edge */
-        hr = ScriptStringXtoCP(ssa, X, &Ch, &iTrailing);
-        ok(hr == S_OK, "ScriptStringXtoCP should return S_OK not %08x\n", hr);
-        ok(Cp + 1 == Ch, "ScriptStringXtoCP should return Ch = %d not %d for X = %d\n", Cp + 1, Ch, X);
-        ok(iTrailing == FALSE, "ScriptStringXtoCP should return iTrailing = 0 not %d for X = %d\n", 
-                                  iTrailing, X);
+        /* Check beyond the leading boundary of the whole string */
+        if (rtl[0])
+        {
+            /* having a leading rtl character seems to confuse usp */
+            /* this looks to be a windows bug we should emulate */
+            hr = ScriptStringCPtoX(ssa, 0, TRUE, &X);
+            X--;
+            hr = ScriptStringXtoCP(ssa, X, &Ch, &iTrailing);
+            ok(hr == S_OK, "ScriptStringXtoCP should return S_OK not %08x\n", hr);
+            ok(Ch == 1, "ScriptStringXtoCP should return Ch = 1 not %d for X outside leading edge when rtl\n", Ch);
+            ok(iTrailing == FALSE, "ScriptStringXtoCP should return iTrailing = 0 not %d for X = outside leading edge when rtl\n",
+                                       iTrailing);
+        }
+        else
+        {
+            hr = ScriptStringCPtoX(ssa, 0, FALSE, &X);
+            X--;
+            hr = ScriptStringXtoCP(ssa, X, &Ch, &iTrailing);
+            ok(hr == S_OK, "ScriptStringXtoCP should return S_OK not %08x\n", hr);
+            ok(Ch == -1, "ScriptStringXtoCP should return Ch = -1 not %d for X outside leading edge\n", Ch);
+            ok(iTrailing == TRUE, "ScriptStringXtoCP should return iTrailing = 1 not %d for X = outside leading edge\n",
+                                       iTrailing);
+        }
 
-        /*
-         * This test is to check that if the X position is just outside the leading edge of the
-         * character then iTrailing will indicate the trailing edge, ie. TRUE, and Ch will indicate
-         * the next character down , ie. Cp - 1 
-         */
-        fTrailing = FALSE;
-        Cp = 3;
-        hr = ScriptStringCPtoX(ssa, Cp, fTrailing, &X);
-        ok(hr == S_OK, "ScriptStringCPtoX should return S_OK not %08x\n", hr);
-        X--;                                /* put X just outside the leading edge */
+        /* Check beyond the end boundary of the whole string */
+        if (rtl[String_len-1])
+            hr = ScriptStringCPtoX(ssa, String_len-1, FALSE, &X);
+        else
+            hr = ScriptStringCPtoX(ssa, String_len-1, TRUE, &X);
+        X++;
         hr = ScriptStringXtoCP(ssa, X, &Ch, &iTrailing);
         ok(hr == S_OK, "ScriptStringXtoCP should return S_OK not %08x\n", hr);
-        ok(Cp - 1 == Ch, "ScriptStringXtoCP should return Ch = %d not %d for X = %d\n", Cp - 1, Ch, X);
-        ok(iTrailing == TRUE, "ScriptStringXtoCP should return iTrailing = 1 not %d for X = %d\n", 
-                                  iTrailing, X);
+        ok(Ch == String_len, "ScriptStringXtoCP should return Ch = %i not %d for X outside trailing edge\n", String_len, Ch);
+        ok(iTrailing == FALSE, "ScriptStringXtoCP should return iTrailing = 0 not %d for X = outside traling edge\n",
+                                   iTrailing);
 
         /*
          * Cleanup the SSA for the next round of tests
@@ -1380,11 +1474,11 @@ static void test_ScriptStringXtoCP_CPtoX(HDC hdc)
 
         /*
          * When ScriptStringCPtoX is called with a character position Cp that exceeds the
-         * string length, return E_INVALIDARG.  This also invalidates the ssa so a 
+         * string length, return E_INVALIDARG.  This also invalidates the ssa so a
          * ScriptStringFree should also fail.
          */
         fTrailing = FALSE;
-        Cp = String_len + 1; 
+        Cp = String_len + 1;
         hr = ScriptStringCPtoX(ssa, Cp, fTrailing, &X);
         ok(hr == E_INVALIDARG, "ScriptStringCPtoX should return E_INVALIDARG not %08x\n", hr);
 

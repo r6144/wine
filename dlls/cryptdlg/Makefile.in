@@ -1,7 +1,3 @@
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = cryptdlg.dll
 IMPORTS   = cryptui crypt32 wintrust user32 advapi32
 
@@ -22,6 +18,8 @@ RC_SRCS = \
 	cryptdlg_Pl.rc \
 	cryptdlg_Pt.rc \
 	cryptdlg_Ro.rc \
+	cryptdlg_Sr.rc \
+	cryptdlg_Sv.rc \
 	cryptdlg_Uk.rc
 
 @MAKE_DLL_RULES@

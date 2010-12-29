@@ -27,11 +27,18 @@
  * The installer for the Zuma Deluxe Popcap game is good for testing.
  */
 
+#include <stdarg.h>
+#include <stdio.h>
+
+#define NONAMELESSUNION
 #include "wine/debug.h"
 #include "shdocvw.h"
 #include "objidl.h"
 #include "shobjidl.h"
 #include "intshcut.h"
+#include "shellapi.h"
+#include "winreg.h"
+#include "shlwapi.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(shdocvw);
 
@@ -40,9 +47,11 @@ typedef struct
     IUniformResourceLocatorA uniformResourceLocatorA;
     IUniformResourceLocatorW uniformResourceLocatorW;
     IPersistFile persistFile;
+    IPropertySetStorage IPropertySetStorage_iface;
 
     LONG refCount;
 
+    IPropertySetStorage *property_set_storage;
     WCHAR *url;
     BOOLEAN isDirty;
     LPOLESTR currentFile;
@@ -52,17 +61,22 @@ typedef struct
 
 static inline InternetShortcut* impl_from_IUniformResourceLocatorA(IUniformResourceLocatorA *iface)
 {
-    return (InternetShortcut*)((char*)iface - FIELD_OFFSET(InternetShortcut, uniformResourceLocatorA));
+    return CONTAINING_RECORD(iface, InternetShortcut, uniformResourceLocatorA);
 }
 
 static inline InternetShortcut* impl_from_IUniformResourceLocatorW(IUniformResourceLocatorW *iface)
 {
-    return (InternetShortcut*)((char*)iface - FIELD_OFFSET(InternetShortcut, uniformResourceLocatorW));
+    return CONTAINING_RECORD(iface, InternetShortcut, uniformResourceLocatorW);
 }
 
 static inline InternetShortcut* impl_from_IPersistFile(IPersistFile *iface)
 {
-    return (InternetShortcut*)((char*)iface - FIELD_OFFSET(InternetShortcut, persistFile));
+    return CONTAINING_RECORD(iface, InternetShortcut, persistFile);
+}
+
+static inline InternetShortcut* impl_from_IPropertySetStorage(IPropertySetStorage *iface)
+{
+    return (InternetShortcut*)((char*)iface - FIELD_OFFSET(InternetShortcut, IPropertySetStorage_iface));
 }
 
 static BOOL run_winemenubuilder( const WCHAR *args )
@@ -139,6 +153,8 @@ static HRESULT Unknown_QueryInterface(InternetShortcut *This, REFIID riid, PVOID
         *ppvObject = &This->uniformResourceLocatorW;
     else if (IsEqualGUID(&IID_IPersistFile, riid))
         *ppvObject = &This->persistFile;
+    else if (IsEqualGUID(&IID_IPropertySetStorage, riid))
+        *ppvObject = &This->IPropertySetStorage_iface;
     else if (IsEqualGUID(&IID_IShellLinkA, riid))
     {
         FIXME("The IShellLinkA interface is not yet supported by InternetShortcut\n");
@@ -173,6 +189,7 @@ static ULONG Unknown_Release(InternetShortcut *This)
     {
         CoTaskMemFree(This->url);
         CoTaskMemFree(This->currentFile);
+        IPropertySetStorage_Release(This->property_set_storage);
         heap_free(This);
         SHDOCVW_UnlockModule();
     }
@@ -237,8 +254,47 @@ static HRESULT WINAPI UniformResourceLocatorW_GetUrl(IUniformResourceLocatorW *u
 
 static HRESULT WINAPI UniformResourceLocatorW_InvokeCommand(IUniformResourceLocatorW *url, PURLINVOKECOMMANDINFOW pCommandInfo)
 {
-    FIXME("(%p, %p): stub\n", url, pCommandInfo);
-    return E_NOTIMPL;
+    InternetShortcut *This = impl_from_IUniformResourceLocatorW(url);
+    WCHAR app[64];
+    HKEY hkey;
+    static const WCHAR wszURLProtocol[] = {'U','R','L',' ','P','r','o','t','o','c','o','l',0};
+    SHELLEXECUTEINFOW sei;
+    DWORD res, type;
+    HRESULT hres;
+
+    TRACE("%p %p\n", This, pCommandInfo );
+
+    if (pCommandInfo->dwcbSize < sizeof (URLINVOKECOMMANDINFOW))
+        return E_INVALIDARG;
+
+    if (pCommandInfo->dwFlags != IURL_INVOKECOMMAND_FL_USE_DEFAULT_VERB)
+    {
+        FIXME("(%p, %p): non-default verbs not implemented\n", url, pCommandInfo);
+        return E_NOTIMPL;
+    }
+
+    hres = CoInternetParseUrl(This->url, PARSE_SCHEMA, 0, app, sizeof(app)/sizeof(WCHAR), NULL, 0);
+    if(FAILED(hres))
+        return E_FAIL;
+
+    res = RegOpenKeyW(HKEY_CLASSES_ROOT, app, &hkey);
+    if(res != ERROR_SUCCESS)
+        return E_FAIL;
+
+    res = RegQueryValueExW(hkey, wszURLProtocol, NULL, &type, NULL, NULL);
+    RegCloseKey(hkey);
+    if(res != ERROR_SUCCESS || type != REG_SZ)
+        return E_FAIL;
+
+    memset(&sei, 0, sizeof(sei));
+    sei.cbSize = sizeof(sei);
+    sei.lpFile = This->url;
+    sei.nShow = SW_SHOW;
+
+    if( ShellExecuteExW(&sei) )
+        return S_OK;
+    else
+        return E_FAIL;
 }
 
 static HRESULT WINAPI UniformResourceLocatorA_QueryInterface(IUniformResourceLocatorA *url, REFIID riid, PVOID *ppvObject)
@@ -299,8 +355,26 @@ static HRESULT WINAPI UniformResourceLocatorA_GetUrl(IUniformResourceLocatorA *u
 
 static HRESULT WINAPI UniformResourceLocatorA_InvokeCommand(IUniformResourceLocatorA *url, PURLINVOKECOMMANDINFOA pCommandInfo)
 {
-    FIXME("(%p, %p): stub\n", url, pCommandInfo);
-    return E_NOTIMPL;
+    URLINVOKECOMMANDINFOW wideCommandInfo;
+    int len;
+    WCHAR *wideVerb;
+    HRESULT res;
+    InternetShortcut *This = impl_from_IUniformResourceLocatorA(url);
+
+    wideCommandInfo.dwcbSize = sizeof wideCommandInfo;
+    wideCommandInfo.dwFlags = pCommandInfo->dwFlags;
+    wideCommandInfo.hwndParent = pCommandInfo->hwndParent;
+
+    len = MultiByteToWideChar(CP_ACP, 0, pCommandInfo->pcszVerb, -1, NULL, 0);
+    wideVerb = heap_alloc(len * sizeof(WCHAR));
+    MultiByteToWideChar(CP_ACP, 0, pCommandInfo->pcszVerb, -1, wideVerb, len);
+
+    wideCommandInfo.pcszVerb = wideVerb;
+
+    res = UniformResourceLocatorW_InvokeCommand(&This->uniformResourceLocatorW, &wideCommandInfo);
+    heap_free(wideVerb);
+
+    return res;
 }
 
 static HRESULT WINAPI PersistFile_QueryInterface(IPersistFile *pFile, REFIID riid, PVOID *ppvObject)
@@ -338,10 +412,46 @@ static HRESULT WINAPI PersistFile_IsDirty(IPersistFile *pFile)
     return This->isDirty ? S_OK : S_FALSE;
 }
 
+/* A helper function:  Allocate and fill rString.  Return number of bytes read. */
+static DWORD get_profile_string(LPCWSTR lpAppName, LPCWSTR lpKeyName,
+                                LPCWSTR lpFileName, WCHAR **rString )
+{
+    DWORD r = 0;
+    DWORD len = 128;
+    WCHAR *buffer;
+
+    buffer = CoTaskMemAlloc(len * sizeof(*buffer));
+    if (buffer != NULL)
+    {
+        r = GetPrivateProfileStringW(lpAppName, lpKeyName, NULL, buffer, len, lpFileName);
+        while (r == len-1)
+        {
+            WCHAR *realloc_buf;
+
+            len *= 2;
+            realloc_buf = CoTaskMemRealloc(buffer, len * sizeof(*buffer));
+            if (realloc_buf == NULL)
+            {
+                CoTaskMemFree(buffer);
+                *rString = NULL;
+                return 0;
+            }
+            buffer = realloc_buf;
+
+            r = GetPrivateProfileStringW(lpAppName, lpKeyName, NULL, buffer, len, lpFileName);
+        }
+    }
+
+    *rString = buffer;
+    return r;
+}
+
 static HRESULT WINAPI PersistFile_Load(IPersistFile *pFile, LPCOLESTR pszFileName, DWORD dwMode)
 {
     WCHAR str_header[] = {'I','n','t','e','r','n','e','t','S','h','o','r','t','c','u','t',0};
     WCHAR str_URL[] = {'U','R','L',0};
+    WCHAR str_iconfile[] = {'i','c','o','n','f','i','l','e',0};
+    WCHAR str_iconindex[] = {'i','c','o','n','i','n','d','e','x',0};
     WCHAR *filename = NULL;
     HRESULT hr;
     InternetShortcut *This = impl_from_IPersistFile(pFile);
@@ -351,39 +461,88 @@ static HRESULT WINAPI PersistFile_Load(IPersistFile *pFile, LPCOLESTR pszFileNam
     filename = co_strdupW(pszFileName);
     if (filename != NULL)
     {
-        DWORD len = 128;
         DWORD r;
-        WCHAR *url = CoTaskMemAlloc(len*sizeof(WCHAR));
-        if (url != NULL)
+        WCHAR *url;
+
+        r = get_profile_string(str_header, str_URL, pszFileName, &url);
+
+        if (url == NULL)
         {
-            r = GetPrivateProfileStringW(str_header, str_URL, NULL, url, len, pszFileName);
-            while (r == len-1)
+            hr = E_OUTOFMEMORY;
+            CoTaskMemFree(filename);
+        }
+        else if (r == 0)
+        {
+            hr = E_FAIL;
+            CoTaskMemFree(filename);
+        }
+        else
+        {
+            hr = S_OK;
+            CoTaskMemFree(This->currentFile);
+            This->currentFile = filename;
+            CoTaskMemFree(This->url);
+            This->url = url;
+            This->isDirty = FALSE;
+        }
+
+        /* Now we're going to read in the iconfile and iconindex.
+           If we don't find them, that's not a failure case -- it's possible
+           that they just aren't in there. */
+        if (SUCCEEDED(hr))
+        {
+            IPropertyStorage *pPropStg;
+            WCHAR *iconfile;
+            WCHAR *iconindexstring;
+            hr = IPropertySetStorage_Open(This->property_set_storage, &FMTID_Intshcut,
+                                          STGM_READWRITE | STGM_SHARE_EXCLUSIVE,
+                                          &pPropStg);
+
+            r = get_profile_string(str_header, str_iconfile, pszFileName, &iconfile);
+            if (iconfile != NULL)
             {
-                CoTaskMemFree(url);
-                len *= 2;
-                url = CoTaskMemAlloc(len*sizeof(WCHAR));
-                if (url == NULL)
-                    break;
-                r = GetPrivateProfileStringW(str_header, str_URL, NULL, url, len, pszFileName);
+                PROPSPEC ps;
+                PROPVARIANT pv;
+                ps.ulKind = PRSPEC_PROPID;
+                ps.u.propid = PID_IS_ICONFILE;
+                pv.vt = VT_LPWSTR;
+                pv.u.pwszVal = iconfile;
+                hr = IPropertyStorage_WriteMultiple(pPropStg, 1, &ps, &pv, 0);
+                if (FAILED(hr))
+                {
+                    TRACE("Failed to store the iconfile to our property storage.  hr = 0x%x\n", hr);
+                }
+
+                CoTaskMemFree(iconfile);
             }
-            if (r == 0)
-                hr = E_FAIL;
-            else if (url != NULL)
+
+            r = get_profile_string(str_header, str_iconindex, pszFileName, &iconindexstring);
+
+            if (iconindexstring != NULL)
             {
-                CoTaskMemFree(This->currentFile);
-                This->currentFile = filename;
-                CoTaskMemFree(This->url);
-                This->url = url;
-                This->isDirty = FALSE;
-                return S_OK;
+                int iconindex;
+                PROPSPEC ps;
+                PROPVARIANT pv;
+                char *iconindexastring = co_strdupWtoA(iconindexstring);
+                sscanf(iconindexastring, "%d", &iconindex);
+                CoTaskMemFree(iconindexastring);
+                ps.ulKind = PRSPEC_PROPID;
+                ps.u.propid = PID_IS_ICONINDEX;
+                pv.vt = VT_I4;
+                pv.u.iVal = iconindex;
+                hr = IPropertyStorage_WriteMultiple(pPropStg, 1, &ps, &pv, 0);
+                if (FAILED(hr))
+                {
+                    TRACE("Failed to store the iconindex to our property storage.  hr = 0x%x\n", hr);
+                }
+
+                CoTaskMemFree(iconindexstring);
             }
-            else
-                hr = E_OUTOFMEMORY;
-            CoTaskMemFree(url);
+
+            IPropertyStorage_Release(pPropStg);
         }
         else
             hr = E_OUTOFMEMORY;
-        CoTaskMemFree(filename);
     }
     else
         hr = E_OUTOFMEMORY;
@@ -428,15 +587,66 @@ static HRESULT WINAPI PersistFile_Save(IPersistFile *pFile, LPCOLESTR pszFileNam
         if (file != INVALID_HANDLE_VALUE)
         {
             DWORD bytesWritten;
+            char *iconfile;
             char str_header[] = "[InternetShortcut]";
             char str_URL[] = "URL=";
+            char str_ICONFILE[] = "ICONFILE=";
             char str_eol[] = "\r\n";
+            IPropertyStorage *pPropStgRead;
+            PROPSPEC ps[2];
+            PROPVARIANT pvread[2];
+            ps[0].ulKind = PRSPEC_PROPID;
+            ps[0].u.propid = PID_IS_ICONFILE;
+            ps[1].ulKind = PRSPEC_PROPID;
+            ps[1].u.propid = PID_IS_ICONINDEX;
 
             WriteFile(file, str_header, lstrlenA(str_header), &bytesWritten, NULL);
             WriteFile(file, str_eol, lstrlenA(str_eol), &bytesWritten, NULL);
             WriteFile(file, str_URL, lstrlenA(str_URL), &bytesWritten, NULL);
             WriteFile(file, url, lstrlenA(url), &bytesWritten, NULL);
             WriteFile(file, str_eol, lstrlenA(str_eol), &bytesWritten, NULL);
+
+            hr = IPropertySetStorage_Open(This->property_set_storage, &FMTID_Intshcut, STGM_READ|STGM_SHARE_EXCLUSIVE, &pPropStgRead);
+            if SUCCEEDED(hr)
+            {
+                hr = IPropertyStorage_ReadMultiple(pPropStgRead, 2, ps, pvread);
+                if (hr == S_FALSE)
+                {
+                    /* None of the properties are present, that's ok */
+                    hr = S_OK;
+                    IPropertyStorage_Release(pPropStgRead);
+                }
+                else if SUCCEEDED(hr)
+                {
+                    char indexString[50];
+                    len = WideCharToMultiByte(CP_UTF8, 0, pvread[0].u.pwszVal, -1, NULL, 0, 0, 0);
+                    iconfile = heap_alloc(len);
+                    if (iconfile != NULL)
+                    {
+                        WideCharToMultiByte(CP_UTF8, 0, pvread[0].u.pwszVal, -1, iconfile, len, 0, 0);
+                        WriteFile(file, str_ICONFILE, lstrlenA(str_ICONFILE), &bytesWritten, NULL);
+                        WriteFile(file, iconfile, lstrlenA(iconfile), &bytesWritten, NULL);
+                        WriteFile(file, str_eol, lstrlenA(str_eol), &bytesWritten, NULL);
+                    }
+
+                    sprintf(indexString, "ICONINDEX=%d", pvread[1].u.iVal);
+                    WriteFile(file, indexString, lstrlenA(indexString), &bytesWritten, NULL);
+                    WriteFile(file, str_eol, lstrlenA(str_eol), &bytesWritten, NULL);
+
+                    IPropertyStorage_Release(pPropStgRead);
+                    PropVariantClear(&pvread[0]);
+                    PropVariantClear(&pvread[1]);
+                }
+                else
+                {
+                    TRACE("Unable to read properties.\n");
+                }
+            }
+            else
+            {
+               TRACE("Unable to get the IPropertyStorage.\n");
+            }
+
             CloseHandle(file);
             if (pszFileName == NULL || fRemember)
                 This->isDirty = FALSE;
@@ -474,7 +684,77 @@ static HRESULT WINAPI PersistFile_GetCurFile(IPersistFile *pFile, LPOLESTR *ppsz
     return hr;
 }
 
+static HRESULT WINAPI PropertySetStorage_QueryInterface(IPropertySetStorage *iface, REFIID riid, PVOID *ppvObject)
+{
+    InternetShortcut *This = impl_from_IPropertySetStorage(iface);
+    TRACE("(%p)\n", iface);
+    return Unknown_QueryInterface(This, riid, ppvObject);
+}
 
+static ULONG WINAPI PropertySetStorage_AddRef(IPropertySetStorage *iface)
+{
+    InternetShortcut *This = impl_from_IPropertySetStorage(iface);
+    TRACE("(%p)\n", iface);
+    return Unknown_AddRef(This);
+}
+
+static ULONG WINAPI PropertySetStorage_Release(IPropertySetStorage *iface)
+{
+    InternetShortcut *This = impl_from_IPropertySetStorage(iface);
+    TRACE("(%p)\n", iface);
+    return Unknown_Release(This);
+}
+
+static HRESULT WINAPI PropertySetStorage_Create(
+        IPropertySetStorage* iface,
+        REFFMTID rfmtid,
+        const CLSID *pclsid,
+        DWORD grfFlags,
+        DWORD grfMode,
+        IPropertyStorage **ppprstg)
+{
+    InternetShortcut *This = impl_from_IPropertySetStorage(iface);
+    TRACE("(%s, %p, 0x%x, 0x%x, %p)\n", debugstr_guid(rfmtid), pclsid, grfFlags, grfMode, ppprstg);
+
+    return IPropertySetStorage_Create(This->property_set_storage,
+                                      rfmtid,
+                                      pclsid,
+                                      grfFlags,
+                                      grfMode,
+                                      ppprstg);
+}
+
+static HRESULT WINAPI PropertySetStorage_Open(
+        IPropertySetStorage* iface,
+        REFFMTID rfmtid,
+        DWORD grfMode,
+        IPropertyStorage **ppprstg)
+{
+    InternetShortcut *This = impl_from_IPropertySetStorage(iface);
+    TRACE("(%s, 0x%x, %p)\n", debugstr_guid(rfmtid), grfMode, ppprstg);
+
+    /* Note:  The |STGM_SHARE_EXCLUSIVE is to cope with a bug in the implementation.  Should be fixed in ole32. */
+    return IPropertySetStorage_Open(This->property_set_storage,
+                                    rfmtid,
+                                    grfMode|STGM_SHARE_EXCLUSIVE,
+                                    ppprstg);
+}
+
+static HRESULT WINAPI PropertySetStorage_Delete(IPropertySetStorage *iface, REFFMTID rfmtid)
+{
+    InternetShortcut *This = impl_from_IPropertySetStorage(iface);
+    TRACE("(%s)\n", debugstr_guid(rfmtid));
+
+
+    return IPropertySetStorage_Delete(This->property_set_storage,
+                                      rfmtid);
+}
+
+static HRESULT WINAPI PropertySetStorage_Enum(IPropertySetStorage *iface, IEnumSTATPROPSETSTG **ppenum)
+{
+    FIXME("(%p): stub\n", ppenum);
+    return E_NOTIMPL;
+}
 
 static const IUniformResourceLocatorWVtbl uniformResourceLocatorWVtbl = {
     UniformResourceLocatorW_QueryInterface,
@@ -506,6 +786,53 @@ static const IPersistFileVtbl persistFileVtbl = {
     PersistFile_GetCurFile
 };
 
+static const IPropertySetStorageVtbl propertySetStorageVtbl = {
+    PropertySetStorage_QueryInterface,
+    PropertySetStorage_AddRef,
+    PropertySetStorage_Release,
+    PropertySetStorage_Create,
+    PropertySetStorage_Open,
+    PropertySetStorage_Delete,
+    PropertySetStorage_Enum
+};
+
+static InternetShortcut *create_shortcut(void)
+{
+    InternetShortcut *newshortcut;
+
+    newshortcut = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(InternetShortcut));
+    if (newshortcut)
+    {
+        HRESULT hr;
+        IPropertyStorage *dummy;
+
+        newshortcut->uniformResourceLocatorA.lpVtbl = &uniformResourceLocatorAVtbl;
+        newshortcut->uniformResourceLocatorW.lpVtbl = &uniformResourceLocatorWVtbl;
+        newshortcut->persistFile.lpVtbl = &persistFileVtbl;
+        newshortcut->IPropertySetStorage_iface.lpVtbl = &propertySetStorageVtbl;
+        newshortcut->refCount = 0;
+        hr = StgCreateStorageEx(NULL, STGM_CREATE | STGM_READWRITE | STGM_SHARE_EXCLUSIVE, STGFMT_STORAGE, 0, NULL, NULL, &IID_IPropertySetStorage, (void **) &newshortcut->property_set_storage);
+        if FAILED(hr)
+        {
+            TRACE("Failed to create the storage object needed for the shortcut.\n");
+            heap_free(newshortcut);
+            return NULL;
+        }
+
+        hr = IPropertySetStorage_Create(newshortcut->property_set_storage, &FMTID_Intshcut, NULL, PROPSETFLAG_DEFAULT, STGM_CREATE | STGM_READWRITE | STGM_SHARE_EXCLUSIVE, &dummy);
+        if FAILED(hr)
+        {
+            TRACE("Failed to create the property object needed for the shortcut.\n");
+            IPropertySetStorage_Release(newshortcut->property_set_storage);
+            heap_free(newshortcut);
+            return NULL;
+        }
+        IPropertySetStorage_Release(dummy);
+    }
+
+    return newshortcut;
+}
+
 HRESULT InternetShortcut_Create(IUnknown *pOuter, REFIID riid, void **ppv)
 {
     InternetShortcut *This;
@@ -518,13 +845,9 @@ HRESULT InternetShortcut_Create(IUnknown *pOuter, REFIID riid, void **ppv)
     if(pOuter)
         return CLASS_E_NOAGGREGATION;
 
-    This = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(InternetShortcut));
+    This = create_shortcut();
     if (This)
     {
-        This->uniformResourceLocatorA.lpVtbl = &uniformResourceLocatorAVtbl;
-        This->uniformResourceLocatorW.lpVtbl = &uniformResourceLocatorWVtbl;
-        This->persistFile.lpVtbl = &persistFileVtbl;
-        This->refCount = 0;
         hr = Unknown_QueryInterface(This, riid, ppv);
         if (SUCCEEDED(hr))
             SHDOCVW_LockModule();
@@ -534,4 +857,40 @@ HRESULT InternetShortcut_Create(IUnknown *pOuter, REFIID riid, void **ppv)
     }
     else
         return E_OUTOFMEMORY;
+}
+
+
+/**********************************************************************
+ * OpenURL  (SHDOCVW.@)
+ */
+void WINAPI OpenURL(HWND hWnd, HINSTANCE hInst, LPCSTR lpcstrUrl, int nShowCmd)
+{
+    InternetShortcut *shortcut;
+    WCHAR* urlfilepath = NULL;
+    shortcut = create_shortcut();
+
+    if (shortcut)
+    {
+        int len;
+
+        len = MultiByteToWideChar(CP_ACP, 0, lpcstrUrl, -1, NULL, 0);
+        urlfilepath = heap_alloc(len * sizeof(WCHAR));
+        MultiByteToWideChar(CP_ACP, 0, lpcstrUrl, -1, urlfilepath, len);
+
+        if(SUCCEEDED(IPersistFile_Load(&shortcut->persistFile, urlfilepath, 0)))
+        {
+            URLINVOKECOMMANDINFOW ici;
+
+            memset( &ici, 0, sizeof ici );
+            ici.dwcbSize = sizeof ici;
+            ici.dwFlags = IURL_INVOKECOMMAND_FL_USE_DEFAULT_VERB;
+            ici.hwndParent = hWnd;
+
+            if FAILED(UniformResourceLocatorW_InvokeCommand(&shortcut->uniformResourceLocatorW, (PURLINVOKECOMMANDINFOW) &ici))
+                    TRACE("failed to open URL: %s\n", debugstr_a(lpcstrUrl));
+        }
+
+        heap_free(shortcut);
+        heap_free(urlfilepath);
+    }
 }

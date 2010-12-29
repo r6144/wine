@@ -604,7 +604,7 @@ static HRESULT exec_editmode(HTMLDocument *This, DWORD cmdexecopt, VARIANT *in, 
         }
     }
 
-    hres = IPersistMoniker_Load(PERSISTMON(This), TRUE, mon, NULL, 0);
+    hres = IPersistMoniker_Load(&This->IPersistMoniker_iface, TRUE, mon, NULL, 0);
     IMoniker_Release(mon);
     if(FAILED(hres))
         return hres;
@@ -620,11 +620,12 @@ static HRESULT exec_editmode(HTMLDocument *This, DWORD cmdexecopt, VARIANT *in, 
         RECT rcBorderWidths;
 
         if(This->doc_obj->hostui)
-            IDocHostUIHandler_ShowUI(This->doc_obj->hostui, DOCHOSTUITYPE_AUTHOR, ACTOBJ(This), CMDTARGET(This),
+            IDocHostUIHandler_ShowUI(This->doc_obj->hostui, DOCHOSTUITYPE_AUTHOR,
+                &This->IOleInPlaceActiveObject_iface, CMDTARGET(This),
                 This->doc_obj->frame, This->doc_obj->ip_window);
 
         if(This->doc_obj->ip_window)
-            call_set_active_object(This->doc_obj->ip_window, ACTOBJ(This));
+            call_set_active_object(This->doc_obj->ip_window, &This->IOleInPlaceActiveObject_iface);
 
         memset(&rcBorderWidths, 0, sizeof(rcBorderWidths));
         if(This->doc_obj->frame)
@@ -737,19 +738,19 @@ static const cmdtable_t base_cmds[] = {
 static HRESULT WINAPI OleCommandTarget_QueryInterface(IOleCommandTarget *iface, REFIID riid, void **ppv)
 {
     HTMLDocument *This = CMDTARGET_THIS(iface);
-    return IHTMLDocument2_QueryInterface(HTMLDOC(This), riid, ppv);
+    return htmldoc_query_interface(This, riid, ppv);
 }
 
 static ULONG WINAPI OleCommandTarget_AddRef(IOleCommandTarget *iface)
 {
     HTMLDocument *This = CMDTARGET_THIS(iface);
-    return IHTMLDocument2_AddRef(HTMLDOC(This));
+    return htmldoc_addref(This);
 }
 
 static ULONG WINAPI OleCommandTarget_Release(IOleCommandTarget *iface)
 {
     HTMLDocument *This = CMDTARGET_THIS(iface);
-    return IHTMLDocument_Release(HTMLDOC(This));
+    return htmldoc_release(This);
 }
 
 static HRESULT query_from_table(HTMLDocument *This, const cmdtable_t *cmdtable, OLECMD *cmd)

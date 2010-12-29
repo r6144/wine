@@ -56,6 +56,9 @@ WINE_DECLARE_DEBUG_CHANNEL(file);
 WINE_DECLARE_DEBUG_CHANNEL(relay);
 
 #ifdef __APPLE__
+#include <CoreFoundation/CoreFoundation.h>
+#include <pthread.h>
+#include <unistd.h>
 extern char **__wine_get_main_environment(void);
 #else
 extern char **__wine_main_environ;
@@ -69,8 +72,6 @@ typedef struct
     LPSTR lpCmdShow;
     DWORD dwReserved;
 } LOADPARMS32;
-
-static UINT process_error_mode;
 
 static DWORD shutdown_flags = 0;
 static DWORD shutdown_priority = 0x280;
@@ -538,6 +539,95 @@ static void set_additional_environment(void)
 
     HeapFree( GetProcessHeap(), 0, all_users_dir );
     HeapFree( GetProcessHeap(), 0, profile_dir );
+}
+
+/***********************************************************************
+ *           set_wow64_environment
+ *
+ * Set the environment variables that change across 32/64/Wow64.
+ */
+static void set_wow64_environment(void)
+{
+    static const WCHAR archW[]    = {'P','R','O','C','E','S','S','O','R','_','A','R','C','H','I','T','E','C','T','U','R','E',0};
+    static const WCHAR arch6432W[] = {'P','R','O','C','E','S','S','O','R','_','A','R','C','H','I','T','E','W','6','4','3','2',0};
+    static const WCHAR x86W[] = {'x','8','6',0};
+    static const WCHAR versionW[] = {'M','a','c','h','i','n','e','\\',
+                                     'S','o','f','t','w','a','r','e','\\',
+                                     'M','i','c','r','o','s','o','f','t','\\',
+                                     'W','i','n','d','o','w','s','\\',
+                                     'C','u','r','r','e','n','t','V','e','r','s','i','o','n',0};
+    static const WCHAR progdirW[]   = {'P','r','o','g','r','a','m','F','i','l','e','s','D','i','r',0};
+    static const WCHAR progdir86W[] = {'P','r','o','g','r','a','m','F','i','l','e','s','D','i','r',' ','(','x','8','6',')',0};
+    static const WCHAR progfilesW[] = {'P','r','o','g','r','a','m','F','i','l','e','s',0};
+    static const WCHAR progw6432W[] = {'P','r','o','g','r','a','m','W','6','4','3','2',0};
+    static const WCHAR commondirW[]   = {'C','o','m','m','o','n','F','i','l','e','s','D','i','r',0};
+    static const WCHAR commondir86W[] = {'C','o','m','m','o','n','F','i','l','e','s','D','i','r',' ','(','x','8','6',')',0};
+    static const WCHAR commonfilesW[] = {'C','o','m','m','o','n','P','r','o','g','r','a','m','F','i','l','e','s',0};
+    static const WCHAR commonw6432W[] = {'C','o','m','m','o','n','P','r','o','g','r','a','m','W','6','4','3','2',0};
+
+    OBJECT_ATTRIBUTES attr;
+    UNICODE_STRING nameW;
+    WCHAR arch[64];
+    WCHAR *value;
+    HANDLE hkey;
+
+    /* set the PROCESSOR_ARCHITECTURE variable */
+
+    if (GetEnvironmentVariableW( arch6432W, arch, sizeof(arch)/sizeof(WCHAR) ))
+    {
+        if (is_win64)
+        {
+            SetEnvironmentVariableW( archW, arch );
+            SetEnvironmentVariableW( arch6432W, NULL );
+        }
+    }
+    else if (GetEnvironmentVariableW( archW, arch, sizeof(arch)/sizeof(WCHAR) ))
+    {
+        if (is_wow64)
+        {
+            SetEnvironmentVariableW( arch6432W, arch );
+            SetEnvironmentVariableW( archW, x86W );
+        }
+    }
+
+    attr.Length = sizeof(attr);
+    attr.RootDirectory = 0;
+    attr.ObjectName = &nameW;
+    attr.Attributes = 0;
+    attr.SecurityDescriptor = NULL;
+    attr.SecurityQualityOfService = NULL;
+    RtlInitUnicodeString( &nameW, versionW );
+    if (NtOpenKey( &hkey, KEY_READ | KEY_WOW64_64KEY, &attr )) return;
+
+    /* set the ProgramFiles variables */
+
+    if ((value = get_reg_value( hkey, progdirW )))
+    {
+        if (is_win64 || is_wow64) SetEnvironmentVariableW( progw6432W, value );
+        if (is_win64 || !is_wow64) SetEnvironmentVariableW( progfilesW, value );
+        HeapFree( GetProcessHeap(), 0, value );
+    }
+    if (is_wow64 && (value = get_reg_value( hkey, progdir86W )))
+    {
+        SetEnvironmentVariableW( progfilesW, value );
+        HeapFree( GetProcessHeap(), 0, value );
+    }
+
+    /* set the CommonProgramFiles variables */
+
+    if ((value = get_reg_value( hkey, commondirW )))
+    {
+        if (is_win64 || is_wow64) SetEnvironmentVariableW( commonw6432W, value );
+        if (is_win64 || !is_wow64) SetEnvironmentVariableW( commonfilesW, value );
+        HeapFree( GetProcessHeap(), 0, value );
+    }
+    if (is_wow64 && (value = get_reg_value( hkey, commondir86W )))
+    {
+        SetEnvironmentVariableW( commonfilesW, value );
+        HeapFree( GetProcessHeap(), 0, value );
+    }
+
+    NtClose( hkey );
 }
 
 /***********************************************************************
@@ -1125,6 +1215,7 @@ void CDECL __wine_kernel_init(void)
         set_registry_environment( got_environment );
         set_additional_environment();
     }
+    set_wow64_environment();
 
     if (!(peb->ImageBaseAddress = LoadLibraryExW( main_exe_name, 0, DONT_RESOLVE_DLL_REFERENCES )))
     {
@@ -1530,7 +1621,7 @@ static startup_info_t *create_startup_info( LPCWSTR filename, LPCWSTR cmdline,
 
     info->console_flags = cur_params->ConsoleFlags;
     if (flags & CREATE_NEW_PROCESS_GROUP) info->console_flags = 1;
-    if (flags & CREATE_NEW_CONSOLE) info->console = (obj_handle_t)1;  /* FIXME: cf. kernel_main.c */
+    if (flags & CREATE_NEW_CONSOLE) info->console = wine_server_obj_handle(KERNEL32_CONSOLE_ALLOC);
 
     if (startup->dwFlags & STARTF_USESTDHANDLES)
     {
@@ -1635,6 +1726,54 @@ static const char *get_alternate_loader( char **ret_env )
     return loader;
 }
 
+#ifdef __APPLE__
+/***********************************************************************
+ *           terminate_main_thread
+ *
+ * On some versions of Mac OS X, the execve system call fails with
+ * ENOTSUP if the process has multiple threads.  Wine is always multi-
+ * threaded on Mac OS X because it specifically reserves the main thread
+ * for use by the system frameworks (see apple_main_thread() in
+ * libs/wine/loader.c).  So, when we need to exec without first forking,
+ * we need to terminate the main thread first.  We do this by installing
+ * a custom run loop source onto the main run loop and signaling it.
+ * The source's "perform" callback is pthread_exit and it will be
+ * executed on the main thread, terminating it.
+ *
+ * Returns TRUE if there's still hope the main thread has terminated or
+ * will soon.  Return FALSE if we've given up.
+ */
+static BOOL terminate_main_thread(void)
+{
+    static int delayms;
+
+    if (!delayms)
+    {
+        CFRunLoopSourceContext source_context = { 0 };
+        CFRunLoopSourceRef source;
+
+        source_context.perform = pthread_exit;
+        if (!(source = CFRunLoopSourceCreate( NULL, 0, &source_context )))
+            return FALSE;
+
+        CFRunLoopAddSource( CFRunLoopGetMain(), source, kCFRunLoopCommonModes );
+        CFRunLoopSourceSignal( source );
+        CFRunLoopWakeUp( CFRunLoopGetMain() );
+        CFRelease( source );
+
+        delayms = 20;
+    }
+
+    if (delayms > 1000)
+        return FALSE;
+
+    usleep(delayms * 1000);
+    delayms *= 2;
+
+    return TRUE;
+}
+#endif
+
 /***********************************************************************
  *           create_process
  *
@@ -1662,7 +1801,7 @@ static BOOL create_process( HANDLE hFile, LPCWSTR filename, LPWSTR cmd_line, LPW
 
     if (!is_win64 && !is_wow64 && (binary_info->flags & BINARY_FLAG_64BIT))
     {
-        ERR( "starting 64-bit process %s not supported on this environment\n", debugstr_w(filename) );
+        ERR( "starting 64-bit process %s not supported in 32-bit wineprefix\n", debugstr_w(filename) );
         SetLastError( ERROR_BAD_EXE_FORMAT );
         return FALSE;
     }
@@ -1799,7 +1938,18 @@ static BOOL create_process( HANDLE hFile, LPCWSTR filename, LPWSTR cmd_line, LPW
         if (wineloader) putenv( wineloader );
         if (unixdir) chdir(unixdir);
 
-        if (argv) wine_exec_wine_binary( loader, argv, getenv("WINELOADER") );
+        if (argv)
+        {
+            do
+            {
+                wine_exec_wine_binary( loader, argv, getenv("WINELOADER") );
+            }
+#ifdef __APPLE__
+            while (errno == ENOTSUP && exec_only && terminate_main_thread());
+#else
+            while (0);
+#endif
+        }
         _exit(1);
     }
 
@@ -2300,25 +2450,25 @@ UINT WINAPI WinExec( LPCSTR lpCmdLine, UINT nCmdShow )
 /**********************************************************************
  *	    LoadModule    (KERNEL32.@)
  */
-HINSTANCE WINAPI LoadModule( LPCSTR name, LPVOID paramBlock )
+DWORD WINAPI LoadModule( LPCSTR name, LPVOID paramBlock )
 {
     LOADPARMS32 *params = paramBlock;
     PROCESS_INFORMATION info;
     STARTUPINFOA startup;
-    HINSTANCE hInstance;
+    DWORD ret;
     LPSTR cmdline, p;
     char filename[MAX_PATH];
     BYTE len;
 
-    if (!name) return (HINSTANCE)ERROR_FILE_NOT_FOUND;
+    if (!name) return ERROR_FILE_NOT_FOUND;
 
     if (!SearchPathA( NULL, name, ".exe", sizeof(filename), filename, NULL ) &&
         !SearchPathA( NULL, name, NULL, sizeof(filename), filename, NULL ))
-        return ULongToHandle(GetLastError());
+        return GetLastError();
 
     len = (BYTE)params->lpCmdLine[0];
     if (!(cmdline = HeapAlloc( GetProcessHeap(), 0, strlen(filename) + len + 2 )))
-        return (HINSTANCE)ERROR_NOT_ENOUGH_MEMORY;
+        return ERROR_NOT_ENOUGH_MEMORY;
 
     strcpy( cmdline, filename );
     p = cmdline + strlen(cmdline);
@@ -2340,19 +2490,19 @@ HINSTANCE WINAPI LoadModule( LPCSTR name, LPVOID paramBlock )
         /* Give 30 seconds to the app to come up */
         if (wait_input_idle( info.hProcess, 30000 ) == WAIT_FAILED)
             WARN("WaitForInputIdle failed: Error %d\n", GetLastError() );
-        hInstance = (HINSTANCE)33;
+        ret = 33;
         /* Close off the handles */
         CloseHandle( info.hThread );
         CloseHandle( info.hProcess );
     }
-    else if ((hInstance = ULongToHandle(GetLastError())) >= (HINSTANCE)32)
+    else if ((ret = GetLastError()) >= 32)
     {
-        FIXME("Strange error set by CreateProcess: %p\n", hInstance );
-        hInstance = (HINSTANCE)11;
+        FIXME("Strange error set by CreateProcess: %u\n", ret );
+        ret = 11;
     }
 
     HeapFree( GetProcessHeap(), 0, cmdline );
-    return hInstance;
+    return ret;
 }
 
 
@@ -2451,8 +2601,12 @@ BOOL WINAPI GetExitCodeProcess( HANDLE hProcess, LPDWORD lpExitCode )
  */
 UINT WINAPI SetErrorMode( UINT mode )
 {
-    UINT old = process_error_mode;
-    process_error_mode = mode;
+    UINT old;
+
+    NtQueryInformationProcess( GetCurrentProcess(), ProcessDefaultHardErrorMode,
+                               &old, sizeof(old), NULL );
+    NtSetInformationProcess( GetCurrentProcess(), ProcessDefaultHardErrorMode,
+                             &mode, sizeof(mode) );
     return old;
 }
 
@@ -2461,7 +2615,11 @@ UINT WINAPI SetErrorMode( UINT mode )
  */
 UINT WINAPI GetErrorMode( void )
 {
-    return process_error_mode;
+    UINT mode;
+
+    NtQueryInformationProcess( GetCurrentProcess(), ProcessDefaultHardErrorMode,
+                               &mode, sizeof(mode), NULL );
+    return mode;
 }
 
 /**********************************************************************
@@ -3379,4 +3537,22 @@ DWORD WINAPI WTSGetActiveConsoleSessionId(void)
 {
     FIXME("stub\n");
     return 0;
+}
+
+/**********************************************************************
+ *           GetSystemDEPPolicy     (KERNEL32.@)
+ */
+DEP_SYSTEM_POLICY_TYPE WINAPI GetSystemDEPPolicy(void)
+{
+    FIXME("stub\n");
+    return OptIn;
+}
+/**********************************************************************
+ *           SetProcessDEPPolicy     (KERNEL32.@)
+ */
+BOOL WINAPI SetProcessDEPPolicy(DWORD newDEP)
+{
+    FIXME("(%d): stub\n", newDEP);
+    SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
+    return FALSE;
 }

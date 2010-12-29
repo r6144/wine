@@ -23,13 +23,12 @@
 #include "config.h"
 
 #include <stdarg.h>
-#include <assert.h>
 #include "windef.h"
 #include "winbase.h"
 #include "winuser.h"
 #include "winnls.h"
 #include "ole2.h"
-#include "msxml2.h"
+#include "msxml6.h"
 #include "wininet.h"
 #include "urlmon.h"
 #include "winreg.h"
@@ -132,6 +131,12 @@ static inline BOOL has_content_handler(const saxlocator *locator)
            (!locator->vbInterface && locator->saxreader->contentHandler);
 }
 
+static inline BOOL has_error_handler(const saxlocator *locator)
+{
+    return (locator->vbInterface && locator->saxreader->vberrorHandler) ||
+          (!locator->vbInterface && locator->saxreader->errorHandler);
+}
+
 static HRESULT namespacePush(saxlocator *locator, int ns)
 {
     if(locator->nsStackLast>=locator->nsStackSize)
@@ -176,23 +181,17 @@ static BSTR bstr_from_xmlCharN(const xmlChar *buf, int len)
 
 static BSTR QName_from_xmlChar(const xmlChar *prefix, const xmlChar *name)
 {
-    DWORD dLen, dLast;
+    xmlChar *qname;
     BSTR bstr;
 
     if(!name) return NULL;
 
-    if(!prefix || *prefix=='\0')
+    if(!prefix || !*prefix)
         return bstr_from_xmlChar(name);
 
-    dLen = MultiByteToWideChar(CP_UTF8, 0, (LPCSTR)prefix, -1, NULL, 0)
-        + MultiByteToWideChar(CP_UTF8, 0, (LPCSTR)name, -1, NULL, 0);
-    bstr = SysAllocStringLen(NULL, dLen-1);
-    if(!bstr)
-        return NULL;
-
-    dLast = MultiByteToWideChar(CP_UTF8, 0, (LPCSTR)prefix, -1, bstr, dLen);
-    bstr[dLast-1] = ':';
-    MultiByteToWideChar(CP_UTF8, 0, (LPCSTR)name, -1, &bstr[dLast], dLen-dLast);
+    qname = xmlBuildQName(name, prefix, NULL, 0);
+    bstr = bstr_from_xmlChar(qname);
+    xmlFree(qname);
 
     return bstr;
 }
@@ -202,8 +201,7 @@ static void format_error_message_from_id(saxlocator *This, HRESULT hr)
     xmlStopParser(This->pParserCtxt);
     This->ret = hr;
 
-    if((This->vbInterface && This->saxreader->vberrorHandler)
-            || (!This->vbInterface && This->saxreader->errorHandler))
+    if(has_error_handler(This))
     {
         WCHAR msg[1024];
         if(!FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM,
@@ -218,6 +216,7 @@ static void format_error_message_from_id(saxlocator *This, HRESULT hr)
             BSTR bstrMsg = SysAllocString(msg);
             IVBSAXErrorHandler_fatalError(This->saxreader->vberrorHandler,
                     (IVBSAXLocator*)&This->lpVBSAXLocatorVtbl, &bstrMsg, hr);
+            SysFreeString(bstrMsg);
         }
         else
             ISAXErrorHandler_fatalError(This->saxreader->errorHandler,
@@ -1240,16 +1239,19 @@ static void libxmlSetDocumentLocator(
         xmlSAXLocatorPtr loc)
 {
     saxlocator *This = ctx;
-    HRESULT hr;
+    HRESULT hr = S_OK;
 
-    if(This->vbInterface)
-        hr = IVBSAXContentHandler_putref_documentLocator(
-                This->saxreader->vbcontentHandler,
-                (IVBSAXLocator*)&This->lpVBSAXLocatorVtbl);
-    else
-        hr = ISAXContentHandler_putDocumentLocator(
-                This->saxreader->contentHandler,
-                (ISAXLocator*)&This->lpSAXLocatorVtbl);
+    if(has_content_handler(This))
+    {
+        if(This->vbInterface)
+            hr = IVBSAXContentHandler_putref_documentLocator(
+                    This->saxreader->vbcontentHandler,
+                    (IVBSAXLocator*)&This->lpVBSAXLocatorVtbl);
+        else
+            hr = ISAXContentHandler_putDocumentLocator(
+                    This->saxreader->contentHandler,
+                    (ISAXLocator*)&This->lpSAXLocatorVtbl);
+    }
 
     if(FAILED(hr))
         format_error_message_from_id(This, hr);
@@ -1291,40 +1293,44 @@ static void libxmlFatalError(void *ctx, const char *msg, ...)
 {
     saxlocator *This = ctx;
     char message[1024];
-    WCHAR *wszError;
+    WCHAR *error;
     DWORD len;
     va_list args;
-
-    if((This->vbInterface && !This->saxreader->vberrorHandler)
-            || (!This->vbInterface && !This->saxreader->errorHandler))
-    {
-        xmlStopParser(This->pParserCtxt);
-        This->ret = E_FAIL;
-        return;
-    }
-
-    FIXME("Error handling is not compatible.\n");
 
     va_start(args, msg);
     vsprintf(message, msg, args);
     va_end(args);
 
     len = MultiByteToWideChar(CP_UNIXCP, 0, message, -1, NULL, 0);
-    wszError = heap_alloc(sizeof(WCHAR)*len);
-    if(wszError)
-        MultiByteToWideChar(CP_UNIXCP, 0, message, -1, wszError, len);
+    error = heap_alloc(sizeof(WCHAR)*len);
+    if(error)
+    {
+        MultiByteToWideChar(CP_UNIXCP, 0, message, -1, error, len);
+        TRACE("fatal error for %p: %s\n", This, debugstr_w(error));
+    }
+
+    if(!has_error_handler(This))
+    {
+        xmlStopParser(This->pParserCtxt);
+        This->ret = E_FAIL;
+        heap_free(error);
+        return;
+    }
+
+    FIXME("Error handling is not compatible.\n");
 
     if(This->vbInterface)
     {
-        BSTR bstrError = SysAllocString(wszError);
+        BSTR bstrError = SysAllocString(error);
         IVBSAXErrorHandler_fatalError(This->saxreader->vberrorHandler,
                 (IVBSAXLocator*)&This->lpVBSAXLocatorVtbl, &bstrError, E_FAIL);
+        SysFreeString(bstrError);
     }
     else
         ISAXErrorHandler_fatalError(This->saxreader->errorHandler,
-                (ISAXLocator*)&This->lpSAXLocatorVtbl, wszError, E_FAIL);
+                (ISAXLocator*)&This->lpSAXLocatorVtbl, error, E_FAIL);
 
-    heap_free(wszError);
+    heap_free(error);
 
     xmlStopParser(This->pParserCtxt);
     This->ret = E_FAIL;
@@ -1763,12 +1769,30 @@ static HRESULT SAXLocator_create(saxreader *reader, saxlocator **ppsaxlocator, B
 /*** SAXXMLReader internal functions ***/
 static HRESULT internal_parseBuffer(saxreader *This, const char *buffer, int size, BOOL vbInterface)
 {
+    xmlCharEncoding encoding = XML_CHAR_ENCODING_NONE;
+    xmlChar *enc_name = NULL;
     saxlocator *locator;
     HRESULT hr;
 
     hr = SAXLocator_create(This, &locator, vbInterface);
     if(FAILED(hr))
         return hr;
+
+    if (size >= 4)
+    {
+        const unsigned char *buff = (unsigned char*)buffer;
+
+        encoding = xmlDetectCharEncoding((xmlChar*)buffer, 4);
+        enc_name = (xmlChar*)xmlGetCharEncodingName(encoding);
+        TRACE("detected encoding: %s\n", enc_name);
+        /* skip BOM, parser won't switch encodings and so won't skip it on its own */
+        if ((encoding == XML_CHAR_ENCODING_UTF8) &&
+            buff[0] == 0xEF && buff[1] == 0xBB && buff[2] == 0xBF)
+        {
+            buffer += 3;
+            size -= 3;
+        }
+    }
 
     locator->pParserCtxt = xmlCreateMemoryParserCtxt(buffer, size);
     if(!locator->pParserCtxt)
@@ -1777,12 +1801,15 @@ static HRESULT internal_parseBuffer(saxreader *This, const char *buffer, int siz
         return E_FAIL;
     }
 
+    if (encoding == XML_CHAR_ENCODING_UTF8)
+        locator->pParserCtxt->encoding = xmlStrdup(enc_name);
+
     xmlFree(locator->pParserCtxt->sax);
     locator->pParserCtxt->sax = &locator->saxreader->sax;
     locator->pParserCtxt->userData = locator;
 
     This->isParsing = TRUE;
-    if(xmlParseDocument(locator->pParserCtxt)) hr = E_FAIL;
+    if(xmlParseDocument(locator->pParserCtxt) == -1) hr = E_FAIL;
     else hr = locator->ret;
     This->isParsing = FALSE;
 
@@ -1828,14 +1855,14 @@ static HRESULT internal_parseStream(saxreader *This, IStream *stream, BOOL vbInt
         if(hr != S_OK)
             break;
 
-        if(xmlParseChunk(locator->pParserCtxt, data, dataRead, 0)) hr = E_FAIL;
+        if(xmlParseChunk(locator->pParserCtxt, data, dataRead, 0) != XML_ERR_OK) hr = E_FAIL;
         else hr = locator->ret;
 
         if(hr != S_OK) break;
 
         if(dataRead != sizeof(data))
         {
-            if(xmlParseChunk(locator->pParserCtxt, data, 0, 1)) hr = E_FAIL;
+            if(xmlParseChunk(locator->pParserCtxt, data, 0, 1) != XML_ERR_OK) hr = E_FAIL;
             else hr = locator->ret;
 
             break;
@@ -2038,12 +2065,24 @@ static HRESULT internal_parse(
                 SysFreeString(bstrData);
                 break;
             }
+
             if(IUnknown_QueryInterface(V_UNKNOWN(&varInput),
                         &IID_IPersistStream, (void**)&persistStream) == S_OK)
             {
+                hr = CreateStreamOnHGlobal(NULL, TRUE, &stream);
+                if(hr != S_OK)
+                {
+                    IPersistStream_Release(persistStream);
+                    return hr;
+                }
+
                 hr = IPersistStream_Save(persistStream, stream, TRUE);
                 IPersistStream_Release(persistStream);
-                if(hr != S_OK) break;
+                if(hr != S_OK)
+                {
+                    IStream_Release(stream);
+                    break;
+                }
             }
             if(stream || IUnknown_QueryInterface(V_UNKNOWN(&varInput),
                         &IID_IStream, (void**)&stream) == S_OK)
@@ -2146,10 +2185,7 @@ static HRESULT internal_putProperty(
         'x','m','l','d','e','c','l','-','v','e','r','s','i','o','n',0
     };
 
-    FIXME("(%p)->(%s): semi-stub\n", This, debugstr_w(pProp));
-
-    if(!memcmp(pProp, wszCharset, sizeof(wszCharset)))
-        return E_NOTIMPL;
+    TRACE("(%p)->(%s)\n", This, debugstr_w(pProp));
 
     if(!memcmp(pProp, wszDeclarationHandler, sizeof(wszDeclarationHandler)))
     {
@@ -2176,12 +2212,6 @@ static HRESULT internal_putProperty(
             This->declHandler = (ISAXDeclHandler*)V_UNKNOWN(&value);
         return S_OK;
     }
-
-    if(!memcmp(pProp, wszDomNode, sizeof(wszDomNode)))
-        return E_FAIL;
-
-    if(!memcmp(pProp, wszInputSource, sizeof(wszInputSource)))
-        return E_NOTIMPL;
 
     if(!memcmp(pProp, wszLexicalHandler, sizeof(wszLexicalHandler)))
     {
@@ -2210,6 +2240,17 @@ static HRESULT internal_putProperty(
             This->lexicalHandler = (ISAXLexicalHandler*)V_UNKNOWN(&value);
         return S_OK;
     }
+
+    FIXME("(%p)->(%s): unsupported property\n", This, debugstr_w(pProp));
+
+    if(!memcmp(pProp, wszCharset, sizeof(wszCharset)))
+        return E_NOTIMPL;
+
+    if(!memcmp(pProp, wszDomNode, sizeof(wszDomNode)))
+        return E_FAIL;
+
+    if(!memcmp(pProp, wszInputSource, sizeof(wszInputSource)))
+        return E_NOTIMPL;
 
     if(!memcmp(pProp, wszMaxElementDepth, sizeof(wszMaxElementDepth)))
         return E_NOTIMPL;

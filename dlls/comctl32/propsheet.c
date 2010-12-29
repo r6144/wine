@@ -613,7 +613,7 @@ static INT_PTR PROPSHEET_CreateDialog(PropSheetInfo* psInfo)
   DWORD resSize;
   WORD resID = IDD_PROPSHEET;
 
-  TRACE("\n");
+  TRACE("(%p)\n", psInfo);
   if (psInfo->ppshheader.dwFlags & INTRNL_ANY_WIZARD)
     resID = IDD_WIZARD;
 
@@ -1074,18 +1074,13 @@ static PADDING_INFO PROPSHEET_GetPaddingInfo(HWND hwndDlg)
 {
   HWND hwndTab = GetDlgItem(hwndDlg, IDC_TABCONTROL);
   RECT rcTab;
-  POINT tl;
   PADDING_INFO padding;
 
   GetWindowRect(hwndTab, &rcTab);
+  MapWindowPoints( 0, hwndDlg, (POINT *)&rcTab, 2 );
 
-  tl.x = rcTab.left;
-  tl.y = rcTab.top;
-
-  ScreenToClient(hwndDlg, &tl);
-
-  padding.x = tl.x;
-  padding.y = tl.y;
+  padding.x = rcTab.left;
+  padding.y = rcTab.top;
 
   return padding;
 }
@@ -1131,20 +1126,16 @@ static PADDING_INFO PROPSHEET_GetPaddingInfoWizard(HWND hwndDlg, const PropSheet
 
   hwndControl = GetDlgItem(hwndDlg, idButton);
   GetWindowRect(hwndControl, &rc);
-
+  MapWindowPoints( 0, hwndDlg, (POINT *)&rc, 2 );
   ptButton.x = rc.left;
   ptButton.y = rc.top;
-
-  ScreenToClient(hwndDlg, &ptButton);
 
   /* Line */
   hwndControl = GetDlgItem(hwndDlg, IDC_SUNKEN_LINE);
   GetWindowRect(hwndControl, &rc);
-
+  MapWindowPoints( 0, hwndDlg, (POINT *)&rc, 2 );
   ptLine.x = rc.left;
   ptLine.y = rc.bottom;
-
-  ScreenToClient(hwndDlg, &ptLine);
 
   padding.y = ptButton.y - ptLine.y;
 
@@ -3415,10 +3406,7 @@ PROPSHEET_DialogProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
       {
         /* set up the Next and Back buttons by default */
         PROPSHEET_SetWizButtons(hwnd, PSWIZB_BACK|PSWIZB_NEXT);
-        SetFocus(GetDlgItem(hwnd, IDC_NEXT_BUTTON));
       }
-      else
-        SetFocus(GetDlgItem(hwnd, IDOK));
 
       /* Set up fonts */
       SystemParametersInfoW (SPI_GETICONTITLELOGFONT, 0, &logFont, 0);
@@ -3464,6 +3452,7 @@ PROPSHEET_DialogProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         ShowWindow(hwndTabCtrl, SW_HIDE);
         PROPSHEET_AdjustSizeWizard(hwnd, psInfo);
         PROPSHEET_AdjustButtonsWizard(hwnd, psInfo);
+        SetFocus(GetDlgItem(hwnd, IDC_NEXT_BUTTON));
       }
       else
       {
@@ -3472,6 +3461,7 @@ PROPSHEET_DialogProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
           PROPSHEET_AdjustSize(hwnd, psInfo);
           PROPSHEET_AdjustButtons(hwnd, psInfo);
         }
+        SetFocus(GetDlgItem(hwnd, IDOK));
       }
 
       if (IS_INTRESOURCE(psInfo->ppshheader.pszCaption) &&

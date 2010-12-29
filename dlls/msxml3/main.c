@@ -29,8 +29,9 @@
 #include "winbase.h"
 #include "winuser.h"
 #include "ole2.h"
+#include "rpcproxy.h"
 #include "msxml.h"
-#include "msxml2.h"
+#include "msxml6.h"
 
 #include "wine/unicode.h"
 #include "wine/debug.h"
@@ -40,7 +41,57 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(msxml);
 
+HINSTANCE MSXML_hInstance = NULL;
+
 #ifdef HAVE_LIBXML2
+
+void wineXmlCallbackLog(char const* caller, xmlErrorLevel lvl, char const* msg, va_list ap)
+{
+    char* buf = NULL;
+    int len = 32, needed;
+    enum __wine_debug_class dbcl = __WINE_DBCL_ERR;
+    switch (lvl)
+    {
+        case XML_ERR_NONE:
+            dbcl = __WINE_DBCL_TRACE;
+            break;
+        case XML_ERR_WARNING:
+            dbcl = __WINE_DBCL_WARN;
+            break;
+        default:
+            break;
+    }
+
+    do
+    {
+        heap_free(buf);
+        buf = heap_alloc(len);
+        needed = vsnprintf(buf, len, msg, ap);
+        if (needed == -1)
+            len *= 2;
+        else if (needed >= len)
+            len = needed + 1;
+        else
+            needed = 0;
+    }
+    while (needed);
+
+    wine_dbg_log(dbcl, &__wine_dbch_msxml, caller, "%s", buf);
+    heap_free(buf);
+}
+
+void wineXmlCallbackError(char const* caller, xmlErrorPtr err)
+{
+    enum __wine_debug_class dbcl;
+
+    switch (err->level)
+    {
+    case XML_ERR_NONE:    dbcl = __WINE_DBCL_TRACE; break;
+    case XML_ERR_WARNING: dbcl = __WINE_DBCL_WARN; break;
+    default:              dbcl = __WINE_DBCL_ERR; break;
+    }
+    wine_dbg_log(dbcl, &__wine_dbch_msxml, caller, "%s", err->message);
+}
 
 /* Support for loading xml files from a Wine Windows drive */
 static int wineXmlMatchCallback (char const * filename)
@@ -115,7 +166,7 @@ DECL_FUNCPTR(xsltApplyStylesheet);
 DECL_FUNCPTR(xsltCleanupGlobals);
 DECL_FUNCPTR(xsltFreeStylesheet);
 DECL_FUNCPTR(xsltParseStylesheetDoc);
-# undef MAKE_FUNCPTR
+# undef DECL_FUNCPTR
 #endif
 
 static void init_libxslt(void)
@@ -148,6 +199,8 @@ static void init_libxslt(void)
 
 BOOL WINAPI DllMain(HINSTANCE hInstDLL, DWORD fdwReason, LPVOID lpv)
 {
+    MSXML_hInstance = hInstDLL;
+
     switch(fdwReason)
     {
     case DLL_PROCESS_ATTACH:
@@ -164,6 +217,7 @@ BOOL WINAPI DllMain(HINSTANCE hInstDLL, DWORD fdwReason, LPVOID lpv)
                             wineXmlReadCallback, wineXmlFileCloseCallback) == -1)
             WARN("Failed to register callbacks\n");
 
+        schemasInit();
 #endif
         init_libxslt();
         DisableThreadLibraryCalls(hInstDLL);
@@ -183,9 +237,26 @@ BOOL WINAPI DllMain(HINSTANCE hInstDLL, DWORD fdwReason, LPVOID lpv)
         xmlRegisterDefaultInputCallbacks();
 
         xmlCleanupParser();
+        schemasCleanup();
 #endif
         release_typelib();
         break;
     }
     return TRUE;
+}
+
+/***********************************************************************
+ *		DllRegisterServer (MSXML3.@)
+ */
+HRESULT WINAPI DllRegisterServer(void)
+{
+    return __wine_register_resources( MSXML_hInstance, NULL );
+}
+
+/***********************************************************************
+ *		DllUnregisterServer (MSXML3.@)
+ */
+HRESULT WINAPI DllUnregisterServer(void)
+{
+    return __wine_unregister_resources( MSXML_hInstance, NULL );
 }

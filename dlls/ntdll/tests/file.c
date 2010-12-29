@@ -35,6 +35,7 @@
 #include "wine/test.h"
 #include "winternl.h"
 #include "winuser.h"
+#include "winioctl.h"
 
 #ifndef IO_COMPLETION_ALL_ACCESS
 #define IO_COMPLETION_ALL_ACCESS 0x001F0003
@@ -75,6 +76,7 @@ static NTSTATUS (WINAPI *pNtSetInformationFile)(HANDLE, PIO_STATUS_BLOCK, PVOID,
 static NTSTATUS (WINAPI *pNtQueryInformationFile)(HANDLE, PIO_STATUS_BLOCK, PVOID, ULONG, FILE_INFORMATION_CLASS);
 static NTSTATUS (WINAPI *pNtQueryDirectoryFile)(HANDLE,HANDLE,PIO_APC_ROUTINE,PVOID,PIO_STATUS_BLOCK,
                                                 PVOID,ULONG,FILE_INFORMATION_CLASS,BOOLEAN,PUNICODE_STRING,BOOLEAN);
+static NTSTATUS (WINAPI *pNtQueryVolumeInformationFile)(HANDLE,PIO_STATUS_BLOCK,PVOID,ULONG,FS_INFORMATION_CLASS);
 
 static inline BOOL is_signaled( HANDLE obj )
 {
@@ -112,9 +114,9 @@ static HANDLE create_temp_file( ULONG flags )
 #define CKEY_FIRST 0x1030341
 #define CKEY_SECOND 0x132E46
 
-ULONG_PTR completionKey;
-IO_STATUS_BLOCK ioSb;
-ULONG_PTR completionValue;
+static ULONG_PTR completionKey;
+static IO_STATUS_BLOCK ioSb;
+static ULONG_PTR completionValue;
 
 static ULONG get_pending_msgs(HANDLE h)
 {
@@ -947,8 +949,11 @@ static void test_iocp_fileio(HANDLE h)
         ok( hPipeClt != INVALID_HANDLE_VALUE, "Cannot connect to pipe\n" );
         if (hPipeClt != INVALID_HANDLE_VALUE)
         {
+            U(iosb).Status = 0xdeadbeef;
             res = pNtSetInformationFile( hPipeSrv, &iosb, &fci, sizeof(fci), FileCompletionInformation );
             ok( res == STATUS_INVALID_PARAMETER, "Unexpected NtSetInformationFile on non-overlapped handle: %x\n", res );
+            ok( U(iosb).Status == STATUS_INVALID_PARAMETER /* 98 */ || U(iosb).Status == 0xdeadbeef /* NT4+ */,
+                "Unexpected iosb.Status on non-overlapped handle: %x\n", U(iosb).Status );
             CloseHandle(hPipeClt);
         }
         CloseHandle( hPipeSrv );
@@ -968,7 +973,8 @@ static void test_iocp_fileio(HANDLE h)
         DWORD read;
         long count;
 
-        NTSTATUS res = pNtSetInformationFile( hPipeSrv, &iosb, &fci, sizeof(fci), FileCompletionInformation );
+        U(iosb).Status = 0xdeadbeef;
+        res = pNtSetInformationFile( hPipeSrv, &iosb, &fci, sizeof(fci), FileCompletionInformation );
         ok( res == STATUS_SUCCESS, "NtSetInformationFile failed: %x\n", res );
         ok( U(iosb).Status == STATUS_SUCCESS, "iosb.Status invalid: %x\n", U(iosb).Status );
 
@@ -1047,8 +1053,10 @@ static void test_file_basic_information(void)
     /* Clear fbi to avoid setting times */
     memset(&fbi, 0, sizeof(fbi));
     fbi.FileAttributes = FILE_ATTRIBUTE_SYSTEM;
+    U(io).Status = 0xdeadbeef;
     res = pNtSetInformationFile(h, &io, &fbi, sizeof fbi, FileBasicInformation);
-    ok ( res == STATUS_SUCCESS, "can't set system attribute\n");
+    ok ( res == STATUS_SUCCESS, "can't set system attribute, NtSetInformationFile returned %x\n", res );
+    ok ( U(io).Status == STATUS_SUCCESS, "can't set system attribute, io.Status is %x\n", U(io).Status );
 
     memset(&fbi, 0, sizeof(fbi));
     res = pNtQueryInformationFile(h, &io, &fbi, sizeof fbi, FileBasicInformation);
@@ -1058,8 +1066,10 @@ static void test_file_basic_information(void)
     /* Then HIDDEN */
     memset(&fbi, 0, sizeof(fbi));
     fbi.FileAttributes = FILE_ATTRIBUTE_HIDDEN;
+    U(io).Status = 0xdeadbeef;
     res = pNtSetInformationFile(h, &io, &fbi, sizeof fbi, FileBasicInformation);
-    ok ( res == STATUS_SUCCESS, "can't set system attribute\n");
+    ok ( res == STATUS_SUCCESS, "can't set system attribute, NtSetInformationFile returned %x\n", res );
+    ok ( U(io).Status == STATUS_SUCCESS, "can't set system attribute, io.Status is %x\n", U(io).Status );
 
     memset(&fbi, 0, sizeof(fbi));
     res = pNtQueryInformationFile(h, &io, &fbi, sizeof fbi, FileBasicInformation);
@@ -1069,8 +1079,10 @@ static void test_file_basic_information(void)
     /* Check NORMAL last of all (to make sure we can clear attributes) */
     memset(&fbi, 0, sizeof(fbi));
     fbi.FileAttributes = FILE_ATTRIBUTE_NORMAL;
+    U(io).Status = 0xdeadbeef;
     res = pNtSetInformationFile(h, &io, &fbi, sizeof fbi, FileBasicInformation);
-    ok ( res == STATUS_SUCCESS, "can't set normal attribute\n");
+    ok ( res == STATUS_SUCCESS, "can't set normal attribute, NtSetInformationFile returned %x\n", res );
+    ok ( U(io).Status == STATUS_SUCCESS, "can't set normal attribute, io.Status is %x\n", U(io).Status );
 
     memset(&fbi, 0, sizeof(fbi));
     res = pNtQueryInformationFile(h, &io, &fbi, sizeof fbi, FileBasicInformation);
@@ -1107,10 +1119,14 @@ static void test_file_all_information(void)
     /* Clear fbi to avoid setting times */
     memset(&fai_buf.fai.BasicInformation, 0, sizeof(fai_buf.fai.BasicInformation));
     fai_buf.fai.BasicInformation.FileAttributes = FILE_ATTRIBUTE_SYSTEM;
+    U(io).Status = 0xdeadbeef;
     res = pNtSetInformationFile(h, &io, &fai_buf.fai, sizeof fai_buf, FileAllInformation);
-    ok ( res == STATUS_INVALID_INFO_CLASS || res == STATUS_NOT_IMPLEMENTED, "shouldn't be able to set FileAllInformation, res %x\n", res);
+    ok ( res == STATUS_INVALID_INFO_CLASS || broken(res == STATUS_NOT_IMPLEMENTED), "shouldn't be able to set FileAllInformation, res %x\n", res);
+    todo_wine ok ( U(io).Status == 0xdeadbeef, "shouldn't be able to set FileAllInformation, io.Status is %x\n", U(io).Status);
+    U(io).Status = 0xdeadbeef;
     res = pNtSetInformationFile(h, &io, &fai_buf.fai.BasicInformation, sizeof fai_buf.fai.BasicInformation, FileBasicInformation);
-    ok ( res == STATUS_SUCCESS, "can't set system attribute\n");
+    ok ( res == STATUS_SUCCESS, "can't set system attribute, res: %x\n", res );
+    ok ( U(io).Status == STATUS_SUCCESS, "can't set system attribute, io.Status: %x\n", U(io).Status );
 
     memset(&fai_buf.fai, 0, sizeof(fai_buf.fai));
     res = pNtQueryInformationFile(h, &io, &fai_buf.fai, sizeof fai_buf, FileAllInformation);
@@ -1120,8 +1136,10 @@ static void test_file_all_information(void)
     /* Then HIDDEN */
     memset(&fai_buf.fai.BasicInformation, 0, sizeof(fai_buf.fai.BasicInformation));
     fai_buf.fai.BasicInformation.FileAttributes = FILE_ATTRIBUTE_HIDDEN;
+    U(io).Status = 0xdeadbeef;
     res = pNtSetInformationFile(h, &io, &fai_buf.fai.BasicInformation, sizeof fai_buf.fai.BasicInformation, FileBasicInformation);
-    ok ( res == STATUS_SUCCESS, "can't set system attribute\n");
+    ok ( res == STATUS_SUCCESS, "can't set system attribute, res: %x\n", res );
+    ok ( U(io).Status == STATUS_SUCCESS, "can't set system attribute, io.Status: %x\n", U(io).Status );
 
     memset(&fai_buf.fai, 0, sizeof(fai_buf.fai));
     res = pNtQueryInformationFile(h, &io, &fai_buf.fai, sizeof fai_buf, FileAllInformation);
@@ -1131,8 +1149,10 @@ static void test_file_all_information(void)
     /* Check NORMAL last of all (to make sure we can clear attributes) */
     memset(&fai_buf.fai.BasicInformation, 0, sizeof(fai_buf.fai.BasicInformation));
     fai_buf.fai.BasicInformation.FileAttributes = FILE_ATTRIBUTE_NORMAL;
+    U(io).Status = 0xdeadbeef;
     res = pNtSetInformationFile(h, &io, &fai_buf.fai.BasicInformation, sizeof fai_buf.fai.BasicInformation, FileBasicInformation);
-    ok ( res == STATUS_SUCCESS, "can't set normal attribute\n");
+    ok ( res == STATUS_SUCCESS, "can't set system attribute, res: %x\n", res );
+    ok ( U(io).Status == STATUS_SUCCESS, "can't set system attribute, io.Status: %x\n", U(io).Status );
 
     memset(&fai_buf.fai, 0, sizeof(fai_buf.fai));
     res = pNtQueryInformationFile(h, &io, &fai_buf.fai, sizeof fai_buf, FileAllInformation);
@@ -1440,6 +1460,60 @@ static void test_file_all_name_information(void)
     HeapFree( GetProcessHeap(), 0, file_name );
 }
 
+static void test_query_volume_information_file(void)
+{
+    NTSTATUS status;
+    HANDLE dir;
+    WCHAR path[MAX_PATH];
+    OBJECT_ATTRIBUTES attr;
+    IO_STATUS_BLOCK io;
+    UNICODE_STRING nameW;
+    FILE_FS_VOLUME_INFORMATION *ffvi;
+    BYTE buf[sizeof(FILE_FS_VOLUME_INFORMATION) + MAX_PATH * sizeof(WCHAR)];
+
+    GetWindowsDirectoryW( path, MAX_PATH );
+    pRtlDosPathNameToNtPathName_U( path, &nameW, NULL, NULL );
+    attr.Length = sizeof(attr);
+    attr.RootDirectory = 0;
+    attr.ObjectName = &nameW;
+    attr.Attributes = OBJ_CASE_INSENSITIVE;
+    attr.SecurityDescriptor = NULL;
+    attr.SecurityQualityOfService = NULL;
+
+    status = pNtOpenFile( &dir, SYNCHRONIZE|FILE_LIST_DIRECTORY, &attr, &io,
+                          FILE_SHARE_READ|FILE_SHARE_WRITE, FILE_DIRECTORY_FILE|FILE_SYNCHRONOUS_IO_NONALERT );
+    ok( !status, "open %s failed %x\n", wine_dbgstr_w(nameW.Buffer), status );
+    pRtlFreeUnicodeString( &nameW );
+
+    ZeroMemory( buf, sizeof(buf) );
+    U(io).Status = 0xdadadada;
+    io.Information = 0xcacacaca;
+
+    status = pNtQueryVolumeInformationFile( dir, &io, buf, sizeof(buf), FileFsVolumeInformation );
+
+    ffvi = (FILE_FS_VOLUME_INFORMATION *)buf;
+
+todo_wine
+{
+    ok(status == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %d\n", status);
+    ok(U(io).Status == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %d\n", U(io).Status);
+
+    ok(io.Information == (FIELD_OFFSET(FILE_FS_VOLUME_INFORMATION, VolumeLabel) + ffvi->VolumeLabelLength),
+    "expected %d, got %lu\n", (FIELD_OFFSET(FILE_FS_VOLUME_INFORMATION, VolumeLabel) + ffvi->VolumeLabelLength),
+     io.Information);
+
+    ok(ffvi->VolumeCreationTime.QuadPart != 0, "Missing VolumeCreationTime\n");
+    ok(ffvi->VolumeSerialNumber != 0, "Missing VolumeSerialNumber\n");
+    ok(ffvi->SupportsObjects == 1,"expected 1, got %d\n", ffvi->SupportsObjects);
+}
+    ok(ffvi->VolumeLabelLength == lstrlenW(ffvi->VolumeLabel) * sizeof(WCHAR), "expected %d, got %d\n",
+    lstrlenW(ffvi->VolumeLabel) * sizeof(WCHAR), ffvi->VolumeLabelLength);
+
+    trace("VolumeSerialNumber: %x VolumeLabelName: %s\n", ffvi->VolumeSerialNumber, wine_dbgstr_w(ffvi->VolumeLabel));
+
+    CloseHandle( dir );
+}
+
 START_TEST(file)
 {
     HMODULE hkernel32 = GetModuleHandleA("kernel32.dll");
@@ -1474,6 +1548,7 @@ START_TEST(file)
     pNtSetInformationFile   = (void *)GetProcAddress(hntdll, "NtSetInformationFile");
     pNtQueryInformationFile = (void *)GetProcAddress(hntdll, "NtQueryInformationFile");
     pNtQueryDirectoryFile   = (void *)GetProcAddress(hntdll, "NtQueryDirectoryFile");
+    pNtQueryVolumeInformationFile = (void *)GetProcAddress(hntdll, "NtQueryVolumeInformationFile");
 
     create_file_test();
     open_file_test();
@@ -1486,4 +1561,5 @@ START_TEST(file)
     test_file_both_information();
     test_file_name_information();
     test_file_all_name_information();
+    test_query_volume_information_file();
 }

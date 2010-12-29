@@ -26,128 +26,65 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(jscript);
 
-typedef struct {
-    DispatchEx dispex;
-
-    VARIANT number;
-    VARIANT description;
-    VARIANT message;
-} ErrorInstance;
-
 static const WCHAR descriptionW[] = {'d','e','s','c','r','i','p','t','i','o','n',0};
 static const WCHAR messageW[] = {'m','e','s','s','a','g','e',0};
 static const WCHAR nameW[] = {'n','a','m','e',0};
 static const WCHAR numberW[] = {'n','u','m','b','e','r',0};
 static const WCHAR toStringW[] = {'t','o','S','t','r','i','n','g',0};
 
-static inline ErrorInstance *error_from_vdisp(vdisp_t *vdisp)
-{
-    return (ErrorInstance*)vdisp->u.jsdisp;
-}
-
-static inline ErrorInstance *error_this(vdisp_t *jsthis)
-{
-    return is_vclass(jsthis, JSCLASS_ERROR) ? error_from_vdisp(jsthis) : NULL;
-}
-
-static HRESULT Error_number(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags,
-        DISPPARAMS *dp, VARIANT *retv, jsexcept_t *ei, IServiceProvider *sp)
-{
-    ErrorInstance *This = error_from_vdisp(jsthis);
-
-    TRACE("\n");
-
-    switch(flags) {
-    case DISPATCH_PROPERTYGET:
-        return VariantCopy(retv, &This->number);
-    case DISPATCH_PROPERTYPUT:
-        return VariantCopy(&This->number, get_arg(dp, 0));
-    default:
-        FIXME("unimplemented flags %x\n", flags);
-        return E_NOTIMPL;
-    }
-}
-
-static HRESULT Error_description(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags,
-        DISPPARAMS *dp, VARIANT *retv, jsexcept_t *ei, IServiceProvider *sp)
-{
-    ErrorInstance *This = error_from_vdisp(jsthis);
-
-    TRACE("\n");
-
-    switch(flags) {
-    case DISPATCH_PROPERTYGET:
-        return VariantCopy(retv, &This->description);
-    case DISPATCH_PROPERTYPUT:
-        return VariantCopy(&This->description, get_arg(dp, 0));
-    default:
-        FIXME("unimplemented flags %x\n", flags);
-        return E_NOTIMPL;
-    }
-}
-
-/* ECMA-262 3rd Edition    15.11.4.3 */
-static HRESULT Error_message(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags,
-        DISPPARAMS *dp, VARIANT *retv, jsexcept_t *ei, IServiceProvider *sp)
-{
-    ErrorInstance *This = error_from_vdisp(jsthis);
-
-    TRACE("\n");
-
-    switch(flags) {
-    case DISPATCH_PROPERTYGET:
-        return VariantCopy(retv, &This->message);
-    case DISPATCH_PROPERTYPUT:
-        return VariantCopy(&This->message, get_arg(dp, 0));
-    default:
-        FIXME("unimplemented flags %x\n", flags);
-        return E_NOTIMPL;
-    }
-}
-
 /* ECMA-262 3rd Edition    15.11.4.4 */
-static HRESULT Error_toString(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags,
+static HRESULT Error_toString(script_ctx_t *ctx, vdisp_t *vthis, WORD flags,
         DISPPARAMS *dp, VARIANT *retv, jsexcept_t *ei, IServiceProvider *caller)
 {
-    ErrorInstance *error;
-    BSTR name, msg = NULL, ret = NULL;
+    jsdisp_t *jsthis;
+    BSTR name = NULL, msg = NULL, ret = NULL;
     VARIANT v;
     HRESULT hres;
 
-    static const WCHAR str[] = {'[','o','b','j','e','c','t',' ','E','r','r','o','r',']',0};
+    static const WCHAR object_errorW[] = {'[','o','b','j','e','c','t',' ','E','r','r','o','r',']',0};
 
     TRACE("\n");
 
-    error = error_this(jsthis);
-    if(ctx->version < 2 || !error) {
+    jsthis = get_jsdisp(vthis);
+    if(!jsthis || ctx->version < 2) {
         if(retv) {
             V_VT(retv) = VT_BSTR;
-            V_BSTR(retv) = SysAllocString(str);
+            V_BSTR(retv) = SysAllocString(object_errorW);
             if(!V_BSTR(retv))
                 return E_OUTOFMEMORY;
         }
         return S_OK;
     }
 
-    hres = jsdisp_propget_name(&error->dispex, nameW, &v, ei, caller);
+    hres = jsdisp_propget_name(jsthis, nameW, &v, ei, caller);
     if(FAILED(hres))
         return hres;
 
-    hres = to_string(ctx, &v, ei, &name);
-    VariantClear(&v);
-    if(FAILED(hres))
-        return hres;
+    if(V_VT(&v) != VT_EMPTY) {
+        hres = to_string(ctx, &v, ei, &name);
+        VariantClear(&v);
+        if(FAILED(hres))
+            return hres;
+        if(!*name) {
+            SysFreeString(name);
+            name = NULL;
+        }
+    }
 
-    if(V_VT(&error->message) != VT_EMPTY) {
-        hres = to_string(ctx, &error->message, ei, &msg);
-        if(SUCCEEDED(hres) && !*msg) {
-            SysFreeString(msg);
-            msg = NULL;
+    hres = jsdisp_propget_name(jsthis, messageW, &v, ei, caller);
+    if(SUCCEEDED(hres)) {
+        if(V_VT(&v) != VT_EMPTY) {
+            hres = to_string(ctx, &v, ei, &msg);
+            VariantClear(&v);
+            if(SUCCEEDED(hres) && !*msg) {
+                SysFreeString(msg);
+                msg = NULL;
+            }
         }
     }
 
     if(SUCCEEDED(hres)) {
-        if(msg) {
+        if(name && msg) {
             DWORD name_len, msg_len;
 
             name_len = SysStringLen(name);
@@ -160,9 +97,14 @@ static HRESULT Error_toString(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags,
                 ret[name_len+1] = ' ';
                 memcpy(ret+name_len+2, msg, msg_len*sizeof(WCHAR));
             }
-        }else {
+        }else if(name) {
             ret = name;
             name = NULL;
+        }else if(msg) {
+            ret = msg;
+            msg = NULL;
+        }else {
+            ret = SysAllocString(object_errorW);
         }
     }
 
@@ -199,20 +141,7 @@ static HRESULT Error_value(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags,
     return S_OK;
 }
 
-static void Error_destructor(DispatchEx *dispex)
-{
-    ErrorInstance *This = (ErrorInstance*)dispex;
-
-    VariantClear(&This->number);
-    VariantClear(&This->description);
-    VariantClear(&This->message);
-    heap_free(This);
-}
-
 static const builtin_prop_t Error_props[] = {
-    {descriptionW,              Error_description,                  0},
-    {messageW,                  Error_message,                      0},
-    {numberW,                   Error_number,                       0},
     {toStringW,                 Error_toString,                     PROPF_METHOD}
 };
 
@@ -221,39 +150,33 @@ static const builtin_info_t Error_info = {
     {NULL, Error_value, 0},
     sizeof(Error_props)/sizeof(*Error_props),
     Error_props,
-    Error_destructor,
+    NULL,
     NULL
-};
-
-static const builtin_prop_t ErrorInst_props[] = {
-    {descriptionW,              Error_description,                  0},
-    {messageW,                  Error_message,                      0},
-    {numberW,                   Error_number,                       0},
 };
 
 static const builtin_info_t ErrorInst_info = {
     JSCLASS_ERROR,
     {NULL, Error_value, 0},
-    sizeof(ErrorInst_props)/sizeof(*ErrorInst_props),
-    ErrorInst_props,
-    Error_destructor,
+    0,
+    NULL,
+    NULL,
     NULL
 };
 
-static HRESULT alloc_error(script_ctx_t *ctx, DispatchEx *prototype,
-        DispatchEx *constr, ErrorInstance **ret)
+static HRESULT alloc_error(script_ctx_t *ctx, jsdisp_t *prototype,
+        jsdisp_t *constr, jsdisp_t **ret)
 {
-    ErrorInstance *err;
+    jsdisp_t *err;
     HRESULT hres;
 
-    err = heap_alloc_zero(sizeof(ErrorInstance));
+    err = heap_alloc_zero(sizeof(*err));
     if(!err)
         return E_OUTOFMEMORY;
 
     if(prototype)
-        hres = init_dispex(&err->dispex, ctx, &Error_info, prototype);
+        hres = init_dispex(err, ctx, &Error_info, prototype);
     else
-        hres = init_dispex_from_constr(&err->dispex, ctx, &ErrorInst_info,
+        hres = init_dispex_from_constr(err, ctx, &ErrorInst_info,
             constr ? constr : ctx->error_constr);
     if(FAILED(hres)) {
         heap_free(err);
@@ -264,47 +187,55 @@ static HRESULT alloc_error(script_ctx_t *ctx, DispatchEx *prototype,
     return S_OK;
 }
 
-static HRESULT create_error(script_ctx_t *ctx, DispatchEx *constr,
-        const UINT *number, const WCHAR *msg, DispatchEx **ret)
+static HRESULT create_error(script_ctx_t *ctx, jsdisp_t *constr,
+        UINT number, const WCHAR *msg, jsdisp_t **ret)
 {
-    ErrorInstance *err;
+    jsdisp_t *err;
+    VARIANT v;
     HRESULT hres;
 
     hres = alloc_error(ctx, NULL, constr, &err);
     if(FAILED(hres))
         return hres;
 
-    if(number) {
-        V_VT(&err->number) = VT_I4;
-        V_I4(&err->number) = *number;
+    V_VT(&v) = VT_I4;
+    V_I4(&v) = number;
+    hres = jsdisp_propput_name(err, numberW, &v, NULL/*FIXME*/, NULL/*FIXME*/);
+    if(FAILED(hres)) {
+        jsdisp_release(err);
+        return hres;
     }
 
-    V_VT(&err->message) = VT_BSTR;
-    if(msg) V_BSTR(&err->message) = SysAllocString(msg);
-    else V_BSTR(&err->message) = SysAllocStringLen(NULL, 0);
-
-    VariantCopy(&err->description, &err->message);
-
-    if(!V_BSTR(&err->message)) {
-        heap_free(err);
-        return E_OUTOFMEMORY;
+    V_VT(&v) = VT_BSTR;
+    if(msg) V_BSTR(&v) = SysAllocString(msg);
+    else V_BSTR(&v) = SysAllocStringLen(NULL, 0);
+    if(V_BSTR(&v)) {
+        hres = jsdisp_propput_name(err, messageW, &v, NULL/*FIXME*/, NULL/*FIXME*/);
+        if(SUCCEEDED(hres))
+            hres = jsdisp_propput_name(err, descriptionW, &v, NULL/*FIXME*/, NULL/*FIXME*/);
+        SysFreeString(V_BSTR(&v));
+    }else {
+        hres = E_OUTOFMEMORY;
+    }
+    if(FAILED(hres)) {
+        jsdisp_release(err);
+        return hres;
     }
 
-    *ret = &err->dispex;
+    *ret = err;
     return S_OK;
 }
 
 static HRESULT error_constr(script_ctx_t *ctx, WORD flags, DISPPARAMS *dp,
-        VARIANT *retv, jsexcept_t *ei, DispatchEx *constr) {
-    DispatchEx *err;
-    VARIANT numv;
-    UINT num;
+        VARIANT *retv, jsexcept_t *ei, jsdisp_t *constr) {
+    jsdisp_t *err;
+    UINT num = 0;
     BSTR msg = NULL;
     HRESULT hres;
 
-    V_VT(&numv) = VT_NULL;
-
     if(arg_cnt(dp)) {
+        VARIANT numv;
+
         hres = to_number(ctx, get_arg(dp, 0), ei, &numv);
         if(FAILED(hres) || (V_VT(&numv)==VT_R8 && isnan(V_R8(&numv))))
             hres = to_string(ctx, get_arg(dp, 0), ei, &msg);
@@ -326,19 +257,14 @@ static HRESULT error_constr(script_ctx_t *ctx, WORD flags, DISPPARAMS *dp,
     switch(flags) {
     case INVOKE_FUNC:
     case DISPATCH_CONSTRUCT:
-        if(V_VT(&numv) == VT_NULL)
-            hres = create_error(ctx, constr, NULL, msg, &err);
-        else
-            hres = create_error(ctx, constr, &num, msg, &err);
+        hres = create_error(ctx, constr, num, msg, &err);
         SysFreeString(msg);
 
         if(FAILED(hres))
             return hres;
 
-        if(retv) {
-            V_VT(retv) = VT_DISPATCH;
-            V_DISPATCH(retv) = (IDispatch*)_IDispatchEx_(err);
-        }
+        if(retv)
+            var_set_jsdisp(retv, err);
         else
             jsdisp_release(err);
 
@@ -406,7 +332,7 @@ static HRESULT URIErrorConstr_value(script_ctx_t *ctx, vdisp_t *jsthis, WORD fla
     return error_constr(ctx, flags, dp, retv, ei, ctx->uri_error_constr);
 }
 
-HRESULT init_error_constr(script_ctx_t *ctx, DispatchEx *object_prototype)
+HRESULT init_error_constr(script_ctx_t *ctx, jsdisp_t *object_prototype)
 {
     static const WCHAR ErrorW[] = {'E','r','r','o','r',0};
     static const WCHAR EvalErrorW[] = {'E','v','a','l','E','r','r','o','r',0};
@@ -418,7 +344,7 @@ HRESULT init_error_constr(script_ctx_t *ctx, DispatchEx *object_prototype)
     static const WCHAR URIErrorW[] = {'U','R','I','E','r','r','o','r',0};
     static const WCHAR *names[] = {ErrorW, EvalErrorW, RangeErrorW,
         ReferenceErrorW, RegExpErrorW, SyntaxErrorW, TypeErrorW, URIErrorW};
-    DispatchEx **constr_addr[] = {&ctx->error_constr, &ctx->eval_error_constr,
+    jsdisp_t **constr_addr[] = {&ctx->error_constr, &ctx->eval_error_constr,
         &ctx->range_error_constr, &ctx->reference_error_constr, &ctx->regexp_error_constr,
         &ctx->syntax_error_constr, &ctx->type_error_constr,
         &ctx->uri_error_constr};
@@ -426,7 +352,7 @@ HRESULT init_error_constr(script_ctx_t *ctx, DispatchEx *object_prototype)
         RangeErrorConstr_value, ReferenceErrorConstr_value, RegExpErrorConstr_value,
         SyntaxErrorConstr_value, TypeErrorConstr_value, URIErrorConstr_value};
 
-    ErrorInstance *err;
+    jsdisp_t *err;
     INT i;
     VARIANT v;
     HRESULT hres;
@@ -439,17 +365,17 @@ HRESULT init_error_constr(script_ctx_t *ctx, DispatchEx *object_prototype)
         V_VT(&v) = VT_BSTR;
         V_BSTR(&v) = SysAllocString(names[i]);
         if(!V_BSTR(&v)) {
-            jsdisp_release(&err->dispex);
+            jsdisp_release(err);
             return E_OUTOFMEMORY;
         }
 
-        hres = jsdisp_propput_name(&err->dispex, nameW, &v, NULL/*FIXME*/, NULL/*FIXME*/);
+        hres = jsdisp_propput_name(err, nameW, &v, NULL/*FIXME*/, NULL/*FIXME*/);
 
         if(SUCCEEDED(hres))
             hres = create_builtin_function(ctx, constr_val[i], names[i], NULL,
-                    PROPF_CONSTR|1, &err->dispex, constr_addr[i]);
+                    PROPF_CONSTR|1, err, constr_addr[i]);
 
-        jsdisp_release(&err->dispex);
+        jsdisp_release(err);
         VariantClear(&v);
         if(FAILED(hres))
             return hres;
@@ -458,10 +384,10 @@ HRESULT init_error_constr(script_ctx_t *ctx, DispatchEx *object_prototype)
     return S_OK;
 }
 
-static HRESULT throw_error(script_ctx_t *ctx, jsexcept_t *ei, UINT id, const WCHAR *str, DispatchEx *constr)
+static HRESULT throw_error(script_ctx_t *ctx, jsexcept_t *ei, UINT id, const WCHAR *str, jsdisp_t *constr)
 {
     WCHAR buf[1024], *pos = NULL;
-    DispatchEx *err;
+    jsdisp_t *err;
     HRESULT hres;
 
     buf[0] = '\0';
@@ -477,16 +403,12 @@ static HRESULT throw_error(script_ctx_t *ctx, jsexcept_t *ei, UINT id, const WCH
     WARN("%s\n", debugstr_w(buf));
 
     id |= JSCRIPT_ERROR;
-    hres = create_error(ctx, constr, &id, buf, &err);
+    hres = create_error(ctx, constr, id, buf, &err);
     if(FAILED(hres))
         return hres;
 
-    if(!ei)
-        return id;
-
-    V_VT(&ei->var) = VT_DISPATCH;
-    V_DISPATCH(&ei->var) = (IDispatch*)_IDispatchEx_(err);
-
+    if(ei)
+        var_set_jsdisp(&ei->var, err);
     return id;
 }
 

@@ -118,15 +118,16 @@ WINE_DEFAULT_DEBUG_CHANNEL(typelib2);
 /*================== Implementation Structures ===================================*/
 
 /* Used for storing cyclic list. Tail address is kept */
-enum tagCyclicListElementType {
+typedef enum tagCyclicListElementType {
+    CyclicListSentinel,
     CyclicListFunc,
     CyclicListVar
-};
+} CyclicListElementType;
 typedef struct tagCyclicList {
     struct tagCyclicList *next;
     int indice;
     int name;
-    enum tagCyclicListElementType type;
+    CyclicListElementType type;
 
     union {
         int val;
@@ -218,8 +219,26 @@ static inline ICreateTypeInfo2Impl *impl_from_ITypeInfo2( ITypeInfo2 *iface )
 
 static ULONG WINAPI ICreateTypeLib2_fnRelease(ICreateTypeLib2 *iface);
 
+static CyclicList *alloc_cyclic_list_item(CyclicListElementType type)
+{
+    CyclicList *ret = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(CyclicList));
+    if (!ret)
+        return NULL;
+    ret->type = type;
+    return ret;
+}
 
 /*================== Internal functions ===================================*/
+
+static inline UINT cti2_get_var_count(const MSFT_TypeInfoBase *typeinfo)
+{
+    return typeinfo->cElement >> 16;
+}
+
+static inline UINT cti2_get_func_count(const MSFT_TypeInfoBase *typeinfo)
+{
+    return typeinfo->cElement & 0xFFFF;
+}
 
 /****************************************************************************
  *	ctl2_init_header
@@ -317,7 +336,7 @@ static int ctl2_find_guid(
     while (offset != -1) {
 	guidentry = (MSFT_GuidEntry *)&This->typelib_segment_data[MSFT_SEG_GUID][offset];
 
-	if (!memcmp(guidentry, guid, sizeof(GUID))) return offset;
+        if (IsEqualGUID(guidentry, guid)) return offset;
 
 	offset = guidentry->next_hash;
     }
@@ -921,6 +940,84 @@ static HRESULT ctl2_encode_variant(
     }
 }
 
+static int ctl2_find_custdata(
+    ICreateTypeLib2Impl *This,
+    REFGUID guid,
+    int offset)
+{
+    while (offset != -1) {
+        MSFT_CDGuid *cdentry =
+            (MSFT_CDGuid *)&This->typelib_segment_data[MSFT_SEG_CUSTDATAGUID][offset];
+        MSFT_GuidEntry *guidentry =
+            (MSFT_GuidEntry *)&This->typelib_segment_data[MSFT_SEG_GUID][cdentry->GuidOffset];
+
+        if (IsEqualGUID(guidentry, guid))
+            return offset;
+
+        offset = cdentry->next;
+    }
+
+    return -1;
+}
+
+/****************************************************************************
+ *      ctl2_decode_variant
+ *
+ *  Decodes a variant
+ *
+ * RETURNS
+ *
+ *  Success: S_OK
+ *  Failure: Error code from winerror.h
+ */
+static HRESULT ctl2_decode_variant(
+        ICreateTypeLib2Impl *This, /* [I] The typelib that contains the variant */
+        int data_offs,             /* [I] Offset within the data array, or the encoded value itself */
+        VARIANT *value)            /* [O] Decoded value */
+{
+    char *encoded_data;
+    VARTYPE type;
+
+    if (data_offs & 0x80000000) {
+        /* data_offs contains the encoded value */
+        V_VT(value) = (data_offs & ~0x80000000) >> 26;
+        V_UI4(value) = data_offs & ~0xFF000000;
+        return S_OK;
+    }
+
+    encoded_data = &This->typelib_segment_data[MSFT_SEG_CUSTDATA][data_offs];
+    type = *encoded_data;
+
+    switch(type) {
+    case VT_I4:
+    case VT_R4:
+    case VT_UI4:
+    case VT_INT:
+    case VT_UINT:
+    case VT_HRESULT:
+    case VT_PTR: {
+        V_VT(value) = type;
+        V_UI4(value) = *(unsigned*)(encoded_data + 2);
+        return S_OK;
+    }
+    case VT_BSTR: {
+        unsigned len, i;
+
+        len = *(unsigned*)(encoded_data + 2);
+
+        V_VT(value) = type;
+        V_BSTR(value) = SysAllocStringByteLen(NULL, len * sizeof(OLECHAR));
+        for (i = 0; i < len; ++i)
+            V_BSTR(value)[i] = *(encoded_data + 6 + i);
+
+        return S_OK;
+    }
+    default:
+        FIXME("Don't yet have decoder for this VARTYPE: %u\n", type);
+        return E_NOTIMPL;
+    }
+}
+
 /****************************************************************************
  *	ctl2_set_custdata
  *
@@ -943,6 +1040,7 @@ static HRESULT ctl2_set_custdata(
     int guidoffset;
     int custoffset;
     int *custdata;
+    BOOL new_segment = FALSE;
 
     switch(V_VT(pVarVal))
     {
@@ -971,14 +1069,21 @@ static HRESULT ctl2_set_custdata(
     if (status)
 	return status;
 
-    custoffset = ctl2_alloc_segment(This, MSFT_SEG_CUSTDATAGUID, 12, 0);
-    if (custoffset == -1) return E_OUTOFMEMORY;
+    custoffset = ctl2_find_custdata(This, guid, *offset);
+    if (custoffset == -1) {
+        custoffset = ctl2_alloc_segment(This, MSFT_SEG_CUSTDATAGUID, 12, 0);
+        if (custoffset == -1)
+            return E_OUTOFMEMORY;
+        new_segment = TRUE;
+    }
 
     custdata = (int *)&This->typelib_segment_data[MSFT_SEG_CUSTDATAGUID][custoffset];
     custdata[0] = guidoffset;
     custdata[1] = dataoffset;
-    custdata[2] = *offset;
-    *offset = custoffset;
+    if (new_segment) {
+        custdata[2] = *offset;
+        *offset = custoffset;
+    }
 
     return S_OK;
 }
@@ -1109,7 +1214,7 @@ static int ctl2_encode_typedesc(
 			mix_field = typedata[0]>>16;
 			break;
 		    default:
-			mix_field = 0x7fff;
+			mix_field = ((typedata[0] >> 16) == 0x7fff) ? 0x7fff : 0x7ffe;
 			break;
 		}
 	    }
@@ -1212,6 +1317,83 @@ static int ctl2_encode_typedesc(
     }
 
     return 0;
+}
+
+/****************************************************************************
+ *	ctl2_decode_typedesc
+ *
+ *  Decodes a type description from an ICreateTypeLib2Impl.
+ *
+ * RETURNS
+ *
+ *  Success: S_OK.
+ *  Failure: HRESULT error code.
+ */
+static HRESULT ctl2_decode_typedesc(
+	ICreateTypeLib2Impl *This, /* [I] The type library from which to decode the TYPEDESC. */
+	int encoded_tdesc,         /* [I] The encoded type description. */
+	TYPEDESC *tdesc)           /* [O] The decoded type description. */
+{
+    int *typedata, i;
+    HRESULT hres;
+
+    if (encoded_tdesc & 0x80000000) {
+        tdesc->vt = encoded_tdesc & VT_TYPEMASK;
+        tdesc->u.lptdesc = NULL;
+        return S_OK;
+    }
+
+    typedata = (void *)&This->typelib_segment_data[MSFT_SEG_TYPEDESC][encoded_tdesc];
+
+    tdesc->vt = typedata[0] & 0xFFFF;
+
+    switch(tdesc->vt) {
+    case VT_PTR:
+    case VT_SAFEARRAY:
+        tdesc->u.lptdesc = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(TYPEDESC));
+        if (!tdesc->u.lptdesc)
+            return E_OUTOFMEMORY;
+
+        hres = ctl2_decode_typedesc(This, typedata[1], tdesc->u.lptdesc);
+        if (FAILED(hres)) {
+            HeapFree(GetProcessHeap(), 0, tdesc->u.lptdesc);
+            return hres;
+        }
+
+        return S_OK;
+
+    case VT_CARRAY: {
+        int arrayoffset, *arraydata, num_dims;
+
+        arrayoffset = typedata[1];
+        arraydata = (void *)&This->typelib_segment_data[MSFT_SEG_ARRAYDESC][arrayoffset];
+        num_dims = arraydata[1] & 0xFFFF;
+
+        tdesc->u.lpadesc = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY,
+                sizeof(ARRAYDESC) + sizeof(SAFEARRAYBOUND) * (num_dims - 1));
+        if (!tdesc->u.lpadesc)
+            return E_OUTOFMEMORY;
+
+        hres = ctl2_decode_typedesc(This, arraydata[0], &tdesc->u.lpadesc->tdescElem);
+        if (FAILED(hres)) {
+            HeapFree(GetProcessHeap(), 0, tdesc->u.lpadesc);
+            return E_OUTOFMEMORY;
+        }
+
+        for (i = 0; i < num_dims; ++i) {
+            tdesc->u.lpadesc->rgbounds[i].cElements = arraydata[2 + i * 2];
+            tdesc->u.lpadesc->rgbounds[i].lLbound = arraydata[3 + i * 2];
+        }
+
+        return S_OK;
+    }
+    case VT_USERDEFINED:
+        tdesc->u.hreftype = typedata[1];
+        return S_OK;
+    default:
+        FIXME("unable to decode typedesc (%08x): unknown VT: %d\n", encoded_tdesc, tdesc->vt);
+        return E_NOTIMPL;
+    }
 }
 
 /****************************************************************************
@@ -1695,7 +1877,7 @@ static HRESULT WINAPI ICreateTypeInfo2_fnAddRefTypeInfo(
         impinfo.oGuid = guid_offset;
         *phRefType = ctl2_alloc_importinfo(This->typelib, &impinfo)+1;
 
-        if(!memcmp(&guid.guid, &IID_IDispatch, sizeof(GUID)))
+        if(IsEqualGUID(&guid.guid, &IID_IDispatch))
             This->typelib->typelib_header.dispatchpos = *phRefType;
     }
 
@@ -1749,7 +1931,7 @@ static HRESULT WINAPI ICreateTypeInfo2_fnAddFuncDesc(
             return TYPE_E_BADMODULEKIND;
     }
 
-    if(This->typeinfo->cElement<index)
+    if(cti2_get_func_count(This->typeinfo) < index)
         return TYPE_E_ELEMENTNOTFOUND;
 
     if((pFuncDesc->invkind&(INVOKE_PROPERTYPUT|INVOKE_PROPERTYPUTREF)) &&
@@ -1765,19 +1947,18 @@ static HRESULT WINAPI ICreateTypeInfo2_fnAddFuncDesc(
     }
 
     if (!This->typedata) {
-        This->typedata = HeapAlloc(GetProcessHeap(), 0, sizeof(CyclicList));
+        This->typedata = alloc_cyclic_list_item(CyclicListSentinel);
         if(!This->typedata)
             return E_OUTOFMEMORY;
 
         This->typedata->next = This->typedata;
-        This->typedata->u.val = 0;
 
         if(This->dual)
             This->dual->typedata = This->typedata;
     }
 
     /* allocate type data space for us */
-    insert = HeapAlloc(GetProcessHeap(), 0, sizeof(CyclicList));
+    insert = alloc_cyclic_list_item(CyclicListFunc);
     if(!insert)
         return E_OUTOFMEMORY;
     insert->u.data = HeapAlloc(GetProcessHeap(), 0, sizeof(int[6])+sizeof(int[(num_defaults?4:3)])*pFuncDesc->cParams);
@@ -1833,10 +2014,9 @@ static HRESULT WINAPI ICreateTypeInfo2_fnAddFuncDesc(
     /* update the index data */
     insert->indice = pFuncDesc->memid;
     insert->name = -1;
-    insert->type = CyclicListFunc;
 
     /* insert type data to list */
-    if(index == This->typeinfo->cElement) {
+    if(index == cti2_get_func_count(This->typeinfo)) {
         insert->next = This->typedata->next;
         This->typedata->next = insert;
         This->typedata = insert;
@@ -2036,31 +2216,28 @@ static HRESULT WINAPI ICreateTypeInfo2_fnAddVarDesc(
     int var_type_size;
     int alignment;
 
-    TRACE("(%p,%d,%p), stub!\n", iface, index, pVarDesc);
+    TRACE("(%p,%d,%p)\n", iface, index, pVarDesc);
     TRACE("%d, %p, %d, {{%x, %d}, {%p, %x}}, 0x%x, %d\n", pVarDesc->memid, pVarDesc->lpstrSchema, pVarDesc->u.oInst,
 	  pVarDesc->elemdescVar.tdesc.u.hreftype, pVarDesc->elemdescVar.tdesc.vt,
 	  pVarDesc->elemdescVar.u.paramdesc.pparamdescex, pVarDesc->elemdescVar.u.paramdesc.wParamFlags,
 	  pVarDesc->wVarFlags, pVarDesc->varkind);
 
-    if ((This->typeinfo->cElement >> 16) != index) {
-	TRACE("Out-of-order element.\n");
+    if (cti2_get_var_count(This->typeinfo) != index)
 	return TYPE_E_ELEMENTNOTFOUND;
-    }
 
     if (!This->typedata) {
-        This->typedata = HeapAlloc(GetProcessHeap(), 0, sizeof(CyclicList));
+        This->typedata = alloc_cyclic_list_item(CyclicListSentinel);
         if(!This->typedata)
             return E_OUTOFMEMORY;
 
         This->typedata->next = This->typedata;
-        This->typedata->u.val = 0;
 
         if(This->dual)
             This->dual->typedata = This->typedata;
     }
 
     /* allocate type data space for us */
-    insert = HeapAlloc(GetProcessHeap(), 0, sizeof(CyclicList));
+    insert = alloc_cyclic_list_item(CyclicListVar);
     if(!insert)
         return E_OUTOFMEMORY;
     insert->u.data = HeapAlloc(GetProcessHeap(), 0, sizeof(int[5]));
@@ -2087,7 +2264,6 @@ static HRESULT WINAPI ICreateTypeInfo2_fnAddVarDesc(
     /* update the index data */
     insert->indice = 0x40000000 + index;
     insert->name = -1;
-    insert->type = CyclicListVar;
 
     /* figure out type widths and whatnot */
     ctl2_encode_typedesc(This->typelib, &pVarDesc->elemdescVar.tdesc,
@@ -2150,20 +2326,20 @@ static HRESULT WINAPI ICreateTypeInfo2_fnAddVarDesc(
 static HRESULT WINAPI ICreateTypeInfo2_fnSetFuncAndParamNames(
         ICreateTypeInfo2* iface,
         UINT index,
-        LPOLESTR* rgszNames,
+        LPOLESTR* names,
         UINT cNames)
 {
     ICreateTypeInfo2Impl *This = (ICreateTypeInfo2Impl *)iface;
-    CyclicList *iter = NULL, *iter2;
-    int offset, len, i=0;
+    CyclicList *iter, *iter2;
+    int offset, len, i;
     char *namedata;
 
-    TRACE("(%p %d %p %d)\n", iface, index, rgszNames, cNames);
+    TRACE("(%p %d %p %d)\n", This, index, names, cNames);
 
-    if(!rgszNames)
+    if(!names)
         return E_INVALIDARG;
 
-    if(index >= (This->typeinfo->cElement&0xFFFF) || !cNames)
+    if(index >= cti2_get_func_count(This->typeinfo) || cNames == 0)
         return TYPE_E_ELEMENTNOTFOUND;
 
     for(iter=This->typedata->next->next, i=0; /* empty */; iter=iter->next)
@@ -2175,7 +2351,7 @@ static HRESULT WINAPI ICreateTypeInfo2_fnSetFuncAndParamNames(
     if(cNames != iter->u.data[5] + ((iter->u.data[4]>>3)&(INVOKE_PROPERTYPUT|INVOKE_PROPERTYPUTREF) ? 0 : 1))
         return TYPE_E_ELEMENTNOTFOUND;
 
-    len = ctl2_encode_name(This->typelib, rgszNames[0], &namedata);
+    len = ctl2_encode_name(This->typelib, names[0], &namedata);
     for(iter2=This->typedata->next->next; iter2!=This->typedata->next; iter2=iter2->next) {
         if(iter2->name!=-1 && !memcmp(namedata,
                     This->typelib->typelib_segment_data[MSFT_SEG_NAME]+iter2->name+8, len)) {
@@ -2192,7 +2368,7 @@ static HRESULT WINAPI ICreateTypeInfo2_fnSetFuncAndParamNames(
         }
     }
 
-    offset = ctl2_alloc_name(This->typelib, rgszNames[0]);
+    offset = ctl2_alloc_name(This->typelib, names[0]);
     if(offset == -1)
         return E_OUTOFMEMORY;
 
@@ -2202,10 +2378,10 @@ static HRESULT WINAPI ICreateTypeInfo2_fnSetFuncAndParamNames(
     if (*((INT*)namedata) == -1)
 	    *((INT *)namedata) = This->typelib->typelib_typeinfo_offsets[This->typeinfo->typekind >> 16];
 
-    len = iter->u.data[0]/4 - iter->u.data[5]*3;
+    len = (iter->u.data[0]&0xFFFF)/4 - iter->u.data[5]*3;
 
     for (i = 1; i < cNames; i++) {
-	offset = ctl2_alloc_name(This->typelib, rgszNames[i]);
+	offset = ctl2_alloc_name(This->typelib, names[i]);
 	iter->u.data[len + ((i-1)*3) + 1] = offset;
     }
 
@@ -2227,12 +2403,10 @@ static HRESULT WINAPI ICreateTypeInfo2_fnSetVarName(
     int offset, i;
     char *namedata;
 
-    TRACE("(%p,%d,%s), stub!\n", iface, index, debugstr_w(szName));
+    TRACE("(%p,%d,%s)\n", This, index, debugstr_w(szName));
 
-    if ((This->typeinfo->cElement >> 16) <= index) {
-	TRACE("Out-of-order element.\n");
+    if (cti2_get_var_count(This->typeinfo) <= index)
 	return TYPE_E_ELEMENTNOTFOUND;
-    }
 
     offset = ctl2_alloc_name(This->typelib, szName);
     if (offset == -1) return E_OUTOFMEMORY;
@@ -2348,10 +2522,10 @@ static HRESULT WINAPI ICreateTypeInfo2_fnSetFuncHelpContext(
 
     TRACE("(%p,%d,%d)\n", iface, index, dwHelpContext);
 
-    if(This->typeinfo->cElement<index)
+    if(cti2_get_func_count(This->typeinfo) < index)
         return TYPE_E_ELEMENTNOTFOUND;
 
-    if(This->typeinfo->cElement == index && This->typedata->type == CyclicListFunc)
+    if(cti2_get_func_count(This->typeinfo) == index && This->typedata->type == CyclicListFunc)
         func = This->typedata;
     else
         for(func=This->typedata->next->next; func!=This->typedata; func=func->next)
@@ -2375,10 +2549,27 @@ static HRESULT WINAPI ICreateTypeInfo2_fnSetFuncHelpContext(
 static HRESULT WINAPI ICreateTypeInfo2_fnSetVarHelpContext(
         ICreateTypeInfo2* iface,
         UINT index,
-        DWORD dwHelpContext)
+        DWORD context)
 {
-    FIXME("(%p,%d,%d), stub!\n", iface, index, dwHelpContext);
-    return E_OUTOFMEMORY;
+    ICreateTypeInfo2Impl *This = (ICreateTypeInfo2Impl *)iface;
+    CyclicList *iter;
+
+    TRACE("(%p,%d,%d)\n", This, index, context);
+
+    if (cti2_get_var_count(This->typeinfo) <= index)
+	return TYPE_E_ELEMENTNOTFOUND;
+
+    for (iter = This->typedata->next->next; iter != This->typedata->next; iter = iter->next)
+       if (iter->type == CyclicListVar)
+       {
+           if (index-- == 0)
+           {
+               iter->u.data[5] = context;
+               return S_OK;
+           }
+       }
+
+    return TYPE_E_ELEMENTNOTFOUND;
 }
 
 /******************************************************************************
@@ -2469,7 +2660,7 @@ static HRESULT WINAPI ICreateTypeInfo2_fnLayOut(
                 return hres;
             }
 
-            if(!memcmp(&typeattr->guid, &IID_IDispatch, sizeof(IDispatch)))
+            if(IsEqualGUID(&typeattr->guid, &IID_IDispatch))
                 This->typeinfo->flags |= TYPEFLAG_FDISPATCHABLE;
 
             This->typeinfo->datatype2 += (typeattr->cFuncs<<16) + 1;
@@ -2526,7 +2717,7 @@ static HRESULT WINAPI ICreateTypeInfo2_fnLayOut(
     if(!This->typedata)
         return S_OK;
 
-    typedata = HeapAlloc(GetProcessHeap(), 0, sizeof(CyclicList*)*(This->typeinfo->cElement&0xffff));
+    typedata = HeapAlloc(GetProcessHeap(), 0, sizeof(CyclicList*)*cti2_get_func_count(This->typeinfo));
     if(!typedata)
         return E_OUTOFMEMORY;
 
@@ -2547,13 +2738,13 @@ static HRESULT WINAPI ICreateTypeInfo2_fnLayOut(
             for(iter2=This->typedata->next->next; iter2!=This->typedata->next; iter2=iter2->next) {
                 if(iter == iter2) continue;
                 if(iter2->indice == iter->indice) {
-                    iter->indice = 0x5fffffff + This->typeinfo->cElement + i + (This->typeinfo->datatype2<<16);
+                    iter->indice = 0x60000000 + This->typeinfo->cElement + (This->typeinfo->datatype2<<16);
 
                     for(iter2=This->typedata->next->next; iter2!=This->typedata->next; iter2=iter2->next) {
                         if(iter == iter2) continue;
                         if(iter2->indice == iter->indice) {
-                            HeapFree(GetProcessHeap(), 0, typedata);
-                            return E_ACCESSDENIED;
+                            ++iter->indice;
+                            iter2 = This->typedata->next;
                         }
                     }
 
@@ -2608,7 +2799,7 @@ static HRESULT WINAPI ICreateTypeInfo2_fnLayOut(
     if(user_vft)
         This->typeinfo->cbSizeVft = user_vft+3;
 
-    for(i=0; i<(This->typeinfo->cElement&0xffff); i++) {
+    for(i=0; i< cti2_get_func_count(This->typeinfo); i++) {
         if(typedata[i]->u.data[4]>>16 > i) {
             int inv;
 
@@ -2777,7 +2968,7 @@ static HRESULT WINAPI ICreateTypeInfo2_fnSetFuncCustData(
 
     TRACE("(%p,%d,%s,%p)\n", iface, index, debugstr_guid(guid), pVarVal);
 
-    if(index >= (This->typeinfo->cElement&0xFFFF))
+    if(index >= cti2_get_func_count(This->typeinfo))
         return TYPE_E_ELEMENTNOTFOUND;
 
     for(iter=This->typedata->next->next; /* empty */; iter=iter->next)
@@ -3013,16 +3204,16 @@ static HRESULT WINAPI ITypeInfo2_fnGetTypeAttr(
     (*ppTypeAttr)->lcid = This->typelib->typelib_header.lcid;
     (*ppTypeAttr)->cbSizeInstance = This->typeinfo->size;
     (*ppTypeAttr)->typekind = This->typekind;
-    (*ppTypeAttr)->cFuncs = This->typeinfo->cElement&0xffff;
+    (*ppTypeAttr)->cFuncs = cti2_get_func_count(This->typeinfo);
     if(This->typeinfo->flags&TYPEFLAG_FDUAL && This->typekind==TKIND_DISPATCH)
         (*ppTypeAttr)->cFuncs += 7;
-    (*ppTypeAttr)->cVars = This->typeinfo->cElement>>16;
+    (*ppTypeAttr)->cVars = cti2_get_var_count(This->typeinfo);
     (*ppTypeAttr)->cImplTypes = This->typeinfo->cImplTypes;
     (*ppTypeAttr)->cbSizeVft = This->typekind==TKIND_DISPATCH ? 7 * sizeof(void*) : This->typeinfo->cbSizeVft;
     (*ppTypeAttr)->cbAlignment = (This->typeinfo->typekind>>11) & 0x1f;
     (*ppTypeAttr)->wTypeFlags = This->typeinfo->flags;
-    (*ppTypeAttr)->wMajorVerNum = This->typeinfo->version&0xffff;
-    (*ppTypeAttr)->wMinorVerNum = This->typeinfo->version>>16;
+    (*ppTypeAttr)->wMajorVerNum = LOWORD(This->typeinfo->version);
+    (*ppTypeAttr)->wMinorVerNum = HIWORD(This->typeinfo->version);
 
     if((*ppTypeAttr)->typekind == TKIND_ALIAS)
         FIXME("TKIND_ALIAS handling not implemented\n");
@@ -3053,8 +3244,101 @@ static HRESULT WINAPI ITypeInfo2_fnGetFuncDesc(
         UINT index,
         FUNCDESC** ppFuncDesc)
 {
-    FIXME("(%p,%d,%p), stub!\n", iface, index, ppFuncDesc);
-    return E_OUTOFMEMORY;
+    ICreateTypeInfo2Impl *This = impl_from_ITypeInfo2(iface);
+    int i, *typedata, num_defaults = 0, hdr_len, tail, has_defaults;
+    CyclicList *desc;
+    HRESULT hres;
+
+    TRACE("(%p,%d,%p), semi-stub\n", iface, index, ppFuncDesc);
+
+    if (!ppFuncDesc)
+        return E_INVALIDARG;
+
+    if (index >= cti2_get_func_count(This->typeinfo))
+        return TYPE_E_ELEMENTNOTFOUND;
+
+    hres = ICreateTypeInfo2_LayOut((ICreateTypeInfo2*)This);
+    if (FAILED(hres))
+        return hres;
+
+    desc = This->typedata->next;
+    for (i = index; i >= 0; ) {
+        desc = desc->next;
+        if (desc->type == CyclicListFunc)
+            --i;
+    }
+
+    typedata = desc->u.data;
+
+    *ppFuncDesc = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(FUNCDESC));
+    if (!*ppFuncDesc)
+        return E_OUTOFMEMORY;
+
+    (*ppFuncDesc)->memid = desc->indice;
+    (*ppFuncDesc)->lprgscode = NULL; /* FIXME: Unimplemented */
+    (*ppFuncDesc)->funckind = typedata[4] & 0x7;
+    (*ppFuncDesc)->invkind = (typedata[4] >> 3) & 0xF;
+    (*ppFuncDesc)->callconv = (typedata[4] >> 8) & 0xF;
+    (*ppFuncDesc)->cParams = typedata[5];
+    (*ppFuncDesc)->cParamsOpt = 0; /* FIXME: Unimplemented*/
+    (*ppFuncDesc)->oVft = typedata[3] & 0xFFFF;
+    if ((*ppFuncDesc)->oVft)
+        --(*ppFuncDesc)->oVft;
+    (*ppFuncDesc)->cScodes = 0; /* FIXME: Unimplemented*/
+    hres = ctl2_decode_typedesc(This->typelib, typedata[1],
+            &(*ppFuncDesc)->elemdescFunc.tdesc);
+    if (FAILED(hres)) {
+        HeapFree(GetProcessHeap(), 0, *ppFuncDesc);
+        return hres;
+    }
+    (*ppFuncDesc)->wFuncFlags = typedata[2];
+
+    has_defaults = typedata[4] & 0x1000;
+    tail = typedata[5] * (has_defaults ? 16 : 12);
+    hdr_len = ((typedata[0] & 0xFFFF) - tail) / sizeof(int);
+
+    if ((*ppFuncDesc)->cParams > 0) {
+        (*ppFuncDesc)->lprgelemdescParam = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, (*ppFuncDesc)->cParams * sizeof(ELEMDESC));
+        if (!(*ppFuncDesc)->lprgelemdescParam) {
+            HeapFree(GetProcessHeap(), 0, *ppFuncDesc);
+            return E_OUTOFMEMORY;
+        }
+        if (has_defaults) {
+            num_defaults = (*ppFuncDesc)->cParams;
+
+            for (i = 0; i < num_defaults; ++i) {
+                if (typedata[hdr_len + i] != 0xFFFFFFFF) {
+                    (*ppFuncDesc)->lprgelemdescParam[i].u.paramdesc.wParamFlags |= PARAMFLAG_FHASDEFAULT;
+
+                    (*ppFuncDesc)->lprgelemdescParam[i].u.paramdesc.pparamdescex = HeapAlloc(GetProcessHeap(), 0, sizeof(PARAMDESCEX));
+                    if (!(*ppFuncDesc)->lprgelemdescParam[i].u.paramdesc.pparamdescex) {
+                        ITypeInfo2_ReleaseFuncDesc(iface, *ppFuncDesc);
+                        return E_OUTOFMEMORY;
+                    }
+
+                    (*ppFuncDesc)->lprgelemdescParam[i].u.paramdesc.pparamdescex->cBytes = sizeof(PARAMDESCEX);
+                    hres = ctl2_decode_variant(This->typelib, typedata[hdr_len + i],
+                            &(*ppFuncDesc)->lprgelemdescParam[i].u.paramdesc.pparamdescex->varDefaultValue);
+                    if (FAILED(hres)) {
+                        ITypeInfo2_ReleaseFuncDesc(iface, *ppFuncDesc);
+                        return hres;
+                    }
+                }
+            }
+        }
+
+        for (i = 0; i < (*ppFuncDesc)->cParams; ++i) {
+            hres = ctl2_decode_typedesc(This->typelib, typedata[hdr_len + num_defaults + (i * 3)],
+                    &((*ppFuncDesc)->lprgelemdescParam + i)->tdesc);
+            if (FAILED(hres)) {
+                ITypeInfo2_ReleaseFuncDesc(iface, *ppFuncDesc);
+                return hres;
+            }
+            (*ppFuncDesc)->lprgelemdescParam[i].u.paramdesc.wParamFlags = typedata[hdr_len + num_defaults + (i * 3) + 2];
+        }
+    }
+
+    return S_OK;
 }
 
 /******************************************************************************
@@ -3236,7 +3520,7 @@ static HRESULT WINAPI ITypeInfo2_fnGetDocumentation(
                 if (iter->indice == memid) {
                     if (iter->type == CyclicListFunc) {
                         const int *typedata = iter->u.data;
-                        int   size = typedata[0] - typedata[5]*(typedata[4]&0x1000?16:12);
+                        int   size = (typedata[0]&0xFFFF) - typedata[5]*(typedata[4]&0x1000?16:12);
 
                         nameoffset = iter->name;
                         /* FIXME implement this once SetFuncDocString is implemented */
@@ -3449,6 +3733,19 @@ static HRESULT WINAPI ITypeInfo2_fnGetContainingTypeLib(
     return S_OK;
 }
 
+static void release_typedesc(TYPEDESC *tdesc)
+{
+    while (tdesc) {
+        TYPEDESC *next;
+        if (tdesc->vt == VT_USERDEFINED)
+            next = NULL;
+        else
+            next = tdesc->u.lptdesc;
+        HeapFree(GetProcessHeap(), 0, tdesc);
+        tdesc = next;
+    }
+}
+
 /******************************************************************************
  * ITypeInfo2_ReleaseTypeAttr {OLEAUT32}
  *
@@ -3459,6 +3756,9 @@ static void WINAPI ITypeInfo2_fnReleaseTypeAttr(
         TYPEATTR* pTypeAttr)
 {
     TRACE("(%p,%p)\n", iface, pTypeAttr);
+
+    if (pTypeAttr->tdescAlias.vt != VT_USERDEFINED)
+        release_typedesc(pTypeAttr->tdescAlias.u.lptdesc);
 
     HeapFree(GetProcessHeap(), 0, pTypeAttr);
 }
@@ -3472,7 +3772,28 @@ static void WINAPI ITypeInfo2_fnReleaseFuncDesc(
         ITypeInfo2* iface,
         FUNCDESC* pFuncDesc)
 {
-    FIXME("(%p,%p), stub!\n", iface, pFuncDesc);
+    int i;
+
+    TRACE("(%p,%p)\n", iface, pFuncDesc);
+
+    HeapFree(GetProcessHeap(), 0, pFuncDesc->lprgscode);
+
+    if (pFuncDesc->lprgelemdescParam) {
+        for (i = 0; i < pFuncDesc->cParams; ++i) {
+            if (pFuncDesc->lprgelemdescParam[i].tdesc.vt != VT_USERDEFINED)
+                release_typedesc(pFuncDesc->lprgelemdescParam[i].tdesc.u.lptdesc);
+
+            HeapFree(GetProcessHeap(), 0, pFuncDesc->lprgelemdescParam[i].u.paramdesc.pparamdescex);
+        }
+        HeapFree(GetProcessHeap(), 0, pFuncDesc->lprgelemdescParam);
+    }
+
+    HeapFree(GetProcessHeap(), 0, pFuncDesc->elemdescFunc.u.paramdesc.pparamdescex);
+
+    if (pFuncDesc->elemdescFunc.tdesc.vt != VT_USERDEFINED)
+        release_typedesc(pFuncDesc->elemdescFunc.tdesc.u.lptdesc);
+
+    HeapFree(GetProcessHeap(), 0, pFuncDesc);
 }
 
 /******************************************************************************
@@ -3577,8 +3898,23 @@ static HRESULT WINAPI ITypeInfo2_fnGetCustData(
         REFGUID guid,      /* [I] The GUID under which the custom data is stored. */
         VARIANT* pVarVal)  /* [O] The custom data. */
 {
-    FIXME("(%p,%s,%p), stub!\n", iface, debugstr_guid(guid), pVarVal);
-    return E_OUTOFMEMORY;
+    ICreateTypeInfo2Impl *This = impl_from_ITypeInfo2(iface);
+    MSFT_CDGuid *cdentry;
+    int offset;
+
+    TRACE("(%p,%s,%p)\n", iface, debugstr_guid(guid), pVarVal);
+
+    if (!guid || !pVarVal)
+        return E_INVALIDARG;
+
+    VariantClear(pVarVal);
+
+    offset = ctl2_find_custdata(This->typelib, guid, This->typeinfo->oCustData);
+    if (offset == -1)
+        return S_OK;
+
+    cdentry = (MSFT_CDGuid *)&This->typelib->typelib_segment_data[MSFT_SEG_CUSTDATAGUID][offset];
+    return ctl2_decode_variant(This->typelib, cdentry->DataOffset, pVarVal);
 }
 
 /******************************************************************************
@@ -4059,20 +4395,21 @@ static HRESULT WINAPI ICreateTypeLib2_fnCreateTypeInfo(
 	ICreateTypeLib2 * iface,
 	LPOLESTR szName,
 	TYPEKIND tkind,
-	ICreateTypeInfo **ppCTInfo)
+	ICreateTypeInfo **tinfo)
 {
     ICreateTypeLib2Impl *This = (ICreateTypeLib2Impl *)iface;
     char *name;
 
-    TRACE("(%p,%s,%d,%p)\n", iface, debugstr_w(szName), tkind, ppCTInfo);
+    TRACE("(%p,%s,%d,%p)\n", iface, debugstr_w(szName), tkind, tinfo);
+
+    if (!szName || !tinfo) return E_INVALIDARG;
 
     ctl2_encode_name(This, szName, &name);
     if(ctl2_find_name(This, name) != -1)
         return TYPE_E_NAMECONFLICT;
 
-    *ppCTInfo = (ICreateTypeInfo *)ICreateTypeInfo2_Constructor(This, szName, tkind);
-
-    if (!*ppCTInfo) return E_OUTOFMEMORY;
+    *tinfo = (ICreateTypeInfo *)ICreateTypeInfo2_Constructor(This, szName, tkind);
+    if (!*tinfo) return E_OUTOFMEMORY;
 
     return S_OK;
 }
@@ -4268,8 +4605,8 @@ static HRESULT ctl2_finalize_typeinfos(ICreateTypeLib2Impl *This, int filesize)
 
 	if (typeinfo->typedata)
 	    filesize += typeinfo->typedata->next->u.val
-                + ((typeinfo->typeinfo->cElement >> 16) * 12)
-                + ((typeinfo->typeinfo->cElement & 0xffff) * 12) + 4;
+                + cti2_get_var_count(typeinfo->typeinfo) * 12
+                + cti2_get_func_count(typeinfo->typeinfo) * 12 + 4;
     }
 
     return S_OK;
@@ -4549,6 +4886,8 @@ static HRESULT WINAPI ITypeLib2_fnGetTypeInfo(
 
     TRACE("(%p,%d,%p)\n", iface, index, ppTInfo);
 
+    if (!ppTInfo) return E_INVALIDARG;
+
     if (index >= This->typelib_header.nrtypeinfos) {
 	return TYPE_E_ELEMENTNOTFOUND;
     }
@@ -4564,17 +4903,19 @@ static HRESULT WINAPI ITypeLib2_fnGetTypeInfo(
 static HRESULT WINAPI ITypeLib2_fnGetTypeInfoType(
         ITypeLib2 * iface,
         UINT index,
-        TYPEKIND* pTKind)
+        TYPEKIND* kind)
 {
     ICreateTypeLib2Impl *This = impl_from_ITypeLib2(iface);
 
-    TRACE("(%p,%d,%p)\n", iface, index, pTKind);
+    TRACE("(%p,%d,%p)\n", iface, index, kind);
+
+    if (!kind) return E_INVALIDARG;
 
     if (index >= This->typelib_header.nrtypeinfos) {
 	return TYPE_E_ELEMENTNOTFOUND;
     }
 
-    *pTKind = (This->typelib_segment_data[MSFT_SEG_TYPEINFO][This->typelib_typeinfo_offsets[index]]) & 15;
+    *kind = (This->typelib_segment_data[MSFT_SEG_TYPEINFO][This->typelib_typeinfo_offsets[index]]) & 0xF;
 
     return S_OK;
 }

@@ -211,7 +211,6 @@ static RETERR16 VCP_VirtnodeCreate(const VCPFILESPEC *vfsSrc, const VCPFILESPEC 
 {
     HANDLE heap;
     LPVIRTNODE lpvn;
-    RETERR16 cbres;
 
     while (vn_last < vn_num)
     {
@@ -248,9 +247,9 @@ static RETERR16 VCP_VirtnodeCreate(const VCPFILESPEC *vfsSrc, const VCPFILESPEC 
 
     lpvn->vhstrDstFinalName = 0xffff; /* FIXME: what is this ? */
 
-    cbres = VCP_Callback(lpvn, VCPM_NODECREATE, 0, 0, VCP_MsgRef);
+    VCP_Callback(lpvn, VCPM_NODECREATE, 0, 0, VCP_MsgRef);
     lpvn->fl |= VFNL_CREATED;
-    cbres = VCP_Callback(lpvn, VCPM_NODEACCEPT, 0, 0, VCP_MsgRef);
+    VCP_Callback(lpvn, VCPM_NODEACCEPT, 0, 0, VCP_MsgRef);
 
     return OK;
 }
@@ -420,28 +419,27 @@ static RETERR16 VCP_CheckPaths(void)
 {
     DWORD n;
     LPVIRTNODE lpvn;
-    RETERR16 cbres;
 
-    cbres = VCP_Callback(&vcp_status, VCPM_VSTATPATHCHECKSTART, 0, 0, VCP_MsgRef);
+    VCP_Callback(&vcp_status, VCPM_VSTATPATHCHECKSTART, 0, 0, VCP_MsgRef);
     for (n = 0; n < vn_num; n++)
     {
 	lpvn = pvnlist[n];
 	if (!lpvn) continue;
         /* FIXME: check paths of all VIRTNODEs here ! */
-	cbres = VCP_Callback(&lpvn->vfsDst, VCPM_CHECKPATH, 0, (DWORD)lpvn, VCP_MsgRef);
+	VCP_Callback(&lpvn->vfsDst, VCPM_CHECKPATH, 0, (DWORD)lpvn, VCP_MsgRef);
     }
-    cbres = VCP_Callback(&vcp_status, VCPM_VSTATPATHCHECKEND, 0, 0, VCP_MsgRef);
+    VCP_Callback(&vcp_status, VCPM_VSTATPATHCHECKEND, 0, 0, VCP_MsgRef);
     return OK;
 }
 
 static RETERR16 VCP_CopyFiles(void)
 {
     char fn_src[MAX_PATH], fn_dst[MAX_PATH];
-    RETERR16 res = OK, cbres;
+    RETERR16 res = OK;
     DWORD n;
     LPVIRTNODE lpvn;
 
-    cbres = VCP_Callback(&vcp_status, VCPM_VSTATCOPYSTART, 0, 0, VCP_MsgRef);
+    VCP_Callback(&vcp_status, VCPM_VSTATCOPYSTART, 0, 0, VCP_MsgRef);
     for (n = 0; n < vn_num; n++)
     {
 	lpvn = pvnlist[n];
@@ -451,7 +449,7 @@ static RETERR16 VCP_CopyFiles(void)
         strcpy(fn_dst, VcpExplain16(lpvn, VCPEX_DST_FULL));
 	/* FIXME: what is this VCPM_VSTATWRITE here for ?
 	 * I guess it's to signal successful destination file creation */
-	cbres = VCP_Callback(&vcp_status, VCPM_VSTATWRITE, 0, 0, VCP_MsgRef);
+	VCP_Callback(&vcp_status, VCPM_VSTATWRITE, 0, 0, VCP_MsgRef);
 
 	/* FIXME: need to do the file copy in small chunks for notifications */
 	TRACE("copying '%s' to '%s'\n", fn_src, fn_dst);
@@ -464,12 +462,12 @@ static RETERR16 VCP_CopyFiles(void)
         }
 
 	vcp_status.prgFileRead.dwSoFar++;
-	cbres = VCP_Callback(&vcp_status, VCPM_VSTATREAD, 0, 0, VCP_MsgRef);
+	VCP_Callback(&vcp_status, VCPM_VSTATREAD, 0, 0, VCP_MsgRef);
 	vcp_status.prgFileWrite.dwSoFar++;
-	cbres = VCP_Callback(&vcp_status, VCPM_VSTATWRITE, 0, 0, VCP_MsgRef);
+	VCP_Callback(&vcp_status, VCPM_VSTATWRITE, 0, 0, VCP_MsgRef);
     }
 
-    cbres = VCP_Callback(&vcp_status, VCPM_VSTATCOPYEND, 0, 0, VCP_MsgRef);
+    VCP_Callback(&vcp_status, VCPM_VSTATCOPYEND, 0, 0, VCP_MsgRef);
     return res;
 }
 
@@ -485,7 +483,6 @@ static RETERR16 VCP_CopyFiles(void)
 RETERR16 WINAPI VcpClose16(WORD fl, LPCSTR lpszBackupDest)
 {
     RETERR16 res = OK;
-    WORD cbres = VCPN_PROCEED;
 
     TRACE("(%04x, '%s')\n", fl, lpszBackupDest);
 
@@ -496,7 +493,7 @@ RETERR16 WINAPI VcpClose16(WORD fl, LPCSTR lpszBackupDest)
     memset(&vcp_status, 0, sizeof(VCPSTATUS));
     /* yes, vcp_status.cbSize is 0 ! */
     TRACE("#2\n");
-    cbres = VCP_Callback(&vcp_status, VCPM_VSTATCLOSESTART, 0, 0, VCP_MsgRef);
+    VCP_Callback(&vcp_status, VCPM_VSTATCLOSESTART, 0, 0, VCP_MsgRef);
     TRACE("#3\n");
 
     res = VCP_CheckPaths();
@@ -506,7 +503,7 @@ RETERR16 WINAPI VcpClose16(WORD fl, LPCSTR lpszBackupDest)
     VCP_CopyFiles();
 
     TRACE("#5\n");
-    cbres = VCP_Callback(&vcp_status, VCPM_VSTATCLOSEEND, 0, 0, VCP_MsgRef);
+    VCP_Callback(&vcp_status, VCPM_VSTATCLOSEEND, 0, 0, VCP_MsgRef);
     TRACE("#6\n");
     VCP_Proc = NULL;
     VCP_opened = FALSE;
@@ -670,7 +667,7 @@ RETERR16 WINAPI vcpUICallbackProc16(LPVOID lpvObj, UINT16 uMsg, WPARAM wParam,
 					LPARAM lParam, LPARAM lParamRef)
 {
     static int count = 0;
-    RETERR16 res = VCPN_OK, cbres;
+    RETERR16 res = VCPN_OK;
 
     if (count < 5)
         FIXME("(%p, %04x, %04lx, %08lx, %08lx) - semi-stub\n",
@@ -700,7 +697,7 @@ RETERR16 WINAPI vcpUICallbackProc16(LPVOID lpvObj, UINT16 uMsg, WPARAM wParam,
 	case VCPM_VSTATREAD:
 	    break;
 	case VCPM_VSTATWRITE:
-	    cbres = VCP_Callback(&vcp_status, VCPM_DISKPREPINFO, 0, 0, VCP_MsgRef);
+	    VCP_Callback(&vcp_status, VCPM_DISKPREPINFO, 0, 0, VCP_MsgRef);
 	    break;
 	case VCPM_VSTATCLOSEEND:
 	    RegCloseKey(hKeyFiles);

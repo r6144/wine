@@ -217,7 +217,7 @@ BOOL WINAPI ILRemoveLastID(LPITEMIDLIST pidl)
 {
     TRACE_(shell)("pidl=%p\n",pidl);
 
-    if (!pidl || !pidl->mkid.cb)
+    if (_ILIsEmpty(pidl))
         return FALSE;
     ILFindLastID(pidl)->mkid.cb = 0;
     return TRUE;
@@ -1357,7 +1357,7 @@ HRESULT WINAPI SHGetNameFromIDList(PCIDLIST_ABSOLUTE pidl, SIGDN sigdnName, PWST
     STRRET disp_name;
     HRESULT ret;
 
-    TRACE("%p %d %p\n", pidl, sigdnName, ppszName);
+    TRACE("%p 0x%08x %p\n", pidl, sigdnName, ppszName);
 
     *ppszName = NULL;
     ret = SHBindToParent(pidl, &IID_IShellFolder, (void**)&psfparent, &child_pidl);
@@ -2062,7 +2062,7 @@ DWORD _ILSimpleGetTextW (LPCITEMIDLIST pidl, LPWSTR szOut, UINT uOutSize)
  */
 LPPIDLDATA _ILGetDataPointer(LPCITEMIDLIST pidl)
 {
-    if(pidl && pidl->mkid.cb != 0x00)
+    if(!_ILIsEmpty(pidl))
         return (LPPIDLDATA)pidl->mkid.abID;
     return NULL;
 }

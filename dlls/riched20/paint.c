@@ -129,12 +129,10 @@ void ME_Repaint(ME_TextEditor *editor)
     ME_UpdateScrollBar(editor);
     FIXME("ME_Repaint had to call ME_WrapMarkedParagraphs\n");
   }
-  if (!editor->bEmulateVersion10 || (editor->nEventMask & ENM_UPDATE))
-    ME_SendOldNotify(editor, EN_UPDATE);
   ITextHost_TxViewChange(editor->texthost, TRUE);
 }
 
-void ME_UpdateRepaint(ME_TextEditor *editor)
+void ME_UpdateRepaint(ME_TextEditor *editor, BOOL update_now)
 {
   /* Should be called whenever the contents of the control have changed */
   BOOL wrappedParagraphs;
@@ -146,6 +144,8 @@ void ME_UpdateRepaint(ME_TextEditor *editor)
   /* Ensure that the cursor is visible */
   ME_EnsureVisible(editor, &editor->pCursors[0]);
 
+  ITextHost_TxViewChange(editor->texthost, update_now);
+
   ME_SendSelChange(editor);
 
   /* send EN_CHANGE if the event mask asks for it */
@@ -155,7 +155,6 @@ void ME_UpdateRepaint(ME_TextEditor *editor)
     ME_SendOldNotify(editor, EN_CHANGE);
     editor->nEventMask |= ENM_CHANGE;
   }
-  ME_Repaint(editor);
 }
 
 void
@@ -960,10 +959,7 @@ static void ME_DrawParagraph(ME_Context *c, ME_DisplayItem *paragraph)
           rc.top = c->pt.y + para->pt.y + run->pt.y;
           rc.bottom = rc.bottom + height;
           TRACE("rc = (%d, %d, %d, %d)\n", rc.left, rc.top, rc.right, rc.bottom);
-          if (run->nFlags & MERF_SKIPPED)
-            DrawFocusRect(c->hDC, &rc);
-          else
-            FrameRect(c->hDC, &rc, GetSysColorBrush(COLOR_GRAYTEXT));
+          FrameRect(c->hDC, &rc, GetSysColorBrush(COLOR_GRAYTEXT));
         }
         if (visible)
           ME_DrawRun(c, c->pt.x + run->pt.x,

@@ -1,7 +1,3 @@
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = iccvid.dll
 IMPORTS   = user32
 
@@ -15,6 +11,7 @@ RC_SRCS = \
 	iccvid_En.rc \
 	iccvid_Es.rc \
 	iccvid_Fr.rc \
+	iccvid_He.rc \
 	iccvid_Hu.rc \
 	iccvid_It.rc \
 	iccvid_Ja.rc \
@@ -27,6 +24,7 @@ RC_SRCS = \
 	iccvid_Ro.rc \
 	iccvid_Ru.rc \
 	iccvid_Si.rc \
+	iccvid_Sr.rc \
 	iccvid_Sv.rc \
 	iccvid_Tr.rc \
 	iccvid_Uk.rc

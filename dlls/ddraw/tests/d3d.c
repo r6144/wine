@@ -1818,28 +1818,18 @@ out:
 
 static void D3D7_OldRenderStateTest(void)
 {
-    HRESULT rc;
+    HRESULT hr;
     DWORD val;
 
-    /* Test reaction to some deprecated states in D3D7.
-
-     * IDirect3DDevice7 in Wine currently relays such states to wined3d where they are do-nothing and return 0, instead
-     * of INVALIDPARAMS. Unless an app is found which cares this is probably ok. What this test shows is that these states
-     * need not to be handled in D3D7.
-     */
-    todo_wine {
-        rc = IDirect3DDevice7_SetRenderState(lpD3DDevice, D3DRENDERSTATE_TEXTUREHANDLE, 0);
-        ok(rc == DDERR_INVALIDPARAMS, "IDirect3DDevice7_SetRenderState returned %08x\n", rc);
-
-        rc = IDirect3DDevice7_GetRenderState(lpD3DDevice, D3DRENDERSTATE_TEXTUREHANDLE, &val);
-        ok(rc == DDERR_INVALIDPARAMS, "IDirect3DDevice7_GetRenderState returned %08x\n", rc);
-
-        rc = IDirect3DDevice7_SetRenderState(lpD3DDevice, D3DRENDERSTATE_TEXTUREMAPBLEND, D3DTBLEND_MODULATE);
-        ok(rc == DDERR_INVALIDPARAMS, "IDirect3DDevice7_SetRenderState returned %08x\n", rc);
-
-        rc = IDirect3DDevice7_GetRenderState(lpD3DDevice, D3DRENDERSTATE_TEXTUREMAPBLEND, &val);
-        ok(rc == DDERR_INVALIDPARAMS, "IDirect3DDevice7_GetRenderState returned %08x\n", rc);
-    }
+    /* Test reaction to some deprecated states in D3D7. */
+    hr = IDirect3DDevice7_SetRenderState(lpD3DDevice, D3DRENDERSTATE_TEXTUREHANDLE, 0);
+    ok(hr == DDERR_INVALIDPARAMS, "IDirect3DDevice7_SetRenderState returned %#x.\n", hr);
+    hr = IDirect3DDevice7_GetRenderState(lpD3DDevice, D3DRENDERSTATE_TEXTUREHANDLE, &val);
+    ok(hr == DDERR_INVALIDPARAMS, "IDirect3DDevice7_GetRenderState returned %#x.\n", hr);
+    hr = IDirect3DDevice7_SetRenderState(lpD3DDevice, D3DRENDERSTATE_TEXTUREMAPBLEND, D3DTBLEND_MODULATE);
+    ok(hr == DDERR_INVALIDPARAMS, "IDirect3DDevice7_SetRenderState returned %#x.\n", hr);
+    hr = IDirect3DDevice7_GetRenderState(lpD3DDevice, D3DRENDERSTATE_TEXTUREMAPBLEND, &val);
+    ok(hr == DDERR_INVALIDPARAMS, "IDirect3DDevice7_GetRenderState returned %#x.\n", hr);
 }
 
 #define IS_VALUE_NEAR(a, b)    ( ((a) == (b)) || ((a) == (b) - 1) || ((a) == (b) + 1) )
@@ -3143,9 +3133,9 @@ static void ComputeSphereVisibility(void)
 static void SetRenderTargetTest(void)
 {
     HRESULT hr;
-    IDirectDrawSurface7 *newrt, *oldrt;
+    IDirectDrawSurface7 *newrt, *failrt, *oldrt;
     D3DVIEWPORT7 vp;
-    DDSURFACEDESC2 ddsd;
+    DDSURFACEDESC2 ddsd, ddsd2;
     DWORD stateblock;
 
     memset(&ddsd, 0, sizeof(ddsd));
@@ -3154,6 +3144,7 @@ static void SetRenderTargetTest(void)
     ddsd.ddsCaps.dwCaps = DDSCAPS_TEXTURE | DDSCAPS_3DDEVICE;
     ddsd.dwWidth = 64;
     ddsd.dwHeight = 64;
+
     hr = IDirectDraw7_CreateSurface(lpDD, &ddsd, &newrt, NULL);
     ok(hr == DD_OK, "IDirectDraw7_CreateSurface failed, hr=0x%08x\n", hr);
     if(FAILED(hr))
@@ -3161,6 +3152,20 @@ static void SetRenderTargetTest(void)
         skip("Skipping SetRenderTarget test\n");
         return;
     }
+
+    memset(&ddsd2, 0, sizeof(ddsd2));
+    ddsd2.dwSize = sizeof(ddsd2);
+    ddsd2.dwFlags = DDSD_CAPS | DDSD_WIDTH | DDSD_HEIGHT | DDSD_PIXELFORMAT;
+    ddsd2.ddsCaps.dwCaps = DDSCAPS_3DDEVICE | DDSCAPS_ZBUFFER;
+    ddsd2.dwWidth = 64;
+    ddsd2.dwHeight = 64;
+    U4(ddsd2).ddpfPixelFormat.dwSize = sizeof(U4(ddsd2).ddpfPixelFormat);
+    U4(ddsd2).ddpfPixelFormat.dwFlags = DDPF_ZBUFFER;
+    U1(U4(ddsd2).ddpfPixelFormat).dwZBufferBitDepth = 16;
+    U3(U4(ddsd2).ddpfPixelFormat).dwZBitMask = 0x0000FFFF;
+
+    hr = IDirectDraw7_CreateSurface(lpDD, &ddsd2, &failrt, NULL);
+    ok(hr == DD_OK, "IDirectDraw7_CreateSurface failed, hr=0x%08x\n", hr);
 
     memset(&vp, 0, sizeof(vp));
     vp.dwX = 10;
@@ -3174,6 +3179,9 @@ static void SetRenderTargetTest(void)
 
     hr = IDirect3DDevice7_GetRenderTarget(lpD3DDevice, &oldrt);
     ok(hr == DD_OK, "IDirect3DDevice7_GetRenderTarget failed, hr=0x%08x\n", hr);
+
+    hr = IDirect3DDevice7_SetRenderTarget(lpD3DDevice, failrt, 0);
+    ok(hr != D3D_OK, "IDirect3DDevice7_SetRenderTarget succeeded\n");
 
     hr = IDirect3DDevice7_SetRenderTarget(lpD3DDevice, newrt, 0);
     ok(hr == D3D_OK, "IDirect3DDevice7_SetRenderTarget failed, hr=0x%08x\n", hr);
@@ -3241,26 +3249,39 @@ static void SetRenderTargetTest(void)
 
     IDirectDrawSurface7_Release(oldrt);
     IDirectDrawSurface7_Release(newrt);
+    IDirectDrawSurface7_Release(failrt);
 }
 
-static UINT expect_message;
+static const UINT *expect_messages;
 
 static LRESULT CALLBACK test_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
 {
-    if (expect_message && message == expect_message) expect_message = 0;
+    if (expect_messages && message == *expect_messages) ++expect_messages;
 
     return DefWindowProcA(hwnd, message, wparam, lparam);
 }
 
 static void test_wndproc(void)
 {
+    LONG_PTR proc, ddraw_proc;
     IDirectDraw7 *ddraw7;
     WNDCLASSA wc = {0};
-    LONG_PTR proc;
     HWND window;
     HRESULT hr;
     ULONG ref;
 
+    static const UINT messages[] =
+    {
+        WM_WINDOWPOSCHANGING,
+        WM_MOVE,
+        WM_SIZE,
+        WM_WINDOWPOSCHANGING,
+        WM_ACTIVATE,
+        WM_SETFOCUS,
+        0,
+    };
+
+    /* DDSCL_EXCLUSIVE replaces the window's window proc. */
     hr = pDirectDrawCreateEx(NULL, (void **)&ddraw7, &IID_IDirectDraw7, NULL);
     if (FAILED(hr))
     {
@@ -3279,7 +3300,7 @@ static void test_wndproc(void)
     ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#lx, got %#lx.\n",
             (LONG_PTR)test_proc, proc);
 
-    expect_message = WM_SETFOCUS;
+    expect_messages = messages;
 
     hr = IDirectDraw7_SetCooperativeLevel(ddraw7, window, DDSCL_EXCLUSIVE | DDSCL_FULLSCREEN);
     ok(SUCCEEDED(hr), "SetCooperativeLevel failed, hr %#x.\n", hr);
@@ -3289,11 +3310,125 @@ static void test_wndproc(void)
         goto done;
     }
 
-    ok(!expect_message, "Expected message %#x, but didn't receive it.\n", expect_message);
+    ok(!*expect_messages, "Expected message %#x, but didn't receive it.\n", *expect_messages);
+    expect_messages = NULL;
 
     proc = GetWindowLongPtrA(window, GWLP_WNDPROC);
     ok(proc != (LONG_PTR)test_proc, "Expected wndproc != %#lx, got %#lx.\n",
             (LONG_PTR)test_proc, proc);
+
+    ref = IDirectDraw7_Release(ddraw7);
+    ok(ref == 0, "The ddraw object was not properly freed: refcount %u.\n", ref);
+
+    proc = GetWindowLongPtrA(window, GWLP_WNDPROC);
+    ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#lx, got %#lx.\n",
+            (LONG_PTR)test_proc, proc);
+
+    /* DDSCL_NORMAL doesn't. */
+    hr = pDirectDrawCreateEx(NULL, (void **)&ddraw7, &IID_IDirectDraw7, NULL);
+    if (FAILED(hr))
+    {
+        skip("Failed to create IDirectDraw7 object (%#x), skipping tests.\n", hr);
+        return;
+    }
+
+    proc = GetWindowLongPtrA(window, GWLP_WNDPROC);
+    ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#lx, got %#lx.\n",
+            (LONG_PTR)test_proc, proc);
+
+    hr = IDirectDraw7_SetCooperativeLevel(ddraw7, window, DDSCL_NORMAL | DDSCL_FULLSCREEN);
+    ok(SUCCEEDED(hr), "SetCooperativeLevel failed, hr %#x.\n", hr);
+    if (FAILED(hr))
+    {
+        IDirectDraw7_Release(ddraw7);
+        goto done;
+    }
+
+    proc = GetWindowLongPtrA(window, GWLP_WNDPROC);
+    ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#lx, got %#lx.\n",
+            (LONG_PTR)test_proc, proc);
+
+    ref = IDirectDraw7_Release(ddraw7);
+    ok(ref == 0, "The ddraw object was not properly freed: refcount %u.\n", ref);
+
+    proc = GetWindowLongPtrA(window, GWLP_WNDPROC);
+    ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#lx, got %#lx.\n",
+            (LONG_PTR)test_proc, proc);
+
+    /* The original window proc is only restored by ddraw if the current
+     * window proc matches the one ddraw set. This also affects switching
+     * from DDSCL_NORMAL to DDSCL_EXCLUSIVE. */
+    hr = pDirectDrawCreateEx(NULL, (void **)&ddraw7, &IID_IDirectDraw7, NULL);
+    if (FAILED(hr))
+    {
+        skip("Failed to create IDirectDraw7 object (%#x), skipping tests.\n", hr);
+        return;
+    }
+
+    proc = GetWindowLongPtrA(window, GWLP_WNDPROC);
+    ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#lx, got %#lx.\n",
+            (LONG_PTR)test_proc, proc);
+
+    hr = IDirectDraw7_SetCooperativeLevel(ddraw7, window, DDSCL_EXCLUSIVE | DDSCL_FULLSCREEN);
+    ok(SUCCEEDED(hr), "SetCooperativeLevel failed, hr %#x.\n", hr);
+    if (FAILED(hr))
+    {
+        IDirectDraw7_Release(ddraw7);
+        goto done;
+    }
+
+    proc = GetWindowLongPtrA(window, GWLP_WNDPROC);
+    ok(proc != (LONG_PTR)test_proc, "Expected wndproc != %#lx, got %#lx.\n",
+            (LONG_PTR)test_proc, proc);
+    ddraw_proc = proc;
+
+    hr = IDirectDraw7_SetCooperativeLevel(ddraw7, window, DDSCL_NORMAL);
+    ok(SUCCEEDED(hr), "SetCooperativeLevel failed, hr %#x.\n", hr);
+    if (FAILED(hr))
+    {
+        IDirectDraw7_Release(ddraw7);
+        goto done;
+    }
+
+    proc = GetWindowLongPtrA(window, GWLP_WNDPROC);
+    ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#lx, got %#lx.\n",
+            (LONG_PTR)test_proc, proc);
+
+    hr = IDirectDraw7_SetCooperativeLevel(ddraw7, window, DDSCL_EXCLUSIVE | DDSCL_FULLSCREEN);
+    ok(SUCCEEDED(hr), "SetCooperativeLevel failed, hr %#x.\n", hr);
+    if (FAILED(hr))
+    {
+        IDirectDraw7_Release(ddraw7);
+        goto done;
+    }
+
+    proc = SetWindowLongPtrA(window, GWLP_WNDPROC, (LONG_PTR)DefWindowProcA);
+    ok(proc != (LONG_PTR)test_proc, "Expected wndproc != %#lx, got %#lx.\n",
+            (LONG_PTR)test_proc, proc);
+
+    hr = IDirectDraw7_SetCooperativeLevel(ddraw7, window, DDSCL_NORMAL);
+    ok(SUCCEEDED(hr), "SetCooperativeLevel failed, hr %#x.\n", hr);
+    if (FAILED(hr))
+    {
+        IDirectDraw7_Release(ddraw7);
+        goto done;
+    }
+
+    proc = GetWindowLongPtrA(window, GWLP_WNDPROC);
+    ok(proc == (LONG_PTR)DefWindowProcA, "Expected wndproc %#lx, got %#lx.\n",
+            (LONG_PTR)DefWindowProcA, proc);
+
+    hr = IDirectDraw7_SetCooperativeLevel(ddraw7, window, DDSCL_EXCLUSIVE | DDSCL_FULLSCREEN);
+    ok(SUCCEEDED(hr), "SetCooperativeLevel failed, hr %#x.\n", hr);
+    if (FAILED(hr))
+    {
+        IDirectDraw7_Release(ddraw7);
+        goto done;
+    }
+
+    proc = SetWindowLongPtrA(window, GWLP_WNDPROC, (LONG_PTR)ddraw_proc);
+    ok(proc == (LONG_PTR)DefWindowProcA, "Expected wndproc %#lx, got %#lx.\n",
+            (LONG_PTR)DefWindowProcA, proc);
 
     ref = IDirectDraw7_Release(ddraw7);
     ok(ref == 0, "The ddraw object was not properly freed: refcount %u.\n", ref);
@@ -3333,7 +3468,7 @@ static void test_wndproc(void)
             (LONG_PTR)DefWindowProcA, proc);
 
 done:
-    expect_message = 0;
+    expect_messages = NULL;
     DestroyWindow(window);
     UnregisterClassA("d3d7_test_wndproc_wc", GetModuleHandleA(NULL));
 }
@@ -3536,6 +3671,195 @@ static void FindDevice(void)
        "Expected IDirect3D1::FindDevice to return D3D_OK, got 0x%08x\n", hr);
 }
 
+static void BackBuffer3DCreateSurfaceTest(void)
+{
+    DDSURFACEDESC ddsd;
+    DDSURFACEDESC created_ddsd;
+    DDSURFACEDESC2 ddsd2;
+    IDirectDrawSurface *surf;
+    IDirectDrawSurface4 *surf4;
+    IDirectDrawSurface7 *surf7;
+    HRESULT hr;
+    IDirectDraw2 *dd2;
+    IDirectDraw4 *dd4;
+    IDirectDraw7 *dd7;
+    DDCAPS ddcaps;
+    IDirect3DDevice *d3dhal;
+
+    const DWORD caps = DDSCAPS_BACKBUFFER | DDSCAPS_3DDEVICE;
+    const DWORD expected_caps = DDSCAPS_BACKBUFFER | DDSCAPS_3DDEVICE | DDSCAPS_VIDEOMEMORY | DDSCAPS_LOCALVIDMEM;
+
+    memset(&ddcaps, 0, sizeof(ddcaps));
+    ddcaps.dwSize = sizeof(DDCAPS);
+    hr = IDirectDraw_GetCaps(DirectDraw1, &ddcaps, NULL);
+    if (!(ddcaps.ddsCaps.dwCaps & DDSCAPS_VIDEOMEMORY))
+    {
+        skip("DDraw reported no VIDEOMEMORY cap. Broken video driver? Skipping surface caps tests.\n");
+        return ;
+    }
+
+    memset(&ddsd, 0, sizeof(ddsd));
+    ddsd.dwSize = sizeof(ddsd);
+    ddsd.dwFlags = DDSD_CAPS | DDSD_WIDTH | DDSD_HEIGHT;
+    ddsd.dwWidth = 64;
+    ddsd.dwHeight = 64;
+    ddsd.ddsCaps.dwCaps = caps;
+    memset(&ddsd2, 0, sizeof(ddsd2));
+    ddsd2.dwSize = sizeof(ddsd2);
+    ddsd2.dwFlags = DDSD_CAPS | DDSD_WIDTH | DDSD_HEIGHT;
+    ddsd2.dwWidth = 64;
+    ddsd2.dwHeight = 64;
+    ddsd2.ddsCaps.dwCaps = caps;
+    memset(&created_ddsd, 0, sizeof(created_ddsd));
+    created_ddsd.dwSize = sizeof(DDSURFACEDESC);
+
+    hr = IDirectDraw_CreateSurface(DirectDraw1, &ddsd, &surf, NULL);
+    ok(SUCCEEDED(hr), "IDirectDraw_CreateSurface failed: 0x%08x\n", hr);
+    if (surf != NULL)
+    {
+        hr = IDirectDrawSurface_GetSurfaceDesc(surf, &created_ddsd);
+        ok(SUCCEEDED(hr), "IDirectDraw_GetSurfaceDesc failed: 0x%08x\n", hr);
+        ok(created_ddsd.ddsCaps.dwCaps == expected_caps,
+           "GetSurfaceDesc returned caps %x, expected %x\n", created_ddsd.ddsCaps.dwCaps,
+           expected_caps);
+
+        hr = IDirectDrawSurface_QueryInterface(surf, &IID_IDirect3DHALDevice, (void **)&d3dhal);
+        /* Currently Wine only supports the creation of one Direct3D device
+           for a given DirectDraw instance. It has been created already
+           in D3D1_createObjects() - IID_IDirect3DRGBDevice */
+        todo_wine ok(SUCCEEDED(hr), "Expected IDirectDrawSurface::QueryInterface to succeed, got 0x%08x\n", hr);
+
+        if (SUCCEEDED(hr))
+            IDirect3DDevice_Release(d3dhal);
+
+        IDirectDrawSurface_Release(surf);
+    }
+
+    hr = IDirectDraw_QueryInterface(DirectDraw1, &IID_IDirectDraw2, (void **) &dd2);
+    ok(SUCCEEDED(hr), "IDirectDraw_QueryInterface failed: 0x%08x\n", hr);
+
+    hr = IDirectDraw2_CreateSurface(dd2, &ddsd, &surf, NULL);
+    ok(hr == DDERR_INVALIDCAPS, "IDirectDraw2_CreateSurface didn't return %x08x, but %x08x\n",
+       DDERR_INVALIDCAPS, hr);
+
+    IDirectDraw2_Release(dd2);
+
+    hr = IDirectDraw_QueryInterface(DirectDraw1, &IID_IDirectDraw4, (void **) &dd4);
+    ok(SUCCEEDED(hr), "IDirectDraw_QueryInterface failed: 0x%08x\n", hr);
+
+    hr = IDirectDraw4_CreateSurface(dd4, &ddsd2, &surf4, NULL);
+    ok(hr == DDERR_INVALIDCAPS, "IDirectDraw4_CreateSurface didn't return %x08x, but %x08x\n",
+       DDERR_INVALIDCAPS, hr);
+
+    IDirectDraw4_Release(dd4);
+
+    hr = IDirectDraw_QueryInterface(DirectDraw1, &IID_IDirectDraw7, (void **) &dd7);
+    ok(SUCCEEDED(hr), "IDirectDraw_QueryInterface failed: 0x%08x\n", hr);
+
+    hr = IDirectDraw7_CreateSurface(dd7, &ddsd2, &surf7, NULL);
+    ok(hr == DDERR_INVALIDCAPS, "IDirectDraw7_CreateSurface didn't return %x08x, but %x08x\n",
+       DDERR_INVALIDCAPS, hr);
+
+    IDirectDraw7_Release(dd7);
+}
+
+static void BackBuffer3DAttachmentTest(void)
+{
+    HRESULT hr;
+    IDirectDrawSurface *surface1, *surface2, *surface3, *surface4;
+    DDSURFACEDESC ddsd;
+    HWND window = CreateWindow( "static", "ddraw_test", WS_OVERLAPPEDWINDOW, 100, 100, 160, 160, NULL, NULL, NULL, NULL );
+
+    hr = IDirectDraw_SetCooperativeLevel(DirectDraw1, window, DDSCL_EXCLUSIVE | DDSCL_FULLSCREEN);
+    ok(hr == DD_OK, "SetCooperativeLevel returned %08x\n", hr);
+
+    /* Perform attachment tests on a back-buffer */
+    memset(&ddsd, 0, sizeof(ddsd));
+    ddsd.dwSize = sizeof(ddsd);
+    ddsd.dwFlags = DDSD_CAPS | DDSD_WIDTH | DDSD_HEIGHT;
+    ddsd.ddsCaps.dwCaps = DDSCAPS_BACKBUFFER | DDSCAPS_3DDEVICE;
+    ddsd.dwWidth = GetSystemMetrics(SM_CXSCREEN);
+    ddsd.dwHeight = GetSystemMetrics(SM_CYSCREEN);
+    hr = IDirectDraw_CreateSurface(DirectDraw1, &ddsd, &surface2, NULL);
+    ok(SUCCEEDED(hr), "CreateSurface returned: %x\n",hr);
+
+    if (surface2 != NULL)
+    {
+        /* Try a single primary and a two back buffers */
+        memset(&ddsd, 0, sizeof(ddsd));
+        ddsd.dwSize = sizeof(ddsd);
+        ddsd.dwFlags = DDSD_CAPS;
+        ddsd.ddsCaps.dwCaps = DDSCAPS_PRIMARYSURFACE;
+        hr = IDirectDraw_CreateSurface(DirectDraw1, &ddsd, &surface1, NULL);
+        ok(hr==DD_OK,"CreateSurface returned: %x\n",hr);
+
+        memset(&ddsd, 0, sizeof(ddsd));
+        ddsd.dwSize = sizeof(ddsd);
+        ddsd.dwFlags = DDSD_CAPS | DDSD_WIDTH | DDSD_HEIGHT;
+        ddsd.ddsCaps.dwCaps = DDSCAPS_BACKBUFFER | DDSCAPS_3DDEVICE;
+        ddsd.dwWidth = GetSystemMetrics(SM_CXSCREEN);
+        ddsd.dwHeight = GetSystemMetrics(SM_CYSCREEN);
+        hr = IDirectDraw_CreateSurface(DirectDraw1, &ddsd, &surface3, NULL);
+        ok(hr==DD_OK,"CreateSurface returned: %x\n",hr);
+
+        /* This one has a different size */
+        memset(&ddsd, 0, sizeof(ddsd));
+        ddsd.dwSize = sizeof(ddsd);
+        ddsd.dwFlags = DDSD_CAPS | DDSD_WIDTH | DDSD_HEIGHT;
+        ddsd.ddsCaps.dwCaps = DDSCAPS_BACKBUFFER | DDSCAPS_3DDEVICE;
+        ddsd.dwWidth = 128;
+        ddsd.dwHeight = 128;
+        hr = IDirectDraw_CreateSurface(DirectDraw1, &ddsd, &surface4, NULL);
+        ok(hr==DD_OK,"CreateSurface returned: %x\n",hr);
+
+        hr = IDirectDrawSurface_AddAttachedSurface(surface1, surface2);
+        todo_wine ok(hr == DD_OK || broken(hr == DDERR_CANNOTATTACHSURFACE),
+           "Attaching a back buffer to a front buffer returned %08x\n", hr);
+        if(SUCCEEDED(hr))
+        {
+            /* Try the reverse without detaching first */
+            hr = IDirectDrawSurface_AddAttachedSurface(surface2, surface1);
+            ok(hr == DDERR_SURFACEALREADYATTACHED, "Attaching an attached surface to its attachee returned %08x\n", hr);
+            hr = IDirectDrawSurface_DeleteAttachedSurface(surface1, 0, surface2);
+            ok(hr == DD_OK, "DeleteAttachedSurface failed with %08x\n", hr);
+        }
+        hr = IDirectDrawSurface_AddAttachedSurface(surface2, surface1);
+        todo_wine ok(hr == DD_OK || broken(hr == DDERR_CANNOTATTACHSURFACE),
+           "Attaching a front buffer to a back buffer returned %08x\n", hr);
+        if(SUCCEEDED(hr))
+        {
+            /* Try to detach reversed */
+            hr = IDirectDrawSurface_DeleteAttachedSurface(surface1, 0, surface2);
+            ok(hr == DDERR_CANNOTDETACHSURFACE, "DeleteAttachedSurface returned %08x\n", hr);
+            /* Now the proper detach */
+            hr = IDirectDrawSurface_DeleteAttachedSurface(surface2, 0, surface1);
+            ok(hr == DD_OK, "DeleteAttachedSurface failed with %08x\n", hr);
+        }
+        hr = IDirectDrawSurface_AddAttachedSurface(surface2, surface3);
+        todo_wine ok(hr == DD_OK || broken(hr == DDERR_CANNOTATTACHSURFACE),
+           "Attaching a back buffer to another back buffer returned %08x\n", hr);
+        if(SUCCEEDED(hr))
+        {
+            hr = IDirectDrawSurface_DeleteAttachedSurface(surface2, 0, surface3);
+            ok(hr == DD_OK, "DeleteAttachedSurface failed with %08x\n", hr);
+        }
+        hr = IDirectDrawSurface_AddAttachedSurface(surface1, surface4);
+        ok(hr == DDERR_CANNOTATTACHSURFACE, "Attaching a back buffer to a front buffer of different size returned %08x\n", hr);
+        hr = IDirectDrawSurface_AddAttachedSurface(surface4, surface1);
+        ok(hr == DDERR_CANNOTATTACHSURFACE, "Attaching a front buffer to a back buffer of different size returned %08x\n", hr);
+
+        IDirectDrawSurface_Release(surface4);
+        IDirectDrawSurface_Release(surface3);
+        IDirectDrawSurface_Release(surface2);
+        IDirectDrawSurface_Release(surface1);
+    }
+
+    hr =IDirectDraw_SetCooperativeLevel(DirectDraw1, NULL, DDSCL_NORMAL);
+    ok(hr == DD_OK, "SetCooperativeLevel returned %08x\n", hr);
+
+    DestroyWindow(window);
+}
+
 START_TEST(d3d)
 {
     init_function_pointers();
@@ -3571,6 +3895,8 @@ START_TEST(d3d)
         TextureLoadTest();
         ViewportTest();
         FindDevice();
+        BackBuffer3DCreateSurfaceTest();
+        BackBuffer3DAttachmentTest();
         D3D1_releaseObjects();
     }
 

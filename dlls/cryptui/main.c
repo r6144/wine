@@ -1282,7 +1282,6 @@ static LRESULT CALLBACK cert_mgr_dlg_proc(HWND hwnd, UINT msg, WPARAM wp,
         case IDCANCEL:
             free_certs(GetDlgItem(hwnd, IDC_MGR_CERTS));
             close_stores(GetDlgItem(hwnd, IDC_MGR_STORES));
-            close_stores(GetDlgItem(hwnd, IDC_MGR_STORES));
             data = (struct CertMgrData *)GetWindowLongPtrW(hwnd, DWLP_USER);
             ImageList_Destroy(data->imageList);
             HeapFree(GetProcessHeap(), 0, data);
@@ -4041,8 +4040,8 @@ static void show_cert_chain(HWND hwnd, struct hierarchy_data *data)
             tvis.u.item.pszText = name;
             tvis.u.item.state = TVIS_EXPANDED;
             tvis.u.item.stateMask = TVIS_EXPANDED;
-            if (i == 1 &&
-             (provSigner->pChainContext->TrustStatus.dwErrorStatus &
+            if (i == 1 && (!provSigner->pChainContext ||
+             provSigner->pChainContext->TrustStatus.dwErrorStatus &
              CERT_TRUST_IS_PARTIAL_CHAIN))
             {
                 /* The root of the chain has a special case:  if the chain is
@@ -4285,7 +4284,6 @@ static BOOL init_hierarchy_page(PCCRYPTUI_VIEWCERTIFICATE_STRUCTW pCertViewInfo,
 static int CALLBACK cert_prop_sheet_proc(HWND hwnd, UINT msg, LPARAM lp)
 {
     RECT rc;
-    POINT topLeft;
 
     TRACE("(%p, %08x, %08lx)\n", hwnd, msg, lp);
 
@@ -4294,17 +4292,12 @@ static int CALLBACK cert_prop_sheet_proc(HWND hwnd, UINT msg, LPARAM lp)
     case PSCB_INITIALIZED:
         /* Get cancel button's position.. */
         GetWindowRect(GetDlgItem(hwnd, IDCANCEL), &rc);
-        topLeft.x = rc.left;
-        topLeft.y = rc.top;
-        ScreenToClient(hwnd, &topLeft);
+        MapWindowPoints( 0, hwnd, (POINT *)&rc, 2 );
         /* hide the cancel button.. */
         ShowWindow(GetDlgItem(hwnd, IDCANCEL), FALSE);
-        /* get the OK button's size.. */
-        GetWindowRect(GetDlgItem(hwnd, IDOK), &rc);
         /* and move the OK button to the cancel button's original position. */
-        MoveWindow(GetDlgItem(hwnd, IDOK), topLeft.x, topLeft.y,
-         rc.right - rc.left, rc.bottom - rc.top, FALSE);
-        GetWindowRect(GetDlgItem(hwnd, IDOK), &rc);
+        SetWindowPos(GetDlgItem(hwnd, IDOK), 0, rc.left, rc.top, 0, 0,
+                     SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW );
         break;
     }
     return 0;
@@ -4435,7 +4428,7 @@ BOOL WINAPI CryptUIDlgViewCertificateW(
     }
     /* Make a local copy in case we have to call WinVerifyTrust ourselves */
     memcpy(&viewInfo, pCertViewInfo, sizeof(viewInfo));
-    if (!viewInfo.u.hWVTStateData)
+    if (!pCertViewInfo->u.hWVTStateData)
     {
         memset(&wvt, 0, sizeof(wvt));
         wvt.cbStruct = sizeof(wvt);
@@ -4477,7 +4470,7 @@ BOOL WINAPI CryptUIDlgViewCertificateW(
     if (ret)
     {
         ret = show_cert_dialog(&viewInfo, provCert, pfPropertiesChanged);
-        if (!viewInfo.u.hWVTStateData)
+        if (!pCertViewInfo->u.hWVTStateData)
         {
             wvt.dwStateAction = WTD_STATEACTION_CLOSE;
             WinVerifyTrust(NULL, &generic_cert_verify, &wvt);
@@ -7044,4 +7037,10 @@ BOOL WINAPI CryptUIWizExport(DWORD dwFlags, HWND hwndParent,
             ret = FALSE;
     }
     return ret;
+}
+
+BOOL WINAPI CryptUIDlgViewSignerInfoA(CRYPTUI_VIEWSIGNERINFO_STRUCTA *pcvsi)
+{
+    FIXME("%p: stub\n", pcvsi);
+    return FALSE;
 }

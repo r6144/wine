@@ -26,11 +26,6 @@
 
 #include "wine/test.h"
 
-/*#define DUMP_STRINGS*/
-#ifdef DUMP_STRINGS
-#include "wine/debug.h"
-#endif
-
 typedef struct _CertRDNAttrEncoding {
     LPCSTR pszObjId;
     DWORD  dwValueType;
@@ -58,6 +53,12 @@ static BYTE bin6[] = { 0x6c, 0x6f, 0x63, 0x61, 0x6c, 0x68, 0x6f, 0x73,
  0x74 };
 static BYTE bin7[] = { 0x61, 0x72, 0x69, 0x63, 0x40, 0x63, 0x6f, 0x64,
  0x65, 0x77, 0x65, 0x61, 0x76, 0x65, 0x72, 0x73, 0x2e, 0x63, 0x6f, 0x6d };
+static BYTE bin8[] = {
+0x65,0x00,0x50,0x00,0x4b,0x00,0x49,0x00,0x20,0x00,0x52,0x00,0x6f,0x00,0x6f,
+0x00,0x74,0x00,0x20,0x00,0x43,0x00,0x65,0x00,0x72,0x00,0x74,0x00,0x69,0x00,
+0x66,0x00,0x69,0x00,0x63,0x00,0x61,0x00,0x74,0x00,0x69,0x00,0x6f,0x00,0x6e,
+0x00,0x20,0x00,0x41,0x00,0x75,0x00,0x74,0x00,0x68,0x00,0x6f,0x00,0x72,0x00,
+0x69,0x00,0x74,0x00,0x79,0x00 };
 
 static const BYTE cert[] = 
 {0x30,0x82,0x2,0xbb,0x30,0x82,0x2,0x24,0x2,0x9,0x0,0xe3,0x5a,0x10,0xf1,0xfc,
@@ -191,7 +192,7 @@ typedef BOOL (WINAPI *CertStrToNameWFunc)(DWORD dwCertEncodingType,
  LPCWSTR pszX500, DWORD dwStrType, void *pvReserved, BYTE *pbEncoded,
  DWORD *pcbEncoded, LPCWSTR *ppszError);
 
-HMODULE dll;
+static HMODULE dll;
 static CertNameToStrAFunc pCertNameToStrA;
 static CertNameToStrWFunc pCertNameToStrW;
 static CryptDecodeObjectFunc pCryptDecodeObject;
@@ -221,6 +222,7 @@ static void test_CertRDNValueToStrA(void)
     DWORD i, ret;
     char buffer[2000];
     CERT_RDN_VALUE_BLOB blob = { 0, NULL };
+    static const char ePKI[] = "ePKI Root Certification Authority";
 
     if (!pCertRDNValueToStrA) return;
 
@@ -244,6 +246,14 @@ static void test_CertRDNValueToStrA(void)
         ok(!strcmp(buffer, attrs[i].str), "Expected %s, got %s\n", attrs[i].str,
          buffer);
     }
+    blob.pbData = bin8;
+    blob.cbData = sizeof(bin8);
+    ret = pCertRDNValueToStrA(CERT_RDN_UTF8_STRING, &blob, buffer,
+     sizeof(buffer));
+    ok(ret == strlen(ePKI) + 1 || broken(ret != strlen(ePKI) + 1),
+     "Expected length %d, got %d\n", lstrlenA(ePKI), ret);
+    if (ret == strlen(ePKI) + 1)
+        ok(!strcmp(buffer, ePKI), "Expected %s, got %s\n", ePKI, buffer);
 }
 
 static void test_CertRDNValueToStrW(void)
@@ -259,6 +269,9 @@ static void test_CertRDNValueToStrW(void)
     static const WCHAR localhostW[] = { 'l','o','c','a','l','h','o','s','t',0 };
     static const WCHAR aricW[] = { 'a','r','i','c','@','c','o','d','e','w','e',
      'a','v','e','r','s','.','c','o','m',0 };
+    static const WCHAR ePKIW[] = { 'e','P','K','I',' ','R','o','o','t',' ',
+     'C','e','r','t','i','f','i','c','a','t','i','o','n',' ','A','u','t','h',
+     'o','r','i','t','y',0 };
     CertRDNAttrEncodingW attrs[] = {
      { "2.5.4.6", CERT_RDN_PRINTABLE_STRING,
        { sizeof(bin1), bin1 }, usW },
@@ -303,33 +316,88 @@ static void test_CertRDNValueToStrW(void)
          buffer, sizeof(buffer) / sizeof(buffer[0]));
         ok(ret == lstrlenW(attrs[i].str) + 1, "Expected length %d, got %d\n",
          lstrlenW(attrs[i].str) + 1, ret);
-        ok(!lstrcmpW(buffer, attrs[i].str), "Unexpected value\n");
-#ifdef DUMP_STRINGS
-        trace("Expected %s, got %s\n",
+        ok(!lstrcmpW(buffer, attrs[i].str), "Expected %s, got %s\n",
          wine_dbgstr_w(attrs[i].str), wine_dbgstr_w(buffer));
-#endif
     }
+    blob.pbData = bin8;
+    blob.cbData = sizeof(bin8);
+    ret = pCertRDNValueToStrW(CERT_RDN_UTF8_STRING, &blob, buffer,
+     sizeof(buffer));
+    ok(ret == lstrlenW(ePKIW) + 1 || broken(ret != lstrlenW(ePKIW) + 1),
+     "Expected length %d, got %d\n", lstrlenW(ePKIW), ret);
+    if (ret == lstrlenW(ePKIW) + 1)
+        ok(!lstrcmpW(buffer, ePKIW), "Expected %s, got %s\n",
+         wine_dbgstr_w(ePKIW), wine_dbgstr_w(buffer));
 }
 
 static void test_NameToStrConversionA(PCERT_NAME_BLOB pName, DWORD dwStrType,
- LPCSTR expected)
+ LPCSTR expected, BOOL todo)
 {
     char buffer[2000] = { 0 };
     DWORD i;
 
     i = pCertNameToStrA(X509_ASN_ENCODING, pName, dwStrType, NULL, 0);
-    ok(i == strlen(expected) + 1, "Expected %d chars, got %d\n",
-     lstrlenA(expected) + 1, i);
+    if (todo)
+        todo_wine
+        ok(i == strlen(expected) + 1, "Expected %d chars, got %d\n",
+         lstrlenA(expected) + 1, i);
+    else
+        ok(i == strlen(expected) + 1, "Expected %d chars, got %d\n",
+         lstrlenA(expected) + 1, i);
     i = pCertNameToStrA(X509_ASN_ENCODING,pName, dwStrType, buffer,
      sizeof(buffer));
-    ok(i == strlen(expected) + 1, "Expected %d chars, got %d\n",
-     lstrlenA(expected) + 1, i);
-    ok(!strcmp(buffer, expected), "Expected %s, got %s\n", expected, buffer);
+    if (todo)
+        todo_wine
+        ok(i == strlen(expected) + 1, "Expected %d chars, got %d\n",
+         lstrlenA(expected) + 1, i);
+    else
+        ok(i == strlen(expected) + 1, "Expected %d chars, got %d\n",
+         lstrlenA(expected) + 1, i);
+    if (todo)
+        todo_wine
+        ok(!strcmp(buffer, expected), "Expected %s, got %s\n", expected,
+         buffer);
+    else
+        ok(!strcmp(buffer, expected), "Expected %s, got %s\n", expected,
+         buffer);
 }
+
+static BYTE encodedSimpleCN[] = {
+0x30,0x0c,0x31,0x0a,0x30,0x08,0x06,0x03,0x55,0x04,0x03,0x13,0x01,0x31 };
+static BYTE encodedSingleQuotedCN[] = { 0x30,0x0e,0x31,0x0c,0x30,0x0a,
+ 0x06,0x03,0x55,0x04,0x03,0x13,0x03,0x27,0x31,0x27 };
+static BYTE encodedSpacedCN[] = { 0x30,0x0e,0x31,0x0c,0x30,0x0a,0x06,0x03,
+ 0x55,0x04,0x03,0x13,0x03,0x20,0x31,0x20 };
+static BYTE encodedQuotedCN[] = { 0x30,0x11,0x31,0x0f,0x30,0x0d,0x06,0x03,
+ 0x55, 0x04,0x03,0x1e,0x06,0x00,0x22,0x00,0x31,0x00,0x22, };
+static BYTE encodedMultipleAttrCN[] = { 0x30,0x0e,0x31,0x0c,0x30,0x0a,
+ 0x06,0x03,0x55,0x04,0x03,0x13,0x03,0x31,0x2b,0x32 };
+static BYTE encodedCommaCN[] = {
+0x30,0x0e,0x31,0x0c,0x30,0x0a,0x06,0x03,0x55,0x04,0x03,0x13,0x03,0x61,0x2c,
+0x62 };
+static BYTE encodedEqualCN[] = {
+0x30,0x0e,0x31,0x0c,0x30,0x0a,0x06,0x03,0x55,0x04,0x03,0x13,0x03,0x61,0x3d,
+0x62 };
+static BYTE encodedLessThanCN[] = {
+0x30,0x0d,0x31,0x0b,0x30,0x09,0x06,0x03,0x55,0x04,0x03,0x1e,0x02,0x00,0x3c
+};
+static BYTE encodedGreaterThanCN[] = {
+0x30,0x0d,0x31,0x0b,0x30,0x09,0x06,0x03,0x55,0x04,0x03,0x1e,0x02,0x00,0x3e
+};
+static BYTE encodedHashCN[] = {
+0x30,0x0d,0x31,0x0b,0x30,0x09,0x06,0x03,0x55,0x04,0x03,0x1e,0x02,0x00,0x23
+};
+static BYTE encodedSemiCN[] = {
+0x30,0x0d,0x31,0x0b,0x30,0x09,0x06,0x03,0x55,0x04,0x03,0x1e,0x02,0x00,0x3b
+};
+static BYTE encodedNewlineCN[] = {
+0x30,0x11,0x31,0x0f,0x30,0x0d,0x06,0x03,0x55,0x04,0x03,0x1e,0x06,0x00,0x61,
+0x00,0x0a,0x00,0x62 };
 
 static void test_CertNameToStrA(void)
 {
     PCCERT_CONTEXT context;
+    CERT_NAME_BLOB blob;
 
     if (!pCertNameToStrA)
     {
@@ -362,53 +430,114 @@ static void test_CertNameToStrA(void)
          ret, GetLastError());
 
         test_NameToStrConversionA(&context->pCertInfo->Issuer,
-         CERT_SIMPLE_NAME_STR, issuerStr);
+         CERT_SIMPLE_NAME_STR, issuerStr, FALSE);
         test_NameToStrConversionA(&context->pCertInfo->Issuer,
          CERT_SIMPLE_NAME_STR | CERT_NAME_STR_SEMICOLON_FLAG,
-         issuerStrSemicolon);
+         issuerStrSemicolon, FALSE);
         test_NameToStrConversionA(&context->pCertInfo->Issuer,
          CERT_SIMPLE_NAME_STR | CERT_NAME_STR_CRLF_FLAG,
-         issuerStrCRLF);
+         issuerStrCRLF, FALSE);
         test_NameToStrConversionA(&context->pCertInfo->Subject,
-         CERT_OID_NAME_STR, subjectStr);
+         CERT_OID_NAME_STR, subjectStr, FALSE);
         test_NameToStrConversionA(&context->pCertInfo->Subject,
          CERT_OID_NAME_STR | CERT_NAME_STR_SEMICOLON_FLAG,
-         subjectStrSemicolon);
+         subjectStrSemicolon, FALSE);
         test_NameToStrConversionA(&context->pCertInfo->Subject,
          CERT_OID_NAME_STR | CERT_NAME_STR_CRLF_FLAG,
-         subjectStrCRLF);
+         subjectStrCRLF, FALSE);
         test_NameToStrConversionA(&context->pCertInfo->Subject,
-         CERT_X500_NAME_STR, x500SubjectStr);
+         CERT_X500_NAME_STR, x500SubjectStr, FALSE);
         test_NameToStrConversionA(&context->pCertInfo->Subject,
-         CERT_X500_NAME_STR | CERT_NAME_STR_SEMICOLON_FLAG | CERT_NAME_STR_REVERSE_FLAG, x500SubjectStrSemicolonReverse);
+         CERT_X500_NAME_STR | CERT_NAME_STR_SEMICOLON_FLAG | CERT_NAME_STR_REVERSE_FLAG,
+         x500SubjectStrSemicolonReverse, FALSE);
 
         CertFreeCertificateContext(context);
     }
+    blob.pbData = encodedSimpleCN;
+    blob.cbData = sizeof(encodedSimpleCN);
+    test_NameToStrConversionA(&blob, CERT_X500_NAME_STR, "CN=1", FALSE);
+    blob.pbData = encodedSingleQuotedCN;
+    blob.cbData = sizeof(encodedSingleQuotedCN);
+    test_NameToStrConversionA(&blob, CERT_X500_NAME_STR, "CN='1'", FALSE);
+    blob.pbData = encodedSpacedCN;
+    blob.cbData = sizeof(encodedSpacedCN);
+    test_NameToStrConversionA(&blob, CERT_X500_NAME_STR, "CN=\" 1 \"", FALSE);
+    blob.pbData = encodedQuotedCN;
+    blob.cbData = sizeof(encodedQuotedCN);
+    test_NameToStrConversionA(&blob, CERT_X500_NAME_STR, "CN=\"\"\"1\"\"\"",
+     FALSE);
+    blob.pbData = encodedMultipleAttrCN;
+    blob.cbData = sizeof(encodedMultipleAttrCN);
+    test_NameToStrConversionA(&blob, CERT_X500_NAME_STR, "CN=\"1+2\"", FALSE);
+    blob.pbData = encodedCommaCN;
+    blob.cbData = sizeof(encodedCommaCN);
+    test_NameToStrConversionA(&blob, CERT_X500_NAME_STR, "CN=\"a,b\"", FALSE);
+    blob.pbData = encodedEqualCN;
+    blob.cbData = sizeof(encodedEqualCN);
+    test_NameToStrConversionA(&blob, CERT_X500_NAME_STR, "CN=\"a=b\"", FALSE);
+    blob.pbData = encodedLessThanCN;
+    blob.cbData = sizeof(encodedLessThanCN);
+    test_NameToStrConversionA(&blob, CERT_X500_NAME_STR, "CN=\"<\"", FALSE);
+    blob.pbData = encodedGreaterThanCN;
+    blob.cbData = sizeof(encodedGreaterThanCN);
+    test_NameToStrConversionA(&blob, CERT_X500_NAME_STR, "CN=\">\"", FALSE);
+    blob.pbData = encodedHashCN;
+    blob.cbData = sizeof(encodedHashCN);
+    test_NameToStrConversionA(&blob, CERT_X500_NAME_STR, "CN=\"#\"", FALSE);
+    blob.pbData = encodedSemiCN;
+    blob.cbData = sizeof(encodedSemiCN);
+    test_NameToStrConversionA(&blob, CERT_X500_NAME_STR, "CN=\";\"", FALSE);
+    blob.pbData = encodedNewlineCN;
+    blob.cbData = sizeof(encodedNewlineCN);
+    test_NameToStrConversionA(&blob, CERT_X500_NAME_STR, "CN=\"a\nb\"", FALSE);
 }
 
 static void test_NameToStrConversionW(PCERT_NAME_BLOB pName, DWORD dwStrType,
- LPCWSTR expected)
+ LPCWSTR expected, BOOL todo)
 {
     WCHAR buffer[2000] = { 0 };
     DWORD i;
 
     i = pCertNameToStrW(X509_ASN_ENCODING,pName, dwStrType, NULL, 0);
-    ok(i == lstrlenW(expected) + 1, "Expected %d chars, got %d\n",
-     lstrlenW(expected) + 1, i);
+    if (todo)
+        todo_wine ok(i == lstrlenW(expected) + 1, "Expected %d chars, got %d\n",
+         lstrlenW(expected) + 1, i);
+    else
+        ok(i == lstrlenW(expected) + 1, "Expected %d chars, got %d\n",
+         lstrlenW(expected) + 1, i);
     i = pCertNameToStrW(X509_ASN_ENCODING,pName, dwStrType, buffer,
      sizeof(buffer) / sizeof(buffer[0]));
-    ok(i == lstrlenW(expected) + 1, "Expected %d chars, got %d\n",
-     lstrlenW(expected) + 1, i);
-    ok(!lstrcmpW(buffer, expected), "Unexpected value\n");
-#ifdef DUMP_STRINGS
-    trace("Expected %s, got %s\n",
-     wine_dbgstr_w(expected), wine_dbgstr_w(buffer));
-#endif
+    if (todo)
+        todo_wine ok(i == lstrlenW(expected) + 1, "Expected %d chars, got %d\n",
+         lstrlenW(expected) + 1, i);
+    else
+        ok(i == lstrlenW(expected) + 1, "Expected %d chars, got %d\n",
+         lstrlenW(expected) + 1, i);
+    if (todo)
+        todo_wine ok(!lstrcmpW(buffer, expected), "Expected %s, got %s\n",
+         wine_dbgstr_w(expected), wine_dbgstr_w(buffer));
+    else
+        ok(!lstrcmpW(buffer, expected), "Expected %s, got %s\n",
+         wine_dbgstr_w(expected), wine_dbgstr_w(buffer));
 }
+
+static const WCHAR simpleCN_W[] = { 'C','N','=','1',0 };
+static const WCHAR singledQuotedCN_W[] = { 'C','N','=','\'','1','\'',0 };
+static const WCHAR spacedCN_W[] = { 'C','N','=','"',' ','1',' ','"',0 };
+static const WCHAR quotedCN_W[] = { 'C','N','=','"','"','"','1','"','"','"',0 };
+static const WCHAR multipleAttrCN_W[] = { 'C','N','=','"','1','+','2','"',0 };
+static const WCHAR commaCN_W[] = { 'C','N','=','"','a',',','b','"',0 };
+static const WCHAR equalCN_W[] = { 'C','N','=','"','a','=','b','"',0 };
+static const WCHAR lessThanCN_W[] = { 'C','N','=','"','<','"',0 };
+static const WCHAR greaterThanCN_W[] = { 'C','N','=','"','>','"',0 };
+static const WCHAR hashCN_W[] = { 'C','N','=','"','#','"',0 };
+static const WCHAR semiCN_W[] = { 'C','N','=','"',';','"',0 };
+static const WCHAR newlineCN_W[] = { 'C','N','=','"','a','\n','b','"',0 };
 
 static void test_CertNameToStrW(void)
 {
     PCCERT_CONTEXT context;
+    CERT_NAME_BLOB blob;
 
     if (!pCertNameToStrW)
     {
@@ -441,26 +570,67 @@ static void test_CertNameToStrW(void)
          ret, GetLastError());
 
         test_NameToStrConversionW(&context->pCertInfo->Issuer,
-         CERT_SIMPLE_NAME_STR, issuerStrW);
+         CERT_SIMPLE_NAME_STR, issuerStrW, FALSE);
         test_NameToStrConversionW(&context->pCertInfo->Issuer,
          CERT_SIMPLE_NAME_STR | CERT_NAME_STR_SEMICOLON_FLAG,
-         issuerStrSemicolonW);
+         issuerStrSemicolonW, FALSE);
         test_NameToStrConversionW(&context->pCertInfo->Issuer,
          CERT_SIMPLE_NAME_STR | CERT_NAME_STR_CRLF_FLAG,
-         issuerStrCRLFW);
+         issuerStrCRLFW, FALSE);
         test_NameToStrConversionW(&context->pCertInfo->Subject,
-         CERT_OID_NAME_STR, subjectStrW);
+         CERT_OID_NAME_STR, subjectStrW, FALSE);
         test_NameToStrConversionW(&context->pCertInfo->Subject,
          CERT_OID_NAME_STR | CERT_NAME_STR_SEMICOLON_FLAG,
-         subjectStrSemicolonW);
+         subjectStrSemicolonW, FALSE);
         test_NameToStrConversionW(&context->pCertInfo->Subject,
          CERT_OID_NAME_STR | CERT_NAME_STR_CRLF_FLAG,
-         subjectStrCRLFW);
+         subjectStrCRLFW, FALSE);
         test_NameToStrConversionW(&context->pCertInfo->Subject,
-         CERT_X500_NAME_STR | CERT_NAME_STR_SEMICOLON_FLAG | CERT_NAME_STR_REVERSE_FLAG, x500SubjectStrSemicolonReverseW);
+         CERT_X500_NAME_STR | CERT_NAME_STR_SEMICOLON_FLAG | CERT_NAME_STR_REVERSE_FLAG,
+         x500SubjectStrSemicolonReverseW, FALSE);
 
         CertFreeCertificateContext(context);
     }
+    blob.pbData = encodedSimpleCN;
+    blob.cbData = sizeof(encodedSimpleCN);
+    test_NameToStrConversionW(&blob, CERT_X500_NAME_STR, simpleCN_W, FALSE);
+    blob.pbData = encodedSingleQuotedCN;
+    blob.cbData = sizeof(encodedSingleQuotedCN);
+    test_NameToStrConversionW(&blob, CERT_X500_NAME_STR, singledQuotedCN_W,
+     FALSE);
+    blob.pbData = encodedSpacedCN;
+    blob.cbData = sizeof(encodedSpacedCN);
+    test_NameToStrConversionW(&blob, CERT_X500_NAME_STR, spacedCN_W, FALSE);
+    blob.pbData = encodedQuotedCN;
+    blob.cbData = sizeof(encodedQuotedCN);
+    test_NameToStrConversionW(&blob, CERT_X500_NAME_STR, quotedCN_W,
+     FALSE);
+    blob.pbData = encodedMultipleAttrCN;
+    blob.cbData = sizeof(encodedMultipleAttrCN);
+    test_NameToStrConversionW(&blob, CERT_X500_NAME_STR, multipleAttrCN_W,
+     FALSE);
+    blob.pbData = encodedCommaCN;
+    blob.cbData = sizeof(encodedCommaCN);
+    test_NameToStrConversionW(&blob, CERT_X500_NAME_STR, commaCN_W, FALSE);
+    blob.pbData = encodedEqualCN;
+    blob.cbData = sizeof(encodedEqualCN);
+    test_NameToStrConversionW(&blob, CERT_X500_NAME_STR, equalCN_W, FALSE);
+    blob.pbData = encodedLessThanCN;
+    blob.cbData = sizeof(encodedLessThanCN);
+    test_NameToStrConversionW(&blob, CERT_X500_NAME_STR, lessThanCN_W, FALSE);
+    blob.pbData = encodedGreaterThanCN;
+    blob.cbData = sizeof(encodedGreaterThanCN);
+    test_NameToStrConversionW(&blob, CERT_X500_NAME_STR, greaterThanCN_W,
+     FALSE);
+    blob.pbData = encodedHashCN;
+    blob.cbData = sizeof(encodedHashCN);
+    test_NameToStrConversionW(&blob, CERT_X500_NAME_STR, hashCN_W, FALSE);
+    blob.pbData = encodedSemiCN;
+    blob.cbData = sizeof(encodedSemiCN);
+    test_NameToStrConversionW(&blob, CERT_X500_NAME_STR, semiCN_W, FALSE);
+    blob.pbData = encodedNewlineCN;
+    blob.cbData = sizeof(encodedNewlineCN);
+    test_NameToStrConversionW(&blob, CERT_X500_NAME_STR, newlineCN_W, FALSE);
 }
 
 struct StrToNameA
@@ -470,18 +640,7 @@ struct StrToNameA
     const BYTE *encoded;
 };
 
-const BYTE encodedSimpleCN[] = {
-0x30,0x0c,0x31,0x0a,0x30,0x08,0x06,0x03,0x55,0x04,0x03,0x13,0x01,0x31 };
-static const BYTE encodedSingleQuotedCN[] = { 0x30,0x0e,0x31,0x0c,0x30,0x0a,
- 0x06,0x03,0x55,0x04,0x03,0x13,0x03,0x27,0x31,0x27 };
-static const BYTE encodedSpacedCN[] = { 0x30,0x0e,0x31,0x0c,0x30,0x0a,0x06,0x03,
- 0x55,0x04,0x03,0x13,0x03,0x20,0x31,0x20 };
-static const BYTE encodedQuotedCN[] = { 0x30,0x11,0x31,0x0f,0x30,0x0d,0x06,0x03,
- 0x55, 0x04,0x03,0x1e,0x06,0x00,0x22,0x00,0x31,0x00,0x22, };
-static const BYTE encodedMultipleAttrCN[] = { 0x30,0x0e,0x31,0x0c,0x30,0x0a,
- 0x06,0x03,0x55,0x04,0x03,0x13,0x03,0x31,0x2b,0x32 };
-
-struct StrToNameA namesA[] = {
+static const struct StrToNameA namesA[] = {
  { "CN=1", sizeof(encodedSimpleCN), encodedSimpleCN },
  { "CN=\"1\"", sizeof(encodedSimpleCN), encodedSimpleCN },
  { "CN = \"1\"", sizeof(encodedSimpleCN), encodedSimpleCN },
@@ -489,6 +648,12 @@ struct StrToNameA namesA[] = {
  { "CN=\" 1 \"", sizeof(encodedSpacedCN), encodedSpacedCN },
  { "CN=\"\"\"1\"\"\"", sizeof(encodedQuotedCN), encodedQuotedCN },
  { "CN=\"1+2\"", sizeof(encodedMultipleAttrCN), encodedMultipleAttrCN },
+ { "CN=\"a,b\"", sizeof(encodedCommaCN), encodedCommaCN },
+ { "CN=\"a=b\"", sizeof(encodedEqualCN), encodedEqualCN },
+ { "CN=\"<\"", sizeof(encodedLessThanCN), encodedLessThanCN },
+ { "CN=\">\"", sizeof(encodedGreaterThanCN), encodedGreaterThanCN },
+ { "CN=\"#\"", sizeof(encodedHashCN), encodedHashCN },
+ { "CN=\";\"", sizeof(encodedSemiCN), encodedSemiCN },
 };
 
 static void test_CertStrToNameA(void)
@@ -551,18 +716,13 @@ struct StrToNameW
 };
 
 static const WCHAR badlyQuotedCN_W[] = { 'C','N','=','"','"','1','"','"',0 };
-static const WCHAR simpleCN_W[] = { 'C','N','=','1',0 };
 static const WCHAR simpleCN2_W[] = { 'C','N','=','"','1','"',0 };
 static const WCHAR simpleCN3_W[] = { 'C','N',' ','=',' ','"','1','"',0 };
-static const WCHAR singledQuotedCN_W[] = { 'C','N','=','\'','1','\'',0 };
-static const WCHAR spacedCN_W[] = { 'C','N','=','"',' ','1',' ','"',0 };
-static const WCHAR quotedCN_W[] = { 'C','N','=','"','"','"','1','"','"','"',0 };
-static const WCHAR multipleAttrCN_W[] = { 'C','N','=','"','1','+','2','"',0 };
 static const WCHAR japaneseCN_W[] = { 'C','N','=',0x226f,0x575b,0 };
 static const BYTE encodedJapaneseCN[] = { 0x30,0x0f,0x31,0x0d,0x30,0x0b,0x06,
  0x03,0x55,0x04,0x03,0x1e,0x04,0x22,0x6f,0x57,0x5b };
 
-struct StrToNameW namesW[] = {
+static const struct StrToNameW namesW[] = {
  { simpleCN_W, sizeof(encodedSimpleCN), encodedSimpleCN },
  { simpleCN2_W, sizeof(encodedSimpleCN), encodedSimpleCN },
  { simpleCN3_W, sizeof(encodedSimpleCN), encodedSimpleCN },
@@ -571,6 +731,12 @@ struct StrToNameW namesW[] = {
  { quotedCN_W, sizeof(encodedQuotedCN), encodedQuotedCN },
  { multipleAttrCN_W, sizeof(encodedMultipleAttrCN), encodedMultipleAttrCN },
  { japaneseCN_W, sizeof(encodedJapaneseCN), encodedJapaneseCN },
+ { commaCN_W, sizeof(encodedCommaCN), encodedCommaCN },
+ { equalCN_W, sizeof(encodedEqualCN), encodedEqualCN },
+ { lessThanCN_W, sizeof(encodedLessThanCN), encodedLessThanCN },
+ { greaterThanCN_W, sizeof(encodedGreaterThanCN), encodedGreaterThanCN },
+ { hashCN_W, sizeof(encodedHashCN), encodedHashCN },
+ { semiCN_W, sizeof(encodedSemiCN), encodedSemiCN },
 };
 
 static void test_CertStrToNameW(void)

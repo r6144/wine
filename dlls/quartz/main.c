@@ -37,6 +37,8 @@ static DWORD dll_ref = 0;
 /* For the moment, do nothing here. */
 BOOL WINAPI DllMain(HINSTANCE hInstDLL, DWORD fdwReason, LPVOID lpv)
 {
+    if (fdwReason == DLL_PROCESS_DETACH)
+        video_unregister_windowclass();
     return QUARTZ_DllMain( hInstDLL, fdwReason, lpv );
 }
 
@@ -295,17 +297,15 @@ LONG WINAPI DBToAmpFactor(LONG db)
  */
 DWORD WINAPI AMGetErrorTextA(HRESULT hr, LPSTR buffer, DWORD maxlen)
 {
-    unsigned int len;
-    static const char format[] = "Error: 0x%x";
-    char error[MAX_ERROR_TEXT_LEN];
+    DWORD res;
+    WCHAR errorW[MAX_ERROR_TEXT_LEN];
 
-    FIXME("(%x,%p,%d) stub\n", hr, buffer, maxlen);
+    TRACE("(%x,%p,%d)\n", hr, buffer, maxlen);
+    if (!buffer)
+        return 0;
 
-    if (!buffer) return 0;
-    wsprintfA(error, format, hr);
-    if ((len = strlen(error)) >= maxlen) return 0;
-    lstrcpyA(buffer, error);
-    return len;
+    res = AMGetErrorTextW(hr, errorW, sizeof(errorW)/sizeof(*errorW));
+    return WideCharToMultiByte(CP_ACP, 0, errorW, res, buffer, maxlen, 0, 0);
 }
 
 /***********************************************************************

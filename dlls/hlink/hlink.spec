@@ -2,7 +2,7 @@
 4 stdcall HlinkCreateFromString(wstr wstr wstr ptr long ptr ptr ptr)
 5 stdcall HlinkCreateFromData(ptr ptr long ptr ptr ptr)
 6 stdcall HlinkCreateBrowseContext(ptr ptr ptr)
-7 stub HlinkClone
+7 stdcall HlinkClone(ptr ptr ptr long ptr)
 8 stdcall HlinkNavigateToStringReference(wstr wstr ptr long ptr long ptr ptr ptr)
 9 stdcall HlinkOnNavigate(ptr ptr long ptr wstr wstr ptr)
 10 stdcall HlinkNavigate(ptr ptr long ptr ptr ptr)
@@ -30,4 +30,4 @@
 @ stdcall -private DllCanUnloadNow()
 @ stdcall -private DllGetClassObject(ptr ptr ptr)
 @ stdcall -private DllRegisterServer()
-# @ stub -private DllUnregisterServer
+@ stdcall -private DllUnregisterServer()

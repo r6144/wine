@@ -1,7 +1,3 @@
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = localui.dll
 IMPORTS   = winspool user32
 
@@ -15,6 +11,7 @@ RC_SRCS = \
 	ui_En.rc \
 	ui_Es.rc \
 	ui_Fr.rc \
+	ui_He.rc \
 	ui_Hu.rc \
 	ui_It.rc \
 	ui_Ja.rc \
@@ -27,6 +24,7 @@ RC_SRCS = \
 	ui_Ro.rc \
 	ui_Ru.rc \
 	ui_Si.rc \
+	ui_Sr.rc \
 	ui_Sv.rc \
 	ui_Uk.rc \
 	ui_Zh.rc

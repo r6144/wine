@@ -4401,12 +4401,141 @@ BOOL WINAPI SHSkipJunction(IBindCtx *pbc, const CLSID *pclsid)
 }
 
 /***********************************************************************
- *		SHGetShellKey (SHLWAPI.@)
+ *		SHGetShellKey (SHLWAPI.491)
  */
 HKEY WINAPI SHGetShellKey(DWORD flags, LPCWSTR sub_key, BOOL create)
 {
-    FIXME("(0x%08x, %s, %d): stub\n", flags, debugstr_w(sub_key), create);
-    return (HKEY)0x50;
+    enum _shellkey_flags {
+        SHKEY_Root_HKCU = 0x1,
+        SHKEY_Root_HKLM = 0x2,
+        SHKEY_Key_Explorer  = 0x00,
+        SHKEY_Key_Shell = 0x10,
+        SHKEY_Key_ShellNoRoam = 0x20,
+        SHKEY_Key_Classes = 0x30,
+        SHKEY_Subkey_Default = 0x0000,
+        SHKEY_Subkey_ResourceName = 0x1000,
+        SHKEY_Subkey_Handlers = 0x2000,
+        SHKEY_Subkey_Associations = 0x3000,
+        SHKEY_Subkey_Volatile = 0x4000,
+        SHKEY_Subkey_MUICache = 0x5000,
+        SHKEY_Subkey_FileExts = 0x6000
+    };
+
+    static const WCHAR explorerW[] = {'S','o','f','t','w','a','r','e','\\',
+        'M','i','c','r','o','s','o','f','t','\\','W','i','n','d','o','w','s','\\',
+        'C','u','r','r','e','n','t','V','e','r','s','i','o','n','\\',
+        'E','x','p','l','o','r','e','r','\\'};
+    static const WCHAR shellW[] = {'S','o','f','t','w','a','r','e','\\',
+        'M','i','c','r','o','s','o','f','t','\\','W','i','n','d','o','w','s','\\',
+        'S','h','e','l','l','\\'};
+    static const WCHAR shell_no_roamW[] = {'S','o','f','t','w','a','r','e','\\',
+        'M','i','c','r','o','s','o','f','t','\\','W','i','n','d','o','w','s','\\',
+        'S','h','e','l','l','N','o','R','o','a','m','\\'};
+    static const WCHAR classesW[] = {'S','o','f','t','w','a','r','e','\\',
+        'C','l','a','s','s','e','s','\\'};
+
+    static const WCHAR localized_resource_nameW[] = {'L','o','c','a','l','i','z','e','d',
+        'R','e','s','o','u','r','c','e','N','a','m','e','\\'};
+    static const WCHAR handlersW[] = {'H','a','n','d','l','e','r','s','\\'};
+    static const WCHAR associationsW[] = {'A','s','s','o','c','i','a','t','i','o','n','s','\\'};
+    static const WCHAR volatileW[] = {'V','o','l','a','t','i','l','e','\\'};
+    static const WCHAR mui_cacheW[] = {'M','U','I','C','a','c','h','e','\\'};
+    static const WCHAR file_extsW[] = {'F','i','l','e','E','x','t','s','\\'};
+
+    WCHAR *path;
+    const WCHAR *key, *subkey;
+    int size_key, size_subkey, size_user;
+    HKEY hkey = NULL;
+
+    TRACE("(0x%08x, %s, %d)\n", flags, debugstr_w(sub_key), create);
+
+    /* For compatibility with Vista+ */
+    if(flags == 0x1ffff)
+        flags = 0x21;
+
+    switch(flags&0xff0) {
+    case SHKEY_Key_Explorer:
+        key = explorerW;
+        size_key = sizeof(explorerW);
+        break;
+    case SHKEY_Key_Shell:
+        key = shellW;
+        size_key = sizeof(shellW);
+        break;
+    case SHKEY_Key_ShellNoRoam:
+        key = shell_no_roamW;
+        size_key = sizeof(shell_no_roamW);
+        break;
+    case SHKEY_Key_Classes:
+        key = classesW;
+        size_key = sizeof(classesW);
+        break;
+    default:
+        FIXME("unsupported flags (0x%08x)\n", flags);
+        return NULL;
+    }
+
+    switch(flags&0xff000) {
+    case SHKEY_Subkey_Default:
+        subkey = NULL;
+        size_subkey = 0;
+        break;
+    case SHKEY_Subkey_ResourceName:
+        subkey = localized_resource_nameW;
+        size_subkey = sizeof(localized_resource_nameW);
+        break;
+    case SHKEY_Subkey_Handlers:
+        subkey = handlersW;
+        size_subkey = sizeof(handlersW);
+        break;
+    case SHKEY_Subkey_Associations:
+        subkey = associationsW;
+        size_subkey = sizeof(associationsW);
+        break;
+    case SHKEY_Subkey_Volatile:
+        subkey = volatileW;
+        size_subkey = sizeof(volatileW);
+        break;
+    case SHKEY_Subkey_MUICache:
+        subkey = mui_cacheW;
+        size_subkey = sizeof(mui_cacheW);
+        break;
+    case SHKEY_Subkey_FileExts:
+        subkey = file_extsW;
+        size_subkey = sizeof(file_extsW);
+        break;
+    default:
+        FIXME("unsupported flags (0x%08x)\n", flags);
+        return NULL;
+    }
+
+    if(sub_key)
+        size_user = lstrlenW(sub_key)*sizeof(WCHAR);
+    else
+        size_user = 0;
+
+    path = HeapAlloc(GetProcessHeap(), 0, size_key+size_subkey+size_user+sizeof(WCHAR));
+    if(!path) {
+        ERR("Out of memory\n");
+        return NULL;
+    }
+
+    memcpy(path, key, size_key);
+    if(subkey)
+        memcpy(path+size_key/sizeof(WCHAR), subkey, size_subkey);
+    if(sub_key)
+        memcpy(path+(size_key+size_subkey)/sizeof(WCHAR), sub_key, size_user);
+    path[(size_key+size_subkey+size_user)/sizeof(WCHAR)] = '\0';
+
+    if(create)
+        RegCreateKeyExW((flags&0xf)==SHKEY_Root_HKLM?HKEY_LOCAL_MACHINE:HKEY_CURRENT_USER,
+                path, 0, NULL, 0, MAXIMUM_ALLOWED, NULL, &hkey, NULL);
+    else
+        RegOpenKeyExW((flags&0xf)==SHKEY_Root_HKLM?HKEY_LOCAL_MACHINE:HKEY_CURRENT_USER,
+                path, 0, MAXIMUM_ALLOWED, &hkey);
+
+    HeapFree(GetProcessHeap(), 0, path);
+    return hkey;
 }
 
 /***********************************************************************
@@ -4475,12 +4604,104 @@ HRESULT WINAPI IUnknown_OnFocusChangeIS(LPUNKNOWN lpUnknown, LPUNKNOWN pFocusObj
 }
 
 /***********************************************************************
- *		SHGetValueW (SHLWAPI.@)
+ *		SKAllocValueW (SHLWAPI.519)
  */
-HRESULT WINAPI SKGetValueW(DWORD a, LPWSTR b, LPWSTR c, DWORD d, DWORD e, DWORD f)
+HRESULT WINAPI SKAllocValueW(DWORD flags, LPCWSTR subkey, LPCWSTR value, DWORD *type,
+        LPVOID *data, DWORD *count)
 {
-    FIXME("(%x, %s, %s, %x, %x, %x): stub\n", a, debugstr_w(b), debugstr_w(c), d, e, f);
-    return E_FAIL;
+    DWORD ret, size;
+    HKEY hkey;
+
+    TRACE("(0x%x, %s, %s, %p, %p, %p)\n", flags, debugstr_w(subkey),
+        debugstr_w(value), type, data, count);
+
+    hkey = SHGetShellKey(flags, subkey, FALSE);
+    if (!hkey)
+        return HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND);
+
+    ret = SHQueryValueExW(hkey, value, NULL, type, NULL, &size);
+    if (ret) {
+        RegCloseKey(hkey);
+        return HRESULT_FROM_WIN32(ret);
+    }
+
+    size += 2;
+    *data = LocalAlloc(0, size);
+    if (!*data) {
+        RegCloseKey(hkey);
+        return E_OUTOFMEMORY;
+    }
+
+    ret = SHQueryValueExW(hkey, value, NULL, type, *data, &size);
+    if (count)
+        *count = size;
+
+    RegCloseKey(hkey);
+    return HRESULT_FROM_WIN32(ret);
+}
+
+/***********************************************************************
+ *		SKDeleteValueW (SHLWAPI.518)
+ */
+HRESULT WINAPI SKDeleteValueW(DWORD flags, LPCWSTR subkey, LPCWSTR value)
+{
+    DWORD ret;
+    HKEY hkey;
+
+    TRACE("(0x%x, %s %s)\n", flags, debugstr_w(subkey), debugstr_w(value));
+
+    hkey = SHGetShellKey(flags, subkey, FALSE);
+    if (!hkey)
+        return HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND);
+
+    ret = RegDeleteValueW(hkey, value);
+
+    RegCloseKey(hkey);
+    return HRESULT_FROM_WIN32(ret);
+}
+
+/***********************************************************************
+ *		SKGetValueW (SHLWAPI.516)
+ */
+HRESULT WINAPI SKGetValueW(DWORD flags, LPCWSTR subkey, LPCWSTR value, DWORD *type,
+    void *data, DWORD *count)
+{
+    DWORD ret;
+    HKEY hkey;
+
+    TRACE("(0x%x, %s, %s, %p, %p, %p)\n", flags, debugstr_w(subkey),
+        debugstr_w(value), type, data, count);
+
+    hkey = SHGetShellKey(flags, subkey, FALSE);
+    if (!hkey)
+        return HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND);
+
+    ret = SHQueryValueExW(hkey, value, NULL, type, data, count);
+
+    RegCloseKey(hkey);
+    return HRESULT_FROM_WIN32(ret);
+}
+
+/***********************************************************************
+ *		SKSetValueW (SHLWAPI.516)
+ */
+HRESULT WINAPI SKSetValueW(DWORD flags, LPCWSTR subkey, LPCWSTR value,
+        DWORD type, void *data, DWORD count)
+{
+    DWORD ret;
+    HKEY hkey;
+
+    TRACE("(0x%x, %s, %s, %x, %p, %d)\n", flags, debugstr_w(subkey),
+            debugstr_w(value), type, data, count);
+
+    hkey = SHGetShellKey(flags, subkey, TRUE);
+    if (!hkey)
+        return HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND);
+
+    ret = RegSetValueExW(hkey, value, 0, type, data, count);
+
+    RegCloseKey(hkey);
+    return HRESULT_FROM_WIN32(ret);
 }
 
 typedef HRESULT (WINAPI *DllGetVersion_func)(DLLVERSIONINFO *);

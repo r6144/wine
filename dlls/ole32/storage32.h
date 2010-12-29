@@ -353,8 +353,13 @@ struct StorageImpl
   ULONG smallBlockLimit;
   ULONG smallBlockDepotStart;
   ULONG extBigBlockDepotStart;
+  ULONG *extBigBlockDepotLocations;
+  ULONG extBigBlockDepotLocationsSize;
   ULONG extBigBlockDepotCount;
   ULONG bigBlockDepotStart[COUNT_BBDEPOTINHEADER];
+
+  ULONG extBlockDepotCached[MAX_BIG_BLOCK_SIZE / 4];
+  ULONG indexExtBlockDepotCached;
 
   ULONG blockDepotCached[MAX_BIG_BLOCK_SIZE / 4];
   ULONG indexBlockDepotCached;
@@ -407,7 +412,8 @@ BlockChainStream* Storage32Impl_SmallBlocksToBigBlocks(
 
 SmallBlockChainStream* Storage32Impl_BigBlocksToSmallBlocks(
                       StorageImpl* This,
-                      BlockChainStream** ppbbChain);
+                      BlockChainStream** ppbbChain,
+                      ULARGE_INTEGER newSize);
 
 /****************************************************************************
  * StgStreamImpl definitions.
@@ -512,6 +518,15 @@ struct BlockChainRun
   ULONG lastOffset;
 };
 
+typedef struct BlockChainBlock
+{
+  ULONG index;
+  ULONG sector;
+  int read;
+  int dirty;
+  BYTE data[MAX_BIG_BLOCK_SIZE];
+} BlockChainBlock;
+
 struct BlockChainStream
 {
   StorageImpl* parentStorage;
@@ -520,6 +535,8 @@ struct BlockChainStream
   struct BlockChainRun* indexCache;
   ULONG        indexCacheLen;
   ULONG        indexCacheSize;
+  BlockChainBlock cachedBlocks[2];
+  ULONG        blockToEvict;
   ULONG        tailIndex;
   ULONG        numBlocks;
 };
@@ -552,6 +569,9 @@ HRESULT BlockChainStream_WriteAt(
 BOOL BlockChainStream_SetSize(
 		BlockChainStream* This,
 		ULARGE_INTEGER    newSize);
+
+HRESULT BlockChainStream_Flush(
+                BlockChainStream* This);
 
 /****************************************************************************
  * SmallBlockChainStream definitions.

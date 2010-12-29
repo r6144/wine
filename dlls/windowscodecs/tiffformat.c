@@ -59,6 +59,7 @@ MAKE_FUNCPTR(TIFFClientOpen);
 MAKE_FUNCPTR(TIFFClose);
 MAKE_FUNCPTR(TIFFCurrentDirectory);
 MAKE_FUNCPTR(TIFFGetField);
+MAKE_FUNCPTR(TIFFIsByteSwapped);
 MAKE_FUNCPTR(TIFFReadDirectory);
 MAKE_FUNCPTR(TIFFReadEncodedStrip);
 MAKE_FUNCPTR(TIFFSetDirectory);
@@ -85,6 +86,7 @@ static void *load_libtiff(void)
         LOAD_FUNCPTR(TIFFClose);
         LOAD_FUNCPTR(TIFFCurrentDirectory);
         LOAD_FUNCPTR(TIFFGetField);
+        LOAD_FUNCPTR(TIFFIsByteSwapped);
         LOAD_FUNCPTR(TIFFReadDirectory);
         LOAD_FUNCPTR(TIFFReadEncodedStrip);
         LOAD_FUNCPTR(TIFFSetDirectory);
@@ -181,13 +183,18 @@ static void tiff_stream_unmap(thandle_t client_data, tdata_t addr, toff_t size)
 
 static TIFF* tiff_open_stream(IStream *stream, const char *mode)
 {
+    LARGE_INTEGER zero;
+
+    zero.QuadPart = 0;
+    IStream_Seek(stream, zero, STREAM_SEEK_SET, NULL);
+
     return pTIFFClientOpen("<IStream object>", mode, stream, tiff_stream_read,
         tiff_stream_write, tiff_stream_seek, tiff_stream_close,
         tiff_stream_size, tiff_stream_map, tiff_stream_unmap);
 }
 
 typedef struct {
-    const IWICBitmapDecoderVtbl *lpVtbl;
+    IWICBitmapDecoder IWICBitmapDecoder_iface;
     LONG ref;
     IStream *stream;
     CRITICAL_SECTION lock; /* Must be held when tiff is used or initiailzed is set */
@@ -197,9 +204,13 @@ typedef struct {
 
 typedef struct {
     const WICPixelFormatGUID *format;
+    int bps;
+    int samples;
     int bpp;
+    int planar;
     int indexed;
     int reverse_bgr;
+    int invert_grayscale;
     UINT width, height;
     UINT tile_width, tile_height;
     UINT tile_stride;
@@ -207,7 +218,7 @@ typedef struct {
 } tiff_decode_info;
 
 typedef struct {
-    const IWICBitmapFrameDecodeVtbl *lpVtbl;
+    IWICBitmapFrameDecode IWICBitmapFrameDecode_iface;
     LONG ref;
     TiffDecoder *parent;
     UINT index;
@@ -218,13 +229,25 @@ typedef struct {
 
 static const IWICBitmapFrameDecodeVtbl TiffFrameDecode_Vtbl;
 
+static inline TiffDecoder *impl_from_IWICBitmapDecoder(IWICBitmapDecoder *iface)
+{
+    return CONTAINING_RECORD(iface, TiffDecoder, IWICBitmapDecoder_iface);
+}
+
+static inline TiffFrameDecode *impl_from_IWICBitmapFrameDecode(IWICBitmapFrameDecode *iface)
+{
+    return CONTAINING_RECORD(iface, TiffFrameDecode, IWICBitmapFrameDecode_iface);
+}
+
 static HRESULT tiff_get_decode_info(TIFF *tiff, tiff_decode_info *decode_info)
 {
     uint16 photometric, bps, samples, planar;
+    uint16 extra_sample_count, *extra_samples;
     int ret;
 
     decode_info->indexed = 0;
     decode_info->reverse_bgr = 0;
+    decode_info->invert_grayscale = 0;
 
     ret = pTIFFGetField(tiff, TIFFTAG_PHOTOMETRIC, &photometric);
     if (!ret)
@@ -235,10 +258,37 @@ static HRESULT tiff_get_decode_info(TIFF *tiff, tiff_decode_info *decode_info)
 
     ret = pTIFFGetField(tiff, TIFFTAG_BITSPERSAMPLE, &bps);
     if (!ret) bps = 1;
+    decode_info->bps = bps;
+
+    ret = pTIFFGetField(tiff, TIFFTAG_SAMPLESPERPIXEL, &samples);
+    if (!ret) samples = 1;
+    decode_info->samples = samples;
+
+    if (samples == 1)
+        planar = 1;
+    else
+    {
+        ret = pTIFFGetField(tiff, TIFFTAG_PLANARCONFIG, &planar);
+        if (!ret) planar = 1;
+        if (planar != 1)
+        {
+            FIXME("unhandled planar configuration %u\n", planar);
+            return E_FAIL;
+        }
+    }
+    decode_info->planar = planar;
 
     switch(photometric)
     {
+    case 0: /* WhiteIsZero */
+        decode_info->invert_grayscale = 1;
     case 1: /* BlackIsZero */
+        if (samples != 1)
+        {
+            FIXME("unhandled grayscale sample count %u\n", samples);
+            return E_FAIL;
+        }
+
         decode_info->bpp = bps;
         switch (bps)
         {
@@ -257,29 +307,72 @@ static HRESULT tiff_get_decode_info(TIFF *tiff, tiff_decode_info *decode_info)
         }
         break;
     case 2: /* RGB */
-        if (bps != 8)
+        decode_info->bpp = bps * samples;
+
+        if (samples == 4)
         {
-            FIXME("unhandled RGB bit count %u\n", bps);
-            return E_FAIL;
+            ret = pTIFFGetField(tiff, TIFFTAG_EXTRASAMPLES, &extra_sample_count, &extra_samples);
+            if (!ret)
+            {
+                WARN("Cannot get extra sample type for RGB data, ret=%i count=%i\n", ret, extra_sample_count);
+                return E_FAIL;
+            }
         }
-        ret = pTIFFGetField(tiff, TIFFTAG_SAMPLESPERPIXEL, &samples);
-        if (samples != 3)
+        else if (samples != 3)
         {
             FIXME("unhandled RGB sample count %u\n", samples);
             return E_FAIL;
         }
-        ret = pTIFFGetField(tiff, TIFFTAG_PLANARCONFIG, &planar);
-        if (!ret) planar = 1;
-        if (planar != 1)
+
+        switch(bps)
         {
-            FIXME("unhandled planar configuration %u\n", planar);
+        case 8:
+            decode_info->reverse_bgr = 1;
+            if (samples == 3)
+                decode_info->format = &GUID_WICPixelFormat24bppBGR;
+            else
+                switch(extra_samples[0])
+                {
+                case 1: /* Associated (pre-multiplied) alpha data */
+                    decode_info->format = &GUID_WICPixelFormat32bppPBGRA;
+                    break;
+                case 2: /* Unassociated alpha data */
+                    decode_info->format = &GUID_WICPixelFormat32bppBGRA;
+                    break;
+                default:
+                    FIXME("unhandled extra sample type %i\n", extra_samples[0]);
+                    return E_FAIL;
+                }
+            break;
+        case 16:
+            if (samples == 3)
+                decode_info->format = &GUID_WICPixelFormat48bppRGB;
+            else
+                switch(extra_samples[0])
+                {
+                case 1: /* Associated (pre-multiplied) alpha data */
+                    decode_info->format = &GUID_WICPixelFormat64bppPRGBA;
+                    break;
+                case 2: /* Unassociated alpha data */
+                    decode_info->format = &GUID_WICPixelFormat64bppRGBA;
+                    break;
+                default:
+                    FIXME("unhandled extra sample type %i\n", extra_samples[0]);
+                    return E_FAIL;
+                }
+            break;
+        default:
+            FIXME("unhandled RGB bit count %u\n", bps);
             return E_FAIL;
         }
-        decode_info->bpp = bps * samples;
-        decode_info->reverse_bgr = 1;
-        decode_info->format = &GUID_WICPixelFormat24bppBGR;
         break;
     case 3: /* RGB Palette */
+        if (samples != 1)
+        {
+            FIXME("unhandled indexed sample count %u\n", samples);
+            return E_FAIL;
+        }
+
         decode_info->indexed = 1;
         decode_info->bpp = bps;
         switch (bps)
@@ -295,7 +388,6 @@ static HRESULT tiff_get_decode_info(TIFF *tiff, tiff_decode_info *decode_info)
             return E_FAIL;
         }
         break;
-    case 0: /* WhiteIsZero */
     case 4: /* Transparency mask */
     case 5: /* CMYK */
     case 6: /* YCbCr */
@@ -322,6 +414,8 @@ static HRESULT tiff_get_decode_info(TIFF *tiff, tiff_decode_info *decode_info)
     ret = pTIFFGetField(tiff, TIFFTAG_ROWSPERSTRIP, &decode_info->tile_height);
     if (ret)
     {
+        if (decode_info->tile_height > decode_info->height)
+            decode_info->tile_height = decode_info->height;
         decode_info->tile_width = decode_info->width;
         decode_info->tile_stride = ((decode_info->bpp * decode_info->tile_width + 7)/8);
         decode_info->tile_size = decode_info->tile_height * decode_info->tile_stride;
@@ -339,7 +433,7 @@ static HRESULT tiff_get_decode_info(TIFF *tiff, tiff_decode_info *decode_info)
 static HRESULT WINAPI TiffDecoder_QueryInterface(IWICBitmapDecoder *iface, REFIID iid,
     void **ppv)
 {
-    TiffDecoder *This = (TiffDecoder*)iface;
+    TiffDecoder *This = impl_from_IWICBitmapDecoder(iface);
     TRACE("(%p,%s,%p)\n", iface, debugstr_guid(iid), ppv);
 
     if (!ppv) return E_INVALIDARG;
@@ -360,7 +454,7 @@ static HRESULT WINAPI TiffDecoder_QueryInterface(IWICBitmapDecoder *iface, REFII
 
 static ULONG WINAPI TiffDecoder_AddRef(IWICBitmapDecoder *iface)
 {
-    TiffDecoder *This = (TiffDecoder*)iface;
+    TiffDecoder *This = impl_from_IWICBitmapDecoder(iface);
     ULONG ref = InterlockedIncrement(&This->ref);
 
     TRACE("(%p) refcount=%u\n", iface, ref);
@@ -370,7 +464,7 @@ static ULONG WINAPI TiffDecoder_AddRef(IWICBitmapDecoder *iface)
 
 static ULONG WINAPI TiffDecoder_Release(IWICBitmapDecoder *iface)
 {
-    TiffDecoder *This = (TiffDecoder*)iface;
+    TiffDecoder *This = impl_from_IWICBitmapDecoder(iface);
     ULONG ref = InterlockedDecrement(&This->ref);
 
     TRACE("(%p) refcount=%u\n", iface, ref);
@@ -397,7 +491,7 @@ static HRESULT WINAPI TiffDecoder_QueryCapability(IWICBitmapDecoder *iface, IStr
 static HRESULT WINAPI TiffDecoder_Initialize(IWICBitmapDecoder *iface, IStream *pIStream,
     WICDecodeOptions cacheOptions)
 {
-    TiffDecoder *This = (TiffDecoder*)iface;
+    TiffDecoder *This = impl_from_IWICBitmapDecoder(iface);
     TIFF *tiff;
     HRESULT hr=S_OK;
 
@@ -481,7 +575,7 @@ static HRESULT WINAPI TiffDecoder_GetThumbnail(IWICBitmapDecoder *iface,
 static HRESULT WINAPI TiffDecoder_GetFrameCount(IWICBitmapDecoder *iface,
     UINT *pCount)
 {
-    TiffDecoder *This = (TiffDecoder*)iface;
+    TiffDecoder *This = impl_from_IWICBitmapDecoder(iface);
 
     if (!This->tiff)
     {
@@ -502,7 +596,7 @@ static HRESULT WINAPI TiffDecoder_GetFrameCount(IWICBitmapDecoder *iface,
 static HRESULT WINAPI TiffDecoder_GetFrame(IWICBitmapDecoder *iface,
     UINT index, IWICBitmapFrameDecode **ppIBitmapFrame)
 {
-    TiffDecoder *This = (TiffDecoder*)iface;
+    TiffDecoder *This = impl_from_IWICBitmapDecoder(iface);
     TiffFrameDecode *result;
     int res;
     tiff_decode_info decode_info;
@@ -525,7 +619,7 @@ static HRESULT WINAPI TiffDecoder_GetFrame(IWICBitmapDecoder *iface,
 
         if (result)
         {
-            result->lpVtbl = &TiffFrameDecode_Vtbl;
+            result->IWICBitmapFrameDecode_iface.lpVtbl = &TiffFrameDecode_Vtbl;
             result->ref = 1;
             result->parent = This;
             result->index = index;
@@ -569,7 +663,7 @@ static const IWICBitmapDecoderVtbl TiffDecoder_Vtbl = {
 static HRESULT WINAPI TiffFrameDecode_QueryInterface(IWICBitmapFrameDecode *iface, REFIID iid,
     void **ppv)
 {
-    TiffFrameDecode *This = (TiffFrameDecode*)iface;
+    TiffFrameDecode *This = impl_from_IWICBitmapFrameDecode(iface);
     TRACE("(%p,%s,%p)\n", iface, debugstr_guid(iid), ppv);
 
     if (!ppv) return E_INVALIDARG;
@@ -592,7 +686,7 @@ static HRESULT WINAPI TiffFrameDecode_QueryInterface(IWICBitmapFrameDecode *ifac
 
 static ULONG WINAPI TiffFrameDecode_AddRef(IWICBitmapFrameDecode *iface)
 {
-    TiffFrameDecode *This = (TiffFrameDecode*)iface;
+    TiffFrameDecode *This = impl_from_IWICBitmapFrameDecode(iface);
     ULONG ref = InterlockedIncrement(&This->ref);
 
     TRACE("(%p) refcount=%u\n", iface, ref);
@@ -602,7 +696,7 @@ static ULONG WINAPI TiffFrameDecode_AddRef(IWICBitmapFrameDecode *iface)
 
 static ULONG WINAPI TiffFrameDecode_Release(IWICBitmapFrameDecode *iface)
 {
-    TiffFrameDecode *This = (TiffFrameDecode*)iface;
+    TiffFrameDecode *This = impl_from_IWICBitmapFrameDecode(iface);
     ULONG ref = InterlockedDecrement(&This->ref);
 
     TRACE("(%p) refcount=%u\n", iface, ref);
@@ -619,7 +713,7 @@ static ULONG WINAPI TiffFrameDecode_Release(IWICBitmapFrameDecode *iface)
 static HRESULT WINAPI TiffFrameDecode_GetSize(IWICBitmapFrameDecode *iface,
     UINT *puiWidth, UINT *puiHeight)
 {
-    TiffFrameDecode *This = (TiffFrameDecode*)iface;
+    TiffFrameDecode *This = impl_from_IWICBitmapFrameDecode(iface);
 
     *puiWidth = This->decode_info.width;
     *puiHeight = This->decode_info.height;
@@ -632,7 +726,7 @@ static HRESULT WINAPI TiffFrameDecode_GetSize(IWICBitmapFrameDecode *iface,
 static HRESULT WINAPI TiffFrameDecode_GetPixelFormat(IWICBitmapFrameDecode *iface,
     WICPixelFormatGUID *pPixelFormat)
 {
-    TiffFrameDecode *This = (TiffFrameDecode*)iface;
+    TiffFrameDecode *This = impl_from_IWICBitmapFrameDecode(iface);
 
     memcpy(pPixelFormat, This->decode_info.format, sizeof(GUID));
 
@@ -651,14 +745,43 @@ static HRESULT WINAPI TiffFrameDecode_GetResolution(IWICBitmapFrameDecode *iface
 static HRESULT WINAPI TiffFrameDecode_CopyPalette(IWICBitmapFrameDecode *iface,
     IWICPalette *pIPalette)
 {
-    FIXME("(%p,%p)\n", iface, pIPalette);
-    return E_NOTIMPL;
+    TiffFrameDecode *This = impl_from_IWICBitmapFrameDecode(iface);
+    uint16 *red, *green, *blue;
+    WICColor colors[256];
+    int color_count, ret, i;
+
+    TRACE("(%p,%p)\n", iface, pIPalette);
+
+    color_count = 1<<This->decode_info.bps;
+
+    EnterCriticalSection(&This->parent->lock);
+    ret = pTIFFGetField(This->parent->tiff, TIFFTAG_COLORMAP, &red, &green, &blue);
+    LeaveCriticalSection(&This->parent->lock);
+
+    if (!ret)
+    {
+        WARN("Couldn't read color map\n");
+        return E_FAIL;
+    }
+
+    for (i=0; i<color_count; i++)
+    {
+        colors[i] = 0xff000000 |
+            ((red[i]<<8) & 0xff0000) |
+            (green[i] & 0xff00) |
+            ((blue[i]>>8) & 0xff);
+    }
+
+    return IWICPalette_InitializeCustom(pIPalette, colors, color_count);
 }
 
 static HRESULT TiffFrameDecode_ReadTile(TiffFrameDecode *This, UINT tile_x, UINT tile_y)
 {
     HRESULT hr=S_OK;
     tsize_t ret;
+    int swap_bytes;
+
+    swap_bytes = pTIFFIsByteSwapped(This->parent->tiff);
 
     ret = pTIFFSetDirectory(This->parent->tiff, This->index);
 
@@ -675,21 +798,66 @@ static HRESULT TiffFrameDecode_ReadTile(TiffFrameDecode *This, UINT tile_x, UINT
 
     if (hr == S_OK && This->decode_info.reverse_bgr)
     {
-        if (This->decode_info.format == &GUID_WICPixelFormat24bppBGR)
+        if (This->decode_info.bps == 8)
         {
-            UINT i, total_pixels;
+            UINT i, total_pixels, sample_count;
             BYTE *pixel, temp;
 
             total_pixels = This->decode_info.tile_width * This->decode_info.tile_height;
             pixel = This->cached_tile;
+            sample_count = This->decode_info.samples;
             for (i=0; i<total_pixels; i++)
             {
                 temp = pixel[2];
                 pixel[2] = pixel[0];
                 pixel[0] = temp;
-                pixel += 3;
+                pixel += sample_count;
             }
         }
+    }
+
+    if (hr == S_OK && swap_bytes && This->decode_info.bps > 8)
+    {
+        UINT row, i, samples_per_row;
+        BYTE *sample, temp;
+
+        samples_per_row = This->decode_info.tile_width * This->decode_info.samples;
+
+        switch(This->decode_info.bps)
+        {
+        case 16:
+            for (row=0; row<This->decode_info.tile_height; row++)
+            {
+                sample = This->cached_tile + row * This->decode_info.tile_stride;
+                for (i=0; i<samples_per_row; i++)
+                {
+                    temp = sample[1];
+                    sample[1] = sample[0];
+                    sample[0] = temp;
+                    sample += 2;
+                }
+            }
+            break;
+        default:
+            ERR("unhandled bps for byte swap %u\n", This->decode_info.bps);
+            return E_FAIL;
+        }
+    }
+
+    if (hr == S_OK && This->decode_info.invert_grayscale)
+    {
+        BYTE *byte, *end;
+
+        if (This->decode_info.samples != 1)
+        {
+            ERR("cannot invert grayscale image with %u samples\n", This->decode_info.samples);
+            return E_FAIL;
+        }
+
+        end = This->cached_tile+This->decode_info.tile_size;
+
+        for (byte = This->cached_tile; byte != end; byte++)
+            *byte = ~(*byte);
     }
 
     if (hr == S_OK)
@@ -704,19 +872,31 @@ static HRESULT TiffFrameDecode_ReadTile(TiffFrameDecode *This, UINT tile_x, UINT
 static HRESULT WINAPI TiffFrameDecode_CopyPixels(IWICBitmapFrameDecode *iface,
     const WICRect *prc, UINT cbStride, UINT cbBufferSize, BYTE *pbBuffer)
 {
-    TiffFrameDecode *This = (TiffFrameDecode*)iface;
+    TiffFrameDecode *This = impl_from_IWICBitmapFrameDecode(iface);
     UINT min_tile_x, max_tile_x, min_tile_y, max_tile_y;
     UINT tile_x, tile_y;
     WICRect rc;
     HRESULT hr=S_OK;
     BYTE *dst_tilepos;
     UINT bytesperrow;
+    WICRect rect;
 
     TRACE("(%p,%p,%u,%u,%p)\n", iface, prc, cbStride, cbBufferSize, pbBuffer);
 
-    if (prc->X < 0 || prc->Y < 0 || prc->X+prc->Width > This->decode_info.width ||
-        prc->Y+prc->Height > This->decode_info.height)
-        return E_INVALIDARG;
+    if (!prc)
+    {
+        rect.X = 0;
+        rect.Y = 0;
+        rect.Width = This->decode_info.width;
+        rect.Height = This->decode_info.height;
+        prc = &rect;
+    }
+    else
+    {
+        if (prc->X < 0 || prc->Y < 0 || prc->X+prc->Width > This->decode_info.width ||
+            prc->Y+prc->Height > This->decode_info.height)
+            return E_INVALIDARG;
+    }
 
     bytesperrow = ((This->decode_info.bpp * prc->Width)+7)/8;
 
@@ -845,7 +1025,7 @@ HRESULT TiffDecoder_CreateInstance(IUnknown *pUnkOuter, REFIID iid, void** ppv)
     This = HeapAlloc(GetProcessHeap(), 0, sizeof(TiffDecoder));
     if (!This) return E_OUTOFMEMORY;
 
-    This->lpVtbl = &TiffDecoder_Vtbl;
+    This->IWICBitmapDecoder_iface.lpVtbl = &TiffDecoder_Vtbl;
     This->ref = 1;
     This->stream = NULL;
     InitializeCriticalSection(&This->lock);

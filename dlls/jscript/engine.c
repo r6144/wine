@@ -32,14 +32,14 @@ WINE_DEFAULT_DEBUG_CHANNEL(jscript);
 #define EXPR_NEWREF  0x0002
 #define EXPR_STRREF  0x0004
 
-static inline HRESULT stat_eval(exec_ctx_t *ctx, statement_t *stat, return_type_t *rt, VARIANT *ret)
+static inline HRESULT stat_eval(script_ctx_t *ctx, statement_t *stat, return_type_t *rt, VARIANT *ret)
 {
     return stat->eval(ctx, stat, rt, ret);
 }
 
-static inline HRESULT expr_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+static inline HRESULT expr_eval(script_ctx_t *ctx, expression_t *expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
-    return _expr->eval(ctx, _expr, flags, ei, ret);
+    return expr->eval(ctx, expr, flags, ei, ret);
 }
 
 static void exprval_release(exprval_t *val)
@@ -133,7 +133,7 @@ static void exprval_set_idref(exprval_t *val, IDispatch *disp, DISPID id)
         IDispatch_AddRef(disp);
 }
 
-HRESULT scope_push(scope_chain_t *scope, DispatchEx *obj, scope_chain_t **ret)
+HRESULT scope_push(scope_chain_t *scope, jsdisp_t *obj, scope_chain_t **ret)
 {
     scope_chain_t *new_scope;
 
@@ -143,7 +143,7 @@ HRESULT scope_push(scope_chain_t *scope, DispatchEx *obj, scope_chain_t **ret)
 
     new_scope->ref = 1;
 
-    IDispatchEx_AddRef(_IDispatchEx_(obj));
+    jsdisp_addref(obj);
     new_scope->obj = obj;
 
     if(scope) {
@@ -178,8 +178,8 @@ void scope_release(scope_chain_t *scope)
     heap_free(scope);
 }
 
-HRESULT create_exec_ctx(script_ctx_t *script_ctx, IDispatch *this_obj, DispatchEx *var_disp,
-        scope_chain_t *scope, exec_ctx_t **ret)
+HRESULT create_exec_ctx(script_ctx_t *script_ctx, IDispatch *this_obj, jsdisp_t *var_disp,
+        scope_chain_t *scope, BOOL is_global, exec_ctx_t **ret)
 {
     exec_ctx_t *ctx;
 
@@ -188,16 +188,17 @@ HRESULT create_exec_ctx(script_ctx_t *script_ctx, IDispatch *this_obj, DispatchE
         return E_OUTOFMEMORY;
 
     ctx->ref = 1;
+    ctx->is_global = is_global;
 
     if(this_obj)
         ctx->this_obj = this_obj;
     else if(script_ctx->host_global)
         ctx->this_obj = script_ctx->host_global;
     else
-        ctx->this_obj = (IDispatch*)_IDispatchEx_(script_ctx->global);
+        ctx->this_obj = to_disp(script_ctx->global);
     IDispatch_AddRef(ctx->this_obj);
 
-    IDispatchEx_AddRef(_IDispatchEx_(var_disp));
+    jsdisp_addref(var_disp);
     ctx->var_disp = var_disp;
 
     if(scope) {
@@ -375,7 +376,7 @@ static HRESULT literal_to_var(script_ctx_t *ctx, literal_t *literal, VARIANT *v)
         V_BOOL(v) = literal->u.bval;
         break;
     case LT_REGEXP: {
-        DispatchEx *regexp;
+        jsdisp_t *regexp;
         HRESULT hres;
 
         hres = create_regexp(ctx, literal->u.regexp.str, literal->u.regexp.str_len,
@@ -383,8 +384,7 @@ static HRESULT literal_to_var(script_ctx_t *ctx, literal_t *literal, VARIANT *v)
         if(FAILED(hres))
             return hres;
 
-        V_VT(v) = VT_DISPATCH;
-        V_DISPATCH(v) = (IDispatch*)_IDispatchEx_(regexp);
+        var_set_jsdisp(v, regexp);
     }
     }
 
@@ -411,7 +411,7 @@ static BOOL lookup_global_members(script_ctx_t *ctx, BSTR identifier, exprval_t 
     return FALSE;
 }
 
-HRESULT exec_source(exec_ctx_t *ctx, parser_ctx_t *parser, source_elements_t *source, exec_type_t exec_type,
+HRESULT exec_source(exec_ctx_t *ctx, parser_ctx_t *parser, source_elements_t *source, BOOL from_eval,
         jsexcept_t *ei, VARIANT *retv)
 {
     script_ctx_t *script = parser->script;
@@ -425,7 +425,7 @@ HRESULT exec_source(exec_ctx_t *ctx, parser_ctx_t *parser, source_elements_t *so
     HRESULT hres = S_OK;
 
     for(func = source->functions; func; func = func->next) {
-        DispatchEx *func_obj;
+        jsdisp_t *func_obj;
         VARIANT var;
 
         hres = create_source_function(parser, func->expr->parameter_list, func->expr->source_elements,
@@ -433,8 +433,7 @@ HRESULT exec_source(exec_ctx_t *ctx, parser_ctx_t *parser, source_elements_t *so
         if(FAILED(hres))
             return hres;
 
-        V_VT(&var) = VT_DISPATCH;
-        V_DISPATCH(&var) = (IDispatch*)_IDispatchEx_(func_obj);
+        var_set_jsdisp(&var, func_obj);
         hres = jsdisp_propput_name(ctx->var_disp, func->expr->identifier, &var, ei, NULL);
         jsdisp_release(func_obj);
         if(FAILED(hres))
@@ -449,7 +448,7 @@ HRESULT exec_source(exec_ctx_t *ctx, parser_ctx_t *parser, source_elements_t *so
         if(!name)
             return E_OUTOFMEMORY;
 
-        if(!lookup_global_members(parser->script, name, NULL))
+        if(!ctx->is_global || !lookup_global_members(parser->script, name, NULL))
             hres = jsdisp_get_id(ctx->var_disp, var->identifier, fdexNameEnsure, &id);
         SysFreeString(name);
         if(FAILED(hres))
@@ -467,7 +466,7 @@ HRESULT exec_source(exec_ctx_t *ctx, parser_ctx_t *parser, source_elements_t *so
     rt.type = RT_NORMAL;
 
     for(stat = source->statement; stat; stat = stat->next) {
-        hres = stat_eval(ctx, stat, &rt, &tmp);
+        hres = stat_eval(script, stat, &rt, &tmp);
         if(FAILED(hres))
             break;
 
@@ -491,19 +490,15 @@ HRESULT exec_source(exec_ctx_t *ctx, parser_ctx_t *parser, source_elements_t *so
         return hres;
     }
 
-    if(retv && (exec_type == EXECT_EVAL || rt.type == RT_RETURN))
-        *retv = val;
-    else {
-        if (retv) {
-            VariantInit(retv);
-        }
+    if(!retv || (!from_eval && rt.type != RT_RETURN))
         VariantClear(&val);
-    }
+    if(retv)
+        *retv = val;
     return S_OK;
 }
 
 /* ECMA-262 3rd Edition    10.1.4 */
-static HRESULT identifier_eval(exec_ctx_t *ctx, BSTR identifier, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+static HRESULT identifier_eval(script_ctx_t *ctx, BSTR identifier, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     scope_chain_t *scope;
     named_item_t *item;
@@ -512,32 +507,29 @@ static HRESULT identifier_eval(exec_ctx_t *ctx, BSTR identifier, DWORD flags, js
 
     TRACE("%s\n", debugstr_w(identifier));
 
-    for(scope = ctx->scope_chain; scope; scope = scope->next) {
+    for(scope = ctx->exec_ctx->scope_chain; scope; scope = scope->next) {
         hres = jsdisp_get_id(scope->obj, identifier, 0, &id);
-        if(SUCCEEDED(hres))
-            break;
+        if(SUCCEEDED(hres)) {
+            exprval_set_idref(ret, to_disp(scope->obj), id);
+            return S_OK;
+        }
     }
 
-    if(scope) {
-        exprval_set_idref(ret, (IDispatch*)_IDispatchEx_(scope->obj), id);
-        return S_OK;
-    }
-
-    hres = jsdisp_get_id(ctx->parser->script->global, identifier, 0, &id);
+    hres = jsdisp_get_id(ctx->global, identifier, 0, &id);
     if(SUCCEEDED(hres)) {
-        exprval_set_idref(ret, (IDispatch*)_IDispatchEx_(ctx->parser->script->global), id);
+        exprval_set_idref(ret, to_disp(ctx->global), id);
         return S_OK;
     }
 
-    for(item = ctx->parser->script->named_items; item; item = item->next) {
+    for(item = ctx->named_items; item; item = item->next) {
         if((item->flags & SCRIPTITEM_ISVISIBLE) && !strcmpW(item->name, identifier)) {
             if(!item->disp) {
                 IUnknown *unk;
 
-                if(!ctx->parser->script->site)
+                if(!ctx->site)
                     break;
 
-                hres = IActiveScriptSite_GetItemInfo(ctx->parser->script->site, identifier,
+                hres = IActiveScriptSite_GetItemInfo(ctx->site, identifier,
                                                      SCRIPTINFO_IUNKNOWN, &unk, NULL);
                 if(FAILED(hres)) {
                     WARN("GetItemInfo failed: %08x\n", hres);
@@ -560,15 +552,15 @@ static HRESULT identifier_eval(exec_ctx_t *ctx, BSTR identifier, DWORD flags, js
         }
     }
 
-    if(lookup_global_members(ctx->parser->script, identifier, ret))
+    if(lookup_global_members(ctx, identifier, ret))
         return S_OK;
 
     if(flags & EXPR_NEWREF) {
-        hres = jsdisp_get_id(ctx->parser->script->global, identifier, fdexNameEnsure, &id);
+        hres = jsdisp_get_id(ctx->global, identifier, fdexNameEnsure, &id);
         if(FAILED(hres))
             return hres;
 
-        exprval_set_idref(ret, (IDispatch*)_IDispatchEx_(ctx->parser->script->global), id);
+        exprval_set_idref(ret, to_disp(ctx->global), id);
         return S_OK;
     }
 
@@ -581,7 +573,7 @@ static HRESULT identifier_eval(exec_ctx_t *ctx, BSTR identifier, DWORD flags, js
 }
 
 /* ECMA-262 3rd Edition    12.1 */
-HRESULT block_statement_eval(exec_ctx_t *ctx, statement_t *_stat, return_type_t *rt, VARIANT *ret)
+HRESULT block_statement_eval(script_ctx_t *ctx, statement_t *_stat, return_type_t *rt, VARIANT *ret)
 {
     block_statement_t *stat = (block_statement_t*)_stat;
     VARIANT val, tmp;
@@ -612,7 +604,7 @@ HRESULT block_statement_eval(exec_ctx_t *ctx, statement_t *_stat, return_type_t 
 }
 
 /* ECMA-262 3rd Edition    12.2 */
-static HRESULT variable_list_eval(exec_ctx_t *ctx, variable_declaration_t *var_list, jsexcept_t *ei)
+static HRESULT variable_list_eval(script_ctx_t *ctx, variable_declaration_t *var_list, jsexcept_t *ei)
 {
     variable_declaration_t *iter;
     HRESULT hres = S_OK;
@@ -628,12 +620,12 @@ static HRESULT variable_list_eval(exec_ctx_t *ctx, variable_declaration_t *var_l
         if(FAILED(hres))
             break;
 
-        hres = exprval_to_value(ctx->parser->script, &exprval, ei, &val);
+        hres = exprval_to_value(ctx, &exprval, ei, &val);
         exprval_release(&exprval);
         if(FAILED(hres))
             break;
 
-        hres = jsdisp_propput_name(ctx->var_disp, iter->identifier, &val, ei, NULL/*FIXME*/);
+        hres = jsdisp_propput_name(ctx->exec_ctx->var_disp, iter->identifier, &val, ei, NULL/*FIXME*/);
         VariantClear(&val);
         if(FAILED(hres))
             break;
@@ -643,7 +635,7 @@ static HRESULT variable_list_eval(exec_ctx_t *ctx, variable_declaration_t *var_l
 }
 
 /* ECMA-262 3rd Edition    12.2 */
-HRESULT var_statement_eval(exec_ctx_t *ctx, statement_t *_stat, return_type_t *rt, VARIANT *ret)
+HRESULT var_statement_eval(script_ctx_t *ctx, statement_t *_stat, return_type_t *rt, VARIANT *ret)
 {
     var_statement_t *stat = (var_statement_t*)_stat;
     HRESULT hres;
@@ -659,7 +651,7 @@ HRESULT var_statement_eval(exec_ctx_t *ctx, statement_t *_stat, return_type_t *r
 }
 
 /* ECMA-262 3rd Edition    12.3 */
-HRESULT empty_statement_eval(exec_ctx_t *ctx, statement_t *stat, return_type_t *rt, VARIANT *ret)
+HRESULT empty_statement_eval(script_ctx_t *ctx, statement_t *stat, return_type_t *rt, VARIANT *ret)
 {
     TRACE("\n");
 
@@ -668,7 +660,7 @@ HRESULT empty_statement_eval(exec_ctx_t *ctx, statement_t *stat, return_type_t *
 }
 
 /* ECMA-262 3rd Edition    12.4 */
-HRESULT expression_statement_eval(exec_ctx_t *ctx, statement_t *_stat, return_type_t *rt, VARIANT *ret)
+HRESULT expression_statement_eval(script_ctx_t *ctx, statement_t *_stat, return_type_t *rt, VARIANT *ret)
 {
     expression_statement_t *stat = (expression_statement_t*)_stat;
     exprval_t exprval;
@@ -681,7 +673,7 @@ HRESULT expression_statement_eval(exec_ctx_t *ctx, statement_t *_stat, return_ty
     if(FAILED(hres))
         return hres;
 
-    hres = exprval_to_value(ctx->parser->script, &exprval, &rt->ei, &val);
+    hres = exprval_to_value(ctx, &exprval, &rt->ei, &val);
     exprval_release(&exprval);
     if(FAILED(hres))
         return hres;
@@ -692,7 +684,7 @@ HRESULT expression_statement_eval(exec_ctx_t *ctx, statement_t *_stat, return_ty
 }
 
 /* ECMA-262 3rd Edition    12.5 */
-HRESULT if_statement_eval(exec_ctx_t *ctx, statement_t *_stat, return_type_t *rt, VARIANT *ret)
+HRESULT if_statement_eval(script_ctx_t *ctx, statement_t *_stat, return_type_t *rt, VARIANT *ret)
 {
     if_statement_t *stat = (if_statement_t*)_stat;
     exprval_t exprval;
@@ -705,7 +697,7 @@ HRESULT if_statement_eval(exec_ctx_t *ctx, statement_t *_stat, return_type_t *rt
     if(FAILED(hres))
         return hres;
 
-    hres = exprval_to_boolean(ctx->parser->script, &exprval, &rt->ei, &b);
+    hres = exprval_to_boolean(ctx, &exprval, &rt->ei, &b);
     exprval_release(&exprval);
     if(FAILED(hres))
         return hres;
@@ -721,7 +713,7 @@ HRESULT if_statement_eval(exec_ctx_t *ctx, statement_t *_stat, return_type_t *rt
 }
 
 /* ECMA-262 3rd Edition    12.6.2 */
-HRESULT while_statement_eval(exec_ctx_t *ctx, statement_t *_stat, return_type_t *rt, VARIANT *ret)
+HRESULT while_statement_eval(script_ctx_t *ctx, statement_t *_stat, return_type_t *rt, VARIANT *ret)
 {
     while_statement_t *stat = (while_statement_t*)_stat;
     exprval_t exprval;
@@ -741,7 +733,7 @@ HRESULT while_statement_eval(exec_ctx_t *ctx, statement_t *_stat, return_type_t 
             if(FAILED(hres))
                 break;
 
-            hres = exprval_to_boolean(ctx->parser->script, &exprval, &rt->ei, &b);
+            hres = exprval_to_boolean(ctx, &exprval, &rt->ei, &b);
             exprval_release(&exprval);
             if(FAILED(hres) || !b)
                 break;
@@ -775,7 +767,7 @@ HRESULT while_statement_eval(exec_ctx_t *ctx, statement_t *_stat, return_type_t 
 }
 
 /* ECMA-262 3rd Edition    12.6.3 */
-HRESULT for_statement_eval(exec_ctx_t *ctx, statement_t *_stat, return_type_t *rt, VARIANT *ret)
+HRESULT for_statement_eval(script_ctx_t *ctx, statement_t *_stat, return_type_t *rt, VARIANT *ret)
 {
     for_statement_t *stat = (for_statement_t*)_stat;
     VARIANT val, tmp, retv;
@@ -794,7 +786,7 @@ HRESULT for_statement_eval(exec_ctx_t *ctx, statement_t *_stat, return_type_t *r
         if(FAILED(hres))
             return hres;
 
-        hres = exprval_to_value(ctx->parser->script, &exprval, &rt->ei, &val);
+        hres = exprval_to_value(ctx, &exprval, &rt->ei, &val);
         exprval_release(&exprval);
         if(FAILED(hres))
             return hres;
@@ -810,7 +802,7 @@ HRESULT for_statement_eval(exec_ctx_t *ctx, statement_t *_stat, return_type_t *r
             if(FAILED(hres))
                 break;
 
-            hres = exprval_to_boolean(ctx->parser->script, &exprval, &rt->ei, &b);
+            hres = exprval_to_boolean(ctx, &exprval, &rt->ei, &b);
             exprval_release(&exprval);
             if(FAILED(hres) || !b)
                 break;
@@ -833,7 +825,7 @@ HRESULT for_statement_eval(exec_ctx_t *ctx, statement_t *_stat, return_type_t *r
             if(FAILED(hres))
                 break;
 
-            hres = exprval_to_value(ctx->parser->script, &exprval, &rt->ei, &val);
+            hres = exprval_to_value(ctx, &exprval, &rt->ei, &val);
             exprval_release(&exprval);
             if(FAILED(hres))
                 break;
@@ -855,7 +847,7 @@ HRESULT for_statement_eval(exec_ctx_t *ctx, statement_t *_stat, return_type_t *r
 }
 
 /* ECMA-262 3rd Edition    12.6.4 */
-HRESULT forin_statement_eval(exec_ctx_t *ctx, statement_t *_stat, return_type_t *rt, VARIANT *ret)
+HRESULT forin_statement_eval(script_ctx_t *ctx, statement_t *_stat, return_type_t *rt, VARIANT *ret)
 {
     forin_statement_t *stat = (forin_statement_t*)_stat;
     VARIANT val, name, retv, tmp;
@@ -877,7 +869,7 @@ HRESULT forin_statement_eval(exec_ctx_t *ctx, statement_t *_stat, return_type_t 
     if(FAILED(hres))
         return hres;
 
-    hres = exprval_to_value(ctx->parser->script, &exprval, &rt->ei, &val);
+    hres = exprval_to_value(ctx, &exprval, &rt->ei, &val);
     exprval_release(&exprval);
     if(FAILED(hres))
         return hres;
@@ -919,7 +911,7 @@ HRESULT forin_statement_eval(exec_ctx_t *ctx, statement_t *_stat, return_type_t 
         if(SUCCEEDED(hres)) {
             V_VT(&name) = VT_BSTR;
             V_BSTR(&name) = str;
-            hres = put_value(ctx->parser->script, &exprval, &name, &rt->ei);
+            hres = put_value(ctx, &exprval, &name, &rt->ei);
             exprval_release(&exprval);
         }
         SysFreeString(str);
@@ -954,7 +946,7 @@ HRESULT forin_statement_eval(exec_ctx_t *ctx, statement_t *_stat, return_type_t 
 }
 
 /* ECMA-262 3rd Edition    12.7 */
-HRESULT continue_statement_eval(exec_ctx_t *ctx, statement_t *_stat, return_type_t *rt, VARIANT *ret)
+HRESULT continue_statement_eval(script_ctx_t *ctx, statement_t *_stat, return_type_t *rt, VARIANT *ret)
 {
     branch_statement_t *stat = (branch_statement_t*)_stat;
 
@@ -971,7 +963,7 @@ HRESULT continue_statement_eval(exec_ctx_t *ctx, statement_t *_stat, return_type
 }
 
 /* ECMA-262 3rd Edition    12.8 */
-HRESULT break_statement_eval(exec_ctx_t *ctx, statement_t *_stat, return_type_t *rt, VARIANT *ret)
+HRESULT break_statement_eval(script_ctx_t *ctx, statement_t *_stat, return_type_t *rt, VARIANT *ret)
 {
     branch_statement_t *stat = (branch_statement_t*)_stat;
 
@@ -988,7 +980,7 @@ HRESULT break_statement_eval(exec_ctx_t *ctx, statement_t *_stat, return_type_t 
 }
 
 /* ECMA-262 3rd Edition    12.9 */
-HRESULT return_statement_eval(exec_ctx_t *ctx, statement_t *_stat, return_type_t *rt, VARIANT *ret)
+HRESULT return_statement_eval(script_ctx_t *ctx, statement_t *_stat, return_type_t *rt, VARIANT *ret)
 {
     expression_statement_t *stat = (expression_statement_t*)_stat;
     HRESULT hres;
@@ -1002,7 +994,7 @@ HRESULT return_statement_eval(exec_ctx_t *ctx, statement_t *_stat, return_type_t
         if(FAILED(hres))
             return hres;
 
-        hres = exprval_to_value(ctx->parser->script, &exprval, &rt->ei, ret);
+        hres = exprval_to_value(ctx, &exprval, &rt->ei, ret);
         exprval_release(&exprval);
         if(FAILED(hres))
             return hres;
@@ -1016,12 +1008,12 @@ HRESULT return_statement_eval(exec_ctx_t *ctx, statement_t *_stat, return_type_t
 }
 
 /* ECMA-262 3rd Edition    12.10 */
-HRESULT with_statement_eval(exec_ctx_t *ctx, statement_t *_stat, return_type_t *rt, VARIANT *ret)
+HRESULT with_statement_eval(script_ctx_t *ctx, statement_t *_stat, return_type_t *rt, VARIANT *ret)
 {
     with_statement_t *stat = (with_statement_t*)_stat;
     exprval_t exprval;
     IDispatch *disp;
-    DispatchEx *obj;
+    jsdisp_t *obj;
     VARIANT val;
     HRESULT hres;
 
@@ -1031,12 +1023,12 @@ HRESULT with_statement_eval(exec_ctx_t *ctx, statement_t *_stat, return_type_t *
     if(FAILED(hres))
         return hres;
 
-    hres = exprval_to_value(ctx->parser->script, &exprval, &rt->ei, &val);
+    hres = exprval_to_value(ctx, &exprval, &rt->ei, &val);
     exprval_release(&exprval);
     if(FAILED(hres))
         return hres;
 
-    hres = to_object(ctx->parser->script, &val, &disp);
+    hres = to_object(ctx, &val, &disp);
     VariantClear(&val);
     if(FAILED(hres))
         return hres;
@@ -1048,26 +1040,26 @@ HRESULT with_statement_eval(exec_ctx_t *ctx, statement_t *_stat, return_type_t *
         return E_NOTIMPL;
     }
 
-    hres = scope_push(ctx->scope_chain, obj, &ctx->scope_chain);
+    hres = scope_push(ctx->exec_ctx->scope_chain, obj, &ctx->exec_ctx->scope_chain);
     jsdisp_release(obj);
     if(FAILED(hres))
         return hres;
 
     hres = stat_eval(ctx, stat->statement, rt, ret);
 
-    scope_pop(&ctx->scope_chain);
+    scope_pop(&ctx->exec_ctx->scope_chain);
     return hres;
 }
 
 /* ECMA-262 3rd Edition    12.12 */
-HRESULT labelled_statement_eval(exec_ctx_t *ctx, statement_t *stat, return_type_t *rt, VARIANT *ret)
+HRESULT labelled_statement_eval(script_ctx_t *ctx, statement_t *stat, return_type_t *rt, VARIANT *ret)
 {
     FIXME("\n");
     return E_NOTIMPL;
 }
 
 /* ECMA-262 3rd Edition    12.13 */
-HRESULT switch_statement_eval(exec_ctx_t *ctx, statement_t *_stat, return_type_t *rt, VARIANT *ret)
+HRESULT switch_statement_eval(script_ctx_t *ctx, statement_t *_stat, return_type_t *rt, VARIANT *ret)
 {
     switch_statement_t *stat = (switch_statement_t*)_stat;
     case_clausule_t *iter, *default_clausule = NULL;
@@ -1083,7 +1075,7 @@ HRESULT switch_statement_eval(exec_ctx_t *ctx, statement_t *_stat, return_type_t
     if(FAILED(hres))
         return hres;
 
-    hres = exprval_to_value(ctx->parser->script, &exprval, &rt->ei, &val);
+    hres = exprval_to_value(ctx, &exprval, &rt->ei, &val);
     exprval_release(&exprval);
     if(FAILED(hres))
         return hres;
@@ -1098,7 +1090,7 @@ HRESULT switch_statement_eval(exec_ctx_t *ctx, statement_t *_stat, return_type_t
         if(FAILED(hres))
             break;
 
-        hres = exprval_to_value(ctx->parser->script, &exprval, &rt->ei, &cval);
+        hres = exprval_to_value(ctx, &exprval, &rt->ei, &cval);
         exprval_release(&exprval);
         if(FAILED(hres))
             break;
@@ -1146,7 +1138,7 @@ HRESULT switch_statement_eval(exec_ctx_t *ctx, statement_t *_stat, return_type_t
 }
 
 /* ECMA-262 3rd Edition    12.13 */
-HRESULT throw_statement_eval(exec_ctx_t *ctx, statement_t *_stat, return_type_t *rt, VARIANT *ret)
+HRESULT throw_statement_eval(script_ctx_t *ctx, statement_t *_stat, return_type_t *rt, VARIANT *ret)
 {
     expression_statement_t *stat = (expression_statement_t*)_stat;
     exprval_t exprval;
@@ -1159,7 +1151,7 @@ HRESULT throw_statement_eval(exec_ctx_t *ctx, statement_t *_stat, return_type_t 
     if(FAILED(hres))
         return hres;
 
-    hres = exprval_to_value(ctx->parser->script, &exprval, &rt->ei, &val);
+    hres = exprval_to_value(ctx, &exprval, &rt->ei, &val);
     exprval_release(&exprval);
     if(FAILED(hres))
         return hres;
@@ -1169,23 +1161,23 @@ HRESULT throw_statement_eval(exec_ctx_t *ctx, statement_t *_stat, return_type_t 
 }
 
 /* ECMA-262 3rd Edition    12.14 */
-static HRESULT catch_eval(exec_ctx_t *ctx, catch_block_t *block, return_type_t *rt, VARIANT *ret)
+static HRESULT catch_eval(script_ctx_t *ctx, catch_block_t *block, return_type_t *rt, VARIANT *ret)
 {
-    DispatchEx *var_disp;
+    jsdisp_t *var_disp;
     VARIANT ex, val;
     HRESULT hres;
 
     ex = rt->ei.var;
     memset(&rt->ei, 0, sizeof(jsexcept_t));
 
-    hres = create_dispex(ctx->parser->script, NULL, NULL, &var_disp);
+    hres = create_dispex(ctx, NULL, NULL, &var_disp);
     if(SUCCEEDED(hres)) {
         hres = jsdisp_propput_name(var_disp, block->identifier, &ex, &rt->ei, NULL/*FIXME*/);
         if(SUCCEEDED(hres)) {
-            hres = scope_push(ctx->scope_chain, var_disp, &ctx->scope_chain);
+            hres = scope_push(ctx->exec_ctx->scope_chain, var_disp, &ctx->exec_ctx->scope_chain);
             if(SUCCEEDED(hres)) {
                 hres = stat_eval(ctx, block->statement, rt, &val);
-                scope_pop(&ctx->scope_chain);
+                scope_pop(&ctx->exec_ctx->scope_chain);
             }
         }
 
@@ -1201,7 +1193,7 @@ static HRESULT catch_eval(exec_ctx_t *ctx, catch_block_t *block, return_type_t *
 }
 
 /* ECMA-262 3rd Edition    12.14 */
-HRESULT try_statement_eval(exec_ctx_t *ctx, statement_t *_stat, return_type_t *rt, VARIANT *ret)
+HRESULT try_statement_eval(script_ctx_t *ctx, statement_t *_stat, return_type_t *rt, VARIANT *ret)
 {
     try_statement_t *stat = (try_statement_t*)_stat;
     VARIANT val;
@@ -1240,7 +1232,7 @@ static HRESULT return_bool(exprval_t *ret, DWORD b)
     return S_OK;
 }
 
-static HRESULT get_binary_expr_values(exec_ctx_t *ctx, binary_expression_t *expr, jsexcept_t *ei, VARIANT *lval, VARIANT *rval)
+static HRESULT get_binary_expr_values(script_ctx_t *ctx, binary_expression_t *expr, jsexcept_t *ei, VARIANT *lval, VARIANT *rval)
 {
     exprval_t exprval;
     HRESULT hres;
@@ -1249,14 +1241,14 @@ static HRESULT get_binary_expr_values(exec_ctx_t *ctx, binary_expression_t *expr
     if(FAILED(hres))
         return hres;
 
-    hres = exprval_to_value(ctx->parser->script, &exprval, ei, lval);
+    hres = exprval_to_value(ctx, &exprval, ei, lval);
     exprval_release(&exprval);
     if(FAILED(hres))
         return hres;
 
     hres = expr_eval(ctx, expr->expression2, 0, ei, &exprval);
     if(SUCCEEDED(hres)) {
-        hres = exprval_to_value(ctx->parser->script, &exprval, ei, rval);
+        hres = exprval_to_value(ctx, &exprval, ei, rval);
         exprval_release(&exprval);
     }
 
@@ -1268,9 +1260,9 @@ static HRESULT get_binary_expr_values(exec_ctx_t *ctx, binary_expression_t *expr
     return S_OK;
 }
 
-typedef HRESULT (*oper_t)(exec_ctx_t*,VARIANT*,VARIANT*,jsexcept_t*,VARIANT*);
+typedef HRESULT (*oper_t)(script_ctx_t*,VARIANT*,VARIANT*,jsexcept_t*,VARIANT*);
 
-static HRESULT binary_expr_eval(exec_ctx_t *ctx, binary_expression_t *expr, oper_t oper, jsexcept_t *ei,
+static HRESULT binary_expr_eval(script_ctx_t *ctx, binary_expression_t *expr, oper_t oper, jsexcept_t *ei,
         exprval_t *ret)
 {
     VARIANT lval, rval, retv;
@@ -1292,7 +1284,7 @@ static HRESULT binary_expr_eval(exec_ctx_t *ctx, binary_expression_t *expr, oper
 }
 
 /* ECMA-262 3rd Edition    11.13.2 */
-static HRESULT assign_oper_eval(exec_ctx_t *ctx, expression_t *lexpr, expression_t *rexpr, oper_t oper,
+static HRESULT assign_oper_eval(script_ctx_t *ctx, expression_t *lexpr, expression_t *rexpr, oper_t oper,
                                 jsexcept_t *ei, exprval_t *ret)
 {
     VARIANT retv, lval, rval;
@@ -1303,11 +1295,11 @@ static HRESULT assign_oper_eval(exec_ctx_t *ctx, expression_t *lexpr, expression
     if(FAILED(hres))
         return hres;
 
-    hres = exprval_value(ctx->parser->script, &exprval, ei, &lval);
+    hres = exprval_value(ctx, &exprval, ei, &lval);
     if(SUCCEEDED(hres)) {
         hres = expr_eval(ctx, rexpr, 0, ei, &exprvalr);
         if(SUCCEEDED(hres)) {
-            hres = exprval_value(ctx->parser->script, &exprvalr, ei, &rval);
+            hres = exprval_value(ctx, &exprvalr, ei, &rval);
             exprval_release(&exprvalr);
         }
         if(SUCCEEDED(hres)) {
@@ -1318,7 +1310,7 @@ static HRESULT assign_oper_eval(exec_ctx_t *ctx, expression_t *lexpr, expression
     }
 
     if(SUCCEEDED(hres)) {
-        hres = put_value(ctx->parser->script, &exprval, &retv, ei);
+        hres = put_value(ctx, &exprval, &retv, ei);
         if(FAILED(hres))
             VariantClear(&retv);
     }
@@ -1333,7 +1325,7 @@ static HRESULT assign_oper_eval(exec_ctx_t *ctx, expression_t *lexpr, expression
 }
 
 /* ECMA-262 3rd Edition    13 */
-HRESULT function_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT function_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     function_expression_t *expr = (function_expression_t*)_expr;
     VARIANT var;
@@ -1342,19 +1334,18 @@ HRESULT function_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD fla
     TRACE("\n");
 
     if(expr->identifier) {
-        hres = jsdisp_propget_name(ctx->var_disp, expr->identifier, &var, ei, NULL/*FIXME*/);
+        hres = jsdisp_propget_name(ctx->exec_ctx->var_disp, expr->identifier, &var, ei, NULL/*FIXME*/);
         if(FAILED(hres))
             return hres;
     }else {
-        DispatchEx *dispex;
+        jsdisp_t *dispex;
 
-        hres = create_source_function(ctx->parser, expr->parameter_list, expr->source_elements, ctx->scope_chain,
+        hres = create_source_function(ctx->exec_ctx->parser, expr->parameter_list, expr->source_elements, ctx->exec_ctx->scope_chain,
                 expr->src_str, expr->src_len, &dispex);
         if(FAILED(hres))
             return hres;
 
-        V_VT(&var) = VT_DISPATCH;
-        V_DISPATCH(&var) = (IDispatch*)_IDispatchEx_(dispex);
+        var_set_jsdisp(&var, dispex);
     }
 
     ret->type = EXPRVAL_VARIANT;
@@ -1363,7 +1354,7 @@ HRESULT function_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD fla
 }
 
 /* ECMA-262 3rd Edition    11.12 */
-HRESULT conditional_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT conditional_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     conditional_expression_t *expr = (conditional_expression_t*)_expr;
     exprval_t exprval;
@@ -1376,7 +1367,7 @@ HRESULT conditional_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD 
     if(FAILED(hres))
         return hres;
 
-    hres = exprval_to_boolean(ctx->parser->script, &exprval, ei, &b);
+    hres = exprval_to_boolean(ctx, &exprval, ei, &b);
     exprval_release(&exprval);
     if(FAILED(hres))
         return hres;
@@ -1385,7 +1376,7 @@ HRESULT conditional_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD 
 }
 
 /* ECMA-262 3rd Edition    11.2.1 */
-HRESULT array_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT array_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     array_expression_t *expr = (array_expression_t*)_expr;
     exprval_t exprval;
@@ -1401,25 +1392,25 @@ HRESULT array_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags,
     if(FAILED(hres))
         return hres;
 
-    hres = exprval_to_value(ctx->parser->script, &exprval, ei, &member);
+    hres = exprval_to_value(ctx, &exprval, ei, &member);
     exprval_release(&exprval);
     if(FAILED(hres))
         return hres;
 
     hres = expr_eval(ctx, expr->expression, EXPR_NEWREF, ei, &exprval);
     if(SUCCEEDED(hres)) {
-        hres = exprval_to_value(ctx->parser->script, &exprval, ei, &val);
+        hres = exprval_to_value(ctx, &exprval, ei, &val);
         exprval_release(&exprval);
     }
 
     if(SUCCEEDED(hres)) {
-        hres = to_object(ctx->parser->script, &member, &obj);
+        hres = to_object(ctx, &member, &obj);
         if(FAILED(hres))
             VariantClear(&val);
     }
     VariantClear(&member);
     if(SUCCEEDED(hres)) {
-        hres = to_string(ctx->parser->script, &val, ei, &str);
+        hres = to_string(ctx, &val, ei, &str);
         VariantClear(&val);
         if(SUCCEEDED(hres)) {
             if(flags & EXPR_STRREF) {
@@ -1429,7 +1420,7 @@ HRESULT array_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags,
                 return S_OK;
             }
 
-            hres = disp_get_id(ctx->parser->script, obj, str, flags & EXPR_NEWREF ? fdexNameEnsure : 0, &id);
+            hres = disp_get_id(ctx, obj, str, flags & EXPR_NEWREF ? fdexNameEnsure : 0, &id);
             SysFreeString(str);
         }
 
@@ -1447,7 +1438,7 @@ HRESULT array_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags,
 }
 
 /* ECMA-262 3rd Edition    11.2.1 */
-HRESULT member_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT member_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     member_expression_t *expr = (member_expression_t*)_expr;
     IDispatch *obj = NULL;
@@ -1463,12 +1454,12 @@ HRESULT member_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags
     if(FAILED(hres))
         return hres;
 
-    hres = exprval_to_value(ctx->parser->script, &exprval, ei, &member);
+    hres = exprval_to_value(ctx, &exprval, ei, &member);
     exprval_release(&exprval);
     if(FAILED(hres))
         return hres;
 
-    hres = to_object(ctx->parser->script, &member, &obj);
+    hres = to_object(ctx, &member, &obj);
     VariantClear(&member);
     if(FAILED(hres))
         return hres;
@@ -1481,7 +1472,7 @@ HRESULT member_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags
         return S_OK;
     }
 
-    hres = disp_get_id(ctx->parser->script, obj, str, flags & EXPR_NEWREF ? fdexNameEnsure : 0, &id);
+    hres = disp_get_id(ctx, obj, str, flags & EXPR_NEWREF ? fdexNameEnsure : 0, &id);
     SysFreeString(str);
     if(SUCCEEDED(hres)) {
         exprval_set_idref(ret, obj, id);
@@ -1503,7 +1494,7 @@ static void free_dp(DISPPARAMS *dp)
     heap_free(dp->rgvarg);
 }
 
-static HRESULT args_to_param(exec_ctx_t *ctx, argument_t *args, jsexcept_t *ei, DISPPARAMS *dp)
+static HRESULT args_to_param(script_ctx_t *ctx, argument_t *args, jsexcept_t *ei, DISPPARAMS *dp)
 {
     VARIANTARG *vargs;
     exprval_t exprval;
@@ -1527,7 +1518,7 @@ static HRESULT args_to_param(exec_ctx_t *ctx, argument_t *args, jsexcept_t *ei, 
         if(FAILED(hres))
             break;
 
-        hres = exprval_to_value(ctx->parser->script, &exprval, ei, vargs + (--i));
+        hres = exprval_to_value(ctx, &exprval, ei, vargs + (--i));
         exprval_release(&exprval);
         if(FAILED(hres))
             break;
@@ -1544,7 +1535,7 @@ static HRESULT args_to_param(exec_ctx_t *ctx, argument_t *args, jsexcept_t *ei, 
 }
 
 /* ECMA-262 3rd Edition    11.2.2 */
-HRESULT new_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT new_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     call_expression_t *expr = (call_expression_t*)_expr;
     exprval_t exprval;
@@ -1560,19 +1551,26 @@ HRESULT new_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, j
 
     hres = args_to_param(ctx, expr->argument_list, ei, &dp);
     if(SUCCEEDED(hres))
-        hres = exprval_to_value(ctx->parser->script, &exprval, ei, &constr);
+        hres = exprval_to_value(ctx, &exprval, ei, &constr);
     exprval_release(&exprval);
     if(FAILED(hres))
         return hres;
 
-    if(V_VT(&constr) != VT_DISPATCH) {
-        FIXME("throw TypeError\n");
+    /* NOTE: Should use to_object here */
+
+    if(V_VT(&constr) == VT_NULL) {
         VariantClear(&constr);
-        return E_FAIL;
+        return throw_type_error(ctx, ei, IDS_OBJECT_EXPECTED, NULL);
+    } else if(V_VT(&constr) != VT_DISPATCH) {
+        VariantClear(&constr);
+        return throw_type_error(ctx, ei, IDS_UNSUPPORTED_ACTION, NULL);
+    } else if(!V_DISPATCH(&constr)) {
+        VariantClear(&constr);
+        return throw_type_error(ctx, ei, IDS_NO_PROPERTY, NULL);
     }
 
-    hres = disp_call(ctx->parser->script, V_DISPATCH(&constr), DISPID_VALUE,
-                     DISPATCH_CONSTRUCT, &dp, &var, ei, NULL/*FIXME*/);
+    hres = disp_call(ctx, V_DISPATCH(&constr), DISPID_VALUE,
+            DISPATCH_CONSTRUCT, &dp, &var, ei, NULL/*FIXME*/);
     IDispatch_Release(V_DISPATCH(&constr));
     free_dp(&dp);
     if(FAILED(hres))
@@ -1584,7 +1582,7 @@ HRESULT new_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, j
 }
 
 /* ECMA-262 3rd Edition    11.2.3 */
-HRESULT call_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT call_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     call_expression_t *expr = (call_expression_t*)_expr;
     VARIANT var;
@@ -1603,17 +1601,17 @@ HRESULT call_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, 
         switch(exprval.type) {
         case EXPRVAL_VARIANT:
             if(V_VT(&exprval.u.var) == VT_DISPATCH)
-                hres = disp_call(ctx->parser->script, V_DISPATCH(&exprval.u.var), DISPID_VALUE,
+                hres = disp_call(ctx, V_DISPATCH(&exprval.u.var), DISPID_VALUE,
                         DISPATCH_METHOD, &dp, flags & EXPR_NOVAL ? NULL : &var, ei, NULL/*FIXME*/);
             else
-                hres = throw_type_error(ctx->parser->script, ei, IDS_NO_PROPERTY, NULL);
+                hres = throw_type_error(ctx, ei, IDS_NO_PROPERTY, NULL);
             break;
         case EXPRVAL_IDREF:
-            hres = disp_call(ctx->parser->script, exprval.u.idref.disp, exprval.u.idref.id,
+            hres = disp_call(ctx, exprval.u.idref.disp, exprval.u.idref.id,
                     DISPATCH_METHOD, &dp, flags & EXPR_NOVAL ? NULL : &var, ei, NULL/*FIXME*/);
             break;
         case EXPRVAL_INVALID:
-            hres = throw_type_error(ctx->parser->script, ei, IDS_OBJECT_EXPECTED, NULL);
+            hres = throw_type_error(ctx, ei, IDS_OBJECT_EXPECTED, NULL);
             break;
         default:
             FIXME("unimplemented type %d\n", exprval.type);
@@ -1638,19 +1636,19 @@ HRESULT call_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, 
 }
 
 /* ECMA-262 3rd Edition    11.1.1 */
-HRESULT this_expression_eval(exec_ctx_t *ctx, expression_t *expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT this_expression_eval(script_ctx_t *ctx, expression_t *expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     TRACE("\n");
 
     ret->type = EXPRVAL_VARIANT;
     V_VT(&ret->u.var) = VT_DISPATCH;
-    V_DISPATCH(&ret->u.var) = ctx->this_obj;
-    IDispatch_AddRef(ctx->this_obj);
+    V_DISPATCH(&ret->u.var) = ctx->exec_ctx->this_obj;
+    IDispatch_AddRef(ctx->exec_ctx->this_obj);
     return S_OK;
 }
 
 /* ECMA-262 3rd Edition    10.1.4 */
-HRESULT identifier_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT identifier_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     identifier_expression_t *expr = (identifier_expression_t*)_expr;
     BSTR identifier;
@@ -1669,7 +1667,7 @@ HRESULT identifier_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD f
 }
 
 /* ECMA-262 3rd Edition    7.8 */
-HRESULT literal_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT literal_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     literal_expression_t *expr = (literal_expression_t*)_expr;
     VARIANT var;
@@ -1677,7 +1675,7 @@ HRESULT literal_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flag
 
     TRACE("\n");
 
-    hres = literal_to_var(ctx->parser->script, expr->literal, &var);
+    hres = literal_to_var(ctx, expr->literal, &var);
     if(FAILED(hres))
         return hres;
 
@@ -1687,12 +1685,12 @@ HRESULT literal_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flag
 }
 
 /* ECMA-262 3rd Edition    11.1.4 */
-HRESULT array_literal_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT array_literal_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     array_literal_expression_t *expr = (array_literal_expression_t*)_expr;
     DWORD length = 0, i = 0;
     array_element_t *elem;
-    DispatchEx *array;
+    jsdisp_t *array;
     exprval_t exprval;
     VARIANT val;
     HRESULT hres;
@@ -1703,7 +1701,7 @@ HRESULT array_literal_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWOR
         length += elem->elision+1;
     length += expr->length;
 
-    hres = create_array(ctx->parser->script, length, &array);
+    hres = create_array(ctx, length, &array);
     if(FAILED(hres))
         return hres;
 
@@ -1714,7 +1712,7 @@ HRESULT array_literal_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWOR
         if(FAILED(hres))
             break;
 
-        hres = exprval_to_value(ctx->parser->script, &exprval, ei, &val);
+        hres = exprval_to_value(ctx, &exprval, ei, &val);
         exprval_release(&exprval);
         if(FAILED(hres))
             break;
@@ -1733,17 +1731,16 @@ HRESULT array_literal_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWOR
     }
 
     ret->type = EXPRVAL_VARIANT;
-    V_VT(&ret->u.var) = VT_DISPATCH;
-    V_DISPATCH(&ret->u.var) = (IDispatch*)_IDispatchEx_(array);
+    var_set_jsdisp(&ret->u.var, array);
     return S_OK;
 }
 
 /* ECMA-262 3rd Edition    11.1.5 */
-HRESULT property_value_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT property_value_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     property_value_expression_t *expr = (property_value_expression_t*)_expr;
     VARIANT val, tmp;
-    DispatchEx *obj;
+    jsdisp_t *obj;
     prop_val_t *iter;
     exprval_t exprval;
     BSTR name;
@@ -1751,23 +1748,23 @@ HRESULT property_value_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWO
 
     TRACE("\n");
 
-    hres = create_object(ctx->parser->script, NULL, &obj);
+    hres = create_object(ctx, NULL, &obj);
     if(FAILED(hres))
         return hres;
 
     for(iter = expr->property_list; iter; iter = iter->next) {
-        hres = literal_to_var(ctx->parser->script, iter->name, &tmp);
+        hres = literal_to_var(ctx, iter->name, &tmp);
         if(FAILED(hres))
             break;
 
-        hres = to_string(ctx->parser->script, &tmp, ei, &name);
+        hres = to_string(ctx, &tmp, ei, &name);
         VariantClear(&tmp);
         if(FAILED(hres))
             break;
 
         hres = expr_eval(ctx, iter->value, 0, ei, &exprval);
         if(SUCCEEDED(hres)) {
-            hres = exprval_to_value(ctx->parser->script, &exprval, ei, &val);
+            hres = exprval_to_value(ctx, &exprval, ei, &val);
             exprval_release(&exprval);
             if(SUCCEEDED(hres)) {
                 hres = jsdisp_propput_name(obj, name, &val, ei, NULL/*FIXME*/);
@@ -1786,13 +1783,12 @@ HRESULT property_value_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWO
     }
 
     ret->type = EXPRVAL_VARIANT;
-    V_VT(&ret->u.var) = VT_DISPATCH;
-    V_DISPATCH(&ret->u.var) = (IDispatch*)_IDispatchEx_(obj);
+    var_set_jsdisp(&ret->u.var, obj);
     return S_OK;
 }
 
 /* ECMA-262 3rd Edition    11.14 */
-HRESULT comma_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT comma_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     binary_expression_t *expr = (binary_expression_t*)_expr;
     VARIANT lval, rval;
@@ -1812,7 +1808,7 @@ HRESULT comma_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags,
 }
 
 /* ECMA-262 3rd Edition    11.11 */
-HRESULT logical_or_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT logical_or_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     binary_expression_t *expr = (binary_expression_t*)_expr;
     exprval_t exprval;
@@ -1826,7 +1822,7 @@ HRESULT logical_or_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD f
     if(FAILED(hres))
         return hres;
 
-    hres = exprval_to_value(ctx->parser->script, &exprval, ei, &val);
+    hres = exprval_to_value(ctx, &exprval, ei, &val);
     exprval_release(&exprval);
     if(FAILED(hres))
         return hres;
@@ -1846,7 +1842,7 @@ HRESULT logical_or_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD f
     if(FAILED(hres))
         return hres;
 
-    hres = exprval_to_value(ctx->parser->script, &exprval, ei, &val);
+    hres = exprval_to_value(ctx, &exprval, ei, &val);
     exprval_release(&exprval);
     if(FAILED(hres))
         return hres;
@@ -1857,7 +1853,7 @@ HRESULT logical_or_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD f
 }
 
 /* ECMA-262 3rd Edition    11.11 */
-HRESULT logical_and_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT logical_and_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     binary_expression_t *expr = (binary_expression_t*)_expr;
     exprval_t exprval;
@@ -1871,7 +1867,7 @@ HRESULT logical_and_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD 
     if(FAILED(hres))
         return hres;
 
-    hres = exprval_to_value(ctx->parser->script, &exprval, ei, &val);
+    hres = exprval_to_value(ctx, &exprval, ei, &val);
     exprval_release(&exprval);
     if(FAILED(hres))
         return hres;
@@ -1891,7 +1887,7 @@ HRESULT logical_and_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD 
     if(FAILED(hres))
         return hres;
 
-    hres = exprval_to_value(ctx->parser->script, &exprval, ei, &val);
+    hres = exprval_to_value(ctx, &exprval, ei, &val);
     exprval_release(&exprval);
     if(FAILED(hres))
         return hres;
@@ -1902,16 +1898,16 @@ HRESULT logical_and_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD 
 }
 
 /* ECMA-262 3rd Edition    11.10 */
-static HRESULT bitor_eval(exec_ctx_t *ctx, VARIANT *lval, VARIANT *rval, jsexcept_t *ei, VARIANT *retv)
+static HRESULT bitor_eval(script_ctx_t *ctx, VARIANT *lval, VARIANT *rval, jsexcept_t *ei, VARIANT *retv)
 {
     INT li, ri;
     HRESULT hres;
 
-    hres = to_int32(ctx->parser->script, lval, ei, &li);
+    hres = to_int32(ctx, lval, ei, &li);
     if(FAILED(hres))
         return hres;
 
-    hres = to_int32(ctx->parser->script, rval, ei, &ri);
+    hres = to_int32(ctx, rval, ei, &ri);
     if(FAILED(hres))
         return hres;
 
@@ -1921,7 +1917,7 @@ static HRESULT bitor_eval(exec_ctx_t *ctx, VARIANT *lval, VARIANT *rval, jsexcep
 }
 
 /* ECMA-262 3rd Edition    11.10 */
-HRESULT binary_or_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT binary_or_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     binary_expression_t *expr = (binary_expression_t*)_expr;
 
@@ -1931,16 +1927,16 @@ HRESULT binary_or_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD fl
 }
 
 /* ECMA-262 3rd Edition    11.10 */
-static HRESULT xor_eval(exec_ctx_t *ctx, VARIANT *lval, VARIANT *rval, jsexcept_t *ei, VARIANT *retv)
+static HRESULT xor_eval(script_ctx_t *ctx, VARIANT *lval, VARIANT *rval, jsexcept_t *ei, VARIANT *retv)
 {
     INT li, ri;
     HRESULT hres;
 
-    hres = to_int32(ctx->parser->script, lval, ei, &li);
+    hres = to_int32(ctx, lval, ei, &li);
     if(FAILED(hres))
         return hres;
 
-    hres = to_int32(ctx->parser->script, rval, ei, &ri);
+    hres = to_int32(ctx, rval, ei, &ri);
     if(FAILED(hres))
         return hres;
 
@@ -1950,7 +1946,7 @@ static HRESULT xor_eval(exec_ctx_t *ctx, VARIANT *lval, VARIANT *rval, jsexcept_
 }
 
 /* ECMA-262 3rd Edition    11.10 */
-HRESULT binary_xor_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT binary_xor_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     binary_expression_t *expr = (binary_expression_t*)_expr;
 
@@ -1960,16 +1956,16 @@ HRESULT binary_xor_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD f
 }
 
 /* ECMA-262 3rd Edition    11.10 */
-static HRESULT bitand_eval(exec_ctx_t *ctx, VARIANT *lval, VARIANT *rval, jsexcept_t *ei, VARIANT *retv)
+static HRESULT bitand_eval(script_ctx_t *ctx, VARIANT *lval, VARIANT *rval, jsexcept_t *ei, VARIANT *retv)
 {
     INT li, ri;
     HRESULT hres;
 
-    hres = to_int32(ctx->parser->script, lval, ei, &li);
+    hres = to_int32(ctx, lval, ei, &li);
     if(FAILED(hres))
         return hres;
 
-    hres = to_int32(ctx->parser->script, rval, ei, &ri);
+    hres = to_int32(ctx, rval, ei, &ri);
     if(FAILED(hres))
         return hres;
 
@@ -1979,7 +1975,7 @@ static HRESULT bitand_eval(exec_ctx_t *ctx, VARIANT *lval, VARIANT *rval, jsexce
 }
 
 /* ECMA-262 3rd Edition    11.10 */
-HRESULT binary_and_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT binary_and_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     binary_expression_t *expr = (binary_expression_t*)_expr;
 
@@ -1989,9 +1985,9 @@ HRESULT binary_and_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD f
 }
 
 /* ECMA-262 3rd Edition    11.8.6 */
-static HRESULT instanceof_eval(exec_ctx_t *ctx, VARIANT *inst, VARIANT *objv, jsexcept_t *ei, VARIANT *retv)
+static HRESULT instanceof_eval(script_ctx_t *ctx, VARIANT *inst, VARIANT *objv, jsexcept_t *ei, VARIANT *retv)
 {
-    DispatchEx *obj, *iter, *tmp = NULL;
+    jsdisp_t *obj, *iter, *tmp = NULL;
     VARIANT_BOOL ret = VARIANT_FALSE;
     BOOL b;
     VARIANT var;
@@ -1999,10 +1995,8 @@ static HRESULT instanceof_eval(exec_ctx_t *ctx, VARIANT *inst, VARIANT *objv, js
 
     static const WCHAR prototypeW[] = {'p','r','o','t','o','t', 'y', 'p','e',0};
 
-    if(V_VT(objv) != VT_DISPATCH) {
-        FIXME("throw TypeError\n");
-        return E_FAIL;
-    }
+    if(V_VT(objv) != VT_DISPATCH || !V_DISPATCH(objv))
+        return throw_type_error(ctx, ei, IDS_NOT_FUNC, NULL);
 
     obj = iface_to_jsdisp((IUnknown*)V_DISPATCH(objv));
     if(!obj) {
@@ -2024,7 +2018,7 @@ static HRESULT instanceof_eval(exec_ctx_t *ctx, VARIANT *inst, VARIANT *objv, js
         if(V_VT(inst) == VT_DISPATCH)
             tmp = iface_to_jsdisp((IUnknown*)V_DISPATCH(inst));
         for(iter = tmp; iter; iter = iter->prototype) {
-            hres = disp_cmp(V_DISPATCH(&var), (IDispatch*)_IDispatchEx_(iter), &b);
+            hres = disp_cmp(V_DISPATCH(&var), to_disp(iter), &b);
             if(FAILED(hres))
                 break;
             if(b) {
@@ -2050,7 +2044,7 @@ static HRESULT instanceof_eval(exec_ctx_t *ctx, VARIANT *inst, VARIANT *objv, js
 }
 
 /* ECMA-262 3rd Edition    11.8.6 */
-HRESULT instanceof_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT instanceof_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     binary_expression_t *expr = (binary_expression_t*)_expr;
 
@@ -2060,23 +2054,21 @@ HRESULT instanceof_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD f
 }
 
 /* ECMA-262 3rd Edition    11.8.7 */
-static HRESULT in_eval(exec_ctx_t *ctx, VARIANT *lval, VARIANT *obj, jsexcept_t *ei, VARIANT *retv)
+static HRESULT in_eval(script_ctx_t *ctx, VARIANT *lval, VARIANT *obj, jsexcept_t *ei, VARIANT *retv)
 {
     VARIANT_BOOL ret;
     DISPID id;
     BSTR str;
     HRESULT hres;
 
-    if(V_VT(obj) != VT_DISPATCH) {
-        FIXME("throw TypeError\n");
-        return E_FAIL;
-    }
+    if(V_VT(obj) != VT_DISPATCH || !V_DISPATCH(obj))
+        return throw_type_error(ctx, ei, IDS_OBJECT_EXPECTED, NULL);
 
-    hres = to_string(ctx->parser->script, lval, ei, &str);
+    hres = to_string(ctx, lval, ei, &str);
     if(FAILED(hres))
         return hres;
 
-    hres = disp_get_id(ctx->parser->script, V_DISPATCH(obj), str, 0, &id);
+    hres = disp_get_id(ctx, V_DISPATCH(obj), str, 0, &id);
     SysFreeString(str);
     if(SUCCEEDED(hres))
         ret = VARIANT_TRUE;
@@ -2091,7 +2083,7 @@ static HRESULT in_eval(exec_ctx_t *ctx, VARIANT *lval, VARIANT *obj, jsexcept_t 
 }
 
 /* ECMA-262 3rd Edition    11.8.7 */
-HRESULT in_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT in_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     binary_expression_t *expr = (binary_expression_t*)_expr;
 
@@ -2101,16 +2093,16 @@ HRESULT in_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, js
 }
 
 /* ECMA-262 3rd Edition    11.6.1 */
-static HRESULT add_eval(exec_ctx_t *ctx, VARIANT *lval, VARIANT *rval, jsexcept_t *ei, VARIANT *retv)
+static HRESULT add_eval(script_ctx_t *ctx, VARIANT *lval, VARIANT *rval, jsexcept_t *ei, VARIANT *retv)
 {
     VARIANT r, l;
     HRESULT hres;
 
-    hres = to_primitive(ctx->parser->script, lval, ei, &l, NO_HINT);
+    hres = to_primitive(ctx, lval, ei, &l, NO_HINT);
     if(FAILED(hres))
         return hres;
 
-    hres = to_primitive(ctx->parser->script, rval, ei, &r, NO_HINT);
+    hres = to_primitive(ctx, rval, ei, &r, NO_HINT);
     if(FAILED(hres)) {
         VariantClear(&l);
         return hres;
@@ -2122,13 +2114,13 @@ static HRESULT add_eval(exec_ctx_t *ctx, VARIANT *lval, VARIANT *rval, jsexcept_
         if(V_VT(&l) == VT_BSTR)
             lstr = V_BSTR(&l);
         else
-            hres = to_string(ctx->parser->script, &l, ei, &lstr);
+            hres = to_string(ctx, &l, ei, &lstr);
 
         if(SUCCEEDED(hres)) {
             if(V_VT(&r) == VT_BSTR)
                 rstr = V_BSTR(&r);
             else
-                hres = to_string(ctx->parser->script, &r, ei, &rstr);
+                hres = to_string(ctx, &r, ei, &rstr);
         }
 
         if(SUCCEEDED(hres)) {
@@ -2150,9 +2142,9 @@ static HRESULT add_eval(exec_ctx_t *ctx, VARIANT *lval, VARIANT *rval, jsexcept_
     }else {
         VARIANT nl, nr;
 
-        hres = to_number(ctx->parser->script, &l, ei, &nl);
+        hres = to_number(ctx, &l, ei, &nl);
         if(SUCCEEDED(hres)) {
-            hres = to_number(ctx->parser->script, &r, ei, &nr);
+            hres = to_number(ctx, &r, ei, &nr);
             if(SUCCEEDED(hres))
                 num_set_val(retv, num_val(&nl) + num_val(&nr));
         }
@@ -2164,7 +2156,7 @@ static HRESULT add_eval(exec_ctx_t *ctx, VARIANT *lval, VARIANT *rval, jsexcept_
 }
 
 /* ECMA-262 3rd Edition    11.6.1 */
-HRESULT add_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT add_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     binary_expression_t *expr = (binary_expression_t*)_expr;
 
@@ -2174,16 +2166,16 @@ HRESULT add_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, j
 }
 
 /* ECMA-262 3rd Edition    11.6.2 */
-static HRESULT sub_eval(exec_ctx_t *ctx, VARIANT *lval, VARIANT *rval, jsexcept_t *ei, VARIANT *retv)
+static HRESULT sub_eval(script_ctx_t *ctx, VARIANT *lval, VARIANT *rval, jsexcept_t *ei, VARIANT *retv)
 {
     VARIANT lnum, rnum;
     HRESULT hres;
 
-    hres = to_number(ctx->parser->script, lval, ei, &lnum);
+    hres = to_number(ctx, lval, ei, &lnum);
     if(FAILED(hres))
         return hres;
 
-    hres = to_number(ctx->parser->script, rval, ei, &rnum);
+    hres = to_number(ctx, rval, ei, &rnum);
     if(FAILED(hres))
         return hres;
 
@@ -2192,7 +2184,7 @@ static HRESULT sub_eval(exec_ctx_t *ctx, VARIANT *lval, VARIANT *rval, jsexcept_
 }
 
 /* ECMA-262 3rd Edition    11.6.2 */
-HRESULT sub_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT sub_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     binary_expression_t *expr = (binary_expression_t*)_expr;
 
@@ -2202,16 +2194,16 @@ HRESULT sub_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, j
 }
 
 /* ECMA-262 3rd Edition    11.5.1 */
-static HRESULT mul_eval(exec_ctx_t *ctx, VARIANT *lval, VARIANT *rval, jsexcept_t *ei, VARIANT *retv)
+static HRESULT mul_eval(script_ctx_t *ctx, VARIANT *lval, VARIANT *rval, jsexcept_t *ei, VARIANT *retv)
 {
     VARIANT lnum, rnum;
     HRESULT hres;
 
-    hres = to_number(ctx->parser->script, lval, ei, &lnum);
+    hres = to_number(ctx, lval, ei, &lnum);
     if(FAILED(hres))
         return hres;
 
-    hres = to_number(ctx->parser->script, rval, ei, &rnum);
+    hres = to_number(ctx, rval, ei, &rnum);
     if(FAILED(hres))
         return hres;
 
@@ -2220,7 +2212,7 @@ static HRESULT mul_eval(exec_ctx_t *ctx, VARIANT *lval, VARIANT *rval, jsexcept_
 }
 
 /* ECMA-262 3rd Edition    11.5.1 */
-HRESULT mul_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT mul_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     binary_expression_t *expr = (binary_expression_t*)_expr;
 
@@ -2230,16 +2222,16 @@ HRESULT mul_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, j
 }
 
 /* ECMA-262 3rd Edition    11.5.2 */
-static HRESULT div_eval(exec_ctx_t *ctx, VARIANT *lval, VARIANT *rval, jsexcept_t *ei, VARIANT *retv)
+static HRESULT div_eval(script_ctx_t *ctx, VARIANT *lval, VARIANT *rval, jsexcept_t *ei, VARIANT *retv)
 {
     VARIANT lnum, rnum;
     HRESULT hres;
 
-    hres = to_number(ctx->parser->script, lval, ei, &lnum);
+    hres = to_number(ctx, lval, ei, &lnum);
     if(FAILED(hres))
         return hres;
 
-    hres = to_number(ctx->parser->script, rval, ei, &rnum);
+    hres = to_number(ctx, rval, ei, &rnum);
     if(FAILED(hres))
         return hres;
 
@@ -2248,7 +2240,7 @@ static HRESULT div_eval(exec_ctx_t *ctx, VARIANT *lval, VARIANT *rval, jsexcept_
 }
 
 /* ECMA-262 3rd Edition    11.5.2 */
-HRESULT div_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT div_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     binary_expression_t *expr = (binary_expression_t*)_expr;
 
@@ -2258,16 +2250,16 @@ HRESULT div_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, j
 }
 
 /* ECMA-262 3rd Edition    11.5.3 */
-static HRESULT mod_eval(exec_ctx_t *ctx, VARIANT *lval, VARIANT *rval, jsexcept_t *ei, VARIANT *retv)
+static HRESULT mod_eval(script_ctx_t *ctx, VARIANT *lval, VARIANT *rval, jsexcept_t *ei, VARIANT *retv)
 {
     VARIANT lnum, rnum;
     HRESULT hres;
 
-    hres = to_number(ctx->parser->script, lval, ei, &lnum);
+    hres = to_number(ctx, lval, ei, &lnum);
     if(FAILED(hres))
         return hres;
 
-    hres = to_number(ctx->parser->script, rval, ei, &rnum);
+    hres = to_number(ctx, rval, ei, &rnum);
     if(FAILED(hres))
         return hres;
 
@@ -2276,7 +2268,7 @@ static HRESULT mod_eval(exec_ctx_t *ctx, VARIANT *lval, VARIANT *rval, jsexcept_
 }
 
 /* ECMA-262 3rd Edition    11.5.3 */
-HRESULT mod_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT mod_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     binary_expression_t *expr = (binary_expression_t*)_expr;
 
@@ -2286,7 +2278,7 @@ HRESULT mod_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, j
 }
 
 /* ECMA-262 3rd Edition    11.4.2 */
-HRESULT delete_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT delete_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     unary_expression_t *expr = (unary_expression_t*)_expr;
     VARIANT_BOOL b = VARIANT_FALSE;
@@ -2317,7 +2309,7 @@ HRESULT delete_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags
         hres = IDispatch_QueryInterface(exprval.u.nameref.disp, &IID_IDispatchEx, (void**)&dispex);
         if(SUCCEEDED(hres)) {
             hres = IDispatchEx_DeleteMemberByName(dispex, exprval.u.nameref.name,
-                    make_grfdex(ctx->parser->script, fdexNameCaseSensitive));
+                    make_grfdex(ctx, fdexNameCaseSensitive));
             b = VARIANT_TRUE;
             IDispatchEx_Release(dispex);
         }
@@ -2336,7 +2328,7 @@ HRESULT delete_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags
 }
 
 /* ECMA-262 3rd Edition    11.4.2 */
-HRESULT void_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT void_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     unary_expression_t *expr = (unary_expression_t*)_expr;
     exprval_t exprval;
@@ -2349,7 +2341,7 @@ HRESULT void_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, 
     if(FAILED(hres))
         return hres;
 
-    hres = exprval_to_value(ctx->parser->script, &exprval, ei, &tmp);
+    hres = exprval_to_value(ctx, &exprval, ei, &tmp);
     exprval_release(&exprval);
     if(FAILED(hres))
         return hres;
@@ -2362,7 +2354,7 @@ HRESULT void_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, 
 }
 
 /* ECMA-262 3rd Edition    11.4.3 */
-static HRESULT typeof_exprval(exec_ctx_t *ctx, exprval_t *exprval, jsexcept_t *ei, const WCHAR **ret)
+static HRESULT typeof_exprval(script_ctx_t *ctx, exprval_t *exprval, jsexcept_t *ei, const WCHAR **ret)
 {
     VARIANT val;
     HRESULT hres;
@@ -2379,7 +2371,7 @@ static HRESULT typeof_exprval(exec_ctx_t *ctx, exprval_t *exprval, jsexcept_t *e
         return S_OK;
     }
 
-    hres = exprval_to_value(ctx->parser->script, exprval, ei, &val);
+    hres = exprval_to_value(ctx, exprval, ei, &val);
     if(FAILED(hres))
         return hres;
 
@@ -2401,7 +2393,7 @@ static HRESULT typeof_exprval(exec_ctx_t *ctx, exprval_t *exprval, jsexcept_t *e
         *ret = stringW;
         break;
     case VT_DISPATCH: {
-        DispatchEx *dispex;
+        jsdisp_t *dispex;
 
         if(V_DISPATCH(&val) && (dispex = iface_to_jsdisp((IUnknown*)V_DISPATCH(&val)))) {
             *ret = is_class(dispex, JSCLASS_FUNCTION) ? functionW : objectW;
@@ -2420,7 +2412,7 @@ static HRESULT typeof_exprval(exec_ctx_t *ctx, exprval_t *exprval, jsexcept_t *e
     return S_OK;
 }
 
-HRESULT typeof_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT typeof_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     unary_expression_t *expr = (unary_expression_t*)_expr;
     const WCHAR *str = NULL;
@@ -2448,7 +2440,7 @@ HRESULT typeof_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags
 }
 
 /* ECMA-262 3rd Edition    11.4.7 */
-HRESULT minus_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT minus_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     unary_expression_t *expr = (unary_expression_t*)_expr;
     exprval_t exprval;
@@ -2461,12 +2453,12 @@ HRESULT minus_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags,
     if(FAILED(hres))
         return hres;
 
-    hres = exprval_to_value(ctx->parser->script, &exprval, ei, &val);
+    hres = exprval_to_value(ctx, &exprval, ei, &val);
     exprval_release(&exprval);
     if(FAILED(hres))
         return hres;
 
-    hres = to_number(ctx->parser->script, &val, ei, &num);
+    hres = to_number(ctx, &val, ei, &num);
     VariantClear(&val);
     if(FAILED(hres))
         return hres;
@@ -2477,7 +2469,7 @@ HRESULT minus_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags,
 }
 
 /* ECMA-262 3rd Edition    11.4.6 */
-HRESULT plus_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT plus_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     unary_expression_t *expr = (unary_expression_t*)_expr;
     exprval_t exprval;
@@ -2490,12 +2482,12 @@ HRESULT plus_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, 
     if(FAILED(hres))
         return hres;
 
-    hres = exprval_to_value(ctx->parser->script, &exprval, ei, &val);
+    hres = exprval_to_value(ctx, &exprval, ei, &val);
     exprval_release(&exprval);
     if(FAILED(hres))
         return hres;
 
-    hres = to_number(ctx->parser->script, &val, ei, &num);
+    hres = to_number(ctx, &val, ei, &num);
     VariantClear(&val);
     if(FAILED(hres))
         return hres;
@@ -2506,7 +2498,7 @@ HRESULT plus_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, 
 }
 
 /* ECMA-262 3rd Edition    11.3.1 */
-HRESULT post_increment_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT post_increment_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     unary_expression_t *expr = (unary_expression_t*)_expr;
     VARIANT val, num;
@@ -2519,16 +2511,16 @@ HRESULT post_increment_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWO
     if(FAILED(hres))
         return hres;
 
-    hres = exprval_value(ctx->parser->script, &exprval, ei, &val);
+    hres = exprval_value(ctx, &exprval, ei, &val);
     if(SUCCEEDED(hres)) {
-        hres = to_number(ctx->parser->script, &val, ei, &num);
+        hres = to_number(ctx, &val, ei, &num);
         VariantClear(&val);
     }
 
     if(SUCCEEDED(hres)) {
         VARIANT inc;
         num_set_val(&inc, num_val(&num)+1.0);
-        hres = put_value(ctx->parser->script, &exprval, &inc, ei);
+        hres = put_value(ctx, &exprval, &inc, ei);
     }
 
     exprval_release(&exprval);
@@ -2541,7 +2533,7 @@ HRESULT post_increment_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWO
 }
 
 /* ECMA-262 3rd Edition    11.3.2 */
-HRESULT post_decrement_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT post_decrement_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     unary_expression_t *expr = (unary_expression_t*)_expr;
     VARIANT val, num;
@@ -2554,16 +2546,16 @@ HRESULT post_decrement_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWO
     if(FAILED(hres))
         return hres;
 
-    hres = exprval_value(ctx->parser->script, &exprval, ei, &val);
+    hres = exprval_value(ctx, &exprval, ei, &val);
     if(SUCCEEDED(hres)) {
-        hres = to_number(ctx->parser->script, &val, ei, &num);
+        hres = to_number(ctx, &val, ei, &num);
         VariantClear(&val);
     }
 
     if(SUCCEEDED(hres)) {
         VARIANT dec;
         num_set_val(&dec, num_val(&num)-1.0);
-        hres = put_value(ctx->parser->script, &exprval, &dec, ei);
+        hres = put_value(ctx, &exprval, &dec, ei);
     }
 
     exprval_release(&exprval);
@@ -2576,7 +2568,7 @@ HRESULT post_decrement_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWO
 }
 
 /* ECMA-262 3rd Edition    11.4.4 */
-HRESULT pre_increment_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT pre_increment_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     unary_expression_t *expr = (unary_expression_t*)_expr;
     VARIANT val, num;
@@ -2589,15 +2581,15 @@ HRESULT pre_increment_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWOR
     if(FAILED(hres))
         return hres;
 
-    hres = exprval_value(ctx->parser->script, &exprval, ei, &val);
+    hres = exprval_value(ctx, &exprval, ei, &val);
     if(SUCCEEDED(hres)) {
-        hres = to_number(ctx->parser->script, &val, ei, &num);
+        hres = to_number(ctx, &val, ei, &num);
         VariantClear(&val);
     }
 
     if(SUCCEEDED(hres)) {
         num_set_val(&val, num_val(&num)+1.0);
-        hres = put_value(ctx->parser->script, &exprval, &val, ei);
+        hres = put_value(ctx, &exprval, &val, ei);
     }
 
     exprval_release(&exprval);
@@ -2610,7 +2602,7 @@ HRESULT pre_increment_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWOR
 }
 
 /* ECMA-262 3rd Edition    11.4.5 */
-HRESULT pre_decrement_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT pre_decrement_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     unary_expression_t *expr = (unary_expression_t*)_expr;
     VARIANT val, num;
@@ -2623,15 +2615,15 @@ HRESULT pre_decrement_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWOR
     if(FAILED(hres))
         return hres;
 
-    hres = exprval_value(ctx->parser->script, &exprval, ei, &val);
+    hres = exprval_value(ctx, &exprval, ei, &val);
     if(SUCCEEDED(hres)) {
-        hres = to_number(ctx->parser->script, &val, ei, &num);
+        hres = to_number(ctx, &val, ei, &num);
         VariantClear(&val);
     }
 
     if(SUCCEEDED(hres)) {
         num_set_val(&val, num_val(&num)-1.0);
-        hres = put_value(ctx->parser->script, &exprval, &val, ei);
+        hres = put_value(ctx, &exprval, &val, ei);
     }
 
     exprval_release(&exprval);
@@ -2644,7 +2636,7 @@ HRESULT pre_decrement_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWOR
 }
 
 /* ECMA-262 3rd Edition    11.9.3 */
-static HRESULT equal_values(exec_ctx_t *ctx, VARIANT *lval, VARIANT *rval, jsexcept_t *ei, BOOL *ret)
+static HRESULT equal_values(script_ctx_t *ctx, VARIANT *lval, VARIANT *rval, jsexcept_t *ei, BOOL *ret)
 {
     if(V_VT(lval) == V_VT(rval) || (is_num_vt(V_VT(lval)) && is_num_vt(V_VT(rval))))
        return equal2_values(lval, rval, ret);
@@ -2672,7 +2664,7 @@ static HRESULT equal_values(exec_ctx_t *ctx, VARIANT *lval, VARIANT *rval, jsexc
         VARIANT v;
         HRESULT hres;
 
-        hres = to_number(ctx->parser->script, lval, ei, &v);
+        hres = to_number(ctx, lval, ei, &v);
         if(FAILED(hres))
             return hres;
 
@@ -2683,7 +2675,7 @@ static HRESULT equal_values(exec_ctx_t *ctx, VARIANT *lval, VARIANT *rval, jsexc
         VARIANT v;
         HRESULT hres;
 
-        hres = to_number(ctx->parser->script, rval, ei, &v);
+        hres = to_number(ctx, rval, ei, &v);
         if(FAILED(hres))
             return hres;
 
@@ -2711,7 +2703,7 @@ static HRESULT equal_values(exec_ctx_t *ctx, VARIANT *lval, VARIANT *rval, jsexc
         VARIANT v;
         HRESULT hres;
 
-        hres = to_primitive(ctx->parser->script, rval, ei, &v, NO_HINT);
+        hres = to_primitive(ctx, rval, ei, &v, NO_HINT);
         if(FAILED(hres))
             return hres;
 
@@ -2726,7 +2718,7 @@ static HRESULT equal_values(exec_ctx_t *ctx, VARIANT *lval, VARIANT *rval, jsexc
         VARIANT v;
         HRESULT hres;
 
-        hres = to_primitive(ctx->parser->script, lval, ei, &v, NO_HINT);
+        hres = to_primitive(ctx, lval, ei, &v, NO_HINT);
         if(FAILED(hres))
             return hres;
 
@@ -2742,7 +2734,7 @@ static HRESULT equal_values(exec_ctx_t *ctx, VARIANT *lval, VARIANT *rval, jsexc
 }
 
 /* ECMA-262 3rd Edition    11.9.1 */
-HRESULT equal_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT equal_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     binary_expression_t *expr = (binary_expression_t*)_expr;
     VARIANT rval, lval;
@@ -2765,7 +2757,7 @@ HRESULT equal_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags,
 }
 
 /* ECMA-262 3rd Edition    11.9.4 */
-HRESULT equal2_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT equal2_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     binary_expression_t *expr = (binary_expression_t*)_expr;
     VARIANT rval, lval;
@@ -2788,7 +2780,7 @@ HRESULT equal2_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags
 }
 
 /* ECMA-262 3rd Edition    11.9.2 */
-HRESULT not_equal_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT not_equal_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     binary_expression_t *expr = (binary_expression_t*)_expr;
     VARIANT rval, lval;
@@ -2811,7 +2803,7 @@ HRESULT not_equal_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD fl
 }
 
 /* ECMA-262 3rd Edition    11.9.5 */
-HRESULT not_equal2_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT not_equal2_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     binary_expression_t *expr = (binary_expression_t*)_expr;
     VARIANT rval, lval;
@@ -2834,16 +2826,16 @@ HRESULT not_equal2_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD f
 }
 
 /* ECMA-262 3rd Edition    11.8.5 */
-static HRESULT less_eval(exec_ctx_t *ctx, VARIANT *lval, VARIANT *rval, BOOL greater, jsexcept_t *ei, BOOL *ret)
+static HRESULT less_eval(script_ctx_t *ctx, VARIANT *lval, VARIANT *rval, BOOL greater, jsexcept_t *ei, BOOL *ret)
 {
     VARIANT l, r, ln, rn;
     HRESULT hres;
 
-    hres = to_primitive(ctx->parser->script, lval, ei, &l, NO_HINT);
+    hres = to_primitive(ctx, lval, ei, &l, NO_HINT);
     if(FAILED(hres))
         return hres;
 
-    hres = to_primitive(ctx->parser->script, rval, ei, &r, NO_HINT);
+    hres = to_primitive(ctx, rval, ei, &r, NO_HINT);
     if(FAILED(hres)) {
         VariantClear(&l);
         return hres;
@@ -2856,10 +2848,10 @@ static HRESULT less_eval(exec_ctx_t *ctx, VARIANT *lval, VARIANT *rval, BOOL gre
         return S_OK;
     }
 
-    hres = to_number(ctx->parser->script, &l, ei, &ln);
+    hres = to_number(ctx, &l, ei, &ln);
     VariantClear(&l);
     if(SUCCEEDED(hres))
-        hres = to_number(ctx->parser->script, &r, ei, &rn);
+        hres = to_number(ctx, &r, ei, &rn);
     VariantClear(&r);
     if(FAILED(hres))
         return hres;
@@ -2877,7 +2869,7 @@ static HRESULT less_eval(exec_ctx_t *ctx, VARIANT *lval, VARIANT *rval, BOOL gre
 }
 
 /* ECMA-262 3rd Edition    11.8.1 */
-HRESULT less_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT less_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     binary_expression_t *expr = (binary_expression_t*)_expr;
     VARIANT rval, lval;
@@ -2900,7 +2892,7 @@ HRESULT less_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, 
 }
 
 /* ECMA-262 3rd Edition    11.8.3 */
-HRESULT lesseq_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT lesseq_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     binary_expression_t *expr = (binary_expression_t*)_expr;
     VARIANT rval, lval;
@@ -2923,7 +2915,7 @@ HRESULT lesseq_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags
 }
 
 /* ECMA-262 3rd Edition    11.8.2 */
-HRESULT greater_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT greater_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     binary_expression_t *expr = (binary_expression_t*)_expr;
     VARIANT rval, lval;
@@ -2946,7 +2938,7 @@ HRESULT greater_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flag
 }
 
 /* ECMA-262 3rd Edition    11.8.4 */
-HRESULT greatereq_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT greatereq_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     binary_expression_t *expr = (binary_expression_t*)_expr;
     VARIANT rval, lval;
@@ -2969,7 +2961,7 @@ HRESULT greatereq_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD fl
 }
 
 /* ECMA-262 3rd Edition    11.4.8 */
-HRESULT binary_negation_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT binary_negation_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     unary_expression_t *expr = (unary_expression_t*)_expr;
     exprval_t exprval;
@@ -2983,12 +2975,12 @@ HRESULT binary_negation_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DW
     if(FAILED(hres))
         return hres;
 
-    hres = exprval_to_value(ctx->parser->script, &exprval, ei, &val);
+    hres = exprval_to_value(ctx, &exprval, ei, &val);
     exprval_release(&exprval);
     if(FAILED(hres))
         return hres;
 
-    hres = to_int32(ctx->parser->script, &val, ei, &i);
+    hres = to_int32(ctx, &val, ei, &i);
     if(FAILED(hres))
         return hres;
 
@@ -2999,7 +2991,7 @@ HRESULT binary_negation_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DW
 }
 
 /* ECMA-262 3rd Edition    11.4.9 */
-HRESULT logical_negation_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT logical_negation_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     unary_expression_t *expr = (unary_expression_t*)_expr;
     exprval_t exprval;
@@ -3012,7 +3004,7 @@ HRESULT logical_negation_expression_eval(exec_ctx_t *ctx, expression_t *_expr, D
     if(FAILED(hres))
         return hres;
 
-    hres = exprval_to_boolean(ctx->parser->script, &exprval, ei, &b);
+    hres = exprval_to_boolean(ctx, &exprval, ei, &b);
     exprval_release(&exprval);
     if(FAILED(hres))
         return hres;
@@ -3021,17 +3013,17 @@ HRESULT logical_negation_expression_eval(exec_ctx_t *ctx, expression_t *_expr, D
 }
 
 /* ECMA-262 3rd Edition    11.7.1 */
-static HRESULT lshift_eval(exec_ctx_t *ctx, VARIANT *lval, VARIANT *rval, jsexcept_t *ei, VARIANT *retv)
+static HRESULT lshift_eval(script_ctx_t *ctx, VARIANT *lval, VARIANT *rval, jsexcept_t *ei, VARIANT *retv)
 {
     DWORD ri;
     INT li;
     HRESULT hres;
 
-    hres = to_int32(ctx->parser->script, lval, ei, &li);
+    hres = to_int32(ctx, lval, ei, &li);
     if(FAILED(hres))
         return hres;
 
-    hres = to_uint32(ctx->parser->script, rval, ei, &ri);
+    hres = to_uint32(ctx, rval, ei, &ri);
     if(FAILED(hres))
         return hres;
 
@@ -3041,7 +3033,7 @@ static HRESULT lshift_eval(exec_ctx_t *ctx, VARIANT *lval, VARIANT *rval, jsexce
 }
 
 /* ECMA-262 3rd Edition    11.7.1 */
-HRESULT left_shift_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT left_shift_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     binary_expression_t *expr = (binary_expression_t*)_expr;
 
@@ -3051,17 +3043,17 @@ HRESULT left_shift_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD f
 }
 
 /* ECMA-262 3rd Edition    11.7.2 */
-static HRESULT rshift_eval(exec_ctx_t *ctx, VARIANT *lval, VARIANT *rval, jsexcept_t *ei, VARIANT *retv)
+static HRESULT rshift_eval(script_ctx_t *ctx, VARIANT *lval, VARIANT *rval, jsexcept_t *ei, VARIANT *retv)
 {
     DWORD ri;
     INT li;
     HRESULT hres;
 
-    hres = to_int32(ctx->parser->script, lval, ei, &li);
+    hres = to_int32(ctx, lval, ei, &li);
     if(FAILED(hres))
         return hres;
 
-    hres = to_uint32(ctx->parser->script, rval, ei, &ri);
+    hres = to_uint32(ctx, rval, ei, &ri);
     if(FAILED(hres))
         return hres;
 
@@ -3071,7 +3063,7 @@ static HRESULT rshift_eval(exec_ctx_t *ctx, VARIANT *lval, VARIANT *rval, jsexce
 }
 
 /* ECMA-262 3rd Edition    11.7.2 */
-HRESULT right_shift_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT right_shift_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     binary_expression_t *expr = (binary_expression_t*)_expr;
 
@@ -3081,16 +3073,16 @@ HRESULT right_shift_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD 
 }
 
 /* ECMA-262 3rd Edition    11.7.3 */
-static HRESULT rshift2_eval(exec_ctx_t *ctx, VARIANT *lval, VARIANT *rval, jsexcept_t *ei, VARIANT *retv)
+static HRESULT rshift2_eval(script_ctx_t *ctx, VARIANT *lval, VARIANT *rval, jsexcept_t *ei, VARIANT *retv)
 {
     DWORD li, ri;
     HRESULT hres;
 
-    hres = to_uint32(ctx->parser->script, lval, ei, &li);
+    hres = to_uint32(ctx, lval, ei, &li);
     if(FAILED(hres))
         return hres;
 
-    hres = to_uint32(ctx->parser->script, rval, ei, &ri);
+    hres = to_uint32(ctx, rval, ei, &ri);
     if(FAILED(hres))
         return hres;
 
@@ -3100,7 +3092,7 @@ static HRESULT rshift2_eval(exec_ctx_t *ctx, VARIANT *lval, VARIANT *rval, jsexc
 }
 
 /* ECMA-262 3rd Edition    11.7.3 */
-HRESULT right2_shift_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT right2_shift_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     binary_expression_t *expr = (binary_expression_t*)_expr;
 
@@ -3110,7 +3102,7 @@ HRESULT right2_shift_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD
 }
 
 /* ECMA-262 3rd Edition    11.13.1 */
-HRESULT assign_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT assign_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     binary_expression_t *expr = (binary_expression_t*)_expr;
     exprval_t exprval, exprvalr;
@@ -3125,12 +3117,12 @@ HRESULT assign_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags
 
     hres = expr_eval(ctx, expr->expression2, 0, ei, &exprvalr);
     if(SUCCEEDED(hres)) {
-        hres = exprval_to_value(ctx->parser->script, &exprvalr, ei, &rval);
+        hres = exprval_to_value(ctx, &exprvalr, ei, &rval);
         exprval_release(&exprvalr);
     }
 
     if(SUCCEEDED(hres)) {
-        hres = put_value(ctx->parser->script, &exprval, &rval, ei);
+        hres = put_value(ctx, &exprval, &rval, ei);
         if(FAILED(hres))
             VariantClear(&rval);
     }
@@ -3145,7 +3137,7 @@ HRESULT assign_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags
 }
 
 /* ECMA-262 3rd Edition    11.13.2 */
-HRESULT assign_lshift_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT assign_lshift_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     binary_expression_t *expr = (binary_expression_t*)_expr;
 
@@ -3155,7 +3147,7 @@ HRESULT assign_lshift_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWOR
 }
 
 /* ECMA-262 3rd Edition    11.13.2 */
-HRESULT assign_rshift_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT assign_rshift_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     binary_expression_t *expr = (binary_expression_t*)_expr;
 
@@ -3165,7 +3157,7 @@ HRESULT assign_rshift_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWOR
 }
 
 /* ECMA-262 3rd Edition    11.13.2 */
-HRESULT assign_rrshift_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT assign_rrshift_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     binary_expression_t *expr = (binary_expression_t*)_expr;
 
@@ -3175,7 +3167,7 @@ HRESULT assign_rrshift_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWO
 }
 
 /* ECMA-262 3rd Edition    11.13.2 */
-HRESULT assign_add_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT assign_add_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     binary_expression_t *expr = (binary_expression_t*)_expr;
 
@@ -3185,7 +3177,7 @@ HRESULT assign_add_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD f
 }
 
 /* ECMA-262 3rd Edition    11.13.2 */
-HRESULT assign_sub_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT assign_sub_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     binary_expression_t *expr = (binary_expression_t*)_expr;
 
@@ -3195,7 +3187,7 @@ HRESULT assign_sub_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD f
 }
 
 /* ECMA-262 3rd Edition    11.13.2 */
-HRESULT assign_mul_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT assign_mul_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     binary_expression_t *expr = (binary_expression_t*)_expr;
 
@@ -3205,7 +3197,7 @@ HRESULT assign_mul_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD f
 }
 
 /* ECMA-262 3rd Edition    11.13.2 */
-HRESULT assign_div_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT assign_div_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     binary_expression_t *expr = (binary_expression_t*)_expr;
 
@@ -3215,7 +3207,7 @@ HRESULT assign_div_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD f
 }
 
 /* ECMA-262 3rd Edition    11.13.2 */
-HRESULT assign_mod_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT assign_mod_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     binary_expression_t *expr = (binary_expression_t*)_expr;
 
@@ -3225,7 +3217,7 @@ HRESULT assign_mod_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD f
 }
 
 /* ECMA-262 3rd Edition    11.13.2 */
-HRESULT assign_and_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT assign_and_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     binary_expression_t *expr = (binary_expression_t*)_expr;
 
@@ -3235,7 +3227,7 @@ HRESULT assign_and_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD f
 }
 
 /* ECMA-262 3rd Edition    11.13.2 */
-HRESULT assign_or_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT assign_or_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     binary_expression_t *expr = (binary_expression_t*)_expr;
 
@@ -3245,7 +3237,7 @@ HRESULT assign_or_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD fl
 }
 
 /* ECMA-262 3rd Edition    11.13.2 */
-HRESULT assign_xor_expression_eval(exec_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
+HRESULT assign_xor_expression_eval(script_ctx_t *ctx, expression_t *_expr, DWORD flags, jsexcept_t *ei, exprval_t *ret)
 {
     binary_expression_t *expr = (binary_expression_t*)_expr;
 

@@ -1,14 +1,11 @@
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 TESTDLL   = msvcp90.dll
 APPMODE   = -mno-cygwin
 MODCFLAGS = @BUILTINFLAG@
-EXTRAINCL = -I$(TOPSRCDIR)/include/msvcrt
+EXTRAINCL = -I$(top_srcdir)/include/msvcrt
 
 C_SRCS = \
-	misc.c
+	misc.c \
+	string.c
 
 RC_SRCS = \
 	msvcp90.rc

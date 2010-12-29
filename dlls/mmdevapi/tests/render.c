@@ -23,7 +23,6 @@
 
 #include "wine/test.h"
 
-#define CINTERFACE
 #define COBJMACROS
 
 #ifdef STANDALONE
@@ -126,26 +125,27 @@ static void test_audioclient(IAudioClient *ac)
     hr = IAudioClient_GetMixFormat(ac, &pwfx);
     ok(hr == S_OK, "Valid GetMixFormat returns %08x\n", hr);
 
-    trace("Tag: %04x\n", pwfx->wFormatTag);
-    trace("bits: %u\n", pwfx->wBitsPerSample);
-    trace("chan: %u\n", pwfx->nChannels);
-    trace("rate: %u\n", pwfx->nSamplesPerSec);
-    trace("align: %u\n", pwfx->nBlockAlign);
-    trace("extra: %u\n", pwfx->cbSize);
-    ok(pwfx->wFormatTag == WAVE_FORMAT_EXTENSIBLE, "wFormatTag is %x\n", pwfx->wFormatTag);
-    if (pwfx->wFormatTag == WAVE_FORMAT_EXTENSIBLE)
-    {
-        WAVEFORMATEXTENSIBLE *pwfxe = (void*)pwfx;
-        trace("Res: %u\n", pwfxe->Samples.wReserved);
-        trace("Mask: %x\n", pwfxe->dwChannelMask);
-        trace("Alg: %s\n",
-              IsEqualGUID(&pwfxe->SubFormat, &KSDATAFORMAT_SUBTYPE_PCM)?"PCM":
-              (IsEqualGUID(&pwfxe->SubFormat,
-                           &KSDATAFORMAT_SUBTYPE_IEEE_FLOAT)?"FLOAT":"Other"));
-    }
-
     if (hr == S_OK)
     {
+        trace("pwfx: %p\n", pwfx);
+        trace("Tag: %04x\n", pwfx->wFormatTag);
+        trace("bits: %u\n", pwfx->wBitsPerSample);
+        trace("chan: %u\n", pwfx->nChannels);
+        trace("rate: %u\n", pwfx->nSamplesPerSec);
+        trace("align: %u\n", pwfx->nBlockAlign);
+        trace("extra: %u\n", pwfx->cbSize);
+        ok(pwfx->wFormatTag == WAVE_FORMAT_EXTENSIBLE, "wFormatTag is %x\n", pwfx->wFormatTag);
+        if (pwfx->wFormatTag == WAVE_FORMAT_EXTENSIBLE)
+        {
+            WAVEFORMATEXTENSIBLE *pwfxe = (void*)pwfx;
+            trace("Res: %u\n", pwfxe->Samples.wReserved);
+            trace("Mask: %x\n", pwfxe->dwChannelMask);
+            trace("Alg: %s\n",
+                  IsEqualGUID(&pwfxe->SubFormat, &KSDATAFORMAT_SUBTYPE_PCM)?"PCM":
+                  (IsEqualGUID(&pwfxe->SubFormat,
+                               &KSDATAFORMAT_SUBTYPE_IEEE_FLOAT)?"FLOAT":"Other"));
+        }
+
         hr = IAudioClient_IsFormatSupported(ac, AUDCLNT_SHAREMODE_SHARED, pwfx, &pwfx2);
         ok(hr == S_OK, "Valid IsFormatSupported(Shared) call returns %08x\n", hr);
         ok(pwfx2 == NULL, "pwfx2 is non-null\n");
@@ -165,7 +165,9 @@ static void test_audioclient(IAudioClient *ac)
         ok(pwfx2 == NULL, "pwfx2 non-null on exclusive IsFormatSupported\n");
 
         hr = IAudioClient_IsFormatSupported(ac, 0xffffffff, pwfx, NULL);
-        ok(hr == E_INVALIDARG, "IsFormatSupported(0xffffffff) call returns %08x\n", hr);
+        ok(hr == E_INVALIDARG ||
+           hr == AUDCLNT_E_UNSUPPORTED_FORMAT,
+           "IsFormatSupported(0xffffffff) call returns %08x\n", hr);
     }
 
     test_uninitialized(ac);
@@ -208,8 +210,9 @@ static void test_audioclient(IAudioClient *ac)
 
     hr = IAudioClient_SetEventHandle(ac, handle);
     ok(hr == AUDCLNT_E_EVENTHANDLE_NOT_EXPECTED ||
-       hr == HRESULT_FROM_WIN32(ERROR_INVALID_NAME) ||
-       hr == HRESULT_FROM_WIN32(ERROR_BAD_PATHNAME) /* Some Vista */
+       broken(hr == HRESULT_FROM_WIN32(ERROR_INVALID_NAME)) ||
+       broken(hr == HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND)) /* Some 2k8 */ ||
+       broken(hr == HRESULT_FROM_WIN32(ERROR_BAD_PATHNAME)) /* Some Vista */
        , "SetEventHandle returns %08x\n", hr);
 
     hr = IAudioClient_Reset(ac);

@@ -1,7 +1,3 @@
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = clock.exe
 APPMODE   = -mwindows
 IMPORTS   = comdlg32 shell32 user32 gdi32
@@ -20,20 +16,27 @@ RC_SRCS = \
 	Es.rc \
 	Fi.rc \
 	Fr.rc \
+	He.rc \
+	Hi.rc \
 	Hu.rc \
 	It.rc \
 	Ja.rc \
 	Ko.rc \
 	Lt.rc \
+	Ml.rc \
 	Nl.rc \
 	No.rc \
+	Or.rc \
+	Pa.rc \
 	Pl.rc \
 	Pt.rc \
 	Ro.rc \
 	Ru.rc \
 	Si.rc \
 	Sk.rc \
+	Sr.rc \
 	Sv.rc \
+	Te.rc \
 	Th.rc \
 	Tr.rc \
 	Uk.rc \

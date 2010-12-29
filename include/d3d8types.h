@@ -148,11 +148,11 @@
 #define D3DCOLORWRITEENABLE_ALPHA (1L<<3)
 
 
-
+#ifndef MAKEFOURCC
 #define MAKEFOURCC(ch0, ch1, ch2, ch3)  \
     ((DWORD)(BYTE)(ch0) | ((DWORD)(BYTE)(ch1) << 8) |  \
     ((DWORD)(BYTE)(ch2) << 16) | ((DWORD)(BYTE)(ch3) << 24 ))
-
+#endif
 
 /**************************** 
  * Vertex Shaders Declaration
@@ -683,7 +683,7 @@ typedef enum _D3DMULTISAMPLE_TYPE {
     D3DMULTISAMPLE_15_SAMPLES      = 15,
     D3DMULTISAMPLE_16_SAMPLES      = 16,
 
-    D3DMULTISAMPLE_FORCE_DWORD     = 0xffffffff
+    D3DMULTISAMPLE_FORCE_DWORD     = 0x7fffffff
 } D3DMULTISAMPLE_TYPE;
 
 typedef enum _D3DORDERTYPE {
@@ -1053,11 +1053,14 @@ typedef struct _D3DINDEXBUFFER_DESC {
     UINT                Size;
 } D3DINDEXBUFFER_DESC;
 
+#ifndef D3DVECTOR_DEFINED
 typedef struct _D3DVECTOR {
     float x;
     float y;
     float z;
 } D3DVECTOR;
+#define D3DVECTOR_DEFINED
+#endif
 
 typedef struct _D3DLIGHT8 {
     D3DLIGHTTYPE    Type;

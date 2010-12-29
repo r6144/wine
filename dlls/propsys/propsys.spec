@@ -79,7 +79,7 @@
 @ stub PSGetItemPropertyHandlerWithCreateObject
 @ stub PSGetNameFromPropertyKey
 @ stub PSGetNamedPropertyFromPropertyStorage
-@ stub PSGetPropertyDescription
+@ stdcall PSGetPropertyDescription(ptr ptr ptr)
 @ stub PSGetPropertyDescriptionByName
 @ stub PSGetPropertyDescriptionListFromString
 @ stub PSGetPropertyFromPropertyStorage
@@ -87,11 +87,11 @@
 @ stub PSGetPropertySystem
 @ stub PSGetPropertyValue
 @ stub PSLookupPropertyHandlerCLSID
-@ stub PSPropertyKeyFromString
+@ stdcall PSPropertyKeyFromString(wstr ptr)
 @ stub PSRefreshPropertySchema
 @ stdcall PSRegisterPropertySchema(wstr)
 @ stub PSSetPropertyValue
-@ stub PSStringFromPropertyKey
+@ stdcall PSStringFromPropertyKey(ptr ptr long)
 @ stdcall PSUnregisterPropertySchema(wstr)
 @ stdcall PropVariantChangeType(ptr ptr long long)
 @ stub PropVariantCompareEx

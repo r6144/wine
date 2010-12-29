@@ -37,6 +37,13 @@ WINE_DEFAULT_DEBUG_CHANNEL(uniscribe);
 #define FIRST_ARABIC_CHAR 0x0600
 #define LAST_ARABIC_CHAR  0x06ff
 
+typedef VOID (*ContextualShapingProc)(HDC, ScriptCache*, SCRIPT_ANALYSIS*,
+                                      WCHAR*, INT, WORD*, INT*, INT, WORD*);
+
+static void ContextualShape_Arabic(HDC hdc, ScriptCache *psc, SCRIPT_ANALYSIS *psa, WCHAR* pwcChars, INT cChars, WORD* pwOutGlyphs, INT* pcGlyphs, INT cMaxGlyphs, WORD *pwLogClust);
+static void ContextualShape_Syriac(HDC hdc, ScriptCache *psc, SCRIPT_ANALYSIS *psa, WCHAR* pwcChars, INT cChars, WORD* pwOutGlyphs, INT* pcGlyphs, INT cMaxGlyphs, WORD *pwLogClust);
+static void ContextualShape_Phags_pa(HDC hdc, ScriptCache *psc, SCRIPT_ANALYSIS *psa, WCHAR* pwcChars, INT cChars, WORD* pwOutGlyphs, INT* pcGlyphs, INT cMaxGlyphs, WORD *pwLogClust);
+
 extern const unsigned short wine_shaping_table[];
 extern const unsigned short wine_shaping_forms[LAST_ARABIC_CHAR - FIRST_ARABIC_CHAR + 1][4];
 
@@ -53,7 +60,11 @@ enum joined_forms {
     Xn=0,
     Xr,
     Xl,
-    Xm
+    Xm,
+    /* Syriac Alaph */
+    Afj,
+    Afn,
+    Afx
 };
 
 #ifdef WORDS_BIGENDIAN
@@ -219,6 +230,18 @@ typedef struct{
     GSUB_SubstLookupRecord SubstLookupRecord[1];
 }GSUB_ChainContextSubstFormat3_4;
 
+typedef struct {
+    WORD SubstFormat; /* = 1 */
+    WORD Coverage;
+    WORD AlternateSetCount;
+    WORD AlternateSet[1];
+} GSUB_AlternateSubstFormat1;
+
+typedef struct{
+    WORD GlyphCount;
+    WORD Alternate[1];
+} GSUB_AlternateSet;
+
 static INT GSUB_apply_lookup(const GSUB_LookupList* lookup, INT lookup_index, WORD *glyphs, INT glyph_index, INT write_dir, INT *glyph_count);
 
 /* the orders of joined_forms and contextual_features need to line up */
@@ -227,18 +250,127 @@ static const char* contextual_features[] =
     "isol",
     "fina",
     "init",
-    "medi"
+    "medi",
+    /* Syriac Alaph */
+    "med2",
+    "fin2",
+    "fin3"
 };
 
-static const char* arabic_GSUB_features[] =
+static OPENTYPE_FEATURE_RECORD standard_features[] =
 {
+    { 0x6167696c /*liga*/, 1},
+    { 0x67696c63 /*clig*/, 1},
+};
+
+static OPENTYPE_FEATURE_RECORD arabic_features[] =
+{
+    { 0x67696c72 /*rlig*/, 1},
+    { 0x746c6163 /*calt*/, 1},
+    { 0x6167696c /*liga*/, 1},
+    { 0x67696c64 /*dlig*/, 1},
+    { 0x68777363 /*cswh*/, 1},
+    { 0x7465736d /*mset*/, 1},
+};
+
+static const char* required_arabic_features[] =
+{
+    "fina",
+    "init",
+    "medi",
     "rlig",
-    "calt",
-    "liga",
-    "dlig",
-    "cswh",
-    "mset",
     NULL
+};
+
+static OPENTYPE_FEATURE_RECORD hebrew_features[] =
+{
+    { 0x67696c64 /*dlig*/, 1},
+};
+
+static OPENTYPE_FEATURE_RECORD syriac_features[] =
+{
+    { 0x67696c72 /*rlig*/, 1},
+    { 0x746c6163 /*calt*/, 1},
+    { 0x6167696c /*liga*/, 1},
+    { 0x67696c64 /*dlig*/, 1},
+};
+
+static const char* required_syriac_features[] =
+{
+    "fina",
+    "fin2",
+    "fin3",
+    "init",
+    "medi",
+    "med2",
+    "rlig",
+    NULL
+};
+
+static OPENTYPE_FEATURE_RECORD sinhala_features[] =
+{
+    /* Base forms */
+    { 0x6e686b61 /*akhn*/, 1},
+    { 0x66687072 /*rphf*/, 1},
+    { 0x75746176 /*vatu*/, 1},
+    { 0x66747370 /*pstf*/, 1},
+    /* Presentation forms */
+    { 0x73776c62 /*blws*/, 1},
+    { 0x73766261 /*abvs*/, 1},
+    { 0x73747370 /*psts*/, 1},
+};
+
+static OPENTYPE_FEATURE_RECORD tibetan_features[] =
+{
+    { 0x73766261 /*abvs*/, 1},
+    { 0x73776c62 /*blws*/, 1},
+};
+
+static OPENTYPE_FEATURE_RECORD thai_features[] =
+{
+    { 0x706d6363 /*ccmp*/, 1},
+};
+
+static const char* required_lao_features[] =
+{
+    "ccmp",
+    NULL
+};
+
+typedef struct ScriptShapeDataTag {
+    TEXTRANGE_PROPERTIES  defaultTextRange;
+    const char**          requiredFeatures;
+    CHAR                  otTag[5];
+    ContextualShapingProc contextProc;
+} ScriptShapeData;
+
+/* in order of scripts */
+static const ScriptShapeData ShapingData[] =
+{
+    {{ standard_features, 2}, NULL, "", NULL},
+    {{ standard_features, 2}, NULL, "latn", NULL},
+    {{ standard_features, 2}, NULL, "latn", NULL},
+    {{ standard_features, 2}, NULL, "latn", NULL},
+    {{ standard_features, 2}, NULL, "" , NULL},
+    {{ standard_features, 2}, NULL, "latn", NULL},
+    {{ arabic_features, 6}, required_arabic_features, "arab", ContextualShape_Arabic},
+    {{ arabic_features, 6}, required_arabic_features, "arab", ContextualShape_Arabic},
+    {{ hebrew_features, 1}, NULL, "hebr", NULL},
+    {{ syriac_features, 4}, required_syriac_features, "syrc", ContextualShape_Syriac},
+    {{ arabic_features, 6}, required_arabic_features, "arab", ContextualShape_Arabic},
+    {{ NULL, 0}, NULL, "thaa", NULL},
+    {{ standard_features, 2}, NULL, "grek", NULL},
+    {{ standard_features, 2}, NULL, "cyrl", NULL},
+    {{ standard_features, 2}, NULL, "armn", NULL},
+    {{ standard_features, 2}, NULL, "geor", NULL},
+    {{ sinhala_features, 7}, NULL, "sinh", NULL},
+    {{ tibetan_features, 2}, NULL, "tibt", NULL},
+    {{ tibetan_features, 2}, NULL, "tibt", NULL},
+    {{ tibetan_features, 2}, NULL, "phag", ContextualShape_Phags_pa},
+    {{ thai_features, 1}, NULL, "thai", NULL},
+    {{ thai_features, 1}, NULL, "thai", NULL},
+    {{ thai_features, 1}, required_lao_features, "lao", NULL},
+    {{ thai_features, 1}, required_lao_features, "lao", NULL},
 };
 
 static INT GSUB_is_glyph_covered(LPCVOID table , UINT glyph)
@@ -395,6 +527,38 @@ static INT GSUB_apply_SingleSubst(const GSUB_LookupTable *look, WORD *glyphs, IN
                 TRACE("0x%x\n",glyphs[glyph_index]);
                 return glyph_index + 1;
             }
+        }
+    }
+    return GSUB_E_NOGLYPH;
+}
+
+static INT GSUB_apply_AlternateSubst(const GSUB_LookupTable *look, WORD *glyphs, INT glyph_index, INT write_dir, INT *glyph_count)
+{
+    int j;
+    TRACE("Alternate Substitution Subtable\n");
+
+    for (j = 0; j < GET_BE_WORD(look->SubTableCount); j++)
+    {
+        int offset;
+        const GSUB_AlternateSubstFormat1 *asf1;
+        INT index;
+
+        offset = GET_BE_WORD(look->SubTable[j]);
+        asf1 = (const GSUB_AlternateSubstFormat1*)((const BYTE*)look+offset);
+        offset = GET_BE_WORD(asf1->Coverage);
+
+        index = GSUB_is_glyph_covered((const BYTE*)asf1+offset, glyphs[glyph_index]);
+        if (index != -1)
+        {
+            const GSUB_AlternateSet *as;
+            offset =  GET_BE_WORD(asf1->AlternateSet[index]);
+            as = (const GSUB_AlternateSet*)((const BYTE*)asf1+offset);
+            FIXME("%i alternates, picking index 0\n",GET_BE_WORD(as->GlyphCount));
+
+            TRACE("  Glyph 0x%x ->",glyphs[glyph_index]);
+            glyphs[glyph_index] = GET_BE_WORD(as->Alternate[0]);
+            TRACE(" 0x%x\n",glyphs[glyph_index]);
+            return glyph_index + 1;
         }
     }
     return GSUB_E_NOGLYPH;
@@ -572,6 +736,8 @@ static INT GSUB_apply_lookup(const GSUB_LookupList* lookup, INT lookup_index, WO
     {
         case 1:
             return GSUB_apply_SingleSubst(look, glyphs, glyph_index, write_dir, glyph_count);
+        case 3:
+            return GSUB_apply_AlternateSubst(look, glyphs, glyph_index, write_dir, glyph_count);
         case 4:
             return GSUB_apply_LigatureSubst(look, glyphs, glyph_index, write_dir, glyph_count);
         case 6:
@@ -606,20 +772,8 @@ static const char* get_opentype_script(HDC hdc, SCRIPT_ANALYSIS *psa)
 {
     UINT charset;
 
-    switch (psa->eScript)
-    {
-        case Script_Arabic:
-            return "arab";
-        case Script_Syriac:
-            return "syrc";
-        case Script_Hebrew:
-            return "hebr";
-        case Script_Latin:
-        case Script_Numeric:
-        case Script_CR:
-        case Script_LF:
-            return "latn";
-    }
+    if (ShapingData[psa->eScript].otTag[0] != 0)
+        return ShapingData[psa->eScript].otTag;
 
     /*
      * fall back to the font charset
@@ -646,38 +800,67 @@ static const char* get_opentype_script(HDC hdc, SCRIPT_ANALYSIS *psa)
     }
 }
 
-static INT apply_GSUB_feature_to_glyph(HDC hdc, SCRIPT_ANALYSIS *psa, void* GSUB_Table, WORD *glyphs, INT index, INT write_dir, INT* glyph_count, const char* feat)
+static LPCVOID load_GSUB_feature(HDC hdc, SCRIPT_ANALYSIS *psa, ScriptCache *psc, const char* feat)
 {
-    const GSUB_Header *header;
-    const GSUB_Script *script;
-    const GSUB_LangSys *language;
+    const GSUB_Feature *feature;
+    int i;
+
+    for (i = 0; i <  psc->feature_count; i++)
+        if (strncmp(psc->features[i].tag,feat,4)==0)
+            return psc->features[i].feature;
+
+    feature = NULL;
+
+    if (psc->GSUB_Table)
+    {
+        const GSUB_Script *script;
+        const GSUB_LangSys *language;
+
+        script = GSUB_get_script_table(psc->GSUB_Table, get_opentype_script(hdc,psa));
+        if (script)
+        {
+            language = GSUB_get_lang_table(script, "xxxx"); /* Need to get Lang tag */
+            if (language)
+                feature = GSUB_get_feature(psc->GSUB_Table, language, feat);
+        }
+
+        /* try in the default (latin) table */
+        if (!feature)
+        {
+            script = GSUB_get_script_table(psc->GSUB_Table, "latn");
+            if (script)
+            {
+                language = GSUB_get_lang_table(script, "xxxx"); /* Need to get Lang tag */
+                if (language)
+                    feature = GSUB_get_feature(psc->GSUB_Table, language, feat);
+            }
+        }
+    }
+
+    TRACE("Feature %s located at %p\n",debugstr_an(feat,4),feature);
+
+    psc->feature_count++;
+
+    if (psc->features)
+        psc->features = HeapReAlloc(GetProcessHeap(), 0, psc->features, psc->feature_count * sizeof(LoadedFeature));
+    else
+        psc->features = HeapAlloc(GetProcessHeap(), 0, psc->feature_count * sizeof(LoadedFeature));
+
+    lstrcpynA(psc->features[psc->feature_count - 1].tag, feat, 5);
+    psc->features[psc->feature_count - 1].feature = feature;
+    return feature;
+}
+
+static INT apply_GSUB_feature_to_glyph(HDC hdc, SCRIPT_ANALYSIS *psa, ScriptCache* psc, WORD *glyphs, INT index, INT write_dir, INT* glyph_count, const char* feat)
+{
     const GSUB_Feature *feature;
 
-    if (!GSUB_Table)
-        return GSUB_E_NOFEATURE;
-
-    header = GSUB_Table;
-
-    script = GSUB_get_script_table(header, get_opentype_script(hdc,psa));
-    if (!script)
-    {
-        TRACE("Script not found\n");
-        return GSUB_E_NOFEATURE;
-    }
-    language = GSUB_get_lang_table(script, "xxxx"); /* Need to get Lang tag */
-    if (!language)
-    {
-        TRACE("Language not found\n");
-        return GSUB_E_NOFEATURE;
-    }
-    feature  =  GSUB_get_feature(header, language, feat);
+    feature = load_GSUB_feature(hdc, psa, psc, feat);
     if (!feature)
-    {
-        TRACE("%s feature not found\n",feat);
         return GSUB_E_NOFEATURE;
-    }
+
     TRACE("applying feature %s\n",feat);
-    return GSUB_apply_feature(header, feature, glyphs, index, write_dir, glyph_count);
+    return GSUB_apply_feature(psc->GSUB_Table, feature, glyphs, index, write_dir, glyph_count);
 }
 
 static VOID *load_gsub_table(HDC hdc)
@@ -693,55 +876,116 @@ static VOID *load_gsub_table(HDC hdc)
     return GSUB_Table;
 }
 
-static int apply_GSUB_feature(HDC hdc, SCRIPT_ANALYSIS *psa, void* GSUB_Table, WORD *pwOutGlyphs, int write_dir, INT* pcGlyphs, const char* feat)
+static void UpdateClusters(int nextIndex, int changeCount, int write_dir, int chars, WORD* pwLogClust )
+{
+    if (changeCount == 0)
+        return;
+    else
+    {
+        int i;
+        int target_glyph = nextIndex - 1;
+        int target_index = -1;
+        int replacing_glyph = -1;
+        int changed = 0;
+
+        if (write_dir > 0)
+            for (i = 0; i < chars; i++)
+            {
+                if (pwLogClust[i] == target_glyph)
+                {
+                    target_index = i;
+                    break;
+                }
+            }
+        else
+            for (i = chars - 1; i >= 0; i--)
+            {
+                if (pwLogClust[i] == target_glyph)
+                {
+                    target_index = i;
+                    break;
+                }
+            }
+        if (target_index == -1)
+        {
+            ERR("Unable to find target glyph\n");
+            return;
+        }
+
+        if (changeCount < 0)
+        {
+            /* merge glyphs */
+            for(i = target_index; i < chars && i >= 0; i+=write_dir)
+            {
+                if (pwLogClust[i] == target_glyph)
+                    continue;
+                if(pwLogClust[i] == replacing_glyph)
+                    pwLogClust[i] = target_glyph;
+                else
+                {
+                    changed--;
+                    if (changed >= changeCount)
+                    {
+                        replacing_glyph = pwLogClust[i];
+                        pwLogClust[i] = target_glyph;
+                    }
+                    else
+                        break;
+                }
+            }
+        }
+
+        /* renumber trailing indexes*/
+        for(i = target_index; i < chars && i >= 0; i+=write_dir)
+        {
+            if (pwLogClust[i] != target_glyph)
+                pwLogClust[i] += changeCount;
+        }
+    }
+}
+
+static int apply_GSUB_feature(HDC hdc, SCRIPT_ANALYSIS *psa, ScriptCache* psc, WORD *pwOutGlyphs, int write_dir, INT* pcGlyphs, INT cChars, const char* feat, WORD *pwLogClust )
 {
     int i;
 
-    if (GSUB_Table)
+    if (psc->GSUB_Table)
     {
-        const GSUB_Header *header;
-        const GSUB_Script *script;
-        const GSUB_LangSys *language;
         const GSUB_Feature *feature;
 
-        if (!GSUB_Table)
-            return GSUB_E_NOFEATURE;
-
-        header = GSUB_Table;
-
-        script = GSUB_get_script_table(header, get_opentype_script(hdc,psa));
-        if (!script)
-        {
-            TRACE("Script not found\n");
-            return GSUB_E_NOFEATURE;
-        }
-        language = GSUB_get_lang_table(script, "xxxx");
-        if (!language)
-        {
-            TRACE("Language not found\n");
-            return GSUB_E_NOFEATURE;
-        }
-        feature  =  GSUB_get_feature(header, language, feat);
+        feature = load_GSUB_feature(hdc, psa, psc, feat);
         if (!feature)
-        {
-            TRACE("%s feature not found\n",feat);
             return GSUB_E_NOFEATURE;
-        }
 
         i = 0;
-        TRACE("applying feature %s\n",feat);
+        TRACE("applying feature %s\n",debugstr_an(feat,4));
         while(i < *pcGlyphs)
         {
                 INT nextIndex;
-                nextIndex = GSUB_apply_feature(header, feature, pwOutGlyphs, i, write_dir, pcGlyphs);
+                INT prevCount = *pcGlyphs;
+                nextIndex = GSUB_apply_feature(psc->GSUB_Table, feature, pwOutGlyphs, i, write_dir, pcGlyphs);
                 if (nextIndex > GSUB_E_NOGLYPH)
+                {
+                    UpdateClusters(nextIndex, *pcGlyphs - prevCount, write_dir, cChars, pwLogClust);
                     i = nextIndex;
+                }
                 else
                     i++;
         }
         return *pcGlyphs;
     }
     return GSUB_E_NOFEATURE;
+}
+
+static WCHAR neighbour_char(int i, int delta, const WCHAR* chars, INT cchLen)
+{
+    if (i + delta < 0)
+        return 0;
+    if ( i+ delta >= cchLen)
+        return 0;
+
+    i += delta;
+
+    return chars[i];
 }
 
 static CHAR neighbour_joining_type(int i, int delta, const CHAR* context_type, INT cchLen, SCRIPT_ANALYSIS *psa)
@@ -779,24 +1023,29 @@ static inline BOOL left_join_causing(CHAR joining_type)
     return (joining_type == jtR || joining_type == jtD || joining_type == jtC);
 }
 
-/* SHAPE_ShapeArabicGlyphs
+static inline BOOL word_break_causing(WCHAR chr)
+{
+    /* we are working within a string of characters already guareented to
+       be within one script, Syriac, so we do not worry about any characers
+       other than the space character outside of that range */
+    return (chr == 0 || chr == 0x20 );
+}
+
+/*
+ * ContextualShape_Arabic
  */
-void SHAPE_ShapeArabicGlyphs(HDC hdc, ScriptCache *psc, SCRIPT_ANALYSIS *psa, WCHAR* pwcChars, INT cChars, WORD* pwOutGlyphs, INT* pcGlyphs, INT cMaxGlyphs)
+static void ContextualShape_Arabic(HDC hdc, ScriptCache *psc, SCRIPT_ANALYSIS *psa, WCHAR* pwcChars, INT cChars, WORD* pwOutGlyphs, INT* pcGlyphs, INT cMaxGlyphs, WORD *pwLogClust)
 {
     CHAR *context_type;
     INT *context_shape;
     INT dirR, dirL;
     int i;
 
-    if (psa->eScript != Script_Arabic)
-        return;
-
     if (*pcGlyphs != cChars)
     {
         ERR("Number of Glyphs and Chars need to match at the beginning\n");
         return;
     }
-
 
     if (!psa->fLogicalOrder && psa->fRTL)
     {
@@ -843,9 +1092,13 @@ void SHAPE_ShapeArabicGlyphs(HDC hdc, ScriptCache *psc, SCRIPT_ANALYSIS *psa, WC
         if (psc->GSUB_Table)
         {
             INT nextIndex;
-            nextIndex = apply_GSUB_feature_to_glyph(hdc, psa, psc->GSUB_Table, pwOutGlyphs, i, dirL, pcGlyphs, contextual_features[context_shape[i]]);
+            INT prevCount = *pcGlyphs;
+            nextIndex = apply_GSUB_feature_to_glyph(hdc, psa, psc, pwOutGlyphs, i, dirL, pcGlyphs, contextual_features[context_shape[i]]);
             if (nextIndex > GSUB_E_NOGLYPH)
+            {
                 i = nextIndex;
+                UpdateClusters(nextIndex, *pcGlyphs - prevCount, dirL, cChars, pwLogClust);
+            }
             shaped = (nextIndex > GSUB_E_NOGLYPH);
         }
 
@@ -863,13 +1116,247 @@ void SHAPE_ShapeArabicGlyphs(HDC hdc, ScriptCache *psc, SCRIPT_ANALYSIS *psa, WC
         }
     }
 
-    i = 0;
-    while (arabic_GSUB_features[i] != NULL)
+    HeapFree(GetProcessHeap(),0,context_shape);
+    HeapFree(GetProcessHeap(),0,context_type);
+}
+
+/*
+ * ContextualShape_Syriac
+ */
+
+#define ALAPH 0x710
+#define DALATH 0x715
+#define RISH 0x72A
+
+static void ContextualShape_Syriac(HDC hdc, ScriptCache *psc, SCRIPT_ANALYSIS *psa, WCHAR* pwcChars, INT cChars, WORD* pwOutGlyphs, INT* pcGlyphs, INT cMaxGlyphs, WORD *pwLogClust)
+{
+    CHAR *context_type;
+    INT *context_shape;
+    INT dirR, dirL;
+    int i;
+
+    if (*pcGlyphs != cChars)
     {
-        apply_GSUB_feature(hdc, psa, psc->GSUB_Table, pwOutGlyphs, dirL, pcGlyphs, arabic_GSUB_features[i]);
-        i++;
+        ERR("Number of Glyphs and Chars need to match at the beginning\n");
+        return;
+    }
+
+    if (!psa->fLogicalOrder && psa->fRTL)
+    {
+        dirR = 1;
+        dirL = -1;
+    }
+    else
+    {
+        dirR = -1;
+        dirL = 1;
+    }
+
+    if (!psc->GSUB_Table)
+        psc->GSUB_Table = load_gsub_table(hdc);
+
+    if (!psc->GSUB_Table)
+        return;
+
+    context_type = HeapAlloc(GetProcessHeap(),0,cChars);
+    context_shape = HeapAlloc(GetProcessHeap(),0,sizeof(INT) * cChars);
+
+    for (i = 0; i < cChars; i++)
+        context_type[i] = wine_shaping_table[wine_shaping_table[pwcChars[i] >> 8] + (pwcChars[i] & 0xff)];
+
+    for (i = 0; i < cChars; i++)
+    {
+        if (pwcChars[i] == ALAPH)
+        {
+            WCHAR rchar = neighbour_char(i,dirR,pwcChars,cChars);
+
+            if (left_join_causing(neighbour_joining_type(i,dirR,context_type,cChars,psa)) && word_break_causing(neighbour_char(i,dirL,pwcChars,cChars)))
+            context_shape[i] = Afj;
+            else if ( rchar != DALATH && rchar != RISH &&
+!left_join_causing(neighbour_joining_type(i,dirR,context_type,cChars,psa)) &&
+word_break_causing(neighbour_char(i,dirL,pwcChars,cChars)))
+            context_shape[i] = Afn;
+            else if ( (rchar == DALATH || rchar == RISH) && word_break_causing(neighbour_char(i,dirL,pwcChars,cChars)))
+            context_shape[i] = Afx;
+        }
+        else if (context_type[i] == jtR &&
+right_join_causing(neighbour_joining_type(i,dirR,context_type,cChars,psa)))
+            context_shape[i] = Xr;
+        else if (context_type[i] == jtL && left_join_causing(neighbour_joining_type(i,dirL,context_type,cChars,psa)))
+            context_shape[i] = Xl;
+        else if (context_type[i] == jtD && left_join_causing(neighbour_joining_type(i,dirL,context_type,cChars,psa)) && right_join_causing(neighbour_joining_type(i,dirR,context_type,cChars,psa)))
+            context_shape[i] = Xm;
+        else if (context_type[i] == jtD && right_join_causing(neighbour_joining_type(i,dirR,context_type,cChars,psa)))
+            context_shape[i] = Xr;
+        else if (context_type[i] == jtD && left_join_causing(neighbour_joining_type(i,dirL,context_type,cChars,psa)))
+            context_shape[i] = Xl;
+        else
+            context_shape[i] = Xn;
+    }
+
+    /* Contextual Shaping */
+    i = 0;
+    while(i < *pcGlyphs)
+    {
+        INT nextIndex;
+        INT prevCount = *pcGlyphs;
+        nextIndex = apply_GSUB_feature_to_glyph(hdc, psa, psc, pwOutGlyphs, i, dirL, pcGlyphs, contextual_features[context_shape[i]]);
+        if (nextIndex > GSUB_E_NOGLYPH)
+        {
+            UpdateClusters(nextIndex, *pcGlyphs - prevCount, dirL, cChars, pwLogClust);
+            i = nextIndex;
+        }
     }
 
     HeapFree(GetProcessHeap(),0,context_shape);
     HeapFree(GetProcessHeap(),0,context_type);
+}
+
+/*
+ * ContextualShape_Phags_pa
+ */
+
+#define phags_pa_CANDRABINDU  0xA873
+#define phags_pa_START 0xA840
+#define phags_pa_END  0xA87F
+
+static void ContextualShape_Phags_pa(HDC hdc, ScriptCache *psc, SCRIPT_ANALYSIS *psa, WCHAR* pwcChars, INT cChars, WORD* pwOutGlyphs, INT* pcGlyphs, INT cMaxGlyphs, WORD *pwLogClust)
+{
+    INT *context_shape;
+    INT dirR, dirL;
+    int i;
+
+    if (*pcGlyphs != cChars)
+    {
+        ERR("Number of Glyphs and Chars need to match at the beginning\n");
+        return;
+    }
+
+    if (!psa->fLogicalOrder && psa->fRTL)
+    {
+        dirR = 1;
+        dirL = -1;
+    }
+    else
+    {
+        dirR = -1;
+        dirL = 1;
+    }
+
+    if (!psc->GSUB_Table)
+        psc->GSUB_Table = load_gsub_table(hdc);
+
+    if (!psc->GSUB_Table)
+        return;
+
+    context_shape = HeapAlloc(GetProcessHeap(),0,sizeof(INT) * cChars);
+
+    for (i = 0; i < cChars; i++)
+    {
+        if (pwcChars[i] >= phags_pa_START && pwcChars[i] <=  phags_pa_END)
+        {
+            WCHAR rchar = neighbour_char(i,dirR,pwcChars,cChars);
+            WCHAR lchar = neighbour_char(i,dirL,pwcChars,cChars);
+            BOOL jrchar = (rchar != phags_pa_CANDRABINDU && rchar >= phags_pa_START && rchar <=  phags_pa_END);
+            BOOL jlchar = (lchar != phags_pa_CANDRABINDU && lchar >= phags_pa_START && lchar <=  phags_pa_END);
+
+            if (jrchar && jlchar)
+                context_shape[i] = Xm;
+            else if (jrchar)
+                context_shape[i] = Xr;
+            else if (jlchar)
+                context_shape[i] = Xl;
+            else
+                context_shape[i] = Xn;
+        }
+        else
+            context_shape[i] = -1;
+    }
+
+    /* Contextual Shaping */
+    i = 0;
+    while(i < *pcGlyphs)
+    {
+        if (context_shape[i] >= 0)
+        {
+            INT nextIndex;
+            INT prevCount = *pcGlyphs;
+            nextIndex = apply_GSUB_feature_to_glyph(hdc, psa, psc, pwOutGlyphs, i, dirL, pcGlyphs, contextual_features[context_shape[i]]);
+            if (nextIndex > GSUB_E_NOGLYPH)
+            {
+                UpdateClusters(nextIndex, *pcGlyphs - prevCount, dirL, cChars, pwLogClust);
+                i = nextIndex;
+            }
+            else
+                i++;
+        }
+        else
+            i++;
+    }
+
+    HeapFree(GetProcessHeap(),0,context_shape);
+}
+
+void SHAPE_ContextualShaping(HDC hdc, ScriptCache *psc, SCRIPT_ANALYSIS *psa, WCHAR* pwcChars, INT cChars, WORD* pwOutGlyphs, INT* pcGlyphs, INT cMaxGlyphs, WORD *pwLogClust)
+{
+    if (ShapingData[psa->eScript].contextProc)
+        ShapingData[psa->eScript].contextProc(hdc, psc, psa, pwcChars, cChars, pwOutGlyphs, pcGlyphs, cMaxGlyphs, pwLogClust);
+}
+
+static void SHAPE_ApplyOpenTypeFeatures(HDC hdc, ScriptCache *psc, SCRIPT_ANALYSIS *psa, WORD* pwOutGlyphs, INT* pcGlyphs, INT cMaxGlyphs, INT cChars, const TEXTRANGE_PROPERTIES *rpRangeProperties, WORD *pwLogClust)
+{
+    int i;
+    INT dirL;
+
+    if (!rpRangeProperties)
+        return;
+
+    if (!psc->GSUB_Table)
+        psc->GSUB_Table = load_gsub_table(hdc);
+
+    if (!psc->GSUB_Table)
+        return;
+
+    if (!psa->fLogicalOrder && psa->fRTL)
+        dirL = -1;
+    else
+        dirL = 1;
+
+    for (i = 0; i < rpRangeProperties->cotfRecords; i++)
+    {
+        if (rpRangeProperties->potfRecords[i].lParameter > 0)
+        apply_GSUB_feature(hdc, psa, psc, pwOutGlyphs, dirL, pcGlyphs, cChars, (const char*)&rpRangeProperties->potfRecords[i].tagFeature, pwLogClust);
+    }
+}
+
+void SHAPE_ApplyDefaultOpentypeFeatures(HDC hdc, ScriptCache *psc, SCRIPT_ANALYSIS *psa, WORD* pwOutGlyphs, INT* pcGlyphs, INT cMaxGlyphs, INT cChars, WORD *pwLogClust)
+{
+const TEXTRANGE_PROPERTIES *rpRangeProperties;
+rpRangeProperties = &ShapingData[psa->eScript].defaultTextRange;
+
+    SHAPE_ApplyOpenTypeFeatures(hdc, psc, psa, pwOutGlyphs, pcGlyphs, cMaxGlyphs, cChars, rpRangeProperties, pwLogClust);
+}
+
+HRESULT SHAPE_CheckFontForRequiredFeatures(HDC hdc, ScriptCache *psc, SCRIPT_ANALYSIS *psa)
+{
+    const GSUB_Feature *feature;
+    int i;
+
+    if (!ShapingData[psa->eScript].requiredFeatures)
+        return S_OK;
+
+    if (!psc->GSUB_Table)
+        psc->GSUB_Table = load_gsub_table(hdc);
+
+    /* we need to have at least one of the required features */
+    i = 0;
+    while (ShapingData[psa->eScript].requiredFeatures[i])
+    {
+        feature = load_GSUB_feature(hdc, psa, psc, ShapingData[psa->eScript].requiredFeatures[i]);
+        if (feature)
+            return S_OK;
+        i++;
+    }
+
+    return USP_E_SCRIPT_NOT_IN_FONT;
 }

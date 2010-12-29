@@ -580,6 +580,7 @@ static BOOL request_query_option( object_header_t *hdr, DWORD option, LPVOID buf
     case WINHTTP_OPTION_SECURITY_FLAGS:
     {
         DWORD flags;
+        int bits;
 
         if (!buffer || *buflen < sizeof(flags))
         {
@@ -590,6 +591,14 @@ static BOOL request_query_option( object_header_t *hdr, DWORD option, LPVOID buf
 
         flags = 0;
         if (hdr->flags & WINHTTP_FLAG_SECURE) flags |= SECURITY_FLAG_SECURE;
+        flags |= request->netconn.security_flags;
+        bits = netconn_get_cipher_strength( &request->netconn );
+        if (bits >= 128)
+            flags |= SECURITY_FLAG_STRENGTH_STRONG;
+        else if (bits >= 56)
+            flags |= SECURITY_FLAG_STRENGTH_MEDIUM;
+        else
+            flags |= SECURITY_FLAG_STRENGTH_WEAK;
         *(DWORD *)buffer = flags;
         *buflen = sizeof(flags);
         return TRUE;
@@ -613,6 +622,7 @@ static BOOL request_query_option( object_header_t *hdr, DWORD option, LPVOID buf
     case WINHTTP_OPTION_SECURITY_CERTIFICATE_STRUCT:
     {
         const CERT_CONTEXT *cert;
+        const CRYPT_OID_INFO *oidInfo;
         WINHTTP_CERTIFICATE_INFO *ci = buffer;
 
         FIXME("partial stub\n");
@@ -630,9 +640,15 @@ static BOOL request_query_option( object_header_t *hdr, DWORD option, LPVOID buf
         ci->lpszSubjectInfo = blob_to_str( cert->dwCertEncodingType, &cert->pCertInfo->Subject );
         ci->lpszIssuerInfo  = blob_to_str( cert->dwCertEncodingType, &cert->pCertInfo->Issuer );
         ci->lpszProtocolName      = NULL;
-        ci->lpszSignatureAlgName  = NULL;
+        oidInfo = CryptFindOIDInfo( CRYPT_OID_INFO_OID_KEY,
+                                    cert->pCertInfo->SignatureAlgorithm.pszObjId,
+                                    0 );
+        if (oidInfo)
+            ci->lpszSignatureAlgName = (LPWSTR)oidInfo->pwszName;
+        else
+            ci->lpszSignatureAlgName  = NULL;
         ci->lpszEncryptionAlgName = NULL;
-        ci->dwKeySize = 128;
+        ci->dwKeySize = netconn_get_cipher_strength( &request->netconn );
 
         CertFreeCertificateContext( cert );
         *buflen = sizeof(*ci);
@@ -647,7 +663,7 @@ static BOOL request_query_option( object_header_t *hdr, DWORD option, LPVOID buf
             return FALSE;
         }
 
-        *(DWORD *)buffer = 128; /* FIXME */
+        *(DWORD *)buffer = netconn_get_cipher_strength( &request->netconn );
         *buflen = sizeof(DWORD);
         return TRUE;
     }

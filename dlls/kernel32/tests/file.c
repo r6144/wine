@@ -874,6 +874,13 @@ static void test_CreateFileA(void)
     ret = DeleteFileA(filename);
     ok(ret, "DeleteFileA: error %d\n", GetLastError());
 
+    SetLastError(0xdeadbeef);
+    hFile = CreateFileA("c:\\*.*", GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    ok(hFile == INVALID_HANDLE_VALUE, "hFile should have been INVALID_HANDLE_VALUE\n");
+    ok(GetLastError() == ERROR_INVALID_NAME ||
+        broken(GetLastError() == ERROR_FILE_NOT_FOUND), /* Win98 */
+        "LastError should have been ERROR_INVALID_NAME or ERROR_FILE_NOT_FOUND but got %u\n", GetLastError());
+
     /* get windows drive letter */
     ret = GetWindowsDirectory(windowsdir, sizeof(windowsdir));
     ok(ret < sizeof(windowsdir), "windowsdir is abnormally long!\n");
@@ -1720,6 +1727,10 @@ static BOOL create_fake_dll( LPCSTR filename )
     nt->FileHeader.Machine = IMAGE_FILE_MACHINE_AMD64;
 #elif defined __powerpc__
     nt->FileHeader.Machine = IMAGE_FILE_MACHINE_POWERPC;
+#elif defined __sparc__
+    nt->FileHeader.Machine = IMAGE_FILE_MACHINE_SPARC;
+#elif defined __arm__
+    nt->FileHeader.Machine = IMAGE_FILE_MACHINE_ARM;
 #else
 # error You must specify the machine type
 #endif

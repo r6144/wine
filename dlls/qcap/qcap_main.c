@@ -36,7 +36,6 @@
 #include "uuids.h"
 #include "strmif.h"
 
-#include "dllsetup.h"
 #include "qcap_main.h"
 
 #include "wine/unicode.h"
@@ -45,7 +44,6 @@
 WINE_DEFAULT_DEBUG_CHANNEL(qcap);
 
 static LONG objects_ref = 0;
-static LONG server_locks = 0;
 
 static const WCHAR wAudioCaptFilter[] =
 {'A','u','d','i','o',' ','C','a','p','t','u','r','e',' ','F','i','l','t','e','r',0};
@@ -77,7 +75,7 @@ static const WCHAR wAudioInMixerProp[] =
 {'A','u','d','i','o','I','n','p','u','t','M','i','x','e','r',' ','P','r','o',
  'p','e','r','t','y',' ','P','a','g','e',0};
  
-static CFactoryTemplate const g_cTemplates[] = {
+FactoryTemplate const g_Templates[] = {
 /*
     {
         wAudioCaptureFilter, 
@@ -147,24 +145,22 @@ static CFactoryTemplate const g_cTemplates[] = {
     }*/
 };
 
-static int g_numTemplates = sizeof(g_cTemplates) / sizeof(g_cTemplates[0]);
+int g_cTemplates = sizeof(g_Templates) / sizeof(g_Templates[0]);
 
 /***********************************************************************
  *    Dll EntryPoint (QCAP.@)
  */
 BOOL WINAPI DllMain(HINSTANCE hInstDLL, DWORD fdwReason, LPVOID lpv)
 {
-    switch (fdwReason)
-    {
-        case DLL_PROCESS_ATTACH:
-            DisableThreadLibraryCalls(hInstDLL);
-            SetupInitializeServers(g_cTemplates, g_numTemplates, TRUE);
-            break;
-        case DLL_PROCESS_DETACH:
-            SetupInitializeServers(g_cTemplates, g_numTemplates, FALSE);
-            break;
-    }
-    return TRUE;
+    return STRMBASE_DllMain(hInstDLL,fdwReason,lpv);
+}
+
+/***********************************************************************
+ *    DllGetClassObject
+ */
+HRESULT WINAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID *ppv)
+{
+    return STRMBASE_DllGetClassObject( rclsid, riid, ppv );
 }
 
 /***********************************************************************
@@ -173,8 +169,7 @@ BOOL WINAPI DllMain(HINSTANCE hInstDLL, DWORD fdwReason, LPVOID lpv)
 HRESULT WINAPI DllRegisterServer(void)
 {
     TRACE("()\n");
-
-    return SetupRegisterServers(g_cTemplates, g_numTemplates, TRUE);
+    return AMovieDllRegisterServer2(TRUE);
 }
 
 /***********************************************************************
@@ -183,8 +178,7 @@ HRESULT WINAPI DllRegisterServer(void)
 HRESULT WINAPI DllUnregisterServer(void)
 {
     TRACE("\n");
-
-    return SetupRegisterServers(g_cTemplates, g_numTemplates, FALSE);
+    return AMovieDllRegisterServer2(FALSE);
 }
 
 /***********************************************************************
@@ -194,157 +188,9 @@ HRESULT WINAPI DllCanUnloadNow(void)
 {
     TRACE("\n");
 
-    if (objects_ref == 0 && server_locks == 0)
+    if (STRMBASE_DllCanUnloadNow() && objects_ref == 0)
         return S_OK;
-    return S_FALSE;	
-}
-
-/******************************************************************************
- * DLL ClassFactory
- */
-typedef struct {
-    IClassFactory ITF_IClassFactory;
-
-    LONG ref;
-    LPFNNewCOMObject pfnCreateInstance;
-} IClassFactoryImpl;
-
-static HRESULT WINAPI
-DSCF_QueryInterface(LPCLASSFACTORY iface,REFIID riid,LPVOID *ppobj)
-{
-    IClassFactoryImpl *This = (IClassFactoryImpl *)iface;
-
-    if (IsEqualGUID(riid, &IID_IUnknown) ||
-        IsEqualGUID(riid, &IID_IClassFactory))
-    {
-        IClassFactory_AddRef(iface);
-        *ppobj = This;
-        return S_OK;
-    }
-
-    WARN("(%p)->(%s,%p), not found\n", This, debugstr_guid(riid), ppobj);
-    return E_NOINTERFACE;
-}
-
-static ULONG WINAPI DSCF_AddRef(LPCLASSFACTORY iface)
-{
-    IClassFactoryImpl *This = (IClassFactoryImpl *)iface;
-    return InterlockedIncrement(&This->ref);
-}
-
-static ULONG WINAPI DSCF_Release(LPCLASSFACTORY iface)
-{
-    IClassFactoryImpl *This = (IClassFactoryImpl *)iface;
-
-    ULONG ref = InterlockedDecrement(&This->ref);
-
-    if (ref == 0)
-        HeapFree(GetProcessHeap(), 0, This);
-
-    return ref;
-}
-
-static HRESULT WINAPI DSCF_CreateInstance(LPCLASSFACTORY iface, LPUNKNOWN pOuter,
-                                          REFIID riid, LPVOID *ppobj)
-{
-    IClassFactoryImpl *This = (IClassFactoryImpl *)iface;
-    HRESULT hres = ERROR_SUCCESS;
-    LPUNKNOWN punk;
-
-    TRACE("(%p)->(%p,%s,%p)\n", This, pOuter, debugstr_guid(riid), ppobj);
-
-    if (!ppobj)
-        return E_POINTER;
-
-    /* Enforce the normal OLE rules regarding interfaces and delegation */
-    if (pOuter && !IsEqualGUID(riid, &IID_IUnknown))
-        return E_NOINTERFACE;
-
-    *ppobj = NULL;
-    punk = This->pfnCreateInstance(pOuter, &hres);
-    if (!punk)
-    {
-        /* No object created, update error if it isn't done already and return */
-        if (SUCCEEDED(hres))
-            hres = E_OUTOFMEMORY;
-    return hres;
-    }
-
-    if (SUCCEEDED(hres))
-    {
-        hres = IUnknown_QueryInterface(punk, riid, ppobj);
-    }
-    /* Releasing the object. If everything was successful, QueryInterface
-       should have incremented the refcount once more, otherwise this will
-       purge the object. */
-    IUnknown_Release(punk);
-    return hres;
-}
-
-static HRESULT WINAPI DSCF_LockServer(LPCLASSFACTORY iface, BOOL dolock)
-{
-    IClassFactoryImpl *This = (IClassFactoryImpl *)iface;
-    TRACE("(%p)->(%d)\n",This, dolock);
-
-    if (dolock)
-        InterlockedIncrement(&server_locks);
-    else
-        InterlockedDecrement(&server_locks);
-    return S_OK;
-}
-
-static const IClassFactoryVtbl DSCF_Vtbl =
-{
-    DSCF_QueryInterface,
-    DSCF_AddRef,
-    DSCF_Release,
-    DSCF_CreateInstance,
-    DSCF_LockServer
-};
-
-/***********************************************************************
- *    DllGetClassObject (QCAP.@)
- */
-HRESULT WINAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID *ppv)
-{
-    const CFactoryTemplate *pList = g_cTemplates;
-    IClassFactoryImpl *factory;
-    int i;
-
-    TRACE("(%s,%s,%p)\n", debugstr_guid(rclsid), debugstr_guid(riid), ppv);
-
-    if (!ppv)
-        return E_POINTER;
-
-    *ppv = NULL;
-
-    if (!IsEqualGUID(&IID_IClassFactory, riid) &&
-        !IsEqualGUID(&IID_IUnknown, riid))
-        return E_NOINTERFACE;
-
-    for (i = 0; i < g_numTemplates; i++, pList++)
-    {
-        if (IsEqualGUID(pList->m_ClsID, rclsid))
-            break;
-    }
-
-    if (i == g_numTemplates)
-    {
-        FIXME("%s: no class found.\n", debugstr_guid(rclsid));
-        return CLASS_E_CLASSNOTAVAILABLE;
-    }
-
-    factory = HeapAlloc(GetProcessHeap(), 0, sizeof(IClassFactoryImpl));
-    if (!factory)
-        return E_OUTOFMEMORY;
-
-    factory->ITF_IClassFactory.lpVtbl = &DSCF_Vtbl;
-    factory->ref = 1;
-
-    factory->pfnCreateInstance = pList->m_lpfnNew;
-
-    *ppv = &(factory->ITF_IClassFactory);
-    return S_OK;
+    return S_FALSE;
 }
 
 DWORD ObjectRefCount(BOOL increment)

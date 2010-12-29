@@ -31,8 +31,9 @@
 
 #include "wine/test.h"
 
+static BOOL is_wow64;
+
 /* function pointers */
-static HMODULE hSetupAPI;
 static HDEVINFO (WINAPI *pSetupDiCreateDeviceInfoList)(GUID*,HWND);
 static HDEVINFO (WINAPI *pSetupDiCreateDeviceInfoListExW)(GUID*,HWND,PCWSTR,PVOID);
 static BOOL     (WINAPI *pSetupDiCreateDeviceInterfaceA)(HDEVINFO, PSP_DEVINFO_DATA, const GUID *, PCSTR, DWORD, PSP_DEVICE_INTERFACE_DATA);
@@ -40,6 +41,7 @@ static BOOL     (WINAPI *pSetupDiCallClassInstaller)(DI_FUNCTION, HDEVINFO, PSP_
 static BOOL     (WINAPI *pSetupDiDestroyDeviceInfoList)(HDEVINFO);
 static BOOL     (WINAPI *pSetupDiEnumDeviceInfo)(HDEVINFO, DWORD, PSP_DEVINFO_DATA);
 static BOOL     (WINAPI *pSetupDiEnumDeviceInterfaces)(HDEVINFO, PSP_DEVINFO_DATA, const GUID *, DWORD, PSP_DEVICE_INTERFACE_DATA);
+static BOOL     (WINAPI *pSetupDiGetINFClassA)(PCSTR, LPGUID, PSTR, DWORD, PDWORD);
 static BOOL     (WINAPI *pSetupDiInstallClassA)(HWND, PCSTR, DWORD, HSPFILEQ);
 static HKEY     (WINAPI *pSetupDiOpenClassRegKeyExA)(GUID*,REGSAM,DWORD,PCSTR,PVOID);
 static HKEY     (WINAPI *pSetupDiOpenDevRegKey)(HDEVINFO, PSP_DEVINFO_DATA, DWORD, DWORD, DWORD, REGSAM);
@@ -56,13 +58,15 @@ static BOOL     (WINAPI *pSetupDiSetDeviceRegistryPropertyA)(HDEVINFO, PSP_DEVIN
 static BOOL     (WINAPI *pSetupDiSetDeviceRegistryPropertyW)(HDEVINFO, PSP_DEVINFO_DATA, DWORD, const BYTE *, DWORD);
 static BOOL     (WINAPI *pSetupDiGetDeviceRegistryPropertyA)(HDEVINFO, PSP_DEVINFO_DATA, DWORD, PDWORD, PBYTE, DWORD, PDWORD);
 static BOOL     (WINAPI *pSetupDiGetDeviceRegistryPropertyW)(HDEVINFO, PSP_DEVINFO_DATA, DWORD, PDWORD, PBYTE, DWORD, PDWORD);
+static BOOL     (WINAPI *pIsWow64Process)(HANDLE, PBOOL);
 
 /* This is a unique guid for testing purposes */
 static GUID guid = {0x6a55b5a4, 0x3f65, 0x11db, {0xb7,0x04,0x00,0x11,0x95,0x5c,0x2b,0xdb}};
 
 static void init_function_pointers(void)
 {
-    hSetupAPI = GetModuleHandleA("setupapi.dll");
+    HMODULE hSetupAPI = GetModuleHandleA("setupapi.dll");
+    HMODULE hKernel32 = GetModuleHandleA("kernel32.dll");
 
     pSetupDiCreateDeviceInfoA = (void *)GetProcAddress(hSetupAPI, "SetupDiCreateDeviceInfoA");
     pSetupDiCreateDeviceInfoW = (void *)GetProcAddress(hSetupAPI, "SetupDiCreateDeviceInfoW");
@@ -83,10 +87,12 @@ static void init_function_pointers(void)
     pSetupDiRegisterDeviceInfo = (void *)GetProcAddress(hSetupAPI, "SetupDiRegisterDeviceInfo");
     pSetupDiGetClassDevsA = (void *)GetProcAddress(hSetupAPI, "SetupDiGetClassDevsA");
     pSetupDiGetClassDevsW = (void *)GetProcAddress(hSetupAPI, "SetupDiGetClassDevsW");
+    pSetupDiGetINFClassA = (void *)GetProcAddress(hSetupAPI, "SetupDiGetINFClassA");
     pSetupDiSetDeviceRegistryPropertyA = (void *)GetProcAddress(hSetupAPI, "SetupDiSetDeviceRegistryPropertyA");
     pSetupDiSetDeviceRegistryPropertyW = (void *)GetProcAddress(hSetupAPI, "SetupDiSetDeviceRegistryPropertyW");
     pSetupDiGetDeviceRegistryPropertyA = (void *)GetProcAddress(hSetupAPI, "SetupDiGetDeviceRegistryPropertyA");
     pSetupDiGetDeviceRegistryPropertyW = (void *)GetProcAddress(hSetupAPI, "SetupDiGetDeviceRegistryPropertyW");
+    pIsWow64Process = (void *)GetProcAddress(hKernel32, "IsWow64Process");
 }
 
 static void change_reg_permissions(const WCHAR *regkey)
@@ -139,8 +145,12 @@ static BOOL remove_device(void)
 
     SetLastError(0xdeadbeef);
     ret = pSetupDiCallClassInstaller(DIF_REMOVE, set, &devInfo);
-    todo_wine
-    ok(ret, "SetupDiCallClassInstaller(DIF_REMOVE...) failed: %08x\n", GetLastError());
+    if(is_wow64)
+        todo_wine ok(!ret && GetLastError() == ERROR_IN_WOW64,
+                     "SetupDiCallClassInstaller(DIF_REMOVE...) succeeded: %08x\n", GetLastError());
+    else
+        todo_wine ok(ret,
+                     "SetupDiCallClassInstaller(DIF_REMOVE...) failed: %08x\n", GetLastError());
 
     SetLastError(0xdeadbeef);
     ok(pSetupDiDestroyDeviceInfoList(set),
@@ -1005,8 +1015,8 @@ static void testDevRegKey(void)
 
         /* Cleanup */
         ret = remove_device();
-        todo_wine
-        ok(ret, "Expected the device to be removed: %08x\n", GetLastError());
+        if(!is_wow64)
+            todo_wine ok(ret, "Expected the device to be removed: %08x\n", GetLastError());
 
         /* FIXME: Only do the RegDeleteKey, once Wine is fixed */
         if (!ret)
@@ -1089,8 +1099,10 @@ static void testRegisterAndGetDetail(void)
     {
         static const char path[] =
             "\\\\?\\root#legacy_bogus#0000#{6a55b5a4-3f65-11db-b704-0011955c2bdb}";
+        static const char path_wow64[] =
+            "\\\\?\\root#legacy_bogus#0001#{6a55b5a4-3f65-11db-b704-0011955c2bdb}";
         static const char path_w2k[] =
-         "\\\\?\\root#legacy_bogus#0000#{6a55b5a4-3f65-11db-b704-0011955c2bdb}\\";
+            "\\\\?\\root#legacy_bogus#0000#{6a55b5a4-3f65-11db-b704-0011955c2bdb}\\";
         PSP_DEVICE_INTERFACE_DETAIL_DATA_A detail = NULL;
 
         detail = HeapAlloc(GetProcessHeap(), 0, dwSize);
@@ -1104,10 +1116,13 @@ static void testRegisterAndGetDetail(void)
             /* FIXME: This one only worked because old data wasn't removed properly. As soon
              * as all the tests are cleaned up correctly this has to be (or should be) fixed
              */
-            todo_wine
-            ok(!lstrcmpiA(path, detail->DevicePath) ||
-             !lstrcmpiA(path_w2k, detail->DevicePath), "Unexpected path %s\n",
-             detail->DevicePath);
+            if(is_wow64)
+                ok(!lstrcmpiA(path_wow64, detail->DevicePath),
+                   "Unexpected path %s\n", detail->DevicePath);
+            else
+                todo_wine ok(!lstrcmpiA(path, detail->DevicePath) ||
+                             !lstrcmpiA(path_w2k, detail->DevicePath),
+                             "Unexpected path %s\n", detail->DevicePath);
             HeapFree(GetProcessHeap(), 0, detail);
         }
     }
@@ -1116,8 +1131,8 @@ static void testRegisterAndGetDetail(void)
 
     /* Cleanup */
     ret = remove_device();
-    todo_wine
-    ok(ret, "Expected the device to be removed: %08x\n", GetLastError());
+    if(!is_wow64)
+        todo_wine ok(ret, "Expected the device to be removed: %08x\n", GetLastError());
 
     /* FIXME: Only do the RegDeleteKey, once Wine is fixed */
     if (!ret)
@@ -1226,8 +1241,8 @@ static void testDeviceRegistryPropertyA(void)
     pSetupDiDestroyDeviceInfoList(set);
 
     res = RegOpenKeyA(HKEY_LOCAL_MACHINE, bogus, &key);
-    todo_wine
-    ok(res == ERROR_FILE_NOT_FOUND, "Expected key to not exist\n");
+    if(!is_wow64)
+        todo_wine ok(res == ERROR_FILE_NOT_FOUND, "Expected key to not exist\n");
     /* FIXME: Remove when Wine is fixed */
     if (res == ERROR_SUCCESS)
     {
@@ -1332,8 +1347,8 @@ static void testDeviceRegistryPropertyW(void)
     pSetupDiDestroyDeviceInfoList(set);
 
     res = RegOpenKeyW(HKEY_LOCAL_MACHINE, bogus, &key);
-    todo_wine
-    ok(res == ERROR_FILE_NOT_FOUND, "Expected key to not exist\n");
+    if(!is_wow64)
+        todo_wine ok(res == ERROR_FILE_NOT_FOUND, "Expected key to not exist\n");
     /* FIXME: Remove when Wine is fixed */
     if (res == ERROR_SUCCESS)
     {
@@ -1341,6 +1356,176 @@ static void testDeviceRegistryPropertyW(void)
         trace("We are most likely on Wine\n");
         RegDeleteKeyW(HKEY_LOCAL_MACHINE, bogus);
     }
+}
+
+static void testSetupDiGetINFClassA(void)
+{
+    static const char inffile[] = "winetest.inf";
+    static const char content[] = "[Version]\r\n\r\n";
+
+    char cn[MAX_PATH];
+    char filename[MAX_PATH];
+    DWORD count;
+    BOOL retval;
+    GUID guid;
+    HANDLE h;
+
+    if(!pSetupDiGetINFClassA)
+    {
+        win_skip("SetupDiGetINFClassA not present\n");
+        return;
+    }
+
+    count = GetTempPathA(MAX_PATH, filename);
+    if(!count)
+    {
+        win_skip("GetTempPathA failed\n");
+        return;
+    }
+
+    strcat(filename, inffile);
+    DeleteFileA(filename);
+
+    /* not existing file */
+    SetLastError(0xdeadbeef);
+    retval = SetupDiGetINFClassA(filename, &guid, cn, MAX_PATH, &count);
+    ok(!retval, "expected SetupDiGetINFClassA to fail!\n");
+    if (ERROR_CALL_NOT_IMPLEMENTED == GetLastError())
+    {
+        skip("SetupDiGetINFClassA is not implemented\n");
+        return;
+    }
+    ok(ERROR_FILE_NOT_FOUND == GetLastError(),
+        "expected error ERROR_FILE_NOT_FOUND, got %u\n", GetLastError());
+
+    /* missing file wins against other invalid parameter */
+    SetLastError(0xdeadbeef);
+    retval = SetupDiGetINFClassA(filename, NULL, cn, MAX_PATH, &count);
+    ok(!retval, "expected SetupDiGetINFClassA to fail!\n");
+    ok(ERROR_FILE_NOT_FOUND == GetLastError(),
+        "expected error ERROR_FILE_NOT_FOUND, got %u\n", GetLastError());
+
+    SetLastError(0xdeadbeef);
+    retval = SetupDiGetINFClassA(filename, &guid, NULL, MAX_PATH, &count);
+    ok(!retval, "expected SetupDiGetINFClassA to fail!\n");
+    ok(ERROR_FILE_NOT_FOUND == GetLastError(),
+        "expected error ERROR_FILE_NOT_FOUND, got %u\n", GetLastError());
+
+    SetLastError(0xdeadbeef);
+    retval = SetupDiGetINFClassA(filename, &guid, cn, 0, &count);
+    ok(!retval, "expected SetupDiGetINFClassA to fail!\n");
+    ok(ERROR_FILE_NOT_FOUND == GetLastError(),
+        "expected error ERROR_FILE_NOT_FOUND, got %u\n", GetLastError());
+
+    SetLastError(0xdeadbeef);
+    retval = SetupDiGetINFClassA(filename, &guid, cn, MAX_PATH, NULL);
+    ok(!retval, "expected SetupDiGetINFClassA to fail!\n");
+    ok(ERROR_FILE_NOT_FOUND == GetLastError(),
+        "expected error ERROR_FILE_NOT_FOUND, got %u\n", GetLastError());
+
+    /* test file content */
+    h = CreateFileA(filename, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
+                    FILE_ATTRIBUTE_NORMAL, NULL);
+    if(h == INVALID_HANDLE_VALUE)
+    {
+        win_skip("failed to create file %s (error %u)\n", filename, GetLastError());
+        return;
+    }
+    CloseHandle( h);
+
+    retval = SetupDiGetINFClassA(filename, &guid, cn, MAX_PATH, &count);
+    ok(!retval, "expected SetupDiGetINFClassA to fail!\n");
+
+    h = CreateFileA(filename, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
+                    FILE_ATTRIBUTE_NORMAL, NULL);
+    if(h == INVALID_HANDLE_VALUE)
+    {
+        win_skip("failed to create file %s (error %u)\n", filename, GetLastError());
+        return;
+    }
+    WriteFile( h, content, sizeof(content), &count, NULL);
+    CloseHandle( h);
+
+    retval = SetupDiGetINFClassA(filename, &guid, cn, MAX_PATH, &count);
+    ok(!retval, "expected SetupDiGetINFClassA to fail!\n");
+
+    WritePrivateProfileStringA("Version", "Signature", "\"$CHICAGO$\"", filename);
+
+    retval = SetupDiGetINFClassA(filename, &guid, cn, MAX_PATH, &count);
+    ok(!retval, "expected SetupDiGetINFClassA to fail!\n");
+
+    WritePrivateProfileStringA("Version", "Class", "WINE", filename);
+
+    count = 0xdeadbeef;
+    retval = SetupDiGetINFClassA(filename, &guid, cn, MAX_PATH, &count);
+    ok(retval, "expected SetupDiGetINFClassA to succeed! error %u\n", GetLastError());
+    ok(count == 5, "expected count==5, got %u\n", count);
+
+    count = 0xdeadbeef;
+    retval = SetupDiGetINFClassA(filename, &guid, cn, 5, &count);
+    ok(retval, "expected SetupDiGetINFClassA to succeed! error %u\n", GetLastError());
+    ok(count == 5, "expected count==5, got %u\n", count);
+
+    count = 0xdeadbeef;
+    SetLastError(0xdeadbeef);
+    retval = SetupDiGetINFClassA(filename, &guid, cn, 4, &count);
+    ok(!retval, "expected SetupDiGetINFClassA to fail!\n");
+    ok(ERROR_INSUFFICIENT_BUFFER == GetLastError(),
+        "expected error ERROR_INSUFFICIENT_BUFFER, got %u\n", GetLastError());
+    ok(count == 5, "expected count==5, got %u\n", count);
+
+    /* invalid parameter */
+    SetLastError(0xdeadbeef);
+    retval = SetupDiGetINFClassA(NULL, &guid, cn, MAX_PATH, &count);
+    ok(!retval, "expected SetupDiGetINFClassA to fail!\n");
+    ok(ERROR_INVALID_PARAMETER == GetLastError(),
+        "expected error ERROR_INVALID_PARAMETER, got %u\n", GetLastError());
+
+    SetLastError(0xdeadbeef);
+    retval = SetupDiGetINFClassA(filename, NULL, cn, MAX_PATH, &count);
+    ok(!retval, "expected SetupDiGetINFClassA to fail!\n");
+    ok(ERROR_INVALID_PARAMETER == GetLastError(),
+        "expected error ERROR_INVALID_PARAMETER, got %u\n", GetLastError());
+
+    SetLastError(0xdeadbeef);
+    retval = SetupDiGetINFClassA(filename, &guid, NULL, MAX_PATH, &count);
+    ok(!retval, "expected SetupDiGetINFClassA to fail!\n");
+    ok(ERROR_INVALID_PARAMETER == GetLastError(),
+        "expected error ERROR_INVALID_PARAMETER, got %u\n", GetLastError());
+
+    SetLastError(0xdeadbeef);
+    retval = SetupDiGetINFClassA(filename, &guid, cn, 0, &count);
+    ok(!retval, "expected SetupDiGetINFClassA to fail!\n");
+    ok(ERROR_INSUFFICIENT_BUFFER == GetLastError() ||
+       ERROR_INVALID_PARAMETER == GetLastError(),
+        "expected error ERROR_INSUFFICIENT_BUFFER or ERROR_INVALID_PARAMETER, "
+        "got %u\n", GetLastError());
+
+    DeleteFileA(filename);
+
+    WritePrivateProfileStringA("Version", "Signature", "\"$CHICAGO$\"", filename);
+    WritePrivateProfileStringA("Version", "ClassGUID", "WINE", filename);
+
+    SetLastError(0xdeadbeef);
+    retval = SetupDiGetINFClassA(filename, &guid, cn, MAX_PATH, &count);
+    ok(!retval, "expected SetupDiGetINFClassA to fail!\n");
+    ok(RPC_S_INVALID_STRING_UUID == GetLastError() ||
+       ERROR_INVALID_PARAMETER == GetLastError(),
+        "expected error RPC_S_INVALID_STRING_UUID or ERROR_INVALID_PARAMETER, "
+        "got %u\n", GetLastError());
+
+    /* network adapter guid */
+    WritePrivateProfileStringA("Version", "ClassGUID",
+                               "{4d36e972-e325-11ce-bfc1-08002be10318}", filename);
+
+    /* this test succeeds only if the guid is known to the system */
+    count = 0xdeadbeef;
+    retval = SetupDiGetINFClassA(filename, &guid, cn, MAX_PATH, &count);
+    ok(retval, "expected SetupDiGetINFClassA to succeed! error %u\n", GetLastError());
+    todo_wine
+    ok(count == 4, "expected count==4, got %u(%s)\n", count, cn);
+
+    DeleteFileA(filename);
 }
 
 START_TEST(devinst)
@@ -1360,6 +1545,9 @@ START_TEST(devinst)
         win_skip("Win9x/WinMe has totally different behavior\n");
         return;
     }
+
+    if (pIsWow64Process)
+        pIsWow64Process(GetCurrentProcess(), &is_wow64);
 
     if (pSetupDiCreateDeviceInfoListExW)
         test_SetupDiCreateDeviceInfoListEx();
@@ -1381,4 +1569,5 @@ START_TEST(devinst)
     testRegisterAndGetDetail();
     testDeviceRegistryPropertyA();
     testDeviceRegistryPropertyW();
+    testSetupDiGetINFClassA();
 }

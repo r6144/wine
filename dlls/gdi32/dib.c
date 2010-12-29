@@ -66,7 +66,6 @@
 
 #include "windef.h"
 #include "winbase.h"
-#include "wownt32.h"
 #include "gdi_private.h"
 #include "wine/debug.h"
 
@@ -225,6 +224,14 @@ INT WINAPI StretchDIBits(HDC hdc, INT xDst, INT yDst, INT widthDst,
         {
             ERR("Bitmap has a negative width\n");
             return 0;
+        }
+
+        if (xSrc == 0 && ySrc == 0 && widthDst == widthSrc && heightDst == heightSrc &&
+            info->bmiHeader.biCompression == BI_RGB)
+        {
+            /* Windows appears to have a fast case optimization
+             * that uses the wrong origin for top-down DIBs */
+            if (height < 0 && heightSrc < abs(height)) ySrc = abs(height) - heightSrc;
         }
 
         hBitmap = GetCurrentObject(hdc, OBJ_BITMAP);

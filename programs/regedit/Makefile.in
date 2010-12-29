@@ -1,12 +1,8 @@
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = regedit.exe
 APPMODE   = -mwindows -mno-cygwin
 IMPORTS   = advapi32
 DELAYIMPORTS = shlwapi shell32 comdlg32 comctl32 user32 gdi32
-EXTRAINCL = -I$(TOPSRCDIR)/include/msvcrt
+EXTRAINCL = -I$(top_srcdir)/include/msvcrt
 EXTRADEFS = -DNO_LIBWINE_PORT
 MODCFLAGS = @BUILTINFLAG@
 
@@ -30,6 +26,7 @@ RC_SRCS = \
 	En.rc \
 	Es.rc \
 	Fr.rc \
+	He.rc \
 	Hu.rc \
 	It.rc \
 	Ja.rc \
@@ -47,6 +44,8 @@ RC_SRCS = \
 	Uk.rc \
 	Zh.rc \
 	rsrc.rc
+
+MANPAGE = regedit.man
 
 SVG_SRCS = regedit.svg
 

@@ -99,7 +99,7 @@ static int EventsQueue_PutEvent(EventsQueue* omr, const Event* evt)
 	int old_ring_buffer_size = omr->ring_buffer_size;
 	omr->ring_buffer_size += EVENTS_RING_BUFFER_INCREMENT;
 	TRACE("omr->ring_buffer_size=%d\n",omr->ring_buffer_size);
-	omr->messages = HeapReAlloc(GetProcessHeap(),0,omr->messages, omr->ring_buffer_size * sizeof(Event));
+	omr->messages = CoTaskMemRealloc(omr->messages, omr->ring_buffer_size * sizeof(Event));
 	/* Now we need to rearrange the ring buffer so that the new
 	   buffers just allocated are in between omr->msg_tosave and
 	   omr->msg_toget.
@@ -184,6 +184,7 @@ typedef struct _IFilterGraphImpl {
     int filterCapacity;
     LONG nameIndex;
     IReferenceClock *refClock;
+    IBaseFilter *refClockProvider;
     EventsQueue evqueue;
     HANDLE hEventCompletion;
     int CompletionStatus;
@@ -200,9 +201,10 @@ typedef struct _IFilterGraphImpl {
     IUnknown * pUnkOuter;
     BOOL bUnkOuterValid;
     BOOL bAggregatable;
+    BOOL defaultclock;
     GUID timeformatseek;
-    LONGLONG start_time;
-    LONGLONG position;
+    REFERENCE_TIME start_time;
+    REFERENCE_TIME pause_time;
     LONGLONG stop_position;
     LONG recursioncount;
 } IFilterGraphImpl;
@@ -268,6 +270,9 @@ static HRESULT WINAPI FilterGraphInner_QueryInterface(IUnknown * iface,
     } else if (IsEqualGUID(&IID_IFilterMapper2, riid)) {
         *ppvObj = This->pFilterMapper2;
         TRACE("   returning IFilterMapper2 interface from aggregated filtermapper (%p)\n", *ppvObj);
+    } else if (IsEqualGUID(&IID_IFilterMapper3, riid)) {
+        *ppvObj = This->pFilterMapper2;
+        TRACE("   returning IFilterMapper3 interface from aggregated filtermapper (%p)\n", *ppvObj);
     } else {
         *ppvObj = NULL;
 	FIXME("unknown interface %s\n", debugstr_guid(riid));
@@ -479,6 +484,12 @@ static HRESULT WINAPI FilterGraph2_RemoveFilter(IFilterGraph2 *iface, IBaseFilte
         {
             IEnumPins *penumpins = NULL;
             FILTER_STATE state;
+
+            if (This->defaultclock && This->refClockProvider == pFilter)
+            {
+                IMediaFilter_SetSyncSource((IMediaFilter*)&This->IMediaFilter_vtbl, NULL);
+                This->defaultclock = 1;
+            }
 
             TRACE("Removing filter %s\n", debugstr_w(This->pFilterNames[i]));
             IBaseFilter_GetState(pFilter, 0, &state);
@@ -754,17 +765,43 @@ static HRESULT WINAPI FilterGraph2_Disconnect(IFilterGraph2 *iface, IPin *ppin)
 static HRESULT WINAPI FilterGraph2_SetDefaultSyncSource(IFilterGraph2 *iface) {
     ICOM_THIS_MULTI(IFilterGraphImpl, IFilterGraph2_vtbl, iface);
     IReferenceClock *pClock = NULL;
-    HRESULT hr;
+    HRESULT hr = S_OK;
+    int i;
 
-    TRACE("(%p/%p)->() semi-stub\n", iface, This);
+    TRACE("(%p/%p)->() live sources not handled properly!\n", iface, This);
 
-    hr = CoCreateInstance(&CLSID_SystemClock, NULL, CLSCTX_INPROC_SERVER, &IID_IReferenceClock, (LPVOID*)&pClock);
+    EnterCriticalSection(&This->cs);
+
+    for (i = 0; i < This->nFilters; ++i)
+    {
+        DWORD miscflags;
+        IAMFilterMiscFlags *flags = NULL;
+        IUnknown_QueryInterface(This->ppFiltersInGraph[i], &IID_IAMFilterMiscFlags, (void**)&flags);
+        if (!flags)
+            continue;
+        miscflags = IAMFilterMiscFlags_GetMiscFlags(flags);
+        IUnknown_Release(flags);
+        if (miscflags == AM_FILTER_MISC_FLAGS_IS_RENDERER)
+            IUnknown_QueryInterface(This->ppFiltersInGraph[i], &IID_IReferenceClock, (void**)&pClock);
+        if (pClock)
+            break;
+    }
+
+    if (!pClock)
+    {
+        hr = CoCreateInstance(&CLSID_SystemClock, NULL, CLSCTX_INPROC_SERVER, &IID_IReferenceClock, (LPVOID*)&pClock);
+        This->refClockProvider = NULL;
+    }
+    else
+        This->refClockProvider = This->ppFiltersInGraph[i];
 
     if (SUCCEEDED(hr))
     {
         hr = IMediaFilter_SetSyncSource((IMediaFilter*)&(This->IMediaFilter_vtbl), pClock);
+        This->defaultclock = TRUE;
         IReferenceClock_Release(pClock);
     }
+    LeaveCriticalSection(&This->cs);
 
     return hr;
 }
@@ -1235,7 +1272,7 @@ static HRESULT WINAPI FilterGraph2_Render(IFilterGraph2 *iface, IPin *ppinOut)
 
             if (to == NULL)
             {
-                hr = IPin_Connect(ppinOut, pin, NULL);
+                hr = FilterGraph2_ConnectDirect(iface, ppinOut, pin, NULL);
                 if (SUCCEEDED(hr))
                 {
                     TRACE("Connected successfully %p/%p, %08x look if we should render more!\n", ppinOut, pin, hr);
@@ -1829,21 +1866,7 @@ static HRESULT ExploreGraph(IFilterGraphImpl* pGraph, IPin* pOutputPin, fnFoundF
 
 static HRESULT WINAPI SendRun(IBaseFilter *pFilter, DWORD_PTR data)
 {
-    LONGLONG time = 0;
-    IReferenceClock *clock = NULL;
-
-    IBaseFilter_GetSyncSource(pFilter, &clock);
-    if (clock)
-    {
-        IReferenceClock_GetTime(clock, &time);
-        if (time)
-            /* Add 50 ms */
-            time += 500000;
-        if (time < 0)
-            time = 0;
-        IReferenceClock_Release(clock);
-    }
-
+    REFERENCE_TIME time = *(REFERENCE_TIME*)data;
     return IBaseFilter_Run(pFilter, time);
 }
 
@@ -1940,21 +1963,30 @@ static HRESULT WINAPI MediaControl_Run(IMediaControl *iface) {
     ICOM_THIS_MULTI(IFilterGraphImpl, IMediaControl_vtbl, iface);
     TRACE("(%p/%p)->()\n", This, iface);
 
-    if (This->state == State_Running) return S_OK;
-
     EnterCriticalSection(&This->cs);
-    if (This->state == State_Stopped)
-        This->EcCompleteCount = 0;
+    if (This->state == State_Running)
+        goto out;
+    This->EcCompleteCount = 0;
+
+    if (This->defaultclock && !This->refClock)
+        IFilterGraph2_SetDefaultSyncSource((IFilterGraph2*)This);
 
     if (This->refClock)
     {
-        IReferenceClock_GetTime(This->refClock, &This->start_time);
-        This->start_time += 500000;
+        REFERENCE_TIME now;
+        IReferenceClock_GetTime(This->refClock, &now);
+        if (This->state == State_Stopped)
+            This->start_time = now + 500000;
+        else if (This->pause_time >= 0)
+            This->start_time += now - This->pause_time;
+        else
+            This->start_time = now;
     }
-    else This->position = This->start_time = 0;
+    else This->start_time = 0;
 
-    SendFilterMessage(iface, SendRun, 0);
+    SendFilterMessage(iface, SendRun, (DWORD_PTR)&This->start_time);
     This->state = State_Running;
+out:
     LeaveCriticalSection(&This->cs);
     return S_FALSE;
 }
@@ -1963,21 +1995,18 @@ static HRESULT WINAPI MediaControl_Pause(IMediaControl *iface) {
     ICOM_THIS_MULTI(IFilterGraphImpl, IMediaControl_vtbl, iface);
     TRACE("(%p/%p)->()\n", This, iface);
 
-    if (This->state == State_Paused) return S_OK;
-
     EnterCriticalSection(&This->cs);
-    if (This->state == State_Stopped)
-        This->EcCompleteCount = 0;
+    if (This->state == State_Paused)
+        goto out;
 
-    if (This->state == State_Running && This->refClock)
-    {
-        LONGLONG time = This->start_time;
-        IReferenceClock_GetTime(This->refClock, &time);
-        This->position += time - This->start_time;
-    }
+    if (This->state == State_Running && This->refClock && This->start_time >= 0)
+        IReferenceClock_GetTime(This->refClock, &This->pause_time);
+    else
+        This->pause_time = -1;
 
     SendFilterMessage(iface, SendPause, 0);
     This->state = State_Paused;
+out:
     LeaveCriticalSection(&This->cs);
     return S_FALSE;
 }
@@ -1989,13 +2018,6 @@ static HRESULT WINAPI MediaControl_Stop(IMediaControl *iface) {
     if (This->state == State_Stopped) return S_OK;
 
     EnterCriticalSection(&This->cs);
-    if (This->state == State_Running && This->refClock)
-    {
-        LONGLONG time = This->start_time;
-        IReferenceClock_GetTime(This->refClock, &time);
-        This->position += time - This->start_time;
-    }
-
     if (This->state == State_Running) SendFilterMessage(iface, SendPause, 0);
     SendFilterMessage(iface, SendStop, 0);
     This->state = State_Stopped;
@@ -2136,53 +2158,34 @@ typedef HRESULT (WINAPI *fnFoundSeek)(IFilterGraphImpl *This, IMediaSeeking*, DW
 static HRESULT all_renderers_seek(IFilterGraphImpl *This, fnFoundSeek FoundSeek, DWORD_PTR arg) {
     BOOL allnotimpl = TRUE;
     int i;
-    IBaseFilter* pfilter;
-    IEnumPins* pEnum;
     HRESULT hr, hr_return = S_OK;
-    IPin* pPin;
-    DWORD dummy;
-    PIN_DIRECTION dir;
 
     TRACE("(%p)->(%p %08lx)\n", This, FoundSeek, arg);
     /* Send a message to all renderers, they are responsible for broadcasting it further */
 
     for(i = 0; i < This->nFilters; i++)
     {
-        BOOL renderer = TRUE;
-        pfilter = This->ppFiltersInGraph[i];
-        hr = IBaseFilter_EnumPins(pfilter, &pEnum);
-        if (hr != S_OK)
-        {
-            WARN("Enum pins failed %x\n", hr);
+        IMediaSeeking *seek = NULL;
+        IBaseFilter* pfilter = This->ppFiltersInGraph[i];
+        IAMFilterMiscFlags *flags = NULL;
+        ULONG filterflags;
+        IUnknown_QueryInterface(pfilter, &IID_IAMFilterMiscFlags, (void**)&flags);
+        if (!flags)
             continue;
-        }
-        /* Check if it is a source filter */
-        while(IEnumPins_Next(pEnum, 1, &pPin, &dummy) == S_OK)
-        {
-            IPin_QueryDirection(pPin, &dir);
-            IPin_Release(pPin);
-            if (dir != PINDIR_INPUT)
-            {
-                renderer = FALSE;
-                break;
-            }
-        }
-        IEnumPins_Release(pEnum);
-        if (renderer)
-        {
-            IMediaSeeking *seek = NULL;
-            IBaseFilter_QueryInterface(pfilter, &IID_IMediaSeeking, (void**)&seek);
-            if (!seek)
-                continue;
+        filterflags = IAMFilterMiscFlags_GetMiscFlags(flags);
+        IUnknown_Release(flags);
+        if (filterflags != AM_FILTER_MISC_FLAGS_IS_RENDERER)
+            continue;
 
-            hr = FoundSeek(This, seek, arg);
-
-            IMediaSeeking_Release(seek);
-            if (hr_return != E_NOTIMPL)
-                allnotimpl = FALSE;
-            if (hr_return == S_OK || (FAILED(hr) && hr != E_NOTIMPL && SUCCEEDED(hr_return)))
-                hr_return = hr;
-        }
+        IBaseFilter_QueryInterface(pfilter, &IID_IMediaSeeking, (void**)&seek);
+        if (!seek)
+            continue;
+        hr = FoundSeek(This, seek, arg);
+        IMediaSeeking_Release(seek);
+        if (hr_return != E_NOTIMPL)
+            allnotimpl = FALSE;
+        if (hr_return == S_OK || (FAILED(hr) && hr != E_NOTIMPL && SUCCEEDED(hr_return)))
+            hr_return = hr;
     }
 
     if (allnotimpl)
@@ -2337,10 +2340,8 @@ static HRESULT WINAPI FoundDuration(IFilterGraphImpl *This, IMediaSeeking *seek,
     if (FAILED(hr))
         return hr;
 
-    /* FIXME: Minimum or maximum duration? Assuming minimum */
-    if (duration > 0 && *pdur < duration)
+    if (*pdur < duration)
         *pdur = duration;
-
     return hr;
 }
 
@@ -2355,7 +2356,7 @@ static HRESULT WINAPI MediaSeeking_GetDuration(IMediaSeeking *iface,
         return E_POINTER;
 
     EnterCriticalSection(&This->cs);
-    *pDuration = -1;
+    *pDuration = 0;
     hr = all_renderers_seek(This, FoundDuration, (DWORD_PTR)pDuration);
     LeaveCriticalSection(&This->cs);
 
@@ -2379,37 +2380,45 @@ static HRESULT WINAPI MediaSeeking_GetStopPosition(IMediaSeeking *iface,
         hr = IMediaSeeking_GetDuration(iface, pStop);
     else
         *pStop = This->stop_position;
-
     LeaveCriticalSection(&This->cs);
 
+    return hr;
+}
+
+static HRESULT WINAPI FoundCurrentPosition(IFilterGraphImpl *This, IMediaSeeking *seek, DWORD_PTR pposition)
+{
+    HRESULT hr;
+    LONGLONG pos = 0, *ppos = (LONGLONG*)pposition;
+
+    hr = IMediaSeeking_GetCurrentPosition(seek, &pos);
+    if (FAILED(hr))
+        return hr;
+
+    if (*ppos < 0 || pos < *ppos)
+        *ppos = pos;
     return hr;
 }
 
 static HRESULT WINAPI MediaSeeking_GetCurrentPosition(IMediaSeeking *iface,
 						      LONGLONG *pCurrent) {
     ICOM_THIS_MULTI(IFilterGraphImpl, IMediaSeeking_vtbl, iface);
-    LONGLONG time = 0;
+    HRESULT hr;
 
     if (!pCurrent)
         return E_POINTER;
 
     EnterCriticalSection(&This->cs);
-    if (This->state == State_Running && This->refClock)
-    {
-        IReferenceClock_GetTime(This->refClock, &time);
-        if (time)
-            time += This->position - This->start_time;
-        if (time < This->position)
-            time = This->position;
-        *pCurrent = time;
+    *pCurrent = -1;
+    hr = all_renderers_seek(This, FoundCurrentPosition, (DWORD_PTR)pCurrent);
+    if (hr == E_NOTIMPL) {
+        *pCurrent = 0;
+        hr = S_OK;
     }
-    else
-        *pCurrent = This->position;
     LeaveCriticalSection(&This->cs);
 
     TRACE("Time: %u.%03u\n", (DWORD)(*pCurrent / 10000000), (DWORD)((*pCurrent / 10000)%1000));
 
-    return S_OK;
+    return hr;
 }
 
 static HRESULT WINAPI MediaSeeking_ConvertTimeFormat(IMediaSeeking *iface,
@@ -2453,11 +2462,8 @@ static HRESULT WINAPI MediaSeeking_SetPositions(IMediaSeeking *iface,
     state = This->state;
     TRACE("State: %s\n", state == State_Running ? "Running" : (state == State_Paused ? "Paused" : (state == State_Stopped ? "Stopped" : "UNKNOWN")));
 
-    if ((dwCurrentFlags & 0x7) == AM_SEEKING_AbsolutePositioning)
-    {
-        This->position = *pCurrent;
-    }
-    else if ((dwCurrentFlags & 0x7) != AM_SEEKING_NoPositioning)
+    if ((dwCurrentFlags & 0x7) != AM_SEEKING_AbsolutePositioning &&
+        (dwCurrentFlags & 0x7) != AM_SEEKING_NoPositioning)
         FIXME("Adjust method %x not handled yet!\n", dwCurrentFlags & 0x7);
 
     if ((dwStopFlags & 0x7) == AM_SEEKING_AbsolutePositioning)
@@ -2465,17 +2471,18 @@ static HRESULT WINAPI MediaSeeking_SetPositions(IMediaSeeking *iface,
     else if ((dwStopFlags & 0x7) != AM_SEEKING_NoPositioning)
         FIXME("Stop position not handled yet!\n");
 
+    if (state == State_Running && !(dwCurrentFlags & AM_SEEKING_NoFlush))
+        IMediaControl_Pause((IMediaControl*)&This->IMediaControl_vtbl);
     args.current = pCurrent;
     args.stop = pStop;
     args.curflags = dwCurrentFlags;
     args.stopflags = dwStopFlags;
     hr = all_renderers_seek(This, found_setposition, (DWORD_PTR)&args);
 
-    if (This->refClock && ((dwCurrentFlags & 0x7) != AM_SEEKING_NoPositioning))
-    {
-        /* Update start time, prevents weird jumps */
-        IReferenceClock_GetTime(This->refClock, &This->start_time);
-    }
+    if ((dwCurrentFlags & 0x7) != AM_SEEKING_NoPositioning)
+        This->pause_time = This->start_time = -1;
+    if (state == State_Running && !(dwCurrentFlags & AM_SEEKING_NoFlush))
+        IMediaControl_Run((IMediaControl*)&This->IMediaControl_vtbl);
     LeaveCriticalSection(&This->cs);
 
     return hr;
@@ -5068,6 +5075,9 @@ static HRESULT WINAPI MediaFilter_Pause(IMediaFilter *iface)
 static HRESULT WINAPI MediaFilter_Run(IMediaFilter *iface, REFERENCE_TIME tStart)
 {
     ICOM_THIS_MULTI(IFilterGraphImpl, IMediaFilter_vtbl, iface);
+    if (tStart)
+        FIXME("Run called with non-null tStart: %x%08x\n",
+              (int)(tStart>>32), (int)tStart);
     return MediaControl_Run((IMediaControl*)&This->IMediaControl_vtbl);
 }
 
@@ -5106,6 +5116,7 @@ static HRESULT WINAPI MediaFilter_SetSyncSource(IMediaFilter *iface, IReferenceC
             This->refClock = pClock;
             if (This->refClock)
                 IReferenceClock_AddRef(This->refClock);
+            This->defaultclock = FALSE;
 
             if (This->HandleEcClockChanged)
             {
@@ -5459,6 +5470,7 @@ HRESULT FilterGraph_create(IUnknown *pUnkOuter, LPVOID *ppObj)
     fimpl->pUnkOuter = pUnkOuter;
     fimpl->bUnkOuterValid = FALSE;
     fimpl->bAggregatable = FALSE;
+    fimpl->defaultclock = TRUE;
     fimpl->IInner_vtbl = &IInner_VTable;
     fimpl->IFilterGraph2_vtbl = &IFilterGraph2_VTable;
     fimpl->IMediaControl_vtbl = &IMediaControl_VTable;
@@ -5486,13 +5498,14 @@ HRESULT FilterGraph_create(IUnknown *pUnkOuter, LPVOID *ppObj)
     fimpl->notif.disabled = FALSE;
     fimpl->nRenderers = 0;
     fimpl->EcCompleteCount = 0;
+    fimpl->refClockProvider = NULL;
     fimpl->state = State_Stopped;
     EventsQueue_Init(&fimpl->evqueue);
     InitializeCriticalSection(&fimpl->cs);
     fimpl->cs.DebugInfo->Spare[0] = (DWORD_PTR)(__FILE__ ": IFilterGraphImpl.cs");
     fimpl->nItfCacheEntries = 0;
     memcpy(&fimpl->timeformatseek, &TIME_FORMAT_MEDIA_TIME, sizeof(GUID));
-    fimpl->start_time = fimpl->position = 0;
+    fimpl->start_time = fimpl->pause_time = 0;
     fimpl->stop_position = -1;
     fimpl->punkFilterMapper2 = NULL;
     fimpl->recursioncount = 0;
@@ -5521,7 +5534,6 @@ HRESULT FilterGraph_create(IUnknown *pUnkOuter, LPVOID *ppObj)
         CoTaskMemFree(fimpl);
         return hr;
     }
-    IFilterGraph2_SetDefaultSyncSource((IFilterGraph2*)fimpl);
 
     *ppObj = fimpl;
     return S_OK;

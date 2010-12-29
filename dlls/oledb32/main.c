@@ -26,6 +26,7 @@
 #include "windef.h"
 #include "winbase.h"
 #include "ole2.h"
+#include "rpcproxy.h"
 
 #include "initguid.h"
 #include "msdaguid.h"
@@ -36,11 +37,14 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(oledb);
 
+static HINSTANCE instance;
+
 BOOL WINAPI DllMain(HINSTANCE hinst, DWORD reason, LPVOID lpv)
 {
     switch(reason)
     {
     case DLL_PROCESS_ATTACH:
+        instance = hinst;
         DisableThreadLibraryCalls(hinst);
         break;
 
@@ -55,13 +59,18 @@ BOOL WINAPI DllMain(HINSTANCE hinst, DWORD reason, LPVOID lpv)
  */
 typedef struct
 {
-    const IClassFactoryVtbl *lpVtbl;
+    IClassFactory IClassFactory_iface;
     HRESULT (*create_object)( IUnknown*, LPVOID* );
 } cf;
 
+static inline cf *impl_from_IClassFactory(IClassFactory *iface)
+{
+    return CONTAINING_RECORD(iface, cf, IClassFactory_iface);
+}
+
 static HRESULT WINAPI CF_QueryInterface(IClassFactory *iface, REFIID riid, void **obj)
 {
-    cf *This = (cf *)iface;
+    cf *This = impl_from_IClassFactory(iface);
 
     TRACE("(%p, %s, %p)\n", This, debugstr_guid(riid), obj);
 
@@ -87,7 +96,7 @@ static ULONG WINAPI CF_Release(IClassFactory *iface)
 
 static HRESULT WINAPI CF_CreateInstance(IClassFactory *iface, IUnknown *pOuter, REFIID riid, void **obj)
 {
-    cf *This = (cf *)iface;
+    cf *This = impl_from_IClassFactory(iface);
     IUnknown *unk = NULL;
     HRESULT r;
 
@@ -117,7 +126,7 @@ static const IClassFactoryVtbl CF_Vtbl =
     CF_LockServer
 };
 
-static cf oledb_convert_cf = { &CF_Vtbl, create_oledb_convert };
+static cf oledb_convert_cf = { { &CF_Vtbl }, create_oledb_convert };
 
 /******************************************************************
  * DllGetClassObject
@@ -141,4 +150,20 @@ HRESULT WINAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, void **obj)
 HRESULT WINAPI DllCanUnloadNow(void)
 {
     return S_FALSE;
+}
+
+/***********************************************************************
+ *		DllRegisterServer
+ */
+HRESULT WINAPI DllRegisterServer(void)
+{
+    return __wine_register_resources( instance, NULL );
+}
+
+/***********************************************************************
+ *		DllUnregisterServer
+ */
+HRESULT WINAPI DllUnregisterServer(void)
+{
+    return __wine_unregister_resources( instance, NULL );
 }

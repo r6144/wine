@@ -255,12 +255,12 @@ double CDECL NTDLL_tan( double d )
 
 /* Merge Sort. Algorithm taken from http://www.linux-related.de/index.html?/coding/sort/sort_merge.htm */
 static void
-NTDLL_mergesort( void *arr, void *barr, int elemsize, int(__cdecl *compar)(const void *, const void *),
-                 int left, int right )
+NTDLL_mergesort( void *arr, void *barr, size_t elemsize, int(__cdecl *compar)(const void *, const void *),
+                 size_t left, size_t right )
 {
     if(right>left) {
-        int i, j, k, m;
-        m=(right+left)/2;
+        size_t i, j, k, m;
+        m=left+(right-left)/2;
         NTDLL_mergesort( arr, barr, elemsize, compar, left, m);
         NTDLL_mergesort( arr, barr, elemsize, compar, m+1, right);
 
@@ -270,9 +270,9 @@ NTDLL_mergesort( void *arr, void *barr, int elemsize, int(__cdecl *compar)(const
         for (j=m; j<right; j++)
             memcpy (X(barr,(right+m-j)),X(arr,(j+1)),elemsize);
 
-        for (k=left; k<=right; k++) {
-            /*arr[k]=(barr[i]<barr[j])?barr[i++]:barr[j--];*/
-            if (i != j && compar(X(barr,i),X(barr,j))<0) {
+        /* i=left; j=right; */
+        for (k=left; i<=m && j>m; k++) {
+            if (i==j || compar(X(barr,i),X(barr,j))<=0) {
                 memcpy(X(arr,k),X(barr,i),elemsize);
                 i++;
             } else {
@@ -280,6 +280,10 @@ NTDLL_mergesort( void *arr, void *barr, int elemsize, int(__cdecl *compar)(const
                 j--;
             }
         }
+        for (; i<=m; i++, k++)
+            memcpy(X(arr,k),X(barr,i),elemsize);
+        for (; j>m; j--, k++)
+            memcpy(X(arr,k),X(barr,j),elemsize);
     }
 #undef X
 }
@@ -290,7 +294,9 @@ NTDLL_mergesort( void *arr, void *barr, int elemsize, int(__cdecl *compar)(const
 void __cdecl NTDLL_qsort( void *base, size_t nmemb, size_t size,
                           int(__cdecl *compar)(const void *, const void *) )
 {
-    void *secondarr = RtlAllocateHeap (GetProcessHeap(), 0, nmemb*size);
+    void *secondarr;
+    if (nmemb < 2 || size == 0) return;
+    secondarr = RtlAllocateHeap (GetProcessHeap(), 0, nmemb*size);
     NTDLL_mergesort( base, secondarr, size, compar, 0, nmemb-1 );
     RtlFreeHeap (GetProcessHeap(),0, secondarr);
 }

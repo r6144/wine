@@ -1,11 +1,9 @@
 EXTRADEFS = -DWINE_NO_UNICODE_MACROS
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = winepath.exe
 APPMODE   = -mconsole -municode
 
 C_SRCS = winepath.c
+
+MANPAGE = winepath.man
 
 @MAKE_PROG_RULES@

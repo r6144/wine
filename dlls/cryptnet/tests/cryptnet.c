@@ -316,7 +316,7 @@ static void make_tmp_file(LPSTR path)
 static void test_retrieveObjectByUrl(void)
 {
     BOOL ret;
-    char tmpfile[MAX_PATH * 2], *ptr, url[MAX_PATH + 8];
+    char tmpfile[MAX_PATH * 2], url[MAX_PATH + 8];
     CRYPT_BLOB_ARRAY *pBlobArray;
     PCCERT_CONTEXT cert;
     PCCRL_CONTEXT crl;
@@ -332,17 +332,7 @@ static void test_retrieveObjectByUrl(void)
        GetLastError(), GetLastError());
 
     make_tmp_file(tmpfile);
-    ptr = strchr(tmpfile, ':');
-    if (ptr)
-        ptr += 2; /* skip colon and first slash */
-    else
-        ptr = tmpfile;
-    snprintf(url, sizeof(url), "file:///%s", ptr);
-    do {
-        ptr = strchr(url, '\\');
-        if (ptr)
-            *ptr = '/';
-    } while (ptr);
+    snprintf(url, sizeof(url), "file://%s", tmpfile);
 
     pBlobArray = (CRYPT_BLOB_ARRAY *)0xdeadbeef;
     ret = CryptRetrieveObjectByUrlA(url, NULL, 0, 0, (void **)&pBlobArray,
@@ -545,7 +535,7 @@ static const BYTE rootSignedCRL[] = {
 0xd5,0xbc,0xb0,0xd5,0xa5,0x9c,0x1b,0x72,0xc3,0x0f,0xa3,0xe3,0x3c,0xf0,0xc3,
 0x91,0xe8,0x93,0x4f,0xd4,0x2f };
 
-BOOL (WINAPI *pCertVerifyRevocation)(DWORD, DWORD, DWORD, void **, DWORD,
+static BOOL (WINAPI *pCertVerifyRevocation)(DWORD, DWORD, DWORD, void **, DWORD,
  PCERT_REVOCATION_PARA, PCERT_REVOCATION_STATUS);
 
 /* Wednesday, Oct 1, 2007 */

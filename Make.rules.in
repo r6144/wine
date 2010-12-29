@@ -1,12 +1,6 @@
 # Global rules shared by all makefiles     -*-Makefile-*-
 #
-# Each individual makefile must define the following variables:
-# TOPSRCDIR    : top-level source directory
-# TOPOBJDIR    : top-level object directory
-# SRCDIR       : source directory for this module
-# MODULE       : name of the module being built
-#
-# Each individual makefile may define the following additional variables:
+# Each individual makefile may define the following variables:
 # C_SRCS       : C sources for the module
 # RC_SRCS      : resource source files
 # EXTRA_SRCS   : extra source files for make depend
@@ -18,125 +12,36 @@
 
 # First some useful definitions
 
-SHELL     = /bin/sh
-CC        = @CC@
-CFLAGS    = @CFLAGS@
-CPPFLAGS  = @CPPFLAGS@
-LIBS      = @LIBS@
-BISON     = @BISON@
-FLEX      = @FLEX@
-EXEEXT    = @EXEEXT@
-OBJEXT    = @OBJEXT@
-LIBEXT    = @LIBEXT@
-DLLEXT    = @DLLEXT@
-TOOLSEXT  = @TOOLSEXT@
-IMPLIBEXT = @IMPLIBEXT@
-LDSHARED  = @LDSHARED@
-DLLTOOL   = @DLLTOOL@
-DLLWRAP   = @DLLWRAP@
-AR        = @AR@
-ARFLAGS   = @ARFLAGS@
-RANLIB    = @RANLIB@
-STRIP     = @STRIP@
-LN_S      = @LN_S@
-TOOLSDIR  = @TOOLSDIR@
-LDFLAGS   = @LDFLAGS@
-PRELINK   = @PRELINK@
-RM        = rm -f
-MV        = mv
-LINT      = @LINT@
-LINTFLAGS = @LINTFLAGS@
-FONTFORGE = @FONTFORGE@
-RSVG      = @RSVG@
-CONVERT   = @CONVERT@
-ICOTOOL   = @ICOTOOL@
-CROSSCC   = @CROSSCC@
-CROSSTARGET = @CROSSTARGET@
-CROSSAR     = $(CROSSTARGET)-ar
-CROSSRANLIB = $(CROSSTARGET)-ranlib
-FAKEEXT   = $(DLLEXT:.so=.fake)
-INCLUDES     = -I$(SRCDIR) -I. -I$(TOPSRCDIR)/include -I$(TOPOBJDIR)/include $(EXTRAINCL)
-EXTRACFLAGS  = @EXTRACFLAGS@
+LDSHARED     = @LDSHARED@
+INCLUDES     = -I$(srcdir) -I. -I$(top_srcdir)/include -I$(top_builddir)/include $(EXTRAINCL)
 ALLCFLAGS    = $(INCLUDES) $(DEFS) $(DLLFLAGS) $(EXTRACFLAGS) $(CPPFLAGS) $(CFLAGS) $(MODCFLAGS)
 ALLLINTFLAGS = $(INCLUDES) $(DEFS) $(LINTFLAGS)
 IDLFLAGS     = $(INCLUDES) $(DEFS) $(EXTRAIDLFLAGS)
-TARGETFLAGS  = @TARGETFLAGS@
-MKINSTALLDIRS= $(TOPSRCDIR)/tools/mkinstalldirs -m 755
-WINAPI_CHECK = $(TOPSRCDIR)/tools/winapi/winapi_check
-BUILDIMAGE   = $(TOPSRCDIR)/tools/buildimage
-C2MAN        = $(TOPSRCDIR)/tools/c2man.pl
-RUNTEST      = $(TOPSRCDIR)/tools/runtest
-WINEBUILD    = $(TOOLSDIR)/tools/winebuild/winebuild$(TOOLSEXT)
-MAKEDEP      = $(TOOLSDIR)/tools/makedep$(TOOLSEXT)
-MAKECTESTS   = $(TOOLSDIR)/tools/make_ctests$(TOOLSEXT)
-WRC          = $(TOOLSDIR)/tools/wrc/wrc$(TOOLSEXT)
-WMC          = $(TOOLSDIR)/tools/wmc/wmc$(TOOLSEXT)
-WIDL         = $(TOOLSDIR)/tools/widl/widl$(TOOLSEXT)
-WINEGCC      = $(TOOLSDIR)/tools/winegcc/winegcc $(TARGETFLAGS) -B$(TOOLSDIR)/tools/winebuild --sysroot=$(TOPOBJDIR) @UNWINDFLAGS@
-CROSSWINEGCC = $(TOOLSDIR)/tools/winegcc/winegcc $(CROSSTARGET:%=-b %) -B$(TOOLSDIR)/tools/winebuild --sysroot=$(TOPOBJDIR) --lib-suffix=.cross.a
-RELPATH      = $(TOOLSDIR)/tools/relpath$(TOOLSEXT)
-SFNT2FNT     = $(TOOLSDIR)/tools/sfnt2fnt$(TOOLSEXT)
-RC           = $(WRC)
-RCFLAGS      = --nostdinc $(INCLUDES) $(DEFS) $(EXTRARCFLAGS)
-LDPATH       = @LDPATH@
-DLLDIR       = $(TOPOBJDIR)/dlls
-LIBPORT      = $(TOPOBJDIR)/libs/port/libwine_port.a
-LIBWPP       = $(TOPOBJDIR)/libs/wpp/libwpp.a
-LIBWINE      = -L$(TOPOBJDIR)/libs/wine -lwine
-LDRPATH_INSTALL = @LDRPATH_INSTALL@
-LDRPATH_LOCAL   = @LDRPATH_LOCAL@
-
-@SET_MAKE@
-
-# Installation infos
-
-INSTALL         = @INSTALL@ $(INSTALL_FLAGS)
-INSTALL_PROGRAM = @INSTALL_PROGRAM@ $(INSTALL_PROGRAM_FLAGS)
-INSTALL_SCRIPT  = @INSTALL_SCRIPT@ $(INSTALL_SCRIPT_FLAGS)
-INSTALL_DATA    = @INSTALL_DATA@ $(INSTALL_DATA_FLAGS)
-prefix          = @prefix@
-exec_prefix     = @exec_prefix@
-bindir          = @bindir@
-libdir          = @libdir@
-datarootdir     = @datarootdir@
-datadir         = @datadir@
-infodir         = @infodir@
-mandir          = @mandir@
-sysconfdir      = @sysconfdir@
-includedir      = @includedir@/wine
-dlldir          = @libdir@/wine
-fakedlldir      = $(dlldir)/fakedlls
-prog_manext     = 1
-api_manext      = 3w
-conf_manext     = 5
-CLEAN_FILES     = *.o *.a *.so *.ln *.res *.fake *.$(LIBEXT) \\\#*\\\# *~ *% .\\\#* *.bak *.orig *.rej *.flc core
+RCFLAGS      = --nostdinc $(TARGETFLAGS) $(INCLUDES) $(DEFS) $(EXTRARCFLAGS)
 
 IDL_GEN_C_SRCS  = $(IDL_C_SRCS:.idl=_c.c) $(IDL_I_SRCS:.idl=_i.c) \
                   $(IDL_P_SRCS:.idl=_p.c) $(IDL_S_SRCS:.idl=_s.c)
 IDL_GEN_HEADERS = $(IDL_H_SRCS:.idl=.h) $(IDL_C_SRCS:.idl=.h) $(IDL_I_SRCS:.idl=.h) \
                   $(IDL_P_SRCS:.idl=.h) $(IDL_S_SRCS:.idl=.h)
 
+CLEAN_FILES   = *.o *.a *.so *.ln *.res *.fake *.$(LIBEXT) \\\#*\\\# *~ *% .\\\#* *.bak *.orig *.rej *.flc core
 CLEAN_TARGETS = $(IDL_GEN_C_SRCS) $(IDL_GEN_HEADERS) $(IDL_TLB_SRCS:.idl=.tlb) $(IDL_P_SRCS:%=dlldata.c) \
                 $(BISON_SRCS:.y=.tab.c) $(BISON_SRCS:.y=.tab.h) $(LEX_SRCS:.l=.yy.c) $(MC_SRCS:.mc=.mc.rc)
 
 OBJS = $(C_SRCS:.c=.o) $(BISON_SRCS:.y=.tab.o) $(LEX_SRCS:.l=.yy.o) $(IDL_GEN_C_SRCS:.c=.o) \
-       $(RC_SRCS:.rc=.res) $(MC_SRCS:.mc=.mc.res) $(EXTRA_OBJS)
+       $(IDL_R_SRCS:.idl=_r.res) $(RC_SRCS:.rc=.res) $(MC_SRCS:.mc=.mc.res) $(EXTRA_OBJS)
 
 CROSSOBJS = $(OBJS:.o=.cross.o)
 LINTS  = $(C_SRCS:.c=.ln)
 
-# 'all' target first in case the enclosing Makefile didn't define any target
-
-all:
-
 filter: dummy
-	@$(TOPSRCDIR)/tools/winapi/make_filter --make $(MAKE) all
+	@$(top_srcdir)/tools/winapi/make_filter --make $(MAKE) all
 
 .PHONY: all filter
 
 # Implicit rules
 
-.SUFFIXES: .mc .rc .mc.rc .res .idl .tlb .h .y .l .tab.c .tab.h .yy.c .ok .man.in .man _c.c _i.c _p.c _s.c .cross.o @MAINTAINER_MODE@ .sfd .ttf .svg .ico .bmp
+.SUFFIXES: .mc .rc .mc.rc .res .idl .tlb .h .y .l .tab.c .tab.h .yy.c .ok .man.in .man _c.c _i.c _p.c _s.c _r.res .cross.o @MAINTAINER_MODE@ .sfd .ttf .svg .ico .bmp
 
 .c.o:
 	$(CC) -c $(ALLCFLAGS) -o $@ $<
@@ -157,25 +62,28 @@ filter: dummy
 	$(LDPATH) $(WMC) -i -U -H /dev/null -o $@ $<
 
 .rc.res:
-	$(LDPATH) $(RC) $(RCFLAGS) -fo$@ $<
+	$(LDPATH) $(WRC) $(RCFLAGS) -o $@ $<
 
 .idl.h:
-	$(WIDL) $(IDLFLAGS) -h -H $@ $<
+	$(WIDL) $(IDLFLAGS) -h -o $@ $<
 
 .idl_c.c:
-	$(WIDL) $(IDLFLAGS) -c -C $@ $<
+	$(WIDL) $(IDLFLAGS) -c -o $@ $<
 
 .idl_i.c:
-	$(WIDL) $(IDLFLAGS) -u -U $@ $<
+	$(WIDL) $(IDLFLAGS) -u -o $@ $<
 
 .idl_p.c:
-	$(WIDL) $(IDLFLAGS) -p -P $@ $<
+	$(WIDL) $(IDLFLAGS) -p -o $@ $<
+
+.idl_r.res:
+	$(WIDL) $(IDLFLAGS) -r -o $@ $<
 
 .idl_s.c:
-	$(WIDL) $(IDLFLAGS) -s -S $@ $<
+	$(WIDL) $(IDLFLAGS) -s -o $@ $<
 
 .idl.tlb:
-	$(WIDL) $(TARGETFLAGS) $(IDLFLAGS) -t -T $@ $<
+	$(WIDL) $(TARGETFLAGS) $(IDLFLAGS) -t -o $@ $<
 
 .c.ln:
 	$(LINT) -c $(ALLLINTFLAGS) $< || ( $(RM) $@ && exit 1 )
@@ -184,7 +92,7 @@ filter: dummy
 	$(RUNTEST) $(RUNTESTFLAGS) $< && touch $@
 
 .sfd.ttf:
-	$(FONTFORGE) -script $(TOPSRCDIR)/fonts/genttf.ff $< $@
+	$(FONTFORGE) -script $(top_srcdir)/fonts/genttf.ff $< $@
 
 .man.in.man:
 	LC_ALL=C sed -e 's,@bindir\@,$(bindir),g' -e 's,@dlldir\@,$(dlldir),g' -e 's,@PACKAGE_STRING\@,@PACKAGE_STRING@,g' $< >$@ || ($(RM) $@ && false)
@@ -198,7 +106,7 @@ filter: dummy
 # Rules for IDL files
 
 dlldata.c: $(WIDL) Makefile.in
-	$(WIDL) $(IDLFLAGS) --dlldata-only --dlldata=$@ $(IDL_P_SRCS)
+	$(WIDL) $(IDLFLAGS) --dlldata-only -o $@ $(IDL_P_SRCS)
 
 # Rule for linting
 
@@ -224,13 +132,28 @@ winapi_check:: dummy
 
 DEPEND_SRCS = $(C_SRCS) $(RC_SRCS) $(MC_SRCS) \
               $(IDL_H_SRCS) $(IDL_C_SRCS) $(IDL_I_SRCS) $(IDL_P_SRCS) $(IDL_S_SRCS) \
-              $(IDL_GEN_C_SRCS) $(IDL_TLB_SRCS) $(IDL_TLB_SRCS:.idl=.tlb) \
+              $(IDL_GEN_C_SRCS) $(IDL_R_SRCS:.idl=_r.res) $(IDL_TLB_SRCS) $(IDL_TLB_SRCS:.idl=.tlb) \
               $(BISON_SRCS) $(LEX_SRCS) $(EXTRA_SRCS)
 
 depend: dummy
-	$(MAKEDEP) $(MAKEDEPFLAGS) -C$(SRCDIR) -S$(TOPSRCDIR) -T$(TOPOBJDIR) $(EXTRAINCL) $(DEPEND_SRCS)
+	$(MAKEDEP) $(MAKEDEPFLAGS) -C$(srcdir) -S$(top_srcdir) -T$(top_builddir) $(EXTRAINCL) $(DEPEND_SRCS)
 
 .PHONY: depend
+
+# Rules for man pages
+
+MANPAGES = $(MANPAGE) $(EXTRA_MANPAGES)
+
+all: $(MANPAGES)
+
+install-man-pages:: $(MANPAGE) $(DESTDIR)$(mandir)/man$(prog_manext)
+	$(INSTALL_DATA) $(MANPAGE) $(DESTDIR)$(mandir)/man$(prog_manext)/$(MANPAGE:.man=).$(prog_manext)
+
+uninstall-man-pages::
+	$(RM) $(DESTDIR)$(mandir)/man$(prog_manext)/$(MANPAGE:.man=).$(prog_manext)
+
+install:: @WOW64_DISABLE@ $(MANPAGE:%=install-man-pages)
+uninstall:: @WOW64_DISABLE@ $(MANPAGE:%=uninstall-man-pages)
 
 # Rules for cleaning
 
@@ -255,7 +178,7 @@ install install-lib install-dev uninstall::
 
 $(MC_SRCS:.mc=.mc.rc): $(WMC)
 
-$(IDL_GEN_HEADERS) $(IDL_GEN_C_SRCS) $(IDL_TLB_SRCS:.idl=.tlb): $(WIDL)
+$(IDL_GEN_HEADERS) $(IDL_GEN_C_SRCS) $(IDL_TLB_SRCS:.idl=.tlb) $(IDL_R_SRCS:.idl=_r.res): $(WIDL)
 
 $(RC_SRCS:.rc=.res) $(MC_SRCS:.mc=.mc.res): $(WRC)
 

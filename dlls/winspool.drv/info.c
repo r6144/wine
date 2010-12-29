@@ -6,7 +6,8 @@
  * Copyright 1999 Klaas van Gend
  * Copyright 1999, 2000 Huw D M Davies
  * Copyright 2001 Marcus Meissner
- * Copyright 2005-2009 Detlef Riekenberg
+ * Copyright 2005-2010 Detlef Riekenberg
+ * Copyright 2010 Vitaly Perov
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -97,7 +98,10 @@ typedef struct {
     struct list entry;
     DWORD job_id;
     WCHAR *filename;
+    WCHAR *portname;
     WCHAR *document_title;
+    WCHAR *printer_name;
+    LPDEVMODEW devmode;
 } job_t;
 
 
@@ -163,9 +167,9 @@ static const WCHAR WinNT_CV_PrinterPortsW[] = { 'S','o','f','t','w','a','r','e',
                                                 'P','r','i','n','t','e','r','P','o','r','t','s',0};
 
 static const WCHAR DefaultEnvironmentW[] = {'W','i','n','e',0};
-static const WCHAR envname_win40W[] = {'W','i','n','d','o','w','s',' ','4','.','0',0};
+static       WCHAR envname_win40W[] = {'W','i','n','d','o','w','s',' ','4','.','0',0};
 static const WCHAR envname_x64W[] =   {'W','i','n','d','o','w','s',' ','x','6','4',0};
-static const WCHAR envname_x86W[] =   {'W','i','n','d','o','w','s',' ','N','T',' ','x','8','6',0};
+static       WCHAR envname_x86W[] =   {'W','i','n','d','o','w','s',' ','N','T',' ','x','8','6',0};
 static const WCHAR subdir_win40W[] = {'w','i','n','4','0',0};
 static const WCHAR subdir_x64W[] =   {'x','6','4',0};
 static const WCHAR subdir_x86W[] =   {'w','3','2','x','8','6',0};
@@ -204,11 +208,17 @@ static const WCHAR ProviderW[] = {'P','r','o','v','i','d','e','r',0};
 static const WCHAR Separator_FileW[] = {'S','e','p','a','r','a','t','o','r',' ','F','i','l','e',0};
 static const WCHAR Share_NameW[] = {'S','h','a','r','e',' ','N','a','m','e',0};
 static const WCHAR VersionW[] = {'V','e','r','s','i','o','n',0};
-static const WCHAR WinPrintW[] = {'W','i','n','P','r','i','n','t',0};
+static       WCHAR WinPrintW[] = {'W','i','n','P','r','i','n','t',0};
 static const WCHAR deviceW[]  = {'d','e','v','i','c','e',0};
 static const WCHAR devicesW[] = {'d','e','v','i','c','e','s',0};
 static const WCHAR windowsW[] = {'w','i','n','d','o','w','s',0};
-static const WCHAR emptyStringW[] = {0};
+static       WCHAR generic_ppdW[] = {'g','e','n','e','r','i','c','.','p','p','d',0};
+static       WCHAR rawW[] = {'R','A','W',0};
+static       WCHAR driver_9x[] = {'w','i','n','e','p','s','1','6','.','d','r','v',0};
+static       WCHAR driver_nt[] = {'w','i','n','e','p','s','.','d','r','v',0};
+static const WCHAR timeout_15_45[] = {',','1','5',',','4','5',0};
+static const WCHAR commaW[] = {',',0};
+static       WCHAR emptyStringW[] = {0};
 
 static const WCHAR May_Delete_Value[] = {'W','i','n','e','M','a','y','D','e','l','e','t','e','M','e',0};
 
@@ -325,23 +335,14 @@ static LPSTR strdupWtoA( LPCWSTR str )
 }
 
 /******************************************************************
- * Return the number of bytes for an multi_sz string.
- * The result includes all \0s
- * (specifically the extra \0, that is needed as multi_sz terminator).
+ * verify, that the filename is a local file
+ *
  */
-#if 0
-static int multi_sz_lenW(const WCHAR *str)
+static inline BOOL is_local_file(LPWSTR name)
 {
-    const WCHAR *ptr = str;
-    if(!str) return 0;
-    do
-    {
-        ptr += lstrlenW(ptr) + 1;
-    } while(*ptr);
-
-    return (ptr - str + 1) * sizeof(WCHAR);
+    return (name[0] && (name[1] == ':') && (name[2] == '\\'));
 }
-#endif
+
 /* ################################ */
 
 static int multi_sz_lenA(const char *str)
@@ -382,41 +383,33 @@ WINSPOOL_SetDefaultPrinter(const char *devname, const char *name, BOOL force) {
     }
 }
 
-static BOOL add_printer_driver(const char *name)
+static BOOL add_printer_driver(WCHAR *name)
 {
-    DRIVER_INFO_3A di3a;
+    DRIVER_INFO_3W di3;
 
-    static char driver_9x[]         = "wineps16.drv",
-                driver_nt[]         = "wineps.drv",
-                env_9x[]            = "Windows 4.0",
-                env_nt[]            = "Windows NT x86",
-                data_file[]         = "generic.ppd",
-                default_data_type[] = "RAW";
+    ZeroMemory(&di3, sizeof(DRIVER_INFO_3W));
+    di3.cVersion         = 3;
+    di3.pName            = name;
+    di3.pEnvironment     = envname_x86W;
+    di3.pDriverPath      = driver_nt;
+    di3.pDataFile        = generic_ppdW;
+    di3.pConfigFile      = driver_nt;
+    di3.pDefaultDataType = rawW;
 
-    ZeroMemory(&di3a, sizeof(DRIVER_INFO_3A));
-    di3a.cVersion         = 3;
-    di3a.pName            = (char *)name;
-    di3a.pEnvironment     = env_nt;
-    di3a.pDriverPath      = driver_nt;
-    di3a.pDataFile        = data_file;
-    di3a.pConfigFile      = driver_nt;
-    di3a.pDefaultDataType = default_data_type;
-
-    if (AddPrinterDriverA(NULL, 3, (LPBYTE)&di3a) ||
+    if (AddPrinterDriverW(NULL, 3, (LPBYTE)&di3) ||
         (GetLastError() ==  ERROR_PRINTER_DRIVER_ALREADY_INSTALLED ))
     {
-        di3a.cVersion     = 0;
-        di3a.pEnvironment = env_9x;
-        di3a.pDriverPath  = driver_9x;
-        di3a.pConfigFile  = driver_9x;
-        if (AddPrinterDriverA(NULL, 3, (LPBYTE)&di3a) ||
+        di3.cVersion     = 0;
+        di3.pEnvironment = envname_win40W;
+        di3.pDriverPath  = driver_9x;
+        di3.pConfigFile  = driver_9x;
+        if (AddPrinterDriverW(NULL, 3, (LPBYTE)&di3) ||
             (GetLastError() ==  ERROR_PRINTER_DRIVER_ALREADY_INSTALLED ))
         {
             return TRUE;
         }
     }
-    ERR("Failed adding driver %s (%s): %u\n", debugstr_a(di3a.pDriverPath),
-        debugstr_a(di3a.pEnvironment), GetLastError());
+    ERR("failed with %u for %s (%s)\n", GetLastError(), debugstr_w(di3.pDriverPath), debugstr_w(di3.pEnvironment));
     return FALSE;
 }
 
@@ -432,10 +425,11 @@ static BOOL CUPS_LoadPrinters(void)
     int	                  i, nrofdests;
     BOOL                  hadprinter = FALSE, haddefault = FALSE;
     cups_dest_t          *dests;
-    PRINTER_INFO_2A       pinfo2a;
-    char   *port,*devline;
-    HKEY hkeyPrinter, hkeyPrinters, hkey;
+    PRINTER_INFO_2W       pi2;
+    WCHAR   *port;
+    HKEY hkeyPrinter, hkeyPrinters;
     char    loaderror[256];
+    WCHAR   nameW[MAX_PATH];
 
     cupshandle = wine_dlopen(SONAME_LIBCUPS, RTLD_NOW, loaderror, sizeof(loaderror));
     if (!cupshandle) {
@@ -463,72 +457,56 @@ static BOOL CUPS_LoadPrinters(void)
     nrofdests = pcupsGetDests(&dests);
     TRACE("Found %d CUPS %s:\n", nrofdests, (nrofdests == 1) ? "printer" : "printers");
     for (i=0;i<nrofdests;i++) {
-        /* FIXME: replace "LPR:" with "CUPS:". Fix printing output first */
-        port = HeapAlloc(GetProcessHeap(), 0, strlen("LPR:") + strlen(dests[i].name)+1);
-        sprintf(port,"LPR:%s", dests[i].name);
-        /* FIXME: remove extension. Fix gdi32/drivers and comdlg32/printdlg first */
-        devline = HeapAlloc(GetProcessHeap(), 0, sizeof("WINEPS.DRV,,15,45") + strlen(port));
-        sprintf(devline, "WINEPS.DRV,%s", port);
-        WriteProfileStringA("devices", dests[i].name, devline);
-        if(RegCreateKeyW(HKEY_CURRENT_USER, user_printers_reg_key, &hkey) == ERROR_SUCCESS) {
-            RegSetValueExA(hkey, dests[i].name, 0, REG_SZ, (LPBYTE)devline, strlen(devline) + 1);
-            RegCloseKey(hkey);
-        }
+        MultiByteToWideChar(CP_UNIXCP, 0, dests[i].name, -1, nameW, sizeof(nameW) / sizeof(WCHAR));
 
-        lstrcatA(devline, ",15,45");
-        WriteProfileStringA("PrinterPorts", dests[i].name, devline);
-        if(RegCreateKeyW(HKEY_CURRENT_USER, WinNT_CV_PrinterPortsW, &hkey) == ERROR_SUCCESS) {
-            RegSetValueExA(hkey, dests[i].name, 0, REG_SZ, (LPBYTE)devline, strlen(devline) + 1);
-            RegCloseKey(hkey);
-        }
+        port = HeapAlloc(GetProcessHeap(), 0, sizeof(CUPS_Port) + lstrlenW(nameW) * sizeof(WCHAR));
+        lstrcpyW(port, CUPS_Port);
+        lstrcatW(port, nameW);
 
-        HeapFree(GetProcessHeap(), 0, devline);
-
-        TRACE("Printer %d: %s\n", i, dests[i].name);
-        if(RegOpenKeyA(hkeyPrinters, dests[i].name, &hkeyPrinter) == ERROR_SUCCESS) {
+        TRACE("Printer %d: %s\n", i, debugstr_w(nameW));
+        if(RegOpenKeyW(hkeyPrinters, nameW, &hkeyPrinter) == ERROR_SUCCESS) {
             /* Printer already in registry, delete the tag added in WINSPOOL_LoadSystemPrinters
                and continue */
             TRACE("Printer already exists\n");
+            /* overwrite old LPR:* port */
+            RegSetValueExW(hkeyPrinter, PortW, 0, REG_SZ, (LPBYTE)port, (lstrlenW(port) + 1) * sizeof(WCHAR));
             RegDeleteValueW(hkeyPrinter, May_Delete_Value);
             RegCloseKey(hkeyPrinter);
         } else {
-            static CHAR data_type[] = "RAW",
-                    print_proc[]    = "WinPrint",
-                    comment[]       = "WINEPS Printer using CUPS",
-                    location[]      = "<physical location of printer>",
-                    params[]        = "<parameters?>",
-                    share_name[]    = "<share name?>",
-                    sep_file[]      = "<sep file?>";
+            static WCHAR comment_cups[]  = {'W','I','N','E','P','S',' ','P','r','i','n','t','e','r',
+                                            ' ','u','s','i','n','g',' ','C','U','P','S',0};
 
-            add_printer_driver(dests[i].name);
+            add_printer_driver(nameW);
 
-            memset(&pinfo2a,0,sizeof(pinfo2a));
-            pinfo2a.pPrinterName    = dests[i].name;
-            pinfo2a.pDatatype       = data_type;
-            pinfo2a.pPrintProcessor = print_proc;
-            pinfo2a.pDriverName     = dests[i].name;
-            pinfo2a.pComment        = comment;
-            pinfo2a.pLocation       = location;
-            pinfo2a.pPortName       = port;
-            pinfo2a.pParameters     = params;
-            pinfo2a.pShareName      = share_name;
-            pinfo2a.pSepFile        = sep_file;
+            memset(&pi2, 0, sizeof(PRINTER_INFO_2W));
+            pi2.pPrinterName    = nameW;
+            pi2.pDatatype       = rawW;
+            pi2.pPrintProcessor = WinPrintW;
+            pi2.pDriverName     = nameW;
+            pi2.pComment        = comment_cups;
+            pi2.pLocation       = emptyStringW;
+            pi2.pPortName       = port;
+            pi2.pParameters     = emptyStringW;
+            pi2.pShareName      = emptyStringW;
+            pi2.pSepFile        = emptyStringW;
 
-            if (!AddPrinterA(NULL,2,(LPBYTE)&pinfo2a)) {
+            if (!AddPrinterW(NULL, 2, (LPBYTE)&pi2)) {
                 if (GetLastError() != ERROR_PRINTER_ALREADY_EXISTS)
-                    ERR("printer '%s' not added by AddPrinterA (error %d)\n",dests[i].name,GetLastError());
+                    ERR("printer '%s' not added by AddPrinter (error %d)\n", debugstr_w(nameW), GetLastError());
             }
         }
 	HeapFree(GetProcessHeap(),0,port);
 
         hadprinter = TRUE;
         if (dests[i].is_default) {
-            WINSPOOL_SetDefaultPrinter(dests[i].name, dests[i].name, TRUE);
+            SetDefaultPrinterW(nameW);
             haddefault = TRUE;
         }
     }
-    if (hadprinter & !haddefault)
-        WINSPOOL_SetDefaultPrinter(dests[0].name, dests[0].name, TRUE);
+    if (hadprinter & !haddefault) {
+        MultiByteToWideChar(CP_UNIXCP, 0, dests[0].name, -1, nameW, sizeof(nameW) / sizeof(WCHAR));
+        SetDefaultPrinterW(nameW);
+    }
     pcupsFreeDests(nrofdests, dests);
     RegCloseKey(hkeyPrinters);
     return hadprinter;
@@ -540,8 +518,9 @@ PRINTCAP_ParseEntry(const char *pent, BOOL isfirst) {
     PRINTER_INFO_2A	pinfo2a;
     char		*e,*s,*name,*prettyname,*devname;
     BOOL		ret = FALSE, set_default = FALSE;
-    char                *port = NULL, *devline,*env_default;
-    HKEY                hkeyPrinter, hkeyPrinters, hkey;
+    char *port = NULL, *env_default;
+    HKEY hkeyPrinter, hkeyPrinters;
+    WCHAR devnameW[MAX_PATH];
 
     while (isspace(*pent)) pent++;
     s = strchr(pent,':');
@@ -599,30 +578,15 @@ PRINTCAP_ParseEntry(const char *pent, BOOL isfirst) {
     port = HeapAlloc(GetProcessHeap(),0,strlen("LPR:")+strlen(name)+1);
     sprintf(port,"LPR:%s",name);
 
-    /* FIXME: remove extension. Fix gdi32/drivers and comdlg32/printdlg first */
-    devline = HeapAlloc(GetProcessHeap(), 0, sizeof("WINEPS.DRV,,15,45") + strlen(port));
-    sprintf(devline, "WINEPS.DRV,%s", port);
-    WriteProfileStringA("devices", devname, devline);
-    if(RegCreateKeyW(HKEY_CURRENT_USER, user_printers_reg_key, &hkey) == ERROR_SUCCESS) {
-        RegSetValueExA(hkey, devname, 0, REG_SZ, (LPBYTE)devline, strlen(devline) + 1);
-        RegCloseKey(hkey);
-    }
-
-    lstrcatA(devline, ",15,45");
-    WriteProfileStringA("PrinterPorts", devname, devline);
-    if(RegCreateKeyW(HKEY_CURRENT_USER, WinNT_CV_PrinterPortsW, &hkey) == ERROR_SUCCESS) {
-        RegSetValueExA(hkey, devname, 0, REG_SZ, (LPBYTE)devline, strlen(devline) + 1);
-        RegCloseKey(hkey);
-    }
-
-    HeapFree(GetProcessHeap(),0,devline);
-    
     if(RegCreateKeyW(HKEY_LOCAL_MACHINE, PrintersW, &hkeyPrinters) !=
        ERROR_SUCCESS) {
         ERR("Can't create Printers key\n");
 	ret = FALSE;
         goto end;
     }
+
+    MultiByteToWideChar(CP_ACP, 0, devname, -1, devnameW, sizeof(devnameW) / sizeof(WCHAR));
+
     if(RegOpenKeyA(hkeyPrinters, devname, &hkeyPrinter) == ERROR_SUCCESS) {
         /* Printer already in registry, delete the tag added in WINSPOOL_LoadSystemPrinters
            and continue */
@@ -637,7 +601,7 @@ PRINTCAP_ParseEntry(const char *pent, BOOL isfirst) {
                     share_name[]  = "<share name?>",
                     sep_file[]    = "<sep file?>";
 
-        add_printer_driver(devname);
+        add_printer_driver(devnameW);
 
         memset(&pinfo2a,0,sizeof(pinfo2a));
         pinfo2a.pPrinterName    = devname;
@@ -1000,8 +964,7 @@ void WINSPOOL_LoadSystemPrinters(void)
        printers AddPrinter takes a while.  So we'll tag all printers that
        were automatically added last time around, if they still exist
        we'll leave them be otherwise we'll delete them. */
-    EnumPrintersA(PRINTER_ENUM_LOCAL, NULL, 5, NULL, 0, &needed, &num);
-    if(needed) {
+    if (EnumPrintersA(PRINTER_ENUM_LOCAL, NULL, 5, NULL, 0, &needed, &num) && needed) {
         PRINTER_INFO_5A* pi = HeapAlloc(GetProcessHeap(), 0, needed);
         if(EnumPrintersA(PRINTER_ENUM_LOCAL, NULL, 5, (LPBYTE)pi, needed, &needed, &num)) {
             for(i = 0; i < num; i++) {
@@ -2286,6 +2249,8 @@ BOOL WINAPI AddJobW(HANDLE hPrinter, DWORD Level, LPBYTE pData, DWORD cbBuf, LPD
     job->filename = HeapAlloc(GetProcessHeap(), 0, (len + 1) * sizeof(WCHAR));
     memcpy(job->filename, filename, (len + 1) * sizeof(WCHAR));
     job->document_title = strdupW(default_doc_title);
+    job->printer_name = strdupW(printer->name);
+    job->devmode = NULL;
     list_add_tail(&printer->queue->jobs, &job->entry);
 
     *pcbNeeded = (len + 1) * sizeof(WCHAR) + sizeof(*addjob);
@@ -2441,6 +2406,46 @@ static HKEY WINSPOOL_OpenDriverReg( LPCVOID pEnvironment)
 }
 
 /*****************************************************************************
+ * set_devices_and_printerports [internal]
+ *
+ * set the [Devices] and [PrinterPorts] entries for a printer.
+ *
+ */
+static void set_devices_and_printerports(PRINTER_INFO_2W *pi)
+{
+    DWORD portlen = lstrlenW(pi->pPortName) * sizeof(WCHAR);
+    WCHAR *devline;
+    HKEY  hkey;
+
+    TRACE("(%p) %s\n", pi, debugstr_w(pi->pPrinterName));
+
+    /* FIXME: the driver must change to "winspool" */
+    devline = HeapAlloc(GetProcessHeap(), 0, sizeof(driver_nt) + portlen + sizeof(timeout_15_45));
+    if (devline) {
+        lstrcpyW(devline, driver_nt);
+        lstrcatW(devline, commaW);
+        lstrcatW(devline, pi->pPortName);
+
+        TRACE("using %s\n", debugstr_w(devline));
+        WriteProfileStringW(devicesW, pi->pPrinterName, devline);
+        if (!RegCreateKeyW(HKEY_CURRENT_USER, user_printers_reg_key, &hkey)) {
+            RegSetValueExW(hkey, pi->pPrinterName, 0, REG_SZ, (LPBYTE)devline,
+                            (lstrlenW(devline) + 1) * sizeof(WCHAR));
+            RegCloseKey(hkey);
+        }
+
+        lstrcatW(devline, timeout_15_45);
+        WriteProfileStringW(PrinterPortsW, pi->pPrinterName, devline);
+        if (!RegCreateKeyW(HKEY_CURRENT_USER, WinNT_CV_PrinterPortsW, &hkey)) {
+            RegSetValueExW(hkey, pi->pPrinterName, 0, REG_SZ, (LPBYTE)devline,
+                            (lstrlenW(devline) + 1) * sizeof(WCHAR));
+            RegCloseKey(hkey);
+        }
+        HeapFree(GetProcessHeap(), 0, devline);
+    }
+}
+
+/*****************************************************************************
  *          AddPrinterW  [WINSPOOL.@]
  */
 HANDLE WINAPI AddPrinterW(LPWSTR pName, DWORD Level, LPBYTE pPrinter)
@@ -2519,6 +2524,8 @@ HANDLE WINAPI AddPrinterW(LPWSTR pName, DWORD Level, LPBYTE pPrinter)
 	RegCloseKey(hkeyPrinters);
 	return 0;
     }
+
+    set_devices_and_printerports(pi);
     RegSetValueExW(hkeyPrinter, attributesW, 0, REG_DWORD,
 		   (LPBYTE)&pi->Attributes, sizeof(DWORD));
     set_reg_szW(hkeyPrinter, DatatypeW, pi->pDatatype);
@@ -2840,6 +2847,7 @@ BOOL WINAPI SetJobW(HANDLE hPrinter, DWORD JobId, DWORD Level,
 {
     BOOL ret = FALSE;
     job_t *job;
+    DWORD size;
 
     TRACE("(%p, %d, %d, %p, %d)\n", hPrinter, JobId, Level, pJob, Command);
     FIXME("Ignoring everything other than document title\n");
@@ -2865,6 +2873,15 @@ BOOL WINAPI SetJobW(HANDLE hPrinter, DWORD JobId, DWORD Level,
         JOB_INFO_2W *info2 = (JOB_INFO_2W*)pJob;
         HeapFree(GetProcessHeap(), 0, job->document_title);
         job->document_title = strdupW(info2->pDocument);
+        HeapFree(GetProcessHeap(), 0, job->devmode);
+        if (info2->pDevMode)
+        {
+            size = info2->pDevMode->dmSize + info2->pDevMode->dmDriverExtra;
+            job->devmode = HeapAlloc(GetProcessHeap(), 0, size);
+            memcpy(job->devmode, info2->pDevMode, size);
+        }
+        else
+            job->devmode = NULL;
         break;
       }
     case 3:
@@ -2975,6 +2992,7 @@ DWORD WINAPI StartDocPrinterW(HANDLE hPrinter, DWORD Level, LPBYTE pDocInfo)
     DWORD needed, ret = 0;
     HANDLE hf;
     WCHAR *filename;
+    job_t *job;
 
     TRACE("(hPrinter = %p, Level = %d, pDocInfo = %p {pDocName = %s, pOutputFile = %s, pDatatype = %s}):\n",
           hPrinter, Level, doc, debugstr_w(doc->pDocName), debugstr_w(doc->pOutputFile),
@@ -3009,7 +3027,8 @@ DWORD WINAPI StartDocPrinterW(HANDLE hPrinter, DWORD Level, LPBYTE pDocInfo)
         goto end;
     }
 
-    if(doc->pOutputFile)
+    /* use pOutputFile only, when it is a real filename */
+    if ((doc->pOutputFile) && is_local_file(doc->pOutputFile))
         filename = doc->pOutputFile;
     else
         filename = addjob->Path;
@@ -3025,6 +3044,9 @@ DWORD WINAPI StartDocPrinterW(HANDLE hPrinter, DWORD Level, LPBYTE pDocInfo)
     printer->doc = HeapAlloc(GetProcessHeap(), 0, sizeof(*printer->doc));
     printer->doc->hf = hf;
     ret = printer->doc->job_id = addjob->JobId;
+    job = get_job(hPrinter, ret);
+    job->portname = strdupW(doc->pOutputFile);
+
 end:
     LeaveCriticalSection(&printer_handles_cs);
 
@@ -4644,7 +4666,7 @@ BOOL WINAPI AddPrintProcessorW(LPWSTR pName, LPWSTR pEnvironment, LPWSTR pPathNa
 {
     FIXME("(%s,%s,%s,%s): stub\n", debugstr_w(pName), debugstr_w(pEnvironment),
           debugstr_w(pPathName), debugstr_w(pPrintProcessorName));
-    return FALSE;
+    return TRUE;
 }
 
 /*****************************************************************************
@@ -5246,11 +5268,91 @@ end:
  */
 BOOL WINAPI SetDefaultPrinterW(LPCWSTR pszPrinter)
 {
+    WCHAR   default_printer[MAX_PATH];
+    LPWSTR  buffer = NULL;
+    HKEY    hreg;
+    DWORD   size;
+    DWORD   namelen;
+    LONG    lres;
 
     TRACE("(%s)\n", debugstr_w(pszPrinter));
+    if ((pszPrinter == NULL) || (pszPrinter[0] == '\0')) {
 
-    SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
-    return FALSE;
+        default_printer[0] = '\0';
+        size = sizeof(default_printer)/sizeof(WCHAR);
+
+        /* if we have a default Printer, do nothing. */
+        if (GetDefaultPrinterW(default_printer, &size))
+            return TRUE;
+
+        pszPrinter = NULL;
+        /* we have no default Printer: search local Printers and use the first */
+        if (!RegOpenKeyExW(HKEY_LOCAL_MACHINE, PrintersW, 0, KEY_READ, &hreg)) {
+
+            default_printer[0] = '\0';
+            size = sizeof(default_printer)/sizeof(WCHAR);
+            if (!RegEnumKeyExW(hreg, 0, default_printer, &size, NULL, NULL, NULL, NULL)) {
+
+                pszPrinter = default_printer;
+                TRACE("using %s\n", debugstr_w(pszPrinter));
+            }
+            RegCloseKey(hreg);
+        }
+
+        if (pszPrinter == NULL) {
+            TRACE("no local printer found\n");
+            SetLastError(ERROR_FILE_NOT_FOUND);
+            return FALSE;
+        }
+    }
+
+    /* "pszPrinter" is never empty or NULL here. */
+    namelen = lstrlenW(pszPrinter);
+    size = namelen + (MAX_PATH * 2) + 3; /* printer,driver,port and a 0 */
+    buffer = HeapAlloc(GetProcessHeap(), 0, size * sizeof(WCHAR));
+    if (!buffer ||
+        (RegOpenKeyExW(HKEY_CURRENT_USER, user_printers_reg_key, 0, KEY_READ, &hreg) != ERROR_SUCCESS)) {
+        HeapFree(GetProcessHeap(), 0, buffer);
+        SetLastError(ERROR_FILE_NOT_FOUND);
+        return FALSE;
+    }
+
+    /* read the devices entry for the printer (driver,port) to build the string for the
+       default device entry (printer,driver,port) */
+    memcpy(buffer, pszPrinter, namelen * sizeof(WCHAR));
+    buffer[namelen] = ',';
+    namelen++; /* move index to the start of the driver */
+
+    size = ((MAX_PATH * 2) + 2) * sizeof(WCHAR); /* driver,port and a 0 */
+    lres = RegQueryValueExW(hreg, pszPrinter, NULL, NULL, (LPBYTE) (&buffer[namelen]), &size);
+    if (!lres) {
+        TRACE("set device to %s\n", debugstr_w(buffer));
+
+        if (!WriteProfileStringW(windowsW, deviceW, buffer)) {
+            TRACE("failed to set the device entry: %d\n", GetLastError());
+            lres = ERROR_INVALID_PRINTER_NAME;
+        }
+
+        /* remove the next section, when INIFileMapping is implemented */
+        {
+            HKEY hdev;
+            if (!RegCreateKeyW(HKEY_CURRENT_USER, user_default_reg_key, &hdev)) {
+                RegSetValueExW(hdev, deviceW, 0, REG_SZ, (LPBYTE)buffer, (lstrlenW(buffer) + 1) * sizeof(WCHAR));
+                RegCloseKey(hdev);
+            }
+        }
+    }
+    else
+    {
+        if (lres != ERROR_FILE_NOT_FOUND)
+            FIXME("RegQueryValueExW failed with %d for %s\n", lres, debugstr_w(pszPrinter));
+
+        SetLastError(ERROR_INVALID_PRINTER_NAME);
+    }
+
+    RegCloseKey(hreg);
+    HeapFree(GetProcessHeap(), 0, buffer);
+    return (lres == ERROR_SUCCESS);
 }
 
 /******************************************************************************
@@ -5261,13 +5363,19 @@ BOOL WINAPI SetDefaultPrinterW(LPCWSTR pszPrinter)
  */
 BOOL WINAPI SetDefaultPrinterA(LPCSTR pszPrinter)
 {
+    LPWSTR  bufferW = NULL;
+    BOOL    res;
 
     TRACE("(%s)\n", debugstr_a(pszPrinter));
-
-    SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
-    return FALSE;
+    if(pszPrinter) {
+        INT len = MultiByteToWideChar(CP_ACP, 0, pszPrinter, -1, NULL, 0);
+        bufferW = HeapAlloc(GetProcessHeap(), 0, len * sizeof(WCHAR));
+        if (bufferW) MultiByteToWideChar(CP_ACP, 0, pszPrinter, -1, bufferW, len);
+    }
+    res = SetDefaultPrinterW(bufferW);
+    HeapFree(GetProcessHeap(), 0, bufferW);
+    return res;
 }
-
 
 /******************************************************************************
  *		SetPrinterDataExA   (WINSPOOL.@)
@@ -7058,6 +7166,20 @@ static BOOL get_job_info_1(job_t *job, JOB_INFO_1W *ji1, LPBYTE buf, DWORD cbBuf
         space = FALSE;
     *pcbNeeded += size;
 
+    if (job->printer_name)
+    {
+        string_to_buf(job->printer_name, ptr, left, &size, unicode);
+        if(space && size <= left)
+        {
+            ji1->pPrinterName = (LPWSTR)ptr;
+            ptr += size;
+            left -= size;
+        }
+        else
+            space = FALSE;
+        *pcbNeeded += size;
+    }
+
     return space;
 }
 
@@ -7068,8 +7190,11 @@ static BOOL get_job_info_2(job_t *job, JOB_INFO_2W *ji2, LPBYTE buf, DWORD cbBuf
                            LPDWORD pcbNeeded, BOOL unicode)
 {
     DWORD size, left = cbBuf;
+    DWORD shift;
     BOOL space = (cbBuf > 0);
     LPBYTE ptr = buf;
+    LPDEVMODEA  dmA;
+    LPDEVMODEW  devmode;
 
     *pcbNeeded = 0;
 
@@ -7088,6 +7213,57 @@ static BOOL get_job_info_2(job_t *job, JOB_INFO_2W *ji2, LPBYTE buf, DWORD cbBuf
     else
         space = FALSE;
     *pcbNeeded += size;
+
+    if (job->printer_name)
+    {
+        string_to_buf(job->printer_name, ptr, left, &size, unicode);
+        if(space && size <= left)
+        {
+            ji2->pPrinterName = (LPWSTR)ptr;
+            ptr += size;
+            left -= size;
+        }
+        else
+            space = FALSE;
+        *pcbNeeded += size;
+    }
+
+    if (job->devmode)
+    {
+        if (!unicode)
+        {
+            dmA = DEVMODEdupWtoA(job->devmode);
+            devmode = (LPDEVMODEW) dmA;
+            if (dmA) size = dmA->dmSize + dmA->dmDriverExtra;
+        }
+        else
+        {
+            devmode = job->devmode;
+            size = devmode->dmSize + devmode->dmDriverExtra;
+        }
+
+        if (!devmode)
+             FIXME("Can't convert DEVMODE W to A\n");
+        else
+        {
+            /* align DEVMODE to a DWORD boundary */
+            shift= (4 - ( (DWORD_PTR) ptr & 3)) & 3;
+            size += shift;
+
+            if (size <= left)
+            {
+                ptr += shift;
+                memcpy(ptr, devmode, size-shift);
+                ji2->pDevMode = (LPDEVMODEW)ptr;
+                if (!unicode) HeapFree(GetProcessHeap(), 0, dmA);
+                ptr += size;
+                left -= size;
+            }
+            else
+                space = FALSE;
+            *pcbNeeded +=size;
+        }
+    }
 
     return space;
 }
@@ -7185,32 +7361,83 @@ BOOL WINAPI GetJobW(HANDLE hPrinter, DWORD JobId, DWORD Level, LPBYTE pJob,
 }
 
 /*****************************************************************************
- *          schedule_lpr
+ *          schedule_pipe
  */
-static BOOL schedule_lpr(LPCWSTR printer_name, LPCWSTR filename)
+static BOOL schedule_pipe(LPCWSTR cmd, LPCWSTR filename)
 {
-    char *unixname, *queue, *cmd;
-    char fmt[] = "lpr -P%s %s";
+#ifdef HAVE_FORK
+    char *unixname, *cmdA;
     DWORD len;
-    int r;
+    int fds[2] = {-1, -1}, file_fd = -1, no_read;
+    BOOL ret = FALSE;
+    char buf[1024];
 
     if(!(unixname = wine_get_unix_file_name(filename)))
         return FALSE;
 
-    len = WideCharToMultiByte(CP_ACP, 0, printer_name, -1, NULL, 0, NULL, NULL);
-    queue = HeapAlloc(GetProcessHeap(), 0, len);
-    WideCharToMultiByte(CP_ACP, 0, printer_name, -1, queue, len, NULL, NULL);
+    len = WideCharToMultiByte(CP_UNIXCP, 0, cmd, -1, NULL, 0, NULL, NULL);
+    cmdA = HeapAlloc(GetProcessHeap(), 0, len);
+    WideCharToMultiByte(CP_UNIXCP, 0, cmd, -1, cmdA, len, NULL, NULL);
 
-    cmd = HeapAlloc(GetProcessHeap(), 0, strlen(unixname) + len + sizeof(fmt) - 5);
-    sprintf(cmd, fmt, queue, unixname);
+    TRACE("printing with: %s\n", cmdA);
 
-    TRACE("printing with: %s\n", cmd);
-    r = system(cmd);
+    if((file_fd = open(unixname, O_RDONLY)) == -1)
+        goto end;
+
+    if (pipe(fds))
+    {
+        ERR("pipe() failed!\n");
+        goto end;
+    }
+
+    if (fork() == 0)
+    {
+        close(0);
+        dup2(fds[0], 0);
+        close(fds[1]);
+
+        /* reset signals that we previously set to SIG_IGN */
+        signal(SIGPIPE, SIG_DFL);
+        signal(SIGCHLD, SIG_DFL);
+
+        execl("/bin/sh", "/bin/sh", "-c", cmdA, NULL);
+        _exit(1);
+    }
+
+    while((no_read = read(file_fd, buf, sizeof(buf))) > 0)
+        write(fds[1], buf, no_read);
+
+    ret = TRUE;
+
+end:
+    if(file_fd != -1) close(file_fd);
+    if(fds[0] != -1) close(fds[0]);
+    if(fds[1] != -1) close(fds[1]);
+
+    HeapFree(GetProcessHeap(), 0, cmdA);
+    HeapFree(GetProcessHeap(), 0, unixname);
+    return ret;
+#else
+    return FALSE;
+#endif
+}
+
+/*****************************************************************************
+ *          schedule_lpr
+ */
+static BOOL schedule_lpr(LPCWSTR printer_name, LPCWSTR filename)
+{
+    WCHAR *cmd;
+    const WCHAR fmtW[] = {'l','p','r',' ','-','P','\'','%','s','\'',0};
+    BOOL r;
+
+    cmd = HeapAlloc(GetProcessHeap(), 0, strlenW(printer_name) * sizeof(WCHAR) + sizeof(fmtW));
+    sprintfW(cmd, fmtW, printer_name);
+
+    r = schedule_pipe(cmd, filename);
 
     HeapFree(GetProcessHeap(), 0, cmd);
-    HeapFree(GetProcessHeap(), 0, queue);
-    HeapFree(GetProcessHeap(), 0, unixname);
-    return (r == 0);
+    return r;
 }
 
 /*****************************************************************************
@@ -7343,68 +7570,6 @@ static BOOL schedule_file(LPCWSTR filename)
 }
 
 /*****************************************************************************
- *          schedule_pipe
- */
-static BOOL schedule_pipe(LPCWSTR cmd, LPCWSTR filename)
-{
-#ifdef HAVE_FORK
-    char *unixname, *cmdA;
-    DWORD len;
-    int fds[2] = {-1, -1}, file_fd = -1, no_read;
-    BOOL ret = FALSE;
-    char buf[1024];
-
-    if(!(unixname = wine_get_unix_file_name(filename)))
-        return FALSE;
-
-    len = WideCharToMultiByte(CP_UNIXCP, 0, cmd, -1, NULL, 0, NULL, NULL);
-    cmdA = HeapAlloc(GetProcessHeap(), 0, len);
-    WideCharToMultiByte(CP_UNIXCP, 0, cmd, -1, cmdA, len, NULL, NULL);
-
-    TRACE("printing with: %s\n", cmdA);
-
-    if((file_fd = open(unixname, O_RDONLY)) == -1)
-        goto end;
-
-    if (pipe(fds))
-    {
-        ERR("pipe() failed!\n"); 
-        goto end;
-    }
-
-    if (fork() == 0)
-    {
-        close(0);
-        dup2(fds[0], 0);
-        close(fds[1]);
-
-        /* reset signals that we previously set to SIG_IGN */
-        signal(SIGPIPE, SIG_DFL);
-        signal(SIGCHLD, SIG_DFL);
-
-        execl("/bin/sh", "/bin/sh", "-c", cmdA, NULL);
-        _exit(1);
-    }
-
-    while((no_read = read(file_fd, buf, sizeof(buf))) > 0)
-        write(fds[1], buf, no_read);
-
-    ret = TRUE;
-
-end:
-    if(file_fd != -1) close(file_fd);
-    if(fds[0] != -1) close(fds[0]);
-    if(fds[1] != -1) close(fds[1]);
-
-    HeapFree(GetProcessHeap(), 0, cmdA);
-    HeapFree(GetProcessHeap(), 0, unixname);
-    return ret;
-#else
-    return FALSE;
-#endif
-}
-
-/*****************************************************************************
  *          schedule_unixfile
  */
 static BOOL schedule_unixfile(LPCWSTR output, LPCWSTR filename)
@@ -7465,18 +7630,23 @@ BOOL WINAPI ScheduleJob( HANDLE hPrinter, DWORD dwJobID )
         hf = CreateFileW(job->filename, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
         if(hf != INVALID_HANDLE_VALUE)
         {
-            PRINTER_INFO_5W *pi5;
+            PRINTER_INFO_5W *pi5 = NULL;
+            LPWSTR portname = job->portname;
             DWORD needed;
             HKEY hkey;
             WCHAR output[1024];
             static const WCHAR spooler_key[] = {'S','o','f','t','w','a','r','e','\\','W','i','n','e','\\',
                                                 'P','r','i','n','t','i','n','g','\\','S','p','o','o','l','e','r',0};
 
-            GetPrinterW(hPrinter, 5, NULL, 0, &needed);
-            pi5 = HeapAlloc(GetProcessHeap(), 0, needed);
-            GetPrinterW(hPrinter, 5, (LPBYTE)pi5, needed, &needed);
+            if (!portname)
+            {
+                GetPrinterW(hPrinter, 5, NULL, 0, &needed);
+                pi5 = HeapAlloc(GetProcessHeap(), 0, needed);
+                GetPrinterW(hPrinter, 5, (LPBYTE)pi5, needed, &needed);
+                portname = pi5->pPortName;
+            }
             TRACE("need to schedule job %d filename %s to port %s\n", job->job_id, debugstr_w(job->filename),
-                  debugstr_w(pi5->pPortName));
+                  debugstr_w(portname));
             
             output[0] = 0;
 
@@ -7484,7 +7654,7 @@ BOOL WINAPI ScheduleJob( HANDLE hPrinter, DWORD dwJobID )
             if(RegOpenKeyW(HKEY_CURRENT_USER, spooler_key, &hkey) == ERROR_SUCCESS)
             {
                 DWORD type, count = sizeof(output);
-                RegQueryValueExW(hkey, pi5->pPortName, NULL, &type, (LPBYTE)output, &count);
+                RegQueryValueExW(hkey, portname, NULL, &type, (LPBYTE)output, &count);
                 RegCloseKey(hkey);
             }
             if(output[0] == '|')
@@ -7495,21 +7665,21 @@ BOOL WINAPI ScheduleJob( HANDLE hPrinter, DWORD dwJobID )
             {
                 ret = schedule_unixfile(output, job->filename);
             }
-            else if(!strncmpW(pi5->pPortName, LPR_Port, strlenW(LPR_Port)))
+            else if(!strncmpW(portname, LPR_Port, strlenW(LPR_Port)))
             {
-                ret = schedule_lpr(pi5->pPortName + strlenW(LPR_Port), job->filename);
+                ret = schedule_lpr(portname + strlenW(LPR_Port), job->filename);
             }
-            else if(!strncmpW(pi5->pPortName, CUPS_Port, strlenW(CUPS_Port)))
+            else if(!strncmpW(portname, CUPS_Port, strlenW(CUPS_Port)))
             {
-                ret = schedule_cups(pi5->pPortName + strlenW(CUPS_Port), job->filename, job->document_title);
+                ret = schedule_cups(portname + strlenW(CUPS_Port), job->filename, job->document_title);
             }
-            else if(!strncmpW(pi5->pPortName, FILE_Port, strlenW(FILE_Port)))
+            else if(!strncmpW(portname, FILE_Port, strlenW(FILE_Port)))
             {
                 ret = schedule_file(job->filename);
             }
             else
             {
-                FIXME("can't schedule to port %s\n", debugstr_w(pi5->pPortName));
+                FIXME("can't schedule to port %s\n", debugstr_w(portname));
             }
             HeapFree(GetProcessHeap(), 0, pi5);
             CloseHandle(hf);
@@ -7517,7 +7687,10 @@ BOOL WINAPI ScheduleJob( HANDLE hPrinter, DWORD dwJobID )
         }
         list_remove(cursor);
         HeapFree(GetProcessHeap(), 0, job->document_title);
+        HeapFree(GetProcessHeap(), 0, job->printer_name);
+        HeapFree(GetProcessHeap(), 0, job->portname);
         HeapFree(GetProcessHeap(), 0, job->filename);
+        HeapFree(GetProcessHeap(), 0, job->devmode);
         HeapFree(GetProcessHeap(), 0, job);
         break;
     }

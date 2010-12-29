@@ -73,6 +73,38 @@ const int X11DRV_XROPfunction[16] =
 };
 
 
+/* get the rectangle in device coordinates, with optional mirroring */
+static RECT get_device_rect( HDC hdc, int left, int top, int right, int bottom )
+{
+    RECT rect;
+
+    rect.left   = left;
+    rect.top    = top;
+    rect.right  = right;
+    rect.bottom = bottom;
+    if (GetLayout( hdc ) & LAYOUT_RTL)
+    {
+        /* shift the rectangle so that the right border is included after mirroring */
+        /* it would be more correct to do this after LPtoDP but that's not what Windows does */
+        rect.left--;
+        rect.right--;
+    }
+    LPtoDP( hdc, (POINT *)&rect, 2 );
+    if (rect.left > rect.right)
+    {
+        int tmp = rect.left;
+        rect.left = rect.right;
+        rect.right = tmp;
+    }
+    if (rect.top > rect.bottom)
+    {
+        int tmp = rect.top;
+        rect.top = rect.bottom;
+        rect.bottom = tmp;
+    }
+    return rect;
+}
+
 /***********************************************************************
  *           X11DRV_GetRegionData
  *
@@ -483,19 +515,15 @@ X11DRV_DrawArc( X11DRV_PDEVICE *physDev, INT left, INT top, INT right,
     XPoint points[4];
     BOOL update = FALSE;
     POINT start, end;
-    RECT rc;
+    RECT rc = get_device_rect( physDev->hdc, left, top, right, bottom );
 
-    SetRect(&rc, left, top, right, bottom);
     start.x = xstart;
     start.y = ystart;
     end.x = xend;
     end.y = yend;
-    LPtoDP(physDev->hdc, (POINT*)&rc, 2);
     LPtoDP(physDev->hdc, &start, 1);
     LPtoDP(physDev->hdc, &end, 1);
 
-    if (rc.right < rc.left) { INT tmp = rc.right; rc.right = rc.left; rc.left = tmp; }
-    if (rc.bottom < rc.top) { INT tmp = rc.bottom; rc.bottom = rc.top; rc.top = tmp; }
     if ((rc.left == rc.right) || (rc.top == rc.bottom)
             ||(lines && ((rc.right-rc.left==1)||(rc.bottom-rc.top==1)))) return TRUE;
 
@@ -673,15 +701,9 @@ X11DRV_Ellipse( X11DRV_PDEVICE *physDev, INT left, INT top, INT right, INT botto
 {
     INT width, oldwidth;
     BOOL update = FALSE;
-    RECT rc;
-
-    SetRect(&rc, left, top, right, bottom);
-    LPtoDP(physDev->hdc, (POINT*)&rc, 2);
+    RECT rc = get_device_rect( physDev->hdc, left, top, right, bottom );
 
     if ((rc.left == rc.right) || (rc.top == rc.bottom)) return TRUE;
-
-    if (rc.right < rc.left) { INT tmp = rc.right; rc.right = rc.left; rc.left = tmp; }
-    if (rc.bottom < rc.top) { INT tmp = rc.bottom; rc.bottom = rc.top; rc.top = tmp; }
 
     oldwidth = width = physDev->pen.width;
     if (!width) width = 1;
@@ -737,17 +759,11 @@ X11DRV_Rectangle(X11DRV_PDEVICE *physDev, INT left, INT top, INT right, INT bott
 {
     INT width, oldwidth, oldjoinstyle;
     BOOL update = FALSE;
-    RECT rc;
+    RECT rc = get_device_rect( physDev->hdc, left, top, right, bottom );
 
     TRACE("(%d %d %d %d)\n", left, top, right, bottom);
 
-    SetRect(&rc, left, top, right, bottom);
-    LPtoDP(physDev->hdc, (POINT*)&rc, 2);
-
     if ((rc.left == rc.right) || (rc.top == rc.bottom)) return TRUE;
-
-    if (rc.right < rc.left) { INT tmp = rc.right; rc.right = rc.left; rc.left = tmp; }
-    if (rc.bottom < rc.top) { INT tmp = rc.bottom; rc.bottom = rc.top; rc.top = tmp; }
 
     oldwidth = width = physDev->pen.width;
     if (!width) width = 1;
@@ -811,14 +827,11 @@ X11DRV_RoundRect( X11DRV_PDEVICE *physDev, INT left, INT top, INT right,
 {
     INT width, oldwidth, oldendcap;
     BOOL update = FALSE;
-    RECT rc;
     POINT pts[2];
+    RECT rc = get_device_rect( physDev->hdc, left, top, right, bottom );
 
     TRACE("(%d %d %d %d  %d %d\n",
     	left, top, right, bottom, ell_width, ell_height);
-
-    SetRect(&rc, left, top, right, bottom);
-    LPtoDP(physDev->hdc, (POINT*)&rc, 2);
 
     if ((rc.left == rc.right) || (rc.top == rc.bottom))
 	return TRUE;
@@ -831,11 +844,6 @@ X11DRV_RoundRect( X11DRV_PDEVICE *physDev, INT left, INT top, INT right,
     LPtoDP(physDev->hdc, pts, 2);
     ell_width  = max(abs( pts[1].x - pts[0].x ), 1);
     ell_height = max(abs( pts[1].y - pts[0].y ), 1);
-
-    /* Fix the coordinates */
-
-    if (rc.right < rc.left) { INT tmp = rc.right; rc.right = rc.left; rc.left = tmp; }
-    if (rc.bottom < rc.top) { INT tmp = rc.bottom; rc.bottom = rc.top; rc.top = tmp; }
 
     oldwidth = width = physDev->pen.width;
     oldendcap = physDev->pen.endcap;
@@ -1467,16 +1475,6 @@ X11DRV_SetTextColor( X11DRV_PDEVICE *physDev, COLORREF color )
     return color;
 }
 
-/***********************************************************************
- *           GetDCOrgEx   (X11DRV.@)
- */
-BOOL CDECL X11DRV_GetDCOrgEx( X11DRV_PDEVICE *physDev, LPPOINT lpp )
-{
-    lpp->x = physDev->dc_rect.left + physDev->drawable_rect.left;
-    lpp->y = physDev->dc_rect.top + physDev->drawable_rect.top;
-    return TRUE;
-}
-
 
 static unsigned char *get_icm_profile( unsigned long *size )
 {
@@ -1511,35 +1509,35 @@ extern void WINAPI A_SHAInit( sha_ctx * );
 extern void WINAPI A_SHAUpdate( sha_ctx *, const unsigned char *, unsigned int );
 extern void WINAPI A_SHAFinal( sha_ctx *, unsigned char * );
 
+static const WCHAR mntr_key[] =
+    {'S','o','f','t','w','a','r','e','\\','M','i','c','r','o','s','o','f','t','\\',
+     'W','i','n','d','o','w','s',' ','N','T','\\','C','u','r','r','e','n','t',
+     'V','e','r','s','i','o','n','\\','I','C','M','\\','m','n','t','r',0};
+
+static const WCHAR color_path[] =
+    {'\\','s','p','o','o','l','\\','d','r','i','v','e','r','s','\\','c','o','l','o','r','\\',0};
+
 /***********************************************************************
  *              GetICMProfile (X11DRV.@)
  */
 BOOL CDECL X11DRV_GetICMProfile( X11DRV_PDEVICE *physDev, LPDWORD size, LPWSTR filename )
 {
-    static const WCHAR path[] =
-        {'\\','s','p','o','o','l','\\','d','r','i','v','e','r','s',
-         '\\','c','o','l','o','r','\\',0};
     static const WCHAR srgb[] =
         {'s','R','G','B',' ','C','o','l','o','r',' ','S','p','a','c','e',' ',
          'P','r','o','f','i','l','e','.','i','c','m',0};
-    static const WCHAR mntr[] =
-        {'S','o','f','t','w','a','r','e','\\','M','i','c','r','o','s','o','f','t','\\',
-         'W','i','n','d','o','w','s',' ','N','T','\\','C','u','r','r','e','n','t',
-         'V','e','r','s','i','o','n','\\','I','C','M','\\','m','n','t','r',0};
-
     HKEY hkey;
     DWORD required, len;
-    WCHAR profile[MAX_PATH], fullname[2*MAX_PATH + sizeof(path)/sizeof(WCHAR)];
+    WCHAR profile[MAX_PATH], fullname[2*MAX_PATH + sizeof(color_path)/sizeof(WCHAR)];
     unsigned char *buffer;
     unsigned long buflen;
 
     if (!size) return FALSE;
 
     GetSystemDirectoryW( fullname, MAX_PATH );
-    strcatW( fullname, path );
+    strcatW( fullname, color_path );
 
     len = sizeof(profile)/sizeof(WCHAR);
-    if (!RegCreateKeyExW( HKEY_LOCAL_MACHINE, mntr, 0, NULL, 0, KEY_ALL_ACCESS, NULL, &hkey, NULL ) &&
+    if (!RegCreateKeyExW( HKEY_LOCAL_MACHINE, mntr_key, 0, NULL, 0, KEY_ALL_ACCESS, NULL, &hkey, NULL ) &&
         !RegEnumValueW( hkey, 0, profile, &len, NULL, NULL, NULL, NULL )) /* FIXME handle multiple values */
     {
         strcatW( fullname, profile );
@@ -1591,4 +1589,58 @@ BOOL CDECL X11DRV_GetICMProfile( X11DRV_PDEVICE *physDev, LPDWORD size, LPWSTR f
     }
     *size = required;
     return TRUE;
+}
+
+/***********************************************************************
+ *              EnumICMProfiles (X11DRV.@)
+ */
+INT CDECL X11DRV_EnumICMProfiles( X11DRV_PDEVICE *physDev, ICMENUMPROCW proc, LPARAM lparam )
+{
+    HKEY hkey;
+    DWORD len_sysdir, len_path, len, index = 0;
+    WCHAR sysdir[MAX_PATH], *profile;
+    LONG res;
+    INT ret;
+
+    TRACE("%p, %p, %ld\n", physDev, proc, lparam);
+
+    if (RegOpenKeyExW( HKEY_LOCAL_MACHINE, mntr_key, 0, KEY_ALL_ACCESS, &hkey ))
+        return -1;
+
+    len_sysdir = GetSystemDirectoryW( sysdir, MAX_PATH );
+    len_path = len_sysdir + sizeof(color_path) / sizeof(color_path[0]) - 1;
+    len = 64;
+    for (;;)
+    {
+        if (!(profile = HeapAlloc( GetProcessHeap(), 0, (len_path + len) * sizeof(WCHAR) )))
+        {
+            RegCloseKey( hkey );
+            return -1;
+        }
+        res = RegEnumValueW( hkey, index, profile + len_path, &len, NULL, NULL, NULL, NULL );
+        while (res == ERROR_MORE_DATA)
+        {
+            len *= 2;
+            HeapFree( GetProcessHeap(), 0, profile );
+            if (!(profile = HeapAlloc( GetProcessHeap(), 0, (len_path + len) * sizeof(WCHAR) )))
+            {
+                RegCloseKey( hkey );
+                return -1;
+            }
+            res = RegEnumValueW( hkey, index, profile + len_path, &len, NULL, NULL, NULL, NULL );
+        }
+        if (res != ERROR_SUCCESS)
+        {
+            HeapFree( GetProcessHeap(), 0, profile );
+            break;
+        }
+        memcpy( profile, sysdir, len_sysdir * sizeof(WCHAR) );
+        memcpy( profile + len_sysdir, color_path, sizeof(color_path) - sizeof(WCHAR) );
+        ret = proc( profile, lparam );
+        HeapFree( GetProcessHeap(), 0, profile );
+        if (!ret) break;
+        index++;
+    }
+    RegCloseKey( hkey );
+    return -1;
 }

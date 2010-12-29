@@ -17,18 +17,17 @@
  */
 
 #ifndef __RPCNDR_H_VERSION__
-/* FIXME: What version?   Perhaps something is better than nothing, however incorrect */
-#define __RPCNDR_H_VERSION__ ( 399 )
+#define __RPCNDR_H_VERSION__ ( 500 )
 #endif
 
 #ifndef __WINE_RPCNDR_H
 #define __WINE_RPCNDR_H
 
+#include <basetsd.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include <basetsd.h>
 
 #undef CONST_VTBL
 #ifdef CONST_VTABLE
@@ -110,6 +109,9 @@ typedef unsigned char boolean;
 #define MIDL_memset(d,v,n) memset(d,v,n)
 #define midl_user_free MIDL_user_free
 #define midl_user_allocate MIDL_user_allocate
+
+void * __RPC_USER MIDL_user_allocate(SIZE_T);
+void __RPC_USER MIDL_user_free(void *);
 
 #define NdrFcShort(s) (unsigned char)(s & 0xff), (unsigned char)(s >> 8)
 #define NdrFcLong(s)  (unsigned char)(s & 0xff), (unsigned char)((s & 0x0000ff00) >> 8), \

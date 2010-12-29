@@ -27,6 +27,7 @@
 #include "windef.h"
 #include "winternl.h"
 #include "msvcrt.h"
+#include "winnls.h"
 #include "excpt.h"
 #include "wine/debug.h"
 
@@ -204,6 +205,48 @@ MSVCRT_ulong* CDECL MSVCRT___doserrno(void)
 }
 
 /*********************************************************************
+ *		_get_errno (MSVCRT.@)
+ */
+int CDECL _get_errno(int *pValue)
+{
+    if (!pValue)
+        return MSVCRT_EINVAL;
+
+    *pValue = *MSVCRT__errno();
+    return 0;
+}
+
+/*********************************************************************
+ *		_get_doserrno (MSVCRT.@)
+ */
+int CDECL _get_doserrno(int *pValue)
+{
+    if (!pValue)
+        return MSVCRT_EINVAL;
+
+    *pValue = *MSVCRT___doserrno();
+    return 0;
+}
+
+/*********************************************************************
+ *		_set_errno (MSVCRT.@)
+ */
+int CDECL _set_errno(int value)
+{
+    *MSVCRT__errno() = value;
+    return 0;
+}
+
+/*********************************************************************
+ *		_set_doserrno (MSVCRT.@)
+ */
+int CDECL _set_doserrno(int value)
+{
+    *MSVCRT___doserrno() = value;
+    return 0;
+}
+
+/*********************************************************************
  *		strerror (MSVCRT.@)
  */
 char* CDECL MSVCRT_strerror(int err)
@@ -216,6 +259,33 @@ char* CDECL MSVCRT_strerror(int err)
     if (err < 0 || err > MSVCRT__sys_nerr) err = MSVCRT__sys_nerr;
     strcpy( data->strerror_buffer, MSVCRT__sys_errlist[err] );
     return data->strerror_buffer;
+}
+
+/**********************************************************************
+ *		strerror_s	(MSVCRT.@)
+ */
+int CDECL strerror_s(char *buffer, MSVCRT_size_t numberOfElements, int errnum)
+{
+    char *ptr;
+
+    if (!buffer || !numberOfElements)
+    {
+        *MSVCRT__errno() = MSVCRT_EINVAL;
+        return MSVCRT_EINVAL;
+    }
+
+    if (errnum < 0 || errnum > MSVCRT__sys_nerr)
+        errnum = MSVCRT__sys_nerr;
+
+    ptr = MSVCRT__sys_errlist[errnum];
+    while (*ptr && numberOfElements > 1)
+    {
+        *buffer++ = *ptr++;
+        numberOfElements--;
+    }
+
+    *buffer = '\0';
+    return 0;
 }
 
 /**********************************************************************
@@ -255,6 +325,85 @@ void CDECL MSVCRT_perror(const char* str)
     }
     MSVCRT__write( 2, MSVCRT__sys_errlist[err], strlen(MSVCRT__sys_errlist[err]) );
     MSVCRT__write( 2, "\n", 1 );
+}
+
+/*********************************************************************
+ *		_wcserror_s (MSVCRT.@)
+ */
+int CDECL _wcserror_s(MSVCRT_wchar_t* buffer, MSVCRT_size_t nc, int err)
+{
+    if (!MSVCRT_CHECK_PMT(buffer != NULL) || !MSVCRT_CHECK_PMT(nc > 0))
+    {
+        _set_errno(MSVCRT_EINVAL);
+        return MSVCRT_EINVAL;
+    }
+    if (err < 0 || err > MSVCRT__sys_nerr) err = MSVCRT__sys_nerr;
+    MultiByteToWideChar(CP_ACP, 0, MSVCRT__sys_errlist[err], -1, buffer, nc);
+    return 0;
+}
+
+/*********************************************************************
+ *		_wcserror (MSVCRT.@)
+ */
+MSVCRT_wchar_t* CDECL _wcserror(int err)
+{
+    thread_data_t *data = msvcrt_get_thread_data();
+
+    if (!data->wcserror_buffer)
+        if (!(data->wcserror_buffer = MSVCRT_malloc(256 * sizeof(MSVCRT_wchar_t)))) return NULL;
+    _wcserror_s(data->wcserror_buffer, 256, err);
+    return data->wcserror_buffer;
+}
+
+/**********************************************************************
+ *		__wcserror_s	(MSVCRT.@)
+ */
+int CDECL __wcserror_s(MSVCRT_wchar_t* buffer, MSVCRT_size_t nc, const MSVCRT_wchar_t* str)
+{
+    int err;
+    static const WCHAR colonW[] = {':', ' ', '\0'};
+    static const WCHAR nlW[] = {'\n', '\0'};
+    size_t len;
+
+    err = *MSVCRT__errno();
+    if (err < 0 || err > MSVCRT__sys_nerr) err = MSVCRT__sys_nerr;
+
+    len = MultiByteToWideChar(CP_ACP, 0, MSVCRT__sys_errlist[err], -1, NULL, 0) + 1 /* \n */;
+    if (str && *str) len += lstrlenW(str) + 2 /* ': ' */;
+    if (len > nc)
+    {
+        MSVCRT_INVALID_PMT("buffer[nc] is too small");
+        _set_errno(MSVCRT_ERANGE);
+        return MSVCRT_ERANGE;
+    }
+    if (str && *str)
+    {
+        lstrcpyW(buffer, str);
+        lstrcatW(buffer, colonW);
+    }
+    else buffer[0] = '\0';
+    len = lstrlenW(buffer);
+    MultiByteToWideChar(CP_ACP, 0, MSVCRT__sys_errlist[err], -1, buffer + len, 256 - len);
+    lstrcatW(buffer, nlW);
+
+    return 0;
+}
+
+/**********************************************************************
+ *		__wcserror	(MSVCRT.@)
+ */
+MSVCRT_wchar_t* CDECL __wcserror(const MSVCRT_wchar_t* str)
+{
+    thread_data_t *data = msvcrt_get_thread_data();
+    int err;
+
+    if (!data->wcserror_buffer)
+        if (!(data->wcserror_buffer = MSVCRT_malloc(256 * sizeof(MSVCRT_wchar_t)))) return NULL;
+
+    err = __wcserror_s(data->wcserror_buffer, 256, str);
+    if (err) FIXME("bad wcserror call (%d)\n", err);
+
+    return data->wcserror_buffer;
 }
 
 /******************************************************************************

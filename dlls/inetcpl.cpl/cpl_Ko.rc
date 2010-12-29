@@ -1,0 +1,65 @@
+/*
+ * Internet control panel applet
+ *
+ * Copyright 2010 Detlef Riekenberg
+ * Copyright 2010 YunSong Hwang
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
+ *
+ */
+
+#include "inetcpl.h"
+
+#pragma code_page(65001)
+
+LANGUAGE LANG_KOREAN, SUBLANG_DEFAULT
+
+STRINGTABLE DISCARDABLE
+BEGIN
+    IDS_CPL_NAME        "인터넷 설정"
+    IDS_CPL_INFO        "Wine 인터넷 브라우저와 관련 설정 처리"
+END
+
+/* "General" propsheet */
+IDD_GENERAL DIALOG  0, 0, 320, 220
+STYLE WS_CAPTION | WS_CHILD | WS_DISABLED
+FONT 8, "MS Shell Dlg"
+CAPTION "일반"
+BEGIN
+
+    GROUPBOX    " 홈 페이지 ", IDC_STATIC, 4, 4, 312, 52
+    LTEXT       "홈페이지로 사용할 주소를 선택할 수 있습니다.",
+                IDC_STATIC, 58, 10, 252, 10
+    EDITTEXT    IDC_HOME_EDIT, 58, 22, 252, 12, WS_VISIBLE | ES_AUTOHSCROLL
+    PUSHBUTTON  "현재 페이지(&C)", IDC_HOME_CURRENT, 58, 36, 80, 14
+    PUSHBUTTON  "기본 페이지(&D)", IDC_HOME_DEFAULT, 144, 36, 80, 14
+    PUSHBUTTON  "빈 페이지(&B)", IDC_HOME_BLANK, 230, 36, 80, 14
+
+END
+
+/* "Content" propsheet */
+IDD_CONTENT DIALOG  0, 0, 320, 220
+STYLE WS_CAPTION | WS_CHILD | WS_DISABLED
+FONT 8, "MS Shell Dlg"
+CAPTION "내용"
+BEGIN
+
+    GROUPBOX    " 인증서 ", IDC_STATIC, 4, 4, 312, 50
+    LTEXT       " 인증서는 당신의 개인 식별과 인증기관과 게시자 식별에 사용됩니다.",
+                IDC_STATIC, 58, 14, 252, 18
+    PUSHBUTTON  "인증서...", IDC_CERT, 146, 34, 80, 14
+    PUSHBUTTON	"발행자...", IDC_CERT_PUBLISHER, 230, 34, 80, 14
+
+END

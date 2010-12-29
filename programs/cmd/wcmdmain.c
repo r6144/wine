@@ -76,6 +76,7 @@ const WCHAR inbuilt[][10] = {
         {'C','O','L','O','R','\0'},
         {'F','T','Y','P','E','\0'},
         {'M','O','R','E','\0'},
+        {'C','H','O','I','C','E','\0'},
         {'E','X','I','T','\0'}
 };
 
@@ -1543,6 +1544,9 @@ void WCMD_execute (WCHAR *command, WCHAR *redirects,
       case WCMD_MORE:
         WCMD_more(p);
         break;
+      case WCMD_CHOICE:
+        WCMD_choice(p);
+        break;
       case WCMD_EXIT:
         WCMD_exit (cmdList);
         break;
@@ -1779,8 +1783,11 @@ WCHAR *WCMD_ReadAndParseLine(WCHAR *optionalcmd, CMD_LIST **output, HANDLE readF
     if (context) handleExpansion(extraSpace, FALSE, NULL, NULL);
     /* Show prompt before batch line IF echo is on and in batch program */
     if (context && echo_mode && extraSpace[0] && (extraSpace[0] != '@')) {
+      const WCHAR spc[]={' ','\0'};
       WCMD_show_prompt();
       WCMD_output_asis(extraSpace);
+      /* I don't know why Windows puts a space here but it does */
+      WCMD_output_asis(spc);
       WCMD_output_asis(newline);
     }
 

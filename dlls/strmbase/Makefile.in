@@ -1,0 +1,13 @@
+MODULE    = strmbase
+
+C_SRCS = \
+	dllfunc.c \
+	enumpins.c \
+	filter.c \
+	mediatype.c \
+	pin.c \
+	qualitycontrol.c \
+	seeking.c \
+	transform.c
+
+@MAKE_IMPLIB_RULES@

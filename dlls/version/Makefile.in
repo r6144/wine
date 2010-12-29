@@ -1,10 +1,5 @@
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = version.dll
 IMPORTLIB = version
-IMPORTS   = lz32
 
 C_SRCS = \
 	info.c \

@@ -74,29 +74,33 @@ static ULONG  WINAPI IWineD3DPaletteImpl_Release(IWineD3DPalette *iface) {
 }
 
 /* Not called from the vtable */
-static DWORD IWineD3DPaletteImpl_Size(DWORD dwFlags)
+static WORD IWineD3DPaletteImpl_Size(DWORD flags)
 {
-    switch (dwFlags & SIZE_BITS) {
+    switch (flags & SIZE_BITS)
+    {
         case WINEDDPCAPS_1BIT: return 2;
         case WINEDDPCAPS_2BIT: return 4;
         case WINEDDPCAPS_4BIT: return 16;
         case WINEDDPCAPS_8BIT: return 256;
         default:
-            FIXME("Unhandled size bits %#x.\n", dwFlags & SIZE_BITS);
+            FIXME("Unhandled size bits %#x.\n", flags & SIZE_BITS);
             return 256;
     }
 }
 
-static HRESULT  WINAPI IWineD3DPaletteImpl_GetEntries(IWineD3DPalette *iface, DWORD Flags, DWORD Start, DWORD Count, PALETTEENTRY *PalEnt) {
+static HRESULT WINAPI IWineD3DPaletteImpl_GetEntries(IWineD3DPalette *iface,
+        DWORD flags, DWORD Start, DWORD Count, PALETTEENTRY *PalEnt)
+{
     IWineD3DPaletteImpl *This = (IWineD3DPaletteImpl *)iface;
 
-    TRACE("(%p)->(%08x,%d,%d,%p)\n",This,Flags,Start,Count,PalEnt);
+    TRACE("iface %p, flags %#x, start %u, count %u, entries %p.\n",
+            iface, flags, Start, Count, PalEnt);
 
-    if (Flags != 0) return WINED3DERR_INVALIDCALL; /* unchecked */
-    if (Start + Count > IWineD3DPaletteImpl_Size(This->Flags))
+    if (flags) return WINED3DERR_INVALIDCALL; /* unchecked */
+    if (Start + Count > IWineD3DPaletteImpl_Size(This->flags))
         return WINED3DERR_INVALIDCALL;
 
-    if (This->Flags & WINEDDPCAPS_8BITENTRIES)
+    if (This->flags & WINEDDPCAPS_8BITENTRIES)
     {
         unsigned int i;
         LPBYTE entry = (LPBYTE)PalEnt;
@@ -111,15 +115,17 @@ static HRESULT  WINAPI IWineD3DPaletteImpl_GetEntries(IWineD3DPalette *iface, DW
 }
 
 static HRESULT  WINAPI IWineD3DPaletteImpl_SetEntries(IWineD3DPalette *iface,
-        DWORD Flags, DWORD Start, DWORD Count, const PALETTEENTRY *PalEnt)
+        DWORD flags, DWORD Start, DWORD Count, const PALETTEENTRY *PalEnt)
 {
     IWineD3DPaletteImpl *This = (IWineD3DPaletteImpl *)iface;
     IWineD3DResourceImpl *res;
 
-    TRACE("(%p)->(%08x,%d,%d,%p)\n",This,Flags,Start,Count,PalEnt);
-    TRACE("Palette flags: %#x\n", This->Flags);
+    TRACE("iface %p, flags %#x, start %u, count %u, entries %p.\n",
+            iface, flags, Start, Count, PalEnt);
+    TRACE("Palette flags: %#x.\n", This->flags);
 
-    if (This->Flags & WINEDDPCAPS_8BITENTRIES) {
+    if (This->flags & WINEDDPCAPS_8BITENTRIES)
+    {
         unsigned int i;
         const BYTE* entry = (const BYTE*)PalEnt;
 
@@ -130,7 +136,7 @@ static HRESULT  WINAPI IWineD3DPaletteImpl_SetEntries(IWineD3DPalette *iface,
         memcpy(This->palents+Start, PalEnt, Count * sizeof(PALETTEENTRY));
 
         /* When WINEDDCAPS_ALLOW256 isn't set we need to override entry 0 with black and 255 with white */
-        if(!(This->Flags & WINEDDPCAPS_ALLOW256))
+        if (!(This->flags & WINEDDPCAPS_ALLOW256))
         {
             TRACE("WINEDDPCAPS_ALLOW256 set, overriding palette entry 0 with black and 255 with white\n");
             This->palents[0].peRed = 0;
@@ -149,8 +155,8 @@ static HRESULT  WINAPI IWineD3DPaletteImpl_SetEntries(IWineD3DPalette *iface,
 #if 0
     /* Now, if we are in 'depth conversion mode', update the screen palette */
     /* FIXME: we need to update the image or we won't get palette fading. */
-    if (This->ddraw->d->palette_convert != NULL)
-        This->ddraw->d->palette_convert(palent,This->screen_palents,start,count);
+    if (This->ddraw->d->palette_convert)
+            This->ddraw->d->palette_convert(palent,This->screen_palents,start,count);
 #endif
 
     /* If the palette is attached to the render target, update all render targets */
@@ -171,17 +177,15 @@ static HRESULT  WINAPI IWineD3DPaletteImpl_GetCaps(IWineD3DPalette *iface, DWORD
     IWineD3DPaletteImpl *This = (IWineD3DPaletteImpl *)iface;
     TRACE("(%p)->(%p)\n", This, Caps);
 
-    *Caps = This->Flags;
+    *Caps = This->flags;
     return WINED3D_OK;
 }
 
-static HRESULT  WINAPI IWineD3DPaletteImpl_GetParent(IWineD3DPalette *iface, IUnknown **Parent) {
-    IWineD3DPaletteImpl *This = (IWineD3DPaletteImpl *)iface;
-    TRACE("(%p)->(%p)\n", This, Parent);
+static void * WINAPI IWineD3DPaletteImpl_GetParent(IWineD3DPalette *iface)
+{
+    TRACE("iface %p.\n", iface);
 
-    *Parent = This->parent;
-    IUnknown_AddRef(This->parent);
-    return WINED3D_OK;
+    return ((IWineD3DPaletteImpl *)iface)->parent;
 }
 
 static const IWineD3DPaletteVtbl IWineD3DPalette_Vtbl =
@@ -198,7 +202,7 @@ static const IWineD3DPaletteVtbl IWineD3DPalette_Vtbl =
 };
 
 HRESULT wined3d_palette_init(IWineD3DPaletteImpl *palette, IWineD3DDeviceImpl *device,
-        DWORD flags, const PALETTEENTRY *entries, IUnknown *parent)
+        DWORD flags, const PALETTEENTRY *entries, void *parent)
 {
     HRESULT hr;
 
@@ -206,7 +210,7 @@ HRESULT wined3d_palette_init(IWineD3DPaletteImpl *palette, IWineD3DDeviceImpl *d
     palette->ref = 1;
     palette->parent = parent;
     palette->device = device;
-    palette->Flags = flags;
+    palette->flags = flags;
 
     palette->palNumEntries = IWineD3DPaletteImpl_Size(flags);
     palette->hpal = CreatePalette((const LOGPALETTE *)&palette->palVersion);

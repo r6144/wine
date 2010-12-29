@@ -155,7 +155,7 @@ struct find_s {
 };
 
 
-struct find_s find_tests[] = {
+static struct find_s find_tests[] = {
   /* Find in empty text */
   {0, -1, "foo", FR_DOWN, -1},
   {0, -1, "foo", 0, -1},
@@ -164,7 +164,7 @@ struct find_s find_tests[] = {
   {5, 20, "foo", FR_DOWN, -1}
 };
 
-struct find_s find_tests2[] = {
+static struct find_s find_tests2[] = {
   /* No-result find */
   {0, -1, "foo", FR_DOWN | FR_MATCHCASE, -1},
   {5, 20, "WINE", FR_DOWN | FR_MATCHCASE, -1},
@@ -1053,6 +1053,11 @@ static void test_EM_SETTEXTMODE(void)
   CHARRANGE cr;
   int rc = 0;
 
+  /*Attempt to use mutually exclusive modes*/
+  rc = SendMessage(hwndRichEdit, EM_SETTEXTMODE, (WPARAM) TM_PLAINTEXT|TM_RICHTEXT, 0);
+  ok(rc == E_INVALIDARG,
+     "EM_SETTEXTMODE: using mutually exclusive mode flags - returned: %x\n", rc);
+
   /*Test that EM_SETTEXTMODE fails if text exists within the control*/
   /*Insert text into the control*/
 
@@ -1060,7 +1065,8 @@ static void test_EM_SETTEXTMODE(void)
 
   /*Attempt to change the control to plain text mode*/
   rc = SendMessage(hwndRichEdit, EM_SETTEXTMODE, (WPARAM) TM_PLAINTEXT, 0);
-  ok(rc != 0, "EM_SETTEXTMODE: changed text mode in control containing text - returned: %d\n", rc);
+  ok(rc == E_UNEXPECTED,
+     "EM_SETTEXTMODE: changed text mode in control containing text - returned: %x\n", rc);
 
   /*Test that EM_SETTEXTMODE does not allow rich edit text to be pasted.
   If rich text is pasted, it should have the same formatting as the rest
@@ -2440,10 +2446,10 @@ static void test_EM_SCROLL(void)
   DestroyWindow(hwndRichEdit);
 }
 
-unsigned int recursionLevel = 0;
-unsigned int WM_SIZE_recursionLevel = 0;
-BOOL bailedOutOfRecursion = FALSE;
-LRESULT (WINAPI *richeditProc)(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
+static unsigned int recursionLevel = 0;
+static unsigned int WM_SIZE_recursionLevel = 0;
+static BOOL bailedOutOfRecursion = FALSE;
+static LRESULT (WINAPI *richeditProc)(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
 
 static LRESULT WINAPI RicheditStupidOverrideProcA(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 {

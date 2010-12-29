@@ -406,7 +406,23 @@ BOOL WINAPI ReadFile( HANDLE hFile, LPVOID buffer, DWORD bytesToRead,
     if (!bytesToRead) return TRUE;
 
     if (is_console_handle(hFile))
-        return ReadConsoleA(hFile, buffer, bytesToRead, bytesRead, NULL);
+    {
+        DWORD conread, mode;
+        if (!ReadConsoleA(hFile, buffer, bytesToRead, &conread, NULL) ||
+            !GetConsoleMode(hFile, &mode))
+            return FALSE;
+        /* ctrl-Z (26) means end of file on window (if at beginning of buffer)
+         * but Unix uses ctrl-D (4), and ctrl-Z is a bad idea on Unix :-/
+         * So map both ctrl-D ctrl-Z to EOF.
+         */
+        if ((mode & ENABLE_PROCESSED_INPUT) && conread > 0 &&
+            (((char*)buffer)[0] == 26 || ((char*)buffer)[0] == 4))
+        {
+            conread = 0;
+        }
+        if (bytesRead) *bytesRead = conread;
+        return TRUE;
+    }
 
     if (overlapped != NULL)
     {
@@ -1001,6 +1017,16 @@ error:
 }
 
 /***********************************************************************
+ *           SetFileValidData   (KERNEL32.@)
+ */
+BOOL WINAPI SetFileValidData( HANDLE hFile, LONGLONG ValidDataLength )
+{
+    FIXME("stub: %p, %s\n", hFile, wine_dbgstr_longlong(ValidDataLength));
+    SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
+    return FALSE;
+}
+
+/***********************************************************************
  *           GetFileTime   (KERNEL32.@)
  */
 BOOL WINAPI GetFileTime( HANDLE hFile, FILETIME *lpCreationTime,
@@ -1182,7 +1208,7 @@ BOOL WINAPI UnlockFileEx( HANDLE hFile, DWORD reserved, DWORD count_low, DWORD c
  */
 UINT WINAPI SetHandleCount( UINT count )
 {
-    return min( 256, count );
+    return count;
 }
 
 

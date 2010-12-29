@@ -29,12 +29,16 @@
 #include "fdi.h"
 #include "msi.h"
 #include "msiquery.h"
+#include "msidefs.h"
 #include "objbase.h"
 #include "objidl.h"
+#include "fusion.h"
 #include "winnls.h"
 #include "winver.h"
 #include "wine/list.h"
 #include "wine/debug.h"
+
+static const BOOL is_64bit = sizeof(void *) > sizeof(int);
 
 #define MSI_DATASIZEMASK 0x00ff
 #define MSITYPE_VALID    0x0100
@@ -45,6 +49,7 @@
 #define MSITYPE_TEMPORARY 0x4000
 
 #define MAX_STREAM_NAME_LEN     62
+#define LONG_STR_BYTES  3
 
 /* Install UI level mask for AND operation to exclude flags */
 #define INSTALLUILEVEL_MASK             0x0007
@@ -103,6 +108,7 @@ typedef struct tagMSIFIELD
     union
     {
         INT iVal;
+        INT_PTR pVal;
         LPWSTR szwVal;
         IStream *stream;
     } u;
@@ -156,6 +162,14 @@ typedef struct tagMSIPATCHINFO
     LPWSTR localfile;
     MSIPATCHSTATE state;
 } MSIPATCHINFO;
+
+typedef struct tagMSIBINARY
+{
+    struct list entry;
+    WCHAR *source;
+    WCHAR *tmpfile;
+    HMODULE module;
+} MSIBINARY;
 
 typedef struct _column_info
 {
@@ -303,18 +317,33 @@ struct tagMSIVIEW
 struct msi_dialog_tag;
 typedef struct msi_dialog_tag msi_dialog;
 
+enum platform
+{
+    PLATFORM_INTEL,
+    PLATFORM_INTEL64,
+    PLATFORM_X64
+};
+
 typedef struct tagMSIPACKAGE
 {
     MSIOBJECTHDR hdr;
     MSIDATABASE *db;
+    INT version;
+    enum platform platform;
+    UINT num_langids;
+    LANGID *langids;
     struct list patches;
     struct list components;
     struct list features;
     struct list files;
     struct list tempfiles;
     struct list folders;
+    struct list binaries;
     LPWSTR ActionFormat;
     LPWSTR LastAction;
+    HANDLE log_file;
+    IAssemblyCache *cache_net;
+    IAssemblyCache *cache_sxs;
 
     struct list classes;
     struct list extensions;
@@ -385,10 +414,20 @@ typedef struct tagMSIFEATURE
     struct list Components;
 } MSIFEATURE;
 
+typedef struct tagMSIASSEMBLY
+{
+    LPWSTR feature;
+    LPWSTR manifest;
+    LPWSTR application;
+    DWORD attributes;
+    LPWSTR display_name;
+    LPWSTR tempdir;
+    BOOL installed;
+} MSIASSEMBLY;
+
 typedef struct tagMSICOMPONENT
 {
     struct list entry;
-    DWORD magic;
     LPWSTR Component;
     LPWSTR ComponentId;
     LPWSTR Directory;
@@ -404,6 +443,7 @@ typedef struct tagMSICOMPONENT
     INT  RefCount;
     LPWSTR FullKeypath;
     LPWSTR AdvertiseString;
+    MSIASSEMBLY *assembly;
 
     unsigned int anyAbsent:1;
     unsigned int hasAdvertiseFeature:1;
@@ -595,28 +635,14 @@ typedef struct tagMSISCRIPT
 #define MSIHANDLETYPE_PACKAGE 5
 #define MSIHANDLETYPE_PREVIEW 6
 
-#define MSI_MAJORVERSION 3
-#define MSI_MINORVERSION 1
-#define MSI_BUILDNUMBER 4000
+#define MSI_MAJORVERSION 4
+#define MSI_MINORVERSION 5
+#define MSI_BUILDNUMBER 6001
 
 #define GUID_SIZE 39
 #define SQUISH_GUID_SIZE 33
 
 #define MSIHANDLE_MAGIC 0x4d434923
-
-DEFINE_GUID(CLSID_IMsiServer,   0x000C101C,0x0000,0x0000,0xC0,0x00,0x00,0x00,0x00,0x00,0x00,0x46);
-DEFINE_GUID(CLSID_IMsiServerX1, 0x000C103E,0x0000,0x0000,0xC0,0x00,0x00,0x00,0x00,0x00,0x00,0x46);
-DEFINE_GUID(CLSID_IMsiServerX2, 0x000C1090,0x0000,0x0000,0xC0,0x00,0x00,0x00,0x00,0x00,0x00,0x46);
-DEFINE_GUID(CLSID_IMsiServerX3, 0x000C1094,0x0000,0x0000,0xC0,0x00,0x00,0x00,0x00,0x00,0x00,0x46);
-
-DEFINE_GUID(CLSID_IMsiServerMessage, 0x000C101D,0x0000,0x0000,0xC0,0x00,0x00,0x00,0x00,0x00,0x00,0x46);
-
-DEFINE_GUID(CLSID_IWineMsiRemoteCustomAction,0xBA26E6FA,0x4F27,0x4f56,0x95,0x3A,0x3F,0x90,0x27,0x20,0x18,0xAA);
-DEFINE_GUID(CLSID_IWineMsiRemotePackage,0x902b3592,0x9d08,0x4dfd,0xa5,0x93,0xd0,0x7c,0x52,0x54,0x64,0x21);
-
-DEFINE_GUID(CLSID_MsiTransform, 0x000c1082,0x0000,0x0000,0xc0,0x00,0x00,0x00,0x00,0x00,0x00,0x46);
-DEFINE_GUID(CLSID_MsiDatabase,  0x000c1084,0x0000,0x0000,0xc0,0x00,0x00,0x00,0x00,0x00,0x00,0x46);
-DEFINE_GUID(CLSID_MsiPatch,     0x000c1086,0x0000,0x0000,0xc0,0x00,0x00,0x00,0x00,0x00,0x00,0x46);
 
 /* handle unicode/ascii output in the Msi* API functions */
 typedef struct {
@@ -672,7 +698,9 @@ extern VOID msi_destroy_stringtable( string_table *st );
 extern const WCHAR *msi_string_lookup_id( const string_table *st, UINT id );
 extern HRESULT msi_init_string_table( IStorage *stg );
 extern string_table *msi_load_string_table( IStorage *stg, UINT *bytes_per_strref );
-extern UINT msi_save_string_table( const string_table *st, IStorage *storage );
+extern UINT msi_save_string_table( const string_table *st, IStorage *storage, UINT *bytes_per_strref );
+extern UINT msi_get_string_table_codepage( const string_table *st );
+extern UINT msi_set_string_table_codepage( string_table *st, UINT codepage );
 
 extern BOOL TABLE_Exists( MSIDATABASE *db, LPCWSTR name );
 extern MSICONDITION MSI_DatabaseIsTablePersistent( MSIDATABASE *db, LPCWSTR table );
@@ -709,11 +737,13 @@ extern UINT MSI_RecordGetIStream( MSIRECORD *, UINT, IStream **);
 extern const WCHAR *MSI_RecordGetString( const MSIRECORD *, UINT );
 extern MSIRECORD *MSI_CreateRecord( UINT );
 extern UINT MSI_RecordSetInteger( MSIRECORD *, UINT, int );
+extern UINT MSI_RecordSetIntPtr( MSIRECORD *, UINT, INT_PTR );
 extern UINT MSI_RecordSetStringW( MSIRECORD *, UINT, LPCWSTR );
 extern BOOL MSI_RecordIsNull( MSIRECORD *, UINT );
 extern UINT MSI_RecordGetStringW( MSIRECORD * , UINT, LPWSTR, LPDWORD);
 extern UINT MSI_RecordGetStringA( MSIRECORD *, UINT, LPSTR, LPDWORD);
 extern int MSI_RecordGetInteger( MSIRECORD *, UINT );
+extern INT_PTR MSI_RecordGetIntPtr( MSIRECORD *, UINT );
 extern UINT MSI_RecordReadStream( MSIRECORD *, UINT, char *, LPDWORD);
 extern UINT MSI_RecordSetStream(MSIRECORD *, UINT, IStream *);
 extern UINT MSI_RecordGetFieldCount( const MSIRECORD *rec );
@@ -765,7 +795,7 @@ extern UINT msi_package_add_info(MSIPACKAGE *, DWORD, DWORD, LPCWSTR, LPWSTR);
 extern UINT msi_package_add_media_disk(MSIPACKAGE *, DWORD, DWORD, DWORD, LPWSTR, LPWSTR);
 extern UINT msi_clone_properties(MSIPACKAGE *);
 extern UINT msi_set_context(MSIPACKAGE *);
-extern void msi_adjust_allusers_property(MSIPACKAGE *);
+extern void msi_adjust_privilege_properties(MSIPACKAGE *);
 extern UINT MSI_GetFeatureCost(MSIPACKAGE *, MSIFEATURE *, MSICOSTTREE, INSTALLSTATE, LPINT);
 
 /* for deformating */
@@ -776,8 +806,8 @@ extern BOOL unsquash_guid(LPCWSTR in, LPWSTR out);
 extern BOOL squash_guid(LPCWSTR in, LPWSTR out);
 extern BOOL encode_base85_guid(GUID *,LPWSTR);
 extern BOOL decode_base85_guid(LPCWSTR,GUID*);
-extern UINT MSIREG_OpenUninstallKey(LPCWSTR szProduct, HKEY* key, BOOL create);
-extern UINT MSIREG_DeleteUninstallKey(LPCWSTR szProduct);
+extern UINT MSIREG_OpenUninstallKey(MSIPACKAGE *package, HKEY *key, BOOL create);
+extern UINT MSIREG_DeleteUninstallKey(MSIPACKAGE *package);
 extern UINT MSIREG_OpenProductKey(LPCWSTR szProduct, LPCWSTR szUserSid,
                                   MSIINSTALLCONTEXT context, HKEY* key, BOOL create);
 extern UINT MSIREG_OpenFeaturesKey(LPCWSTR szProduct, MSIINSTALLCONTEXT context,
@@ -843,6 +873,7 @@ extern UINT msi_spawn_error_dialog( MSIPACKAGE*, LPWSTR, LPWSTR );
 /* summary information */
 extern MSISUMMARYINFO *MSI_GetSummaryInformationW( IStorage *stg, UINT uiUpdateCount );
 extern LPWSTR msi_suminfo_dup_string( MSISUMMARYINFO *si, UINT uiProperty );
+extern INT msi_suminfo_get_int32( MSISUMMARYINFO *si, UINT uiProperty );
 extern LPWSTR msi_get_suminfo_product( IStorage *stg );
 extern UINT msi_add_suminfo( MSIDATABASE *db, LPWSTR **records, int num_records, int num_columns );
 
@@ -861,7 +892,7 @@ extern INSTALLUI_HANDLERW gUIHandlerW;
 extern INSTALLUI_HANDLER_RECORD gUIHandlerRecord;
 extern DWORD gUIFilter;
 extern LPVOID gUIContext;
-extern WCHAR gszLogFile[MAX_PATH];
+extern WCHAR *gszLogFile;
 extern HINSTANCE msi_hInstance;
 
 /* action related functions */
@@ -869,98 +900,6 @@ extern UINT ACTION_PerformAction(MSIPACKAGE *package, const WCHAR *action, UINT 
 extern UINT ACTION_PerformUIAction(MSIPACKAGE *package, const WCHAR *action, UINT script);
 extern void ACTION_FinishCustomActions( const MSIPACKAGE* package);
 extern UINT ACTION_CustomAction(MSIPACKAGE *package,const WCHAR *action, UINT script, BOOL execute);
-
-static inline void msi_feature_set_state(MSIPACKAGE *package,
-                                         MSIFEATURE *feature,
-                                         INSTALLSTATE state)
-{
-    if (!package->ProductCode)
-    {
-        feature->ActionRequest = state;
-        feature->Action = state;
-    }
-    else if (state == INSTALLSTATE_ABSENT)
-    {
-        switch (feature->Installed)
-        {
-            case INSTALLSTATE_ABSENT:
-                feature->ActionRequest = INSTALLSTATE_UNKNOWN;
-                feature->Action = INSTALLSTATE_UNKNOWN;
-                break;
-            default:
-                feature->ActionRequest = state;
-                feature->Action = state;
-        }
-    }
-    else if (state == INSTALLSTATE_SOURCE)
-    {
-        switch (feature->Installed)
-        {
-            case INSTALLSTATE_ABSENT:
-            case INSTALLSTATE_SOURCE:
-                feature->ActionRequest = state;
-                feature->Action = state;
-                break;
-            case INSTALLSTATE_LOCAL:
-                feature->ActionRequest = INSTALLSTATE_LOCAL;
-                feature->Action = INSTALLSTATE_LOCAL;
-                break;
-            default:
-                feature->ActionRequest = INSTALLSTATE_UNKNOWN;
-                feature->Action = INSTALLSTATE_UNKNOWN;
-        }
-    }
-    else
-    {
-        feature->ActionRequest = state;
-        feature->Action = state;
-    }
-}
-
-static inline void msi_component_set_state(MSIPACKAGE *package,
-                                           MSICOMPONENT *comp,
-                                           INSTALLSTATE state)
-{
-    if (!package->ProductCode)
-    {
-        comp->ActionRequest = state;
-        comp->Action = state;
-    }
-    else if (state == INSTALLSTATE_ABSENT)
-    {
-        switch (comp->Installed)
-        {
-            case INSTALLSTATE_LOCAL:
-            case INSTALLSTATE_SOURCE:
-            case INSTALLSTATE_DEFAULT:
-                comp->ActionRequest = state;
-                comp->Action = state;
-                break;
-            default:
-                comp->ActionRequest = INSTALLSTATE_UNKNOWN;
-                comp->Action = INSTALLSTATE_UNKNOWN;
-        }
-    }
-    else if (state == INSTALLSTATE_SOURCE)
-    {
-        if (comp->Installed == INSTALLSTATE_ABSENT ||
-            (comp->Installed == INSTALLSTATE_SOURCE && comp->hasLocalFeature))
-        {
-            comp->ActionRequest = state;
-            comp->Action = state;
-        }
-        else
-        {
-            comp->ActionRequest = INSTALLSTATE_UNKNOWN;
-            comp->Action = INSTALLSTATE_UNKNOWN;
-        }
-    }
-    else
-    {
-        comp->ActionRequest = state;
-        comp->Action = state;
-    }
-}
 
 /* actions in other modules */
 extern UINT ACTION_AppSearch(MSIPACKAGE *package);
@@ -981,6 +920,7 @@ extern UINT ACTION_UnregisterExtensionInfo(MSIPACKAGE *package);
 extern UINT ACTION_UnregisterFonts(MSIPACKAGE *package);
 extern UINT ACTION_UnregisterMIMEInfo(MSIPACKAGE *package);
 extern UINT ACTION_UnregisterProgIdInfo(MSIPACKAGE *package);
+extern UINT ACTION_MsiPublishAssemblies(MSIPACKAGE *package);
 
 /* Helpers */
 extern DWORD deformat_string(MSIPACKAGE *package, LPCWSTR ptr, WCHAR** data );
@@ -1005,7 +945,7 @@ extern LPWSTR build_directory_name(DWORD , ...);
 extern BOOL create_full_pathW(const WCHAR *path);
 extern void reduce_to_longfilename(WCHAR*);
 extern LPWSTR create_component_advertise_string(MSIPACKAGE*, MSICOMPONENT*, LPCWSTR);
-extern void ACTION_UpdateComponentStates(MSIPACKAGE *package, LPCWSTR szFeature);
+extern void ACTION_UpdateComponentStates(MSIPACKAGE *package, MSIFEATURE *feature);
 extern UINT register_unique_action(MSIPACKAGE *, LPCWSTR);
 extern BOOL check_unique_action(const MSIPACKAGE *, LPCWSTR);
 extern WCHAR* generate_error_string(MSIPACKAGE *, UINT, DWORD, ... );
@@ -1013,6 +953,10 @@ extern UINT msi_set_last_used_source(LPCWSTR product, LPCWSTR usersid,
                         MSIINSTALLCONTEXT context, DWORD options, LPCWSTR value);
 extern UINT msi_get_local_package_name(LPWSTR path, LPCWSTR suffix);
 extern UINT msi_set_sourcedir_props(MSIPACKAGE *package, BOOL replace);
+extern void msi_component_set_state(MSIPACKAGE *, MSICOMPONENT *, INSTALLSTATE);
+extern void msi_feature_set_state(MSIPACKAGE *, MSIFEATURE *, INSTALLSTATE);
+extern MSIASSEMBLY *load_assembly(MSIPACKAGE *, MSICOMPONENT *);
+extern UINT install_assembly(MSIPACKAGE *, MSICOMPONENT *);
 
 /* media */
 
@@ -1123,6 +1067,16 @@ static const WCHAR szMIMEDatabase[] = {'M','I','M','E','\\','D','a','t','a','b',
 static const WCHAR szLocalPackage[] = {'L','o','c','a','l','P','a','c','k','a','g','e',0};
 static const WCHAR szOriginalDatabase[] = {'O','r','i','g','i','n','a','l','D','a','t','a','b','a','s','e',0};
 static const WCHAR szUpgradeCode[] = {'U','p','g','r','a','d','e','C','o','d','e',0};
+static const WCHAR szAdminUser[] = {'A','d','m','i','n','U','s','e','r',0};
+static const WCHAR szIntel[] = {'I','n','t','e','l',0};
+static const WCHAR szIntel64[] = {'I','n','t','e','l','6','4',0};
+static const WCHAR szX64[] = {'x','6','4',0};
+static const WCHAR szAMD64[] = {'A','M','D','6','4',0};
+static const WCHAR szWow6432NodeCLSID[] = {'W','o','w','6','4','3','2','N','o','d','e','\\','C','L','S','I','D',0};
+static const WCHAR szWow6432Node[] = {'W','o','w','6','4','3','2','N','o','d','e',0};
+static const WCHAR szStreams[] = {'_','S','t','r','e','a','m','s',0};
+static const WCHAR szStorages[] = {'_','S','t','o','r','a','g','e','s',0};
+static const WCHAR szMsiPublishAssemblies[] = {'M','s','i','P','u','b','l','i','s','h','A','s','s','e','m','b','l','i','e','s',0};
 
 /* memory allocation macro functions */
 static void *msi_alloc( size_t len ) __WINE_ALLOC_SIZE(1);

@@ -27,6 +27,7 @@
 #include "winuser.h"
 #include "winreg.h"
 #include "ole2.h"
+#include "shlobj.h"
 
 #include "wine/debug.h"
 #include "wine/unicode.h"
@@ -52,28 +53,132 @@ WINE_DECLARE_DEBUG_CHANNEL(gecko);
 #define NS_STRING_CONTAINER_INIT_DEPEND  0x0002
 #define NS_CSTRING_CONTAINER_INIT_DEPEND 0x0002
 
-static nsresult (*NS_InitXPCOM2)(nsIServiceManager**,void*,void*);
-static nsresult (*NS_ShutdownXPCOM)(nsIServiceManager*);
-static nsresult (*NS_GetComponentRegistrar)(nsIComponentRegistrar**);
-static nsresult (*NS_StringContainerInit2)(nsStringContainer*,const PRUnichar*,PRUint32,PRUint32);
-static nsresult (*NS_CStringContainerInit2)(nsCStringContainer*,const char*,PRUint32,PRUint32);
-static nsresult (*NS_StringContainerFinish)(nsStringContainer*);
-static nsresult (*NS_CStringContainerFinish)(nsCStringContainer*);
-static nsresult (*NS_StringSetData)(nsAString*,const PRUnichar*,PRUint32);
-static nsresult (*NS_CStringSetData)(nsACString*,const char*,PRUint32);
-static nsresult (*NS_NewLocalFile)(const nsAString*,PRBool,nsIFile**);
-static PRUint32 (*NS_StringGetData)(const nsAString*,const PRUnichar **,PRBool*);
-static PRUint32 (*NS_CStringGetData)(const nsACString*,const char**,PRBool*);
+static nsresult (CDECL *NS_InitXPCOM2)(nsIServiceManager**,void*,void*);
+static nsresult (CDECL *NS_ShutdownXPCOM)(nsIServiceManager*);
+static nsresult (CDECL *NS_GetComponentRegistrar)(nsIComponentRegistrar**);
+static nsresult (CDECL *NS_StringContainerInit2)(nsStringContainer*,const PRUnichar*,PRUint32,PRUint32);
+static nsresult (CDECL *NS_CStringContainerInit2)(nsCStringContainer*,const char*,PRUint32,PRUint32);
+static nsresult (CDECL *NS_StringContainerFinish)(nsStringContainer*);
+static nsresult (CDECL *NS_CStringContainerFinish)(nsCStringContainer*);
+static nsresult (CDECL *NS_StringSetData)(nsAString*,const PRUnichar*,PRUint32);
+static nsresult (CDECL *NS_CStringSetData)(nsACString*,const char*,PRUint32);
+static nsresult (CDECL *NS_NewLocalFile)(const nsAString*,PRBool,nsIFile**);
+static PRUint32 (CDECL *NS_StringGetData)(const nsAString*,const PRUnichar **,PRBool*);
+static PRUint32 (CDECL *NS_CStringGetData)(const nsACString*,const char**,PRBool*);
 
 static HINSTANCE hXPCOM = NULL;
 
 static nsIServiceManager *pServMgr = NULL;
 static nsIComponentManager *pCompMgr = NULL;
 static nsIMemory *nsmem = NULL;
+static nsIFile *profile_directory;
 
 static const WCHAR wszNsContainer[] = {'N','s','C','o','n','t','a','i','n','e','r',0};
 
 static ATOM nscontainer_class;
+static WCHAR gecko_path[MAX_PATH];
+static unsigned gecko_path_len;
+
+static nsresult NSAPI nsDirectoryServiceProvider_QueryInterface(nsIDirectoryServiceProvider *iface,
+        nsIIDRef riid, void **result)
+{
+    if(IsEqualGUID(&IID_nsISupports, riid)) {
+        TRACE("(IID_nsISupports %p)\n", result);
+        *result = iface;
+    }else if(IsEqualGUID(&IID_nsIDirectoryServiceProvider, riid)) {
+        TRACE("(IID_nsIDirectoryServiceProvider %p)\n", result);
+        *result = iface;
+    }else {
+        WARN("(%s %p)\n", debugstr_guid(riid), result);
+        *result = NULL;
+        return NS_NOINTERFACE;
+    }
+
+    nsISupports_AddRef((nsISupports*)*result);
+    return NS_OK;
+}
+
+static nsrefcnt NSAPI nsDirectoryServiceProvider_AddRef(nsIDirectoryServiceProvider *iface)
+{
+    return 2;
+}
+
+static nsrefcnt NSAPI nsDirectoryServiceProvider_Release(nsIDirectoryServiceProvider *iface)
+{
+    return 1;
+}
+
+static nsresult create_profile_directory(void)
+{
+    static const WCHAR wine_geckoW[] = {'\\','w','i','n','e','_','g','e','c','k','o',0};
+
+    WCHAR path[MAX_PATH + sizeof(wine_geckoW)/sizeof(WCHAR)];
+    nsAString str;
+    PRBool exists;
+    nsresult nsres;
+    HRESULT hres;
+
+    hres = SHGetFolderPathW(NULL, CSIDL_APPDATA, NULL, SHGFP_TYPE_DEFAULT, path);
+    if(FAILED(hres)) {
+        ERR("SHGetFolderPath failed: %08x\n", hres);
+        return NS_ERROR_FAILURE;
+    }
+
+    strcatW(path, wine_geckoW);
+    nsAString_InitDepend(&str, path);
+    nsres = NS_NewLocalFile(&str, FALSE, &profile_directory);
+    nsAString_Finish(&str);
+    if(NS_FAILED(nsres)) {
+        ERR("NS_NewLocalFile failed: %08x\n", nsres);
+        return nsres;
+    }
+
+    nsres = nsIFile_Exists(profile_directory, &exists);
+    if(NS_FAILED(nsres)) {
+        ERR("Exists failed: %08x\n", nsres);
+        return nsres;
+    }
+
+    if(!exists) {
+        nsres = nsIFile_Create(profile_directory, 1, 0700);
+        if(NS_FAILED(nsres))
+            ERR("Create failed: %08x\n", nsres);
+    }
+
+    return nsres;
+}
+
+static nsresult NSAPI nsDirectoryServiceProvider_GetFile(nsIDirectoryServiceProvider *iface,
+        const char *prop, PRBool *persistent, nsIFile **_retval)
+{
+    TRACE("(%s %p %p)\n", debugstr_a(prop), persistent, _retval);
+
+    if(!strcmp(prop, "ProfD")) {
+        if(!profile_directory) {
+            nsresult nsres;
+
+            nsres = create_profile_directory();
+            if(NS_FAILED(nsres))
+                return nsres;
+        }
+
+        return nsIFile_Clone(profile_directory, _retval);
+    }
+
+    return NS_ERROR_FAILURE;
+}
+
+#undef NSWEAKREF_THIS
+
+static const nsIDirectoryServiceProviderVtbl nsDirectoryServiceProviderVtbl = {
+    nsDirectoryServiceProvider_QueryInterface,
+    nsDirectoryServiceProvider_AddRef,
+    nsDirectoryServiceProvider_Release,
+    nsDirectoryServiceProvider_GetFile
+};
+
+static nsIDirectoryServiceProvider nsDirectoryServiceProvider =
+    { &nsDirectoryServiceProviderVtbl };
 
 static LRESULT WINAPI nsembed_proc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
@@ -127,6 +232,44 @@ static void register_nscontainer_class(void)
     nscontainer_class = RegisterClassExW(&wndclass);
 }
 
+static BOOL install_wine_gecko(BOOL silent)
+{
+    PROCESS_INFORMATION pi;
+    STARTUPINFOW si;
+    WCHAR app[MAX_PATH];
+    WCHAR *args;
+    LONG len;
+    BOOL ret;
+
+    static const WCHAR controlW[] = {'\\','c','o','n','t','r','o','l','.','e','x','e',0};
+    static const WCHAR argsW[] =
+        {' ','a','p','p','w','i','z','.','c','p','l',' ','i','n','s','t','a','l','l','_','g','e','c','k','o',0};
+
+    len = GetSystemDirectoryW(app, MAX_PATH-sizeof(controlW)/sizeof(WCHAR));
+    memcpy(app+len, controlW, sizeof(controlW));
+
+    args = heap_alloc(len*sizeof(WCHAR) + sizeof(controlW) + sizeof(argsW));
+    if(!args)
+        return FALSE;
+
+    memcpy(args, app, len*sizeof(WCHAR) + sizeof(controlW));
+    memcpy(args + len + sizeof(controlW)/sizeof(WCHAR)-1, argsW, sizeof(argsW));
+
+    TRACE("starting %s\n", debugstr_w(args));
+
+    memset(&si, 0, sizeof(si));
+    si.cb = sizeof(si);
+    ret = CreateProcessW(app, args, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi);
+    heap_free(args);
+    if (ret) {
+        CloseHandle(pi.hThread);
+        WaitForSingleObject(pi.hProcess, INFINITE);
+        CloseHandle(pi.hProcess);
+    }
+
+    return ret;
+}
+
 static void set_environment(LPCWSTR gre_path)
 {
     WCHAR path_env[MAX_PATH], buf[20];
@@ -139,6 +282,8 @@ static void set_environment(LPCWSTR gre_path)
     static const WCHAR nspr_log_modulesW[] =
         {'N','S','P','R','_','L','O','G','_','M','O','D','U','L','E','S',0};
     static const WCHAR debug_formatW[] = {'a','l','l',':','%','d',0};
+    static const WCHAR moz_plugin_pathW[] = {'M','O','Z','_','P','L','U','G','I','N','_','P','A','T','H',0};
+    static const WCHAR gecko_pluginW[] = {'\\','g','e','c','k','o','\\','p','l','u','g','i','n',0};
 
     /* We have to modify PATH as XPCOM loads other DLLs from this directory. */
     GetEnvironmentVariableW(pathW, path_env, sizeof(path_env)/sizeof(WCHAR));
@@ -158,6 +303,12 @@ static void set_environment(LPCWSTR gre_path)
 
     sprintfW(buf, debug_formatW, debug_level);
     SetEnvironmentVariableW(nspr_log_modulesW, buf);
+
+    len = GetSystemDirectoryW(path_env, (sizeof(path_env)-sizeof(gecko_pluginW))/sizeof(WCHAR)+1);
+    if(len) {
+        strcpyW(path_env+len, gecko_pluginW);
+        SetEnvironmentVariableW(moz_plugin_pathW, path_env);
+    }
 }
 
 static BOOL load_xpcom(const PRUnichar *gre_path)
@@ -411,6 +562,7 @@ static BOOL init_xpcom(const PRUnichar *gre_path)
     nsIComponentRegistrar *registrar = NULL;
     nsAString path;
     nsIFile *gre_dir;
+    WCHAR *ptr;
 
     nsAString_InitDepend(&path, gre_path);
     nsres = NS_NewLocalFile(&path, FALSE, &gre_dir);
@@ -421,27 +573,29 @@ static BOOL init_xpcom(const PRUnichar *gre_path)
         return FALSE;
     }
 
-    nsres = NS_InitXPCOM2(&pServMgr, gre_dir, NULL);
+    nsres = NS_InitXPCOM2(&pServMgr, gre_dir, &nsDirectoryServiceProvider);
     if(NS_FAILED(nsres)) {
         ERR("NS_InitXPCOM2 failed: %08x\n", nsres);
         FreeLibrary(hXPCOM);
         return FALSE;
     }
 
+    strcpyW(gecko_path, gre_path);
+    for(ptr = gecko_path; *ptr; ptr++) {
+        if(*ptr == '\\')
+            *ptr = '/';
+    }
+    gecko_path_len = ptr-gecko_path;
+
     nsres = nsIServiceManager_QueryInterface(pServMgr, &IID_nsIComponentManager, (void**)&pCompMgr);
     if(NS_FAILED(nsres))
         ERR("Could not get nsIComponentManager: %08x\n", nsres);
 
     nsres = NS_GetComponentRegistrar(&registrar);
-    if(NS_SUCCEEDED(nsres)) {
-        nsres = nsIComponentRegistrar_AutoRegister(registrar, NULL);
-        if(NS_FAILED(nsres))
-            ERR("AutoRegister(NULL) failed: %08x\n", nsres);
-
+    if(NS_SUCCEEDED(nsres))
         init_nsio(pCompMgr, registrar);
-    }else {
+    else
         ERR("NS_GetComponentRegistrar failed: %08x\n", nsres);
-    }
 
     nsres = nsIComponentManager_CreateInstanceByContractID(pCompMgr, NS_APPSTARTUPNOTIFIER_CONTRACTID,
             NULL, &IID_nsIObserver, (void**)&pStartNotif);
@@ -579,6 +733,30 @@ void nsAString_Finish(nsAString *str)
     NS_StringContainerFinish(str);
 }
 
+HRESULT return_nsstr(nsresult nsres, nsAString *nsstr, BSTR *p)
+{
+    const PRUnichar *str;
+
+    if(NS_FAILED(nsres)) {
+        ERR("failed: %08x\n", nsres);
+        nsAString_Finish(nsstr);
+        return E_FAIL;
+    }
+
+    nsAString_GetData(nsstr, &str);
+    TRACE("ret %s\n", debugstr_w(str));
+    if(*str) {
+        *p = SysAllocString(str);
+        if(!*p)
+            return E_OUTOFMEMORY;
+    }else {
+        *p = NULL;
+    }
+
+    nsAString_Finish(nsstr);
+    return S_OK;
+}
+
 nsICommandParams *create_nscommand_params(void)
 {
     nsICommandParams *ret = NULL;
@@ -615,6 +793,7 @@ static HRESULT nsnode_to_nsstring_rec(nsIContentSerializer *serializer, nsIDOMNo
 {
     nsIDOMNodeList *node_list = NULL;
     PRBool has_children = FALSE;
+    nsIContent *nscontent;
     PRUint16 type;
     nsresult nsres;
 
@@ -626,32 +805,27 @@ static HRESULT nsnode_to_nsstring_rec(nsIContentSerializer *serializer, nsIDOMNo
         return E_FAIL;
     }
 
+    nsres = nsIDOMNode_QueryInterface(nsnode, &IID_nsIContent, (void**)&nscontent);
+    if(NS_FAILED(nsres)) {
+        ERR("Could not get nsIDontent interface: %08x\n", nsres);
+        return E_FAIL;
+    }
+
     switch(type) {
-    case ELEMENT_NODE: {
-        nsIDOMElement *nselem;
-        nsIDOMNode_QueryInterface(nsnode, &IID_nsIDOMElement, (void**)&nselem);
-        nsIContentSerializer_AppendElementStart(serializer, nselem, nselem, str);
-        nsIDOMElement_Release(nselem);
+    case ELEMENT_NODE:
+        nsIContentSerializer_AppendElementStart(serializer, nscontent, nscontent, str);
         break;
-    }
-    case TEXT_NODE: {
-        nsIDOMText *nstext;
-        nsIDOMNode_QueryInterface(nsnode, &IID_nsIDOMText, (void**)&nstext);
-        nsIContentSerializer_AppendText(serializer, nstext, 0, -1, str);
-        nsIDOMText_Release(nstext);
+    case TEXT_NODE:
+        nsIContentSerializer_AppendText(serializer, nscontent, 0, -1, str);
         break;
-    }
-    case COMMENT_NODE: {
-        nsIDOMComment *nscomment;
-        nsres = nsIDOMNode_QueryInterface(nsnode, &IID_nsIDOMComment, (void**)&nscomment);
-        nsres = nsIContentSerializer_AppendComment(serializer, nscomment, 0, -1, str);
+    case COMMENT_NODE:
+        nsres = nsIContentSerializer_AppendComment(serializer, nscontent, 0, -1, str);
         break;
-    }
     case DOCUMENT_NODE: {
-        nsIDOMDocument *nsdoc;
-        nsIDOMNode_QueryInterface(nsnode, &IID_nsIDOMDocument, (void**)&nsdoc);
+        nsIDocument *nsdoc;
+        nsIDOMNode_QueryInterface(nsnode, &IID_nsIDocument, (void**)&nsdoc);
         nsIContentSerializer_AppendDocumentStart(serializer, nsdoc, str);
-        nsIDOMDocument_Release(nsdoc);
+        nsIDocument_Release(nsdoc);
         break;
     }
     case DOCUMENT_TYPE_NODE:
@@ -683,13 +857,10 @@ static HRESULT nsnode_to_nsstring_rec(nsIContentSerializer *serializer, nsIDOMNo
         nsIDOMNodeList_Release(node_list);
     }
 
-    if(type == ELEMENT_NODE) {
-        nsIDOMElement *nselem;
-        nsIDOMNode_QueryInterface(nsnode, &IID_nsIDOMElement, (void**)&nselem);
-        nsIContentSerializer_AppendElementEnd(serializer, nselem, str);
-        nsIDOMElement_Release(nselem);
-    }
+    if(type == ELEMENT_NODE)
+        nsIContentSerializer_AppendElementEnd(serializer, nscontent, str);
 
+    nsIContent_Release(nscontent);
     return S_OK;
 }
 
@@ -775,6 +946,11 @@ void close_gecko(void)
 
     release_nsio();
 
+    if(profile_directory) {
+        nsIFile_Release(profile_directory);
+        profile_directory = NULL;
+    }
+
     if(pCompMgr)
         nsIComponentManager_Release(pCompMgr);
 
@@ -788,6 +964,26 @@ void close_gecko(void)
     /* if (hXPCOM) FreeLibrary(hXPCOM); */
 }
 
+BOOL is_gecko_path(const char *path)
+{
+    WCHAR *buf, *ptr;
+    BOOL ret;
+
+    buf = heap_strdupAtoW(path);
+    if(strlenW(buf) < gecko_path_len)
+        return FALSE;
+
+    buf[gecko_path_len] = 0;
+    for(ptr = buf; *ptr; ptr++) {
+        if(*ptr == '\\')
+            *ptr = '/';
+    }
+
+    ret = !strcmpiW(buf, gecko_path);
+    heap_free(buf);
+    return ret;
+}
+
 /**********************************************************
  *      nsIWebBrowserChrome interface
  */
@@ -795,7 +991,7 @@ void close_gecko(void)
 #define NSWBCHROME_THIS(iface) DEFINE_THIS(NSContainer, WebBrowserChrome, iface)
 
 static nsresult NSAPI nsWebBrowserChrome_QueryInterface(nsIWebBrowserChrome *iface,
-        nsIIDRef riid, nsQIResult result)
+        nsIIDRef riid, void **result)
 {
     NSContainer *This = NSWBCHROME_THIS(iface);
 
@@ -979,7 +1175,7 @@ static const nsIWebBrowserChromeVtbl nsWebBrowserChromeVtbl = {
 #define NSCML_THIS(iface) DEFINE_THIS(NSContainer, ContextMenuListener, iface)
 
 static nsresult NSAPI nsContextMenuListener_QueryInterface(nsIContextMenuListener *iface,
-        nsIIDRef riid, nsQIResult result)
+        nsIIDRef riid, void **result)
 {
     NSContainer *This = NSCML_THIS(iface);
     return nsIWebBrowserChrome_QueryInterface(NSWBCHROME(This), riid, result);
@@ -1002,9 +1198,11 @@ static nsresult NSAPI nsContextMenuListener_OnShowContextMenu(nsIContextMenuList
 {
     NSContainer *This = NSCML_THIS(iface);
     nsIDOMMouseEvent *event;
+    HTMLDOMNode *node;
     POINT pt;
     DWORD dwID = CONTEXT_MENU_DEFAULT;
     nsresult nsres;
+    HRESULT hres;
 
     TRACE("(%p)->(%08x %p %p)\n", This, aContextFlags, aEvent, aNode);
 
@@ -1040,8 +1238,11 @@ static nsresult NSAPI nsContextMenuListener_OnShowContextMenu(nsIContextMenuList
         FIXME("aContextFlags=%08x\n", aContextFlags);
     };
 
-    show_context_menu(This->doc, dwID, &pt, (IDispatch*)HTMLDOMNODE(get_node(This->doc->basedoc.doc_node, aNode, TRUE)));
+    hres = get_node(This->doc->basedoc.doc_node, aNode, TRUE, &node);
+    if(FAILED(hres))
+        return NS_ERROR_FAILURE;
 
+    show_context_menu(This->doc, dwID, &pt, (IDispatch*)HTMLDOMNODE(node));
     return NS_OK;
 }
 
@@ -1061,7 +1262,7 @@ static const nsIContextMenuListenerVtbl nsContextMenuListenerVtbl = {
 #define NSURICL_THIS(iface) DEFINE_THIS(NSContainer, URIContentListener, iface)
 
 static nsresult NSAPI nsURIContentListener_QueryInterface(nsIURIContentListener *iface,
-        nsIIDRef riid, nsQIResult result)
+        nsIIDRef riid, void **result)
 {
     NSContainer *This = NSURICL_THIS(iface);
     return nsIWebBrowserChrome_QueryInterface(NSWBCHROME(This), riid, result);
@@ -1231,7 +1432,7 @@ static const nsIURIContentListenerVtbl nsURIContentListenerVtbl = {
 #define NSEMBWNDS_THIS(iface) DEFINE_THIS(NSContainer, EmbeddingSiteWindow, iface)
 
 static nsresult NSAPI nsEmbeddingSiteWindow_QueryInterface(nsIEmbeddingSiteWindow *iface,
-        nsIIDRef riid, nsQIResult result)
+        nsIIDRef riid, void **result)
 {
     NSContainer *This = NSEMBWNDS_THIS(iface);
     return nsIWebBrowserChrome_QueryInterface(NSWBCHROME(This), riid, result);
@@ -1339,7 +1540,7 @@ static const nsIEmbeddingSiteWindowVtbl nsEmbeddingSiteWindowVtbl = {
 #define NSTOOLTIP_THIS(iface) DEFINE_THIS(NSContainer, TooltipListener, iface)
 
 static nsresult NSAPI nsTooltipListener_QueryInterface(nsITooltipListener *iface, nsIIDRef riid,
-                                                       nsQIResult result)
+        void **result)
 {
     NSContainer *This = NSTOOLTIP_THIS(iface);
     return nsIWebBrowserChrome_QueryInterface(NSWBCHROME(This), riid, result);
@@ -1391,7 +1592,7 @@ static const nsITooltipListenerVtbl nsTooltipListenerVtbl = {
 #define NSIFACEREQ_THIS(iface) DEFINE_THIS(NSContainer, InterfaceRequestor, iface)
 
 static nsresult NSAPI nsInterfaceRequestor_QueryInterface(nsIInterfaceRequestor *iface,
-                                                          nsIIDRef riid, nsQIResult result)
+        nsIIDRef riid, void **result)
 {
     NSContainer *This = NSIFACEREQ_THIS(iface);
     return nsIWebBrowserChrome_QueryInterface(NSWBCHROME(This), riid, result);
@@ -1410,7 +1611,7 @@ static nsrefcnt NSAPI nsInterfaceRequestor_Release(nsIInterfaceRequestor *iface)
 }
 
 static nsresult NSAPI nsInterfaceRequestor_GetInterface(nsIInterfaceRequestor *iface,
-                                                        nsIIDRef riid, nsQIResult result)
+        nsIIDRef riid, void **result)
 {
     NSContainer *This = NSIFACEREQ_THIS(iface);
 
@@ -1434,7 +1635,7 @@ static const nsIInterfaceRequestorVtbl nsInterfaceRequestorVtbl = {
 #define NSWEAKREF_THIS(iface) DEFINE_THIS(NSContainer, WeakReference, iface)
 
 static nsresult NSAPI nsWeakReference_QueryInterface(nsIWeakReference *iface,
-        nsIIDRef riid, nsQIResult result)
+        nsIIDRef riid, void **result)
 {
     NSContainer *This = NSWEAKREF_THIS(iface);
     return nsIWebBrowserChrome_QueryInterface(NSWBCHROME(This), riid, result);
@@ -1471,7 +1672,7 @@ static const nsIWeakReferenceVtbl nsWeakReferenceVtbl = {
 #define NSSUPWEAKREF_THIS(iface) DEFINE_THIS(NSContainer, SupportsWeakReference, iface)
 
 static nsresult NSAPI nsSupportsWeakReference_QueryInterface(nsISupportsWeakReference *iface,
-        nsIIDRef riid, nsQIResult result)
+        nsIIDRef riid, void **result)
 {
     NSContainer *This = NSSUPWEAKREF_THIS(iface);
     return nsIWebBrowserChrome_QueryInterface(NSWBCHROME(This), riid, result);

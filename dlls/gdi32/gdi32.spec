@@ -13,7 +13,7 @@
 @ stdcall AddFontResourceExW(wstr long ptr)
 @ stub AddFontResourceTracking
 @ stdcall AddFontResourceW(wstr)
-@ stdcall AngleArc(long long long long long long)
+@ stdcall AngleArc(long long long long float float)
 @ stdcall AnimatePalette(long long long ptr)
 # @ stub AnyLinkedFonts
 @ stdcall Arc(long long long long long long long long long)
@@ -363,7 +363,7 @@
 @ stub LoadImageColorMatcherA
 @ stub LoadImageColorMatcherW
 @ stdcall MaskBlt(long long long long long long long long long long long long)
-# @ stub MirrorRgn
+@ stdcall MirrorRgn(long long)
 @ stdcall ModifyWorldTransform(long ptr long)
 @ stdcall MoveToEx(long long long ptr)
 @ stdcall NamedEscape(long wstr long long ptr long ptr)
@@ -449,7 +449,7 @@
 @ stdcall SetMapperFlags(long long)
 @ stdcall SetMetaFileBitsEx(long ptr)
 @ stdcall SetMetaRgn(long)
-@ stdcall SetMiterLimit(long long ptr)
+@ stdcall SetMiterLimit(long float ptr)
 @ stdcall SetObjectOwner(long long)
 @ stdcall SetPaletteEntries(long long long ptr)
 @ stdcall SetPixel(long long long long)
@@ -514,7 +514,6 @@
 # Wine extensions: Win16 functions that are needed by other dlls
 #
 @ stdcall GetDCHook(long ptr)
-@ stdcall SelectVisRgn(long long)
 @ stdcall SetDCHook(long ptr long)
 @ stdcall SetHookFlags(long long)
 
@@ -526,3 +525,4 @@
 
 # GDI objects
 @ cdecl __wine_make_gdi_object_system(long long)
+@ cdecl __wine_set_visible_region(long long ptr)

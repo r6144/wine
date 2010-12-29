@@ -183,6 +183,9 @@ struct dbg_thread
     struct dbg_breakpoint	step_over_bp;
     char                        name[9];
     BOOL                        in_exception;   /* TRUE if thread stopped with an exception */
+    BOOL                        first_chance;   /* TRUE if thread stopped with a first chance exception
+                                                 *      - only valid when in_exception is TRUE
+                                                 */
     EXCEPTION_RECORD            excpt_record;   /* only valid when in_exception is TRUE */
     struct
     {
@@ -291,8 +294,8 @@ extern BOOL             break_add_break(const ADDRESS64* addr, BOOL verbose, BOO
 extern BOOL             break_add_break_from_lvalue(const struct dbg_lvalue* value, BOOL swbp);
 extern void             break_add_break_from_id(const char* name, int lineno, BOOL swbp);
 extern void             break_add_break_from_lineno(int lineno, BOOL swbp);
-extern void             break_add_watch_from_lvalue(const struct dbg_lvalue* lvalue);
-extern void             break_add_watch_from_id(const char* name);
+extern void             break_add_watch_from_lvalue(const struct dbg_lvalue* lvalue, BOOL is_write);
+extern void             break_add_watch_from_id(const char* name, BOOL is_write);
 extern void             break_check_delayed_bp(void);
 extern void             break_delete_xpoint(int num);
 extern void             break_delete_xpoints_from_module(DWORD64 base);
@@ -351,9 +354,10 @@ extern void             info_win32_class(HWND hWnd, const char* clsName);
 extern void             info_win32_window(HWND hWnd, BOOL detailed);
 extern void             info_win32_processes(void);
 extern void             info_win32_threads(void);
-extern void             info_win32_exceptions(DWORD tid);
+extern void             info_win32_frame_exceptions(DWORD tid);
 extern void             info_win32_virtual(DWORD pid);
 extern void             info_win32_segments(DWORD start, int length);
+extern void             info_win32_exception(void);
 extern void             info_wine_dbg_channel(BOOL add, const char* chnl, const char* name);
 
   /* memory.c */

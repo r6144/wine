@@ -20,6 +20,7 @@
 #include <stdio.h>
 
 #define COBJMACROS
+#define CONST_VTABLE
 #include "wine/test.h"
 #include "winbase.h"
 #include "winerror.h"
@@ -36,6 +37,7 @@
 /* Function ptrs for ordinal calls */
 static HMODULE hShlwapi;
 static BOOL is_win2k_and_lower;
+static BOOL is_win9x;
 
 static int (WINAPI *pSHSearchMapInt)(const int*,const int*,int,int);
 static HRESULT (WINAPI *pGetAcceptLanguagesA)(LPSTR,LPDWORD);
@@ -60,6 +62,11 @@ static HWND    (WINAPI *pSHCreateWorkerWindowA)(LONG, HWND, DWORD, DWORD, HMENU,
 static HRESULT (WINAPI *pSHIShellFolder_EnumObjects)(LPSHELLFOLDER, HWND, SHCONTF, IEnumIDList**);
 static DWORD   (WINAPI *pSHGetIniStringW)(LPCWSTR, LPCWSTR, LPWSTR, DWORD, LPCWSTR);
 static BOOL    (WINAPI *pSHSetIniStringW)(LPCWSTR, LPCWSTR, LPCWSTR, LPCWSTR);
+static HKEY    (WINAPI *pSHGetShellKey)(DWORD, LPCWSTR, BOOL);
+static HRESULT (WINAPI *pSKGetValueW)(DWORD, LPCWSTR, LPCWSTR, DWORD*, void*, DWORD*);
+static HRESULT (WINAPI *pSKSetValueW)(DWORD, LPCWSTR, LPCWSTR, DWORD, void*, DWORD);
+static HRESULT (WINAPI *pSKDeleteValueW)(DWORD, LPCWSTR, LPCWSTR);
+static HRESULT (WINAPI *pSKAllocValueW)(DWORD, LPCWSTR, LPCWSTR, DWORD*, void**, DWORD*);
 
 static HMODULE hmlang;
 static HRESULT (WINAPI *pLcidToRfc1766A)(LCID, LPSTR, INT);
@@ -590,6 +597,7 @@ static void test_GetShellSecurityDescriptor(void)
     };
     SECURITY_DESCRIPTOR* psd;
     SECURITY_DESCRIPTOR* (WINAPI*pGetShellSecurityDescriptor)(PSHELL_USER_PERMISSION*,int);
+    void *pChrCmpIW = GetProcAddress(hShlwapi, "ChrCmpIW");
 
     pGetShellSecurityDescriptor=(void*)GetProcAddress(hShlwapi,(char*)475);
 
@@ -599,12 +607,18 @@ static void test_GetShellSecurityDescriptor(void)
         return;
     }
 
+    if(pChrCmpIW && pChrCmpIW == pGetShellSecurityDescriptor) /* win2k */
+    {
+        win_skip("Skipping for GetShellSecurityDescriptor, same ordinal used for ChrCmpIW\n");
+        return;
+    }
+
     psd = pGetShellSecurityDescriptor(NULL, 2);
     ok(psd==NULL ||
        broken(psd==INVALID_HANDLE_VALUE), /* IE5 */
        "GetShellSecurityDescriptor should fail\n");
     psd = pGetShellSecurityDescriptor(rgsup, 0);
-    ok(psd==NULL, "GetShellSecurityDescriptor should fail\n");
+    ok(psd==NULL, "GetShellSecurityDescriptor should fail, got %p\n", psd);
 
     SetLastError(0xdeadbeef);
     psd = pGetShellSecurityDescriptor(rgsup, 2);
@@ -614,7 +628,7 @@ static void test_GetShellSecurityDescriptor(void)
         win_skip("GetShellSecurityDescriptor is not implemented\n");
         return;
     }
-    if (psd==INVALID_HANDLE_VALUE)
+    if (psd == INVALID_HANDLE_VALUE)
     {
         win_skip("GetShellSecurityDescriptor is broken on IE5\n");
         return;
@@ -733,22 +747,32 @@ static void test_SHPackDispParams(void)
 
 typedef struct _disp
 {
-    const IDispatchVtbl *vtbl;
+    IDispatch IDispatch_iface;
     LONG   refCount;
 } Disp;
 
+static inline Disp *impl_from_IDispatch(IDispatch *iface)
+{
+    return CONTAINING_RECORD(iface, Disp, IDispatch_iface);
+}
+
 typedef struct _contain
 {
-    const IConnectionPointContainerVtbl *vtbl;
+    IConnectionPointContainer IConnectionPointContainer_iface;
     LONG   refCount;
 
     UINT  ptCount;
     IConnectionPoint **pt;
 } Contain;
 
+static inline Contain *impl_from_IConnectionPointContainer(IConnectionPointContainer *iface)
+{
+    return CONTAINING_RECORD(iface, Contain, IConnectionPointContainer_iface);
+}
+
 typedef struct _cntptn
 {
-    const IConnectionPointVtbl *vtbl;
+    IConnectionPoint IConnectionPoint_iface;
     LONG refCount;
 
     Contain *container;
@@ -757,23 +781,38 @@ typedef struct _cntptn
     IUnknown **sink;
 } ConPt;
 
+static inline ConPt *impl_from_IConnectionPoint(IConnectionPoint *iface)
+{
+    return CONTAINING_RECORD(iface, ConPt, IConnectionPoint_iface);
+}
+
 typedef struct _enum
 {
-    const IEnumConnectionsVtbl *vtbl;
+    IEnumConnections IEnumConnections_iface;
     LONG   refCount;
 
     UINT idx;
     ConPt *pt;
 } EnumCon;
 
+static inline EnumCon *impl_from_IEnumConnections(IEnumConnections *iface)
+{
+    return CONTAINING_RECORD(iface, EnumCon, IEnumConnections_iface);
+}
+
 typedef struct _enumpt
 {
-    const IEnumConnectionPointsVtbl *vtbl;
+    IEnumConnectionPoints IEnumConnectionPoints_iface;
     LONG   refCount;
 
     int idx;
     Contain *container;
 } EnumPt;
+
+static inline EnumPt *impl_from_IEnumConnectionPoints(IEnumConnectionPoints *iface)
+{
+    return CONTAINING_RECORD(iface, EnumPt, IEnumConnectionPoints_iface);
+}
 
 
 static HRESULT WINAPI Disp_QueryInterface(
@@ -800,13 +839,13 @@ static HRESULT WINAPI Disp_QueryInterface(
 
 static ULONG WINAPI Disp_AddRef(IDispatch* This)
 {
-    Disp *iface = (Disp*)This;
+    Disp *iface = impl_from_IDispatch(This);
     return InterlockedIncrement(&iface->refCount);
 }
 
 static ULONG WINAPI Disp_Release(IDispatch* This)
 {
-    Disp *iface = (Disp*)This;
+    Disp *iface = impl_from_IDispatch(This);
     ULONG ret;
 
     ret = InterlockedDecrement(&iface->refCount);
@@ -915,13 +954,13 @@ static HRESULT WINAPI Enum_QueryInterface(
 
 static ULONG WINAPI Enum_AddRef(IEnumConnections* This)
 {
-    EnumCon *iface = (EnumCon*)This;
+    EnumCon *iface = impl_from_IEnumConnections(This);
     return InterlockedIncrement(&iface->refCount);
 }
 
 static ULONG WINAPI Enum_Release(IEnumConnections* This)
 {
-    EnumCon *iface = (EnumCon*)This;
+    EnumCon *iface = impl_from_IEnumConnections(This);
     ULONG ret;
 
     ret = InterlockedDecrement(&iface->refCount);
@@ -936,7 +975,7 @@ static HRESULT WINAPI Enum_Next(
         LPCONNECTDATA rgcd,
         ULONG *pcFetched)
 {
-    EnumCon *iface = (EnumCon*)This;
+    EnumCon *iface = impl_from_IEnumConnections(This);
 
     if (cConnections > 0 && iface->idx < iface->pt->sinkCount)
     {
@@ -1008,14 +1047,14 @@ static HRESULT WINAPI ConPt_QueryInterface(
 static ULONG WINAPI ConPt_AddRef(
         IConnectionPoint* This)
 {
-    ConPt *iface = (ConPt*)This;
+    ConPt *iface = impl_from_IConnectionPoint(This);
     return InterlockedIncrement(&iface->refCount);
 }
 
 static ULONG WINAPI ConPt_Release(
         IConnectionPoint* This)
 {
-    ConPt *iface = (ConPt*)This;
+    ConPt *iface = impl_from_IConnectionPoint(This);
     ULONG ret;
 
     ret = InterlockedDecrement(&iface->refCount);
@@ -1041,7 +1080,7 @@ static HRESULT WINAPI ConPt_GetConnectionInterface(
         IID *pIID)
 {
     static int i = 0;
-    ConPt *iface = (ConPt*)This;
+    ConPt *iface = impl_from_IConnectionPoint(This);
     if (i==0)
     {
         i++;
@@ -1056,9 +1095,9 @@ static HRESULT WINAPI ConPt_GetConnectionPointContainer(
         IConnectionPoint* This,
         IConnectionPointContainer **ppCPC)
 {
-    ConPt *iface = (ConPt*)This;
+    ConPt *iface = impl_from_IConnectionPoint(This);
 
-    *ppCPC = (IConnectionPointContainer*)iface->container;
+    *ppCPC = &iface->container->IConnectionPointContainer_iface;
     return S_OK;
 }
 
@@ -1067,7 +1106,7 @@ static HRESULT WINAPI ConPt_Advise(
         IUnknown *pUnkSink,
         DWORD *pdwCookie)
 {
-    ConPt *iface = (ConPt*)This;
+    ConPt *iface = impl_from_IConnectionPoint(This);
 
     if (iface->sinkCount == 0)
         iface->sink = HeapAlloc(GetProcessHeap(),0,sizeof(IUnknown*));
@@ -1084,7 +1123,7 @@ static HRESULT WINAPI ConPt_Unadvise(
         IConnectionPoint* This,
         DWORD dwCookie)
 {
-    ConPt *iface = (ConPt*)This;
+    ConPt *iface = impl_from_IConnectionPoint(This);
 
     if (dwCookie > iface->sinkCount)
         return E_FAIL;
@@ -1103,11 +1142,11 @@ static HRESULT WINAPI ConPt_EnumConnections(
     EnumCon *ec;
 
     ec = HeapAlloc(GetProcessHeap(),0,sizeof(EnumCon));
-    ec->vtbl = &enum_vtbl;
+    ec->IEnumConnections_iface.lpVtbl = &enum_vtbl;
     ec->refCount = 1;
-    ec->pt = (ConPt*)This;
+    ec->pt = impl_from_IConnectionPoint(This);
     ec->idx = 0;
-    *ppEnum = (IEnumConnections*)ec;
+    *ppEnum = &ec->IEnumConnections_iface;
 
     return S_OK;
 }
@@ -1148,13 +1187,13 @@ static HRESULT WINAPI EnumPt_QueryInterface(
 
 static ULONG WINAPI EnumPt_AddRef(IEnumConnectionPoints* This)
 {
-    EnumPt *iface = (EnumPt*)This;
+    EnumPt *iface = impl_from_IEnumConnectionPoints(This);
     return InterlockedIncrement(&iface->refCount);
 }
 
 static ULONG WINAPI EnumPt_Release(IEnumConnectionPoints* This)
 {
-    EnumPt *iface = (EnumPt*)This;
+    EnumPt *iface = impl_from_IEnumConnectionPoints(This);
     ULONG ret;
 
     ret = InterlockedDecrement(&iface->refCount);
@@ -1169,7 +1208,7 @@ static HRESULT WINAPI EnumPt_Next(
         IConnectionPoint **rgcd,
         ULONG *pcFetched)
 {
-    EnumPt *iface = (EnumPt*)This;
+    EnumPt *iface = impl_from_IEnumConnectionPoints(This);
 
     if (cConnections > 0 && iface->idx < iface->container->ptCount)
     {
@@ -1240,14 +1279,14 @@ static HRESULT WINAPI Contain_QueryInterface(
 static ULONG WINAPI Contain_AddRef(
         IConnectionPointContainer* This)
 {
-    Contain *iface = (Contain*)This;
+    Contain *iface = impl_from_IConnectionPointContainer(This);
     return InterlockedIncrement(&iface->refCount);
 }
 
 static ULONG WINAPI Contain_Release(
         IConnectionPointContainer* This)
 {
-    Contain *iface = (Contain*)This;
+    Contain *iface = impl_from_IConnectionPointContainer(This);
     ULONG ret;
 
     ret = InterlockedDecrement(&iface->refCount);
@@ -1272,11 +1311,11 @@ static HRESULT WINAPI Contain_EnumConnectionPoints(
     EnumPt *ec;
 
     ec = HeapAlloc(GetProcessHeap(),0,sizeof(EnumPt));
-    ec->vtbl = &enumpt_vtbl;
+    ec->IEnumConnectionPoints_iface.lpVtbl = &enumpt_vtbl;
     ec->refCount = 1;
     ec->idx= 0;
-    ec->container = (Contain*)This;
-    *ppEnum = (IEnumConnectionPoints*)ec;
+    ec->container = impl_from_IConnectionPointContainer(This);
+    *ppEnum = &ec->IEnumConnectionPoints_iface;
 
     return S_OK;
 }
@@ -1286,13 +1325,13 @@ static HRESULT WINAPI Contain_FindConnectionPoint(
         REFIID riid,
         IConnectionPoint **ppCP)
 {
-    Contain *iface = (Contain*)This;
+    Contain *iface = impl_from_IConnectionPointContainer(This);
     ConPt *pt;
 
     if (!IsEqualIID(riid, &IID_NULL) || iface->ptCount ==0)
     {
         pt = HeapAlloc(GetProcessHeap(),0,sizeof(ConPt));
-        pt->vtbl = &point_vtbl;
+        pt->IConnectionPoint_iface.lpVtbl = &point_vtbl;
         pt->refCount = 1;
         pt->sinkCount = 0;
         pt->sink = NULL;
@@ -1303,10 +1342,10 @@ static HRESULT WINAPI Contain_FindConnectionPoint(
             iface->pt =HeapAlloc(GetProcessHeap(),0,sizeof(IUnknown*));
         else
             iface->pt = HeapReAlloc(GetProcessHeap(),0,iface->pt,sizeof(IUnknown*)*(iface->ptCount+1));
-        iface->pt[iface->ptCount] = (IConnectionPoint*)pt;
+        iface->pt[iface->ptCount] = &pt->IConnectionPoint_iface;
         iface->ptCount++;
 
-        *ppCP = (IConnectionPoint*)pt;
+        *ppCP = &pt->IConnectionPoint_iface;
     }
     else
     {
@@ -1344,13 +1383,13 @@ static void test_IConnectionPoint(void)
     }
 
     container = HeapAlloc(GetProcessHeap(),0,sizeof(Contain));
-    container->vtbl = &contain_vtbl;
+    container->IConnectionPointContainer_iface.lpVtbl = &contain_vtbl;
     container->refCount = 1;
     container->ptCount = 0;
     container->pt = NULL;
 
     dispatch = HeapAlloc(GetProcessHeap(),0,sizeof(Disp));
-    dispatch->vtbl = &disp_vtbl;
+    dispatch->IDispatch_iface.lpVtbl = &disp_vtbl;
     dispatch->refCount = 1;
 
     rc = pConnectToConnectionPoint((IUnknown*)dispatch, &IID_NULL, TRUE, (IUnknown*)container, &cookie, &point);
@@ -1388,10 +1427,15 @@ static void test_IConnectionPoint(void)
 
 typedef struct _propbag
 {
-    const IPropertyBagVtbl *vtbl;
+    IPropertyBag IPropertyBag_iface;
     LONG   refCount;
 
 } PropBag;
+
+static inline PropBag *impl_from_IPropertyBag(IPropertyBag *iface)
+{
+    return CONTAINING_RECORD(iface, PropBag, IPropertyBag_iface);
+}
 
 
 static HRESULT WINAPI Prop_QueryInterface(
@@ -1419,14 +1463,14 @@ static HRESULT WINAPI Prop_QueryInterface(
 static ULONG WINAPI Prop_AddRef(
         IPropertyBag* This)
 {
-    PropBag *iface = (PropBag*)This;
+    PropBag *iface = impl_from_IPropertyBag(This);
     return InterlockedIncrement(&iface->refCount);
 }
 
 static ULONG WINAPI Prop_Release(
         IPropertyBag* This)
 {
-    PropBag *iface = (PropBag*)This;
+    PropBag *iface = impl_from_IPropertyBag(This);
     ULONG ret;
 
     ret = InterlockedDecrement(&iface->refCount);
@@ -1479,19 +1523,19 @@ static void test_SHPropertyBag_ReadLONG(void)
 
     pb = HeapAlloc(GetProcessHeap(),0,sizeof(PropBag));
     pb->refCount = 1;
-    pb->vtbl = &prop_vtbl;
+    pb->IPropertyBag_iface.lpVtbl = &prop_vtbl;
 
     out = 0xfeedface;
     rc = pSHPropertyBag_ReadLONG(NULL, szName1, &out);
     ok(rc == E_INVALIDARG || broken(rc == 0), "incorrect return %x\n",rc);
     ok(out == 0xfeedface, "value should not have changed\n");
-    rc = pSHPropertyBag_ReadLONG((IPropertyBag*)pb, NULL, &out);
+    rc = pSHPropertyBag_ReadLONG(&pb->IPropertyBag_iface, NULL, &out);
     ok(rc == E_INVALIDARG || broken(rc == 0) || broken(rc == 1), "incorrect return %x\n",rc);
     ok(out == 0xfeedface, "value should not have changed\n");
-    rc = pSHPropertyBag_ReadLONG((IPropertyBag*)pb, szName1, NULL);
+    rc = pSHPropertyBag_ReadLONG(&pb->IPropertyBag_iface, szName1, NULL);
     ok(rc == E_INVALIDARG || broken(rc == 0) || broken(rc == 1), "incorrect return %x\n",rc);
     ok(out == 0xfeedface, "value should not have changed\n");
-    rc = pSHPropertyBag_ReadLONG((IPropertyBag*)pb, szName1, &out);
+    rc = pSHPropertyBag_ReadLONG(&pb->IPropertyBag_iface, szName1, &out);
     ok(rc == DISP_E_BADVARTYPE || broken(rc == 0) || broken(rc == 1), "incorrect return %x\n",rc);
     ok(out == 0xfeedface  || broken(out == 0xfeedfa00), "value should not have changed %x\n",out);
     IUnknown_Release((IUnknown*)pb);
@@ -1757,13 +1801,13 @@ if (0)
     /* no way to get required buffer length here */
     SetLastError(0xdeadbeef);
     ret = pSHFormatDateTimeW(&filetime, NULL, NULL, 0);
-    ok(ret == 0, "got %d\n", ret);
+    ok(ret == 0, "expected 0, got %d\n", ret);
     ok(GetLastError() == 0xdeadbeef, "expected 0xdeadbeef, got %d\n", GetLastError());
 
     SetLastError(0xdeadbeef);
     buff[0] = 'a'; buff[1] = 0;
     ret = pSHFormatDateTimeW(&filetime, NULL, buff, 0);
-    ok(ret == 0, "got %d\n", ret);
+    ok(ret == 0, "expected 0, got %d\n", ret);
     ok(GetLastError() == 0xdeadbeef, "expected 0xdeadbeef, got %d\n", GetLastError());
     ok(buff[0] == 'a', "expected same string\n");
 
@@ -1771,20 +1815,23 @@ if (0)
     flags = FDTF_SHORTTIME | FDTF_LONGTIME;
     SetLastError(0xdeadbeef);
     ret = pSHFormatDateTimeW(&filetime, &flags, buff, sizeof(buff)/sizeof(WCHAR));
-    ok(ret == lstrlenW(buff)+1, "got %d\n", ret);
+    ok(ret == lstrlenW(buff)+1 || ret == lstrlenW(buff),
+       "expected %d or %d, got %d\n", lstrlenW(buff)+1, lstrlenW(buff), ret);
     ok(GetLastError() == 0xdeadbeef, "expected 0xdeadbeef, got %d\n", GetLastError());
 
     flags = FDTF_SHORTDATE | FDTF_LONGDATE;
     SetLastError(0xdeadbeef);
     ret = pSHFormatDateTimeW(&filetime, &flags, buff, sizeof(buff)/sizeof(WCHAR));
-    ok(ret == lstrlenW(buff)+1, "got %d\n", ret);
+    ok(ret == lstrlenW(buff)+1 || ret == lstrlenW(buff),
+       "expected %d or %d, got %d\n", lstrlenW(buff)+1, lstrlenW(buff), ret);
     ok(GetLastError() == 0xdeadbeef, "expected 0xdeadbeef, got %d\n", GetLastError());
 
     flags = FDTF_SHORTDATE | FDTF_LTRDATE | FDTF_RTLDATE;
     SetLastError(0xdeadbeef);
     buff[0] = 0; /* NT4 doesn't clear the buffer on failure */
     ret = pSHFormatDateTimeW(&filetime, &flags, buff, sizeof(buff)/sizeof(WCHAR));
-    ok(ret == lstrlenW(buff)+1, "got %d\n", ret);
+    ok(ret == lstrlenW(buff)+1 || ret == lstrlenW(buff),
+       "expected %d or %d, got %d\n", lstrlenW(buff)+1, lstrlenW(buff), ret);
     ok(GetLastError() == 0xdeadbeef ||
         broken(GetLastError() == ERROR_INVALID_FLAGS), /* Win9x/WinMe/NT4 */
         "expected 0xdeadbeef, got %d\n", GetLastError());
@@ -1792,7 +1839,8 @@ if (0)
     /* now check returned strings */
     flags = FDTF_SHORTTIME;
     ret = pSHFormatDateTimeW(&filetime, &flags, buff, sizeof(buff)/sizeof(WCHAR));
-    ok(ret == lstrlenW(buff)+1, "got %d\n", ret);
+    ok(ret == lstrlenW(buff)+1 || ret == lstrlenW(buff),
+       "expected %d or %d, got %d\n", lstrlenW(buff)+1, lstrlenW(buff), ret);
     SetLastError(0xdeadbeef);
     ret = GetTimeFormatW(LOCALE_USER_DEFAULT, TIME_NOSECONDS, &st, NULL, buff2, sizeof(buff2)/sizeof(WCHAR));
     if (ret == 0 && GetLastError() == ERROR_CALL_NOT_IMPLEMENTED)
@@ -1800,88 +1848,97 @@ if (0)
         win_skip("Needed W-functions are not implemented\n");
         return;
     }
-    ok(ret == lstrlenW(buff2)+1, "got %d\n", ret);
+    ok(ret == lstrlenW(buff2)+1, "expected %d, got %d\n", lstrlenW(buff2)+1, ret);
     ok(lstrcmpW(buff, buff2) == 0, "expected equal strings\n");
 
     flags = FDTF_LONGTIME;
     ret = pSHFormatDateTimeW(&filetime, &flags, buff, sizeof(buff)/sizeof(WCHAR));
-    ok(ret == lstrlenW(buff)+1, "got %d\n", ret);
+    ok(ret == lstrlenW(buff)+1 || ret == lstrlenW(buff),
+       "expected %d or %d, got %d\n", lstrlenW(buff)+1, lstrlenW(buff), ret);
     ret = GetTimeFormatW(LOCALE_USER_DEFAULT, 0, &st, NULL, buff2, sizeof(buff2)/sizeof(WCHAR));
-    ok(ret == lstrlenW(buff2)+1, "got %d\n", ret);
+    ok(ret == lstrlenW(buff2)+1, "expected %d, got %d\n", lstrlenW(buff2)+1, ret);
     ok(lstrcmpW(buff, buff2) == 0, "expected equal strings\n");
 
     /* both time flags */
     flags = FDTF_LONGTIME | FDTF_SHORTTIME;
     ret = pSHFormatDateTimeW(&filetime, &flags, buff, sizeof(buff)/sizeof(WCHAR));
-    ok(ret == lstrlenW(buff)+1, "got %d\n", ret);
+    ok(ret == lstrlenW(buff)+1 || ret == lstrlenW(buff),
+       "expected %d or %d, got %d\n", lstrlenW(buff)+1, lstrlenW(buff), ret);
     ret = GetTimeFormatW(LOCALE_USER_DEFAULT, 0, &st, NULL, buff2, sizeof(buff2)/sizeof(WCHAR));
-    ok(ret == lstrlenW(buff2)+1, "got %d\n", ret);
+    ok(ret == lstrlenW(buff2)+1, "expected %d, got %d\n", lstrlenW(buff2)+1, ret);
     ok(lstrcmpW(buff, buff2) == 0, "expected equal string\n");
 
     flags = FDTF_SHORTDATE;
     ret = pSHFormatDateTimeW(&filetime, &flags, buff, sizeof(buff)/sizeof(WCHAR));
-    ok(ret == lstrlenW(buff)+1, "got %d\n", ret);
+    ok(ret == lstrlenW(buff)+1 || ret == lstrlenW(buff),
+       "expected %d or %d, got %d\n", lstrlenW(buff)+1, lstrlenW(buff), ret);
     ret = GetDateFormatW(LOCALE_USER_DEFAULT, DATE_SHORTDATE, &st, NULL, buff2, sizeof(buff2)/sizeof(WCHAR));
-    ok(ret == lstrlenW(buff2)+1, "got %d\n", ret);
+    ok(ret == lstrlenW(buff2)+1, "expected %d, got %d\n", lstrlenW(buff2)+1, ret);
     ok(lstrcmpW(buff, buff2) == 0, "expected equal strings\n");
 
     flags = FDTF_LONGDATE;
     ret = pSHFormatDateTimeW(&filetime, &flags, buff, sizeof(buff)/sizeof(WCHAR));
-    ok(ret == lstrlenW(buff)+1, "got %d\n", ret);
+    ok(ret == lstrlenW(buff)+1 || ret == lstrlenW(buff),
+       "expected %d or %d, got %d\n", lstrlenW(buff)+1, lstrlenW(buff), ret);
     ret = GetDateFormatW(LOCALE_USER_DEFAULT, DATE_LONGDATE, &st, NULL, buff2, sizeof(buff2)/sizeof(WCHAR));
-    ok(ret == lstrlenW(buff2)+1, "got %d\n", ret);
+    ok(ret == lstrlenW(buff2)+1, "expected %d, got %d\n", lstrlenW(buff2)+1, ret);
     ok(lstrcmpW(buff, buff2) == 0, "expected equal strings\n");
 
     /* both date flags */
     flags = FDTF_LONGDATE | FDTF_SHORTDATE;
     ret = pSHFormatDateTimeW(&filetime, &flags, buff, sizeof(buff)/sizeof(WCHAR));
-    ok(ret == lstrlenW(buff)+1, "got %d\n", ret);
+    ok(ret == lstrlenW(buff)+1 || ret == lstrlenW(buff),
+       "expected %d or %d, got %d\n", lstrlenW(buff)+1, lstrlenW(buff), ret);
     ret = GetDateFormatW(LOCALE_USER_DEFAULT, DATE_LONGDATE, &st, NULL, buff2, sizeof(buff2)/sizeof(WCHAR));
-    ok(ret == lstrlenW(buff2)+1, "got %d\n", ret);
+    ok(ret == lstrlenW(buff2)+1, "expected %d, got %d\n", lstrlenW(buff2)+1, ret);
     ok(lstrcmpW(buff, buff2) == 0, "expected equal strings\n");
 
     /* various combinations of date/time flags */
     flags = FDTF_LONGDATE | FDTF_SHORTTIME;
     ret = pSHFormatDateTimeW(&filetime, &flags, buff, sizeof(buff)/sizeof(WCHAR));
-    ok(ret == lstrlenW(buff)+1, "got %d, length %d\n", ret, lstrlenW(buff)+1);
+    ok(ret == lstrlenW(buff)+1 || ret == lstrlenW(buff),
+       "expected %d or %d, got %d\n", lstrlenW(buff)+1, lstrlenW(buff), ret);
     ret = GetDateFormatW(LOCALE_USER_DEFAULT, DATE_LONGDATE, &st, NULL, buff2, sizeof(buff2)/sizeof(WCHAR));
-    ok(ret == lstrlenW(buff2)+1, "got %d\n", ret);
+    ok(ret == lstrlenW(buff2)+1, "expected %d, got %d\n", lstrlenW(buff2)+1, ret);
     lstrcatW(buff2, commaW);
     ret = GetTimeFormatW(LOCALE_USER_DEFAULT, TIME_NOSECONDS, &st, NULL, buff3, sizeof(buff3)/sizeof(WCHAR));
-    ok(ret == lstrlenW(buff3)+1, "got %d\n", ret);
+    ok(ret == lstrlenW(buff3)+1, "expected %d, got %d\n", lstrlenW(buff3)+1, ret);
     lstrcatW(buff2, buff3);
     ok(lstrcmpW(buff, buff2) == 0, "expected equal strings\n");
 
     flags = FDTF_LONGDATE | FDTF_LONGTIME;
     ret = pSHFormatDateTimeW(&filetime, &flags, buff, sizeof(buff)/sizeof(WCHAR));
-    ok(ret == lstrlenW(buff)+1, "got %d\n", ret);
+    ok(ret == lstrlenW(buff)+1 || ret == lstrlenW(buff),
+       "expected %d or %d, got %d\n", lstrlenW(buff)+1, lstrlenW(buff), ret);
     ret = GetDateFormatW(LOCALE_USER_DEFAULT, DATE_LONGDATE, &st, NULL, buff2, sizeof(buff2)/sizeof(WCHAR));
-    ok(ret == lstrlenW(buff2)+1, "got %d\n", ret);
+    ok(ret == lstrlenW(buff2)+1, "expected %d, got %d\n", lstrlenW(buff2)+1, ret);
     lstrcatW(buff2, commaW);
     ret = GetTimeFormatW(LOCALE_USER_DEFAULT, 0, &st, NULL, buff3, sizeof(buff3)/sizeof(WCHAR));
-    ok(ret == lstrlenW(buff3)+1, "got %d\n", ret);
+    ok(ret == lstrlenW(buff3)+1, "expected %d, got %d\n", lstrlenW(buff3)+1, ret);
     lstrcatW(buff2, buff3);
     ok(lstrcmpW(buff, buff2) == 0, "expected equal strings\n");
 
     flags = FDTF_SHORTDATE | FDTF_SHORTTIME;
     ret = pSHFormatDateTimeW(&filetime, &flags, buff, sizeof(buff)/sizeof(WCHAR));
-    ok(ret == lstrlenW(buff)+1, "got %d\n", ret);
+    ok(ret == lstrlenW(buff)+1 || ret == lstrlenW(buff),
+       "expected %d or %d, got %d\n", lstrlenW(buff)+1, lstrlenW(buff), ret);
     ret = GetDateFormatW(LOCALE_USER_DEFAULT, DATE_SHORTDATE, &st, NULL, buff2, sizeof(buff2)/sizeof(WCHAR));
-    ok(ret == lstrlenW(buff2)+1, "got %d\n", ret);
+    ok(ret == lstrlenW(buff2)+1, "expected %d, got %d\n", lstrlenW(buff2)+1, ret);
     lstrcatW(buff2, spaceW);
     ret = GetTimeFormatW(LOCALE_USER_DEFAULT, TIME_NOSECONDS, &st, NULL, buff3, sizeof(buff3)/sizeof(WCHAR));
-    ok(ret == lstrlenW(buff3)+1, "got %d\n", ret);
+    ok(ret == lstrlenW(buff3)+1, "expected %d, got %d\n", lstrlenW(buff3)+1, ret);
     lstrcatW(buff2, buff3);
     ok(lstrcmpW(buff, buff2) == 0, "expected equal strings\n");
 
     flags = FDTF_SHORTDATE | FDTF_LONGTIME;
     ret = pSHFormatDateTimeW(&filetime, &flags, buff, sizeof(buff)/sizeof(WCHAR));
-    ok(ret == lstrlenW(buff)+1, "got %d\n", ret);
+    ok(ret == lstrlenW(buff)+1 || ret == lstrlenW(buff),
+       "expected %d or %d, got %d\n", lstrlenW(buff)+1, lstrlenW(buff), ret);
     ret = GetDateFormatW(LOCALE_USER_DEFAULT, DATE_SHORTDATE, &st, NULL, buff2, sizeof(buff2)/sizeof(WCHAR));
-    ok(ret == lstrlenW(buff2)+1, "got %d\n", ret);
+    ok(ret == lstrlenW(buff2)+1, "expected %d, got %d\n", lstrlenW(buff2)+1, ret);
     lstrcatW(buff2, spaceW);
     ret = GetTimeFormatW(LOCALE_USER_DEFAULT, 0, &st, NULL, buff3, sizeof(buff3)/sizeof(WCHAR));
-    ok(ret == lstrlenW(buff3)+1, "got %d\n", ret);
+    ok(ret == lstrlenW(buff3)+1, "expected %d, got %d\n", lstrlenW(buff3)+1, ret);
     lstrcatW(buff2, buff3);
     ok(lstrcmpW(buff, buff2) == 0, "expected equal strings\n");
 }
@@ -1910,6 +1967,7 @@ static void test_SHGetObjectCompatFlags(void)
     };
 
     static const char compat_path[] = "Software\\Microsoft\\Windows\\CurrentVersion\\ShellCompatibility\\Objects";
+    void *pColorAdjustLuma = GetProcAddress(hShlwapi, "ColorAdjustLuma");
     CHAR keyA[39]; /* {CLSID} */
     HKEY root;
     DWORD ret;
@@ -1918,6 +1976,12 @@ static void test_SHGetObjectCompatFlags(void)
     if (!pSHGetObjectCompatFlags)
     {
         win_skip("SHGetObjectCompatFlags isn't available\n");
+        return;
+    }
+
+    if (pColorAdjustLuma && pColorAdjustLuma == pSHGetObjectCompatFlags) /* win2k */
+    {
+        win_skip("Skipping SHGetObjectCompatFlags, same ordinal used for ColorAdjustLuma\n");
         return;
     }
 
@@ -2374,13 +2438,15 @@ static void test_SHCreateWorkerWindowA(void)
 
     /* test exstyle */
     ret = GetWindowLongA(hwnd, GWL_EXSTYLE);
-    ok(ret == WS_EX_WINDOWEDGE, "0x%08lx\n", ret);
+    ok(ret == WS_EX_WINDOWEDGE ||
+       ret == (WS_EX_WINDOWEDGE|WS_EX_LAYOUTRTL) /* systems with RTL locale */, "0x%08lx\n", ret);
 
     DestroyWindow(hwnd);
 
     hwnd = pSHCreateWorkerWindowA(0, NULL, WS_EX_TOOLWINDOW, 0, 0, 0);
     ret = GetWindowLongA(hwnd, GWL_EXSTYLE);
-    ok(ret == (WS_EX_WINDOWEDGE|WS_EX_TOOLWINDOW), "0x%08lx\n", ret);
+    ok(ret == (WS_EX_WINDOWEDGE|WS_EX_TOOLWINDOW) ||
+       ret == (WS_EX_WINDOWEDGE|WS_EX_TOOLWINDOW|WS_EX_LAYOUTRTL) /* systems with RTL locale */, "0x%08lx\n", ret);
     DestroyWindow(hwnd);
 }
 
@@ -2661,6 +2727,129 @@ static void test_SHSetIniString(void)
     DeleteFileW(TestIniW);
 }
 
+enum _shellkey_flags {
+    SHKEY_Root_HKCU = 0x1,
+    SHKEY_Root_HKLM = 0x2,
+    SHKEY_Key_Explorer  = 0x00,
+    SHKEY_Key_Shell = 0x10,
+    SHKEY_Key_ShellNoRoam = 0x20,
+    SHKEY_Key_Classes = 0x30,
+    SHKEY_Subkey_Default = 0x0000,
+    SHKEY_Subkey_ResourceName = 0x1000,
+    SHKEY_Subkey_Handlers = 0x2000,
+    SHKEY_Subkey_Associations = 0x3000,
+    SHKEY_Subkey_Volatile = 0x4000,
+    SHKEY_Subkey_MUICache = 0x5000,
+    SHKEY_Subkey_FileExts = 0x6000
+};
+
+static void test_SHGetShellKey(void)
+{
+    static const WCHAR ShellFoldersW[] = { 'S','h','e','l','l',' ','F','o','l','d','e','r','s',0 };
+    static const WCHAR WineTestW[] = { 'W','i','n','e','T','e','s','t',0 };
+
+    void *pPathBuildRootW = GetProcAddress(hShlwapi, "PathBuildRootW");
+    DWORD *alloc_data, data, size;
+    HKEY hkey;
+    HRESULT hres;
+
+    if (!pSHGetShellKey)
+    {
+        win_skip("SHGetShellKey(ordinal 491) isn't available\n");
+        return;
+    }
+
+    /* some win2k */
+    if (pPathBuildRootW && pPathBuildRootW == pSHGetShellKey)
+    {
+        win_skip("SHGetShellKey(ordinal 491) used for PathBuildRootW\n");
+        return;
+    }
+
+    if (is_win9x || is_win2k_and_lower)
+    {
+        win_skip("Ordinal 491 used for another call, skipping SHGetShellKey tests\n");
+        return;
+    }
+
+    /* Vista+ limits SHKEY enumeration values */
+    SetLastError(0xdeadbeef);
+    hkey = pSHGetShellKey(SHKEY_Key_Explorer, ShellFoldersW, FALSE);
+    if (hkey)
+    {
+        /* Tests not working on Vista+ */
+        RegCloseKey(hkey);
+
+        hkey = pSHGetShellKey(SHKEY_Root_HKLM|SHKEY_Key_Classes, NULL, FALSE);
+        ok(hkey != NULL, "hkey = NULL\n");
+        RegCloseKey(hkey);
+    }
+
+    hkey = pSHGetShellKey(SHKEY_Root_HKCU|SHKEY_Key_Explorer, ShellFoldersW, FALSE);
+    ok(hkey != NULL, "hkey = NULL\n");
+    RegCloseKey(hkey);
+
+    hkey = pSHGetShellKey(SHKEY_Root_HKLM|SHKEY_Key_Explorer, ShellFoldersW, FALSE);
+    ok(hkey != NULL, "hkey = NULL\n");
+    RegCloseKey(hkey);
+
+    hkey = pSHGetShellKey(SHKEY_Root_HKLM, WineTestW, FALSE);
+    ok(hkey == NULL, "hkey != NULL\n");
+
+    hkey = pSHGetShellKey(SHKEY_Root_HKLM, WineTestW, TRUE);
+    ok(hkey != NULL, "Can't create key\n");
+    RegCloseKey(hkey);
+
+    hkey = pSHGetShellKey(SHKEY_Root_HKLM, NULL, FALSE);
+    ok(hkey != NULL, "Can't create key\n");
+    ok(SUCCEEDED(RegDeleteKeyW(hkey, WineTestW)), "Can't delte key\n");
+    RegCloseKey(hkey);
+
+    if (!pSKGetValueW || !pSKSetValueW || !pSKDeleteValueW || !pSKAllocValueW)
+    {
+        win_skip("SKGetValueW, SKSetValueW, SKDeleteValueW or SKAllocValueW not available\n");
+        return;
+    }
+
+    hres = pSKGetValueW(SHKEY_Root_HKLM, WineTestW, NULL, NULL, &data, &size);
+    ok(hres == HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND), "hres = %x\n", hres);
+
+    data = 1234;
+    hres = pSKSetValueW(SHKEY_Root_HKLM, WineTestW, NULL, REG_DWORD, &data, sizeof(DWORD));
+    ok(hres == S_OK, "hres = %x\n", hres);
+
+    size = 1;
+    hres = pSKGetValueW(SHKEY_Root_HKLM, WineTestW, NULL, NULL, NULL, &size);
+    ok(hres == S_OK, "hres = %x\n", hres);
+    ok(size == sizeof(DWORD), "size = %d\n", size);
+
+    data = 0xdeadbeef;
+    hres = pSKGetValueW(SHKEY_Root_HKLM, WineTestW, NULL, NULL, &data, &size);
+    ok(hres == S_OK, "hres = %x\n", hres);
+    ok(size == sizeof(DWORD), "size = %d\n", size);
+    ok(data == 1234, "data = %d\n", data);
+
+    hres = pSKAllocValueW(SHKEY_Root_HKLM, WineTestW, NULL, NULL, (void**)&alloc_data, &size);
+    ok(hres == S_OK, "hres= %x\n", hres);
+    ok(size == sizeof(DWORD), "size = %d\n", size);
+    ok(*alloc_data == 1234, "*alloc_data = %d\n", *alloc_data);
+    LocalFree(alloc_data);
+
+    hres = pSKDeleteValueW(SHKEY_Root_HKLM, WineTestW, NULL);
+    ok(hres == S_OK, "hres = %x\n", hres);
+
+    hres = pSKDeleteValueW(SHKEY_Root_HKLM, WineTestW, NULL);
+    ok(hres == HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND), "hres = %x\n", hres);
+
+    hres = pSKGetValueW(SHKEY_Root_HKLM, WineTestW, NULL, NULL, &data, &size);
+    ok(hres == HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND), "hres = %x\n", hres);
+
+    hkey = pSHGetShellKey(SHKEY_Root_HKLM, NULL, FALSE);
+    ok(hkey != NULL, "Can't create key\n");
+    ok(SUCCEEDED(RegDeleteKeyW(hkey, WineTestW)), "Can't delte key\n");
+    RegCloseKey(hkey);
+}
+
 static void init_pointers(void)
 {
 #define MAKEFUNC(f, ord) (p##f = (void*)GetProcAddress(hShlwapi, (LPSTR)(ord)))
@@ -2684,8 +2873,13 @@ static void init_pointers(void)
     MAKEFUNC(SHIShellFolder_EnumObjects, 404);
     MAKEFUNC(SHGetObjectCompatFlags, 476);
     MAKEFUNC(IUnknown_QueryServiceExec, 484);
+    MAKEFUNC(SHGetShellKey, 491);
     MAKEFUNC(SHPropertyBag_ReadLONG, 496);
     MAKEFUNC(IUnknown_ProfferService, 514);
+    MAKEFUNC(SKGetValueW, 516);
+    MAKEFUNC(SKSetValueW, 517);
+    MAKEFUNC(SKDeleteValueW, 518);
+    MAKEFUNC(SKAllocValueW, 519);
 #undef MAKEFUNC
 }
 
@@ -2693,6 +2887,13 @@ START_TEST(ordinal)
 {
     hShlwapi = GetModuleHandleA("shlwapi.dll");
     is_win2k_and_lower = GetProcAddress(hShlwapi, "StrChrNW") == 0;
+    is_win9x = GetProcAddress(hShlwapi, (LPSTR)99) == 0; /* StrCpyNXA */
+
+    /* SHCreateStreamOnFileEx was introduced in shlwapi v6.0 */
+    if(!GetProcAddress(hShlwapi, "SHCreateStreamOnFileEx")){
+        win_skip("Too old shlwapi version\n");
+        return;
+    }
 
     init_pointers();
 
@@ -2720,6 +2921,7 @@ START_TEST(ordinal)
     test_SHIShellFolder_EnumObjects();
     test_SHGetIniString();
     test_SHSetIniString();
+    test_SHGetShellKey();
 
     FreeLibrary(hshell32);
     FreeLibrary(hmlang);

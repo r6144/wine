@@ -249,29 +249,47 @@ NTSTATUS WINAPI NtQueryInformationToken(
 	ULONG tokeninfolength,
 	PULONG retlen )
 {
-    ULONG len;
+    static const ULONG info_len [] =
+    {
+        0,
+        0,    /* TokenUser */
+        0,    /* TokenGroups */
+        0,    /* TokenPrivileges */
+        0,    /* TokenOwner */
+        0,    /* TokenPrimaryGroup */
+        0,    /* TokenDefaultDacl */
+        sizeof(TOKEN_SOURCE), /* TokenSource */
+        sizeof(TOKEN_TYPE),  /* TokenType */
+        sizeof(SECURITY_IMPERSONATION_LEVEL), /* TokenImpersonationLevel */
+        sizeof(TOKEN_STATISTICS), /* TokenStatistics */
+        0,    /* TokenRestrictedSids */
+        0,    /* TokenSessionId */
+        0,    /* TokenGroupsAndPrivileges */
+        0,    /* TokenSessionReference */
+        0,    /* TokenSandBoxInert */
+        0,    /* TokenAuditPolicy */
+        0,    /* TokenOrigin */
+        sizeof(TOKEN_ELEVATION_TYPE), /* TokenElevationType */
+        0,    /* TokenLinkedToken */
+        sizeof(TOKEN_ELEVATION), /* TokenElevation */
+        0,    /* TokenHasRestrictions */
+        0,    /* TokenAccessInformation */
+        0,    /* TokenVirtualizationAllowed */
+        0,    /* TokenVirtualizationEnabled */
+        0,    /* TokenIntegrityLevel */
+        0,    /* TokenUIAccess */
+        0,    /* TokenMandatoryPolicy */
+        0     /* TokenLogonSid */
+    };
+
+    ULONG len = 0;
     NTSTATUS status = STATUS_SUCCESS;
 
     TRACE("(%p,%d,%p,%d,%p)\n",
           token,tokeninfoclass,tokeninfo,tokeninfolength,retlen);
 
-    switch (tokeninfoclass)
-    {
-    case TokenSource:
-        len = sizeof(TOKEN_SOURCE);
-        break;
-    case TokenType:
-        len = sizeof (TOKEN_TYPE);
-        break;
-    case TokenImpersonationLevel:
-        len = sizeof(SECURITY_IMPERSONATION_LEVEL);
-        break;
-    case TokenStatistics:
-        len = sizeof(TOKEN_STATISTICS);
-        break;
-    default:
-        len = 0;
-    }
+    if (tokeninfoclass < MaxTokenInfoClass)
+        len = info_len[tokeninfoclass];
 
     if (retlen) *retlen = len;
 
@@ -488,6 +506,20 @@ NTSTATUS WINAPI NtQueryInformationToken(
             }
         }
         SERVER_END_REQ;
+        break;
+    case TokenElevationType:
+        {
+            TOKEN_ELEVATION_TYPE *elevation_type = tokeninfo;
+            FIXME("QueryInformationToken( ..., TokenElevationType, ...) semi-stub\n");
+            *elevation_type = TokenElevationTypeFull;
+        }
+        break;
+    case TokenElevation:
+        {
+            TOKEN_ELEVATION *elevation = tokeninfo;
+            FIXME("QueryInformationToken( ..., TokenElevation, ...) semi-stub\n");
+            elevation->TokenIsElevated = TRUE;
+        }
         break;
     default:
         {
@@ -895,8 +927,12 @@ void fill_cpu_info(void)
     cached_sci.Architecture     = PROCESSOR_ARCHITECTURE_AMD64;
 #elif defined(__powerpc__)
     cached_sci.Architecture     = PROCESSOR_ARCHITECTURE_PPC;
+#elif defined(__arm__)
+    cached_sci.Architecture     = PROCESSOR_ARCHITECTURE_ARM;
 #elif defined(__ALPHA__)
     cached_sci.Architecture     = PROCESSOR_ARCHITECTURE_ALPHA;
+#elif defined(__sparc__)
+    cached_sci.Architecture     = PROCESSOR_ARCHITECTURE_SPARC;
 #else
 #error Unknown CPU
 #endif
@@ -1020,6 +1056,8 @@ void fill_cpu_info(void)
             {
                 if (strstr(value, "cx8"))
                     user_shared_data->ProcessorFeatures[PF_COMPARE_EXCHANGE_DOUBLE] = TRUE;
+                if (strstr(value, "cx16"))
+                    user_shared_data->ProcessorFeatures[PF_COMPARE_EXCHANGE128] = TRUE;
                 if (strstr(value, "mmx"))
                     user_shared_data->ProcessorFeatures[PF_MMX_INSTRUCTIONS_AVAILABLE] = TRUE;
                 if (strstr(value, "tsc"))
@@ -1032,9 +1070,12 @@ void fill_cpu_info(void)
                     user_shared_data->ProcessorFeatures[PF_XMMI_INSTRUCTIONS_AVAILABLE] = TRUE;
                 if (strstr(value, "sse2"))
                     user_shared_data->ProcessorFeatures[PF_XMMI64_INSTRUCTIONS_AVAILABLE] = TRUE;
+                if (strstr(value, "pni"))
+                    user_shared_data->ProcessorFeatures[PF_SSE3_INSTRUCTIONS_AVAILABLE] = TRUE;
                 if (strstr(value, "pae"))
                     user_shared_data->ProcessorFeatures[PF_PAE_ENABLED] = TRUE;
-
+                if (strstr(value, "ht"))
+                    cached_sci.FeatureSet |= CPU_FEATURE_HTT;
                 continue;
             }
 	}
@@ -1164,15 +1205,16 @@ void fill_cpu_info(void)
     }
 #elif defined (__OpenBSD__)
     {
-        int mib[2], num;
+        int mib[2], num, ret;
         size_t len;
 
         mib[0] = CTL_HW;
         mib[1] = HW_NCPU;
         len = sizeof(num);
 
-        num = sysctl(mib, 2, &num, &len, NULL, 0);
-        NtCurrentTeb()->Peb->NumberOfProcessors = num;
+        ret = sysctl(mib, 2, &num, &len, NULL, 0);
+        if (!ret)
+            NtCurrentTeb()->Peb->NumberOfProcessors = num;
     }
 #elif defined (__APPLE__)
     {
@@ -1244,11 +1286,13 @@ void fill_cpu_info(void)
                 {
                     cached_sci.Revision |= value;
                     if (strstr(buffer, "CX8"))   user_shared_data->ProcessorFeatures[PF_COMPARE_EXCHANGE_DOUBLE] = TRUE;
+                    if (strstr(buffer, "CX16"))  user_shared_data->ProcessorFeatures[PF_COMPARE_EXCHANGE128] = TRUE;
                     if (strstr(buffer, "MMX"))   user_shared_data->ProcessorFeatures[PF_MMX_INSTRUCTIONS_AVAILABLE] = TRUE;
                     if (strstr(buffer, "TSC"))   user_shared_data->ProcessorFeatures[PF_RDTSC_INSTRUCTION_AVAILABLE] = TRUE;
                     if (strstr(buffer, "3DNOW")) user_shared_data->ProcessorFeatures[PF_3DNOW_INSTRUCTIONS_AVAILABLE] = TRUE;
                     if (strstr(buffer, "SSE"))   user_shared_data->ProcessorFeatures[PF_XMMI_INSTRUCTIONS_AVAILABLE] = TRUE;
                     if (strstr(buffer, "SSE2"))  user_shared_data->ProcessorFeatures[PF_XMMI64_INSTRUCTIONS_AVAILABLE] = TRUE;
+                    if (strstr(buffer, "SSE3"))  user_shared_data->ProcessorFeatures[PF_SSE3_INSTRUCTIONS_AVAILABLE] = TRUE;
                     if (strstr(buffer, "PAE"))   user_shared_data->ProcessorFeatures[PF_PAE_ENABLED] = TRUE;
                 }
                 break; /* CPU_TYPE_I386 */
@@ -1326,11 +1370,27 @@ NTSTATUS WINAPI NtQuerySystemInformation(
         {
             SYSTEM_PERFORMANCE_INFORMATION spi;
             static BOOL fixme_written = FALSE;
+            FILE *fp;
 
             memset(&spi, 0 , sizeof(spi));
             len = sizeof(spi);
 
             spi.Reserved3 = 0x7fffffff; /* Available paged pool memory? */
+
+            if ((fp = fopen("/proc/uptime", "r")))
+            {
+                double uptime, idle_time;
+
+                fscanf(fp, "%lf %lf", &uptime, &idle_time);
+                fclose(fp);
+                spi.IdleTime.QuadPart = 10000000 * idle_time;
+            }
+            else
+            {
+                static ULONGLONG idle;
+                /* many programs expect IdleTime to change so fake change */
+                spi.IdleTime.QuadPart = ++idle;
+            }
 
             if (Length >= len)
             {

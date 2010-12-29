@@ -97,6 +97,8 @@ static HANDLE main_exe_file;
 static UINT tls_module_count;      /* number of modules with TLS directory */
 static UINT tls_total_size;        /* total size of TLS storage */
 static const IMAGE_TLS_DIRECTORY **tls_dirs;  /* array of TLS directories */
+#define TLS_ALIGNMENT (2 * sizeof(void *))
+#define TLS_ALIGN(size) (((size) + TLS_ALIGNMENT - 1) & ~(TLS_ALIGNMENT - 1))
 
 static RTL_CRITICAL_SECTION loader_section;
 static RTL_CRITICAL_SECTION_DEBUG critsect_debug =
@@ -843,7 +845,7 @@ static NTSTATUS alloc_process_tls(void)
             continue;
         size = (dir->EndAddressOfRawData - dir->StartAddressOfRawData) + dir->SizeOfZeroFill;
         if (!size && !dir->AddressOfCallBacks) continue;
-        tls_total_size += size;
+        tls_total_size += TLS_ALIGN(size);
         tls_module_count++;
     }
     if (!tls_module_count) return STATUS_SUCCESS;
@@ -878,24 +880,19 @@ static NTSTATUS alloc_thread_tls(void)
 {
     void **pointers;
     char *data;
-    UINT i;
+    UINT i, size;
 
     if (!tls_module_count) return STATUS_SUCCESS;
 
-    if (!(pointers = RtlAllocateHeap( GetProcessHeap(), 0,
-                                      tls_module_count * sizeof(*pointers) )))
+    size = TLS_ALIGN( tls_module_count * sizeof(*pointers) );
+    if (!(pointers = RtlAllocateHeap( GetProcessHeap(), 0, size + tls_total_size )))
         return STATUS_NO_MEMORY;
-
-    if (!(data = RtlAllocateHeap( GetProcessHeap(), 0, tls_total_size )))
-    {
-        RtlFreeHeap( GetProcessHeap(), 0, pointers );
-        return STATUS_NO_MEMORY;
-    }
+    data = (char *)pointers + size;
 
     for (i = 0; i < tls_module_count; i++)
     {
         const IMAGE_TLS_DIRECTORY *dir = tls_dirs[i];
-        ULONG size = dir->EndAddressOfRawData - dir->StartAddressOfRawData;
+        size = dir->EndAddressOfRawData - dir->StartAddressOfRawData;
 
         TRACE( "thread %04x idx %d: %d/%d bytes from %p to %p\n",
                GetCurrentThreadId(), i, size, dir->SizeOfZeroFill,
@@ -903,9 +900,8 @@ static NTSTATUS alloc_thread_tls(void)
 
         pointers[i] = data;
         memcpy( data, (void *)dir->StartAddressOfRawData, size );
-        data += size;
-        memset( data, 0, dir->SizeOfZeroFill );
-        data += dir->SizeOfZeroFill;
+        memset( data + size, 0, dir->SizeOfZeroFill );
+        data += TLS_ALIGN( size + dir->SizeOfZeroFill );
     }
     NtCurrentTeb()->ThreadLocalStoragePointer = pointers;
     return STATUS_SUCCESS;
@@ -1404,9 +1400,8 @@ static void load_builtin_callback( void *module, const char *filename )
         builtin_load_info->status = STATUS_INVALID_IMAGE_FORMAT;
         return;
     }
-    virtual_create_system_view( module, nt->OptionalHeader.SizeOfImage,
-                                VPROT_SYSTEM | VPROT_IMAGE | VPROT_COMMITTED |
-                                VPROT_READ | VPROT_WRITECOPY | VPROT_EXEC );
+
+    virtual_create_builtin_view( module );
 
     /* create the MODREF */
 
@@ -2120,7 +2115,6 @@ IMAGE_BASE_RELOCATION * WINAPI LdrProcessRelocationBlock( void *page, UINT count
         {
         case IMAGE_REL_BASED_ABSOLUTE:
             break;
-#ifdef __i386__
         case IMAGE_REL_BASED_HIGH:
             *(short *)((char *)page + offset) += HIWORD(delta);
             break;
@@ -2130,7 +2124,7 @@ IMAGE_BASE_RELOCATION * WINAPI LdrProcessRelocationBlock( void *page, UINT count
         case IMAGE_REL_BASED_HIGHLOW:
             *(int *)((char *)page + offset) += delta;
             break;
-#elif defined(__x86_64__)
+#ifdef __x86_64__
         case IMAGE_REL_BASED_DIR64:
             *(INT_PTR *)((char *)page + offset) += delta;
             break;

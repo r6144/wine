@@ -1,11 +1,7 @@
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = taskmgr.exe
 APPMODE   = -mwindows -mno-cygwin
 IMPORTS   = psapi shell32 comctl32 user32 gdi32 advapi32
-EXTRAINCL = -I$(TOPSRCDIR)/include/msvcrt
+EXTRAINCL = -I$(top_srcdir)/include/msvcrt
 EXTRADEFS = -DNO_LIBWINE_PORT
 MODCFLAGS = @BUILTINFLAG@
 
@@ -34,6 +30,7 @@ RC_SRCS = \
 	De.rc \
 	En.rc \
 	Fr.rc \
+	He.rc \
 	It.rc \
 	Ja.rc \
 	Ko.rc \

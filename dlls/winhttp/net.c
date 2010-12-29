@@ -38,6 +38,7 @@
 #endif
 #ifdef HAVE_OPENSSL_SSL_H
 # include <openssl/ssl.h>
+# include <openssl/opensslv.h>
 #undef FAR
 #undef DSA
 #endif
@@ -91,7 +92,11 @@ static CRITICAL_SECTION init_ssl_cs = { &init_ssl_cs_debug, -1, 0, 0, 0, 0 };
 static void *libssl_handle;
 static void *libcrypto_handle;
 
+#if defined(OPENSSL_VERSION_NUMBER) && (OPENSSL_VERSION_NUMBER > 0x10000000)
+static const SSL_METHOD *method;
+#else
 static SSL_METHOD *method;
+#endif
 static SSL_CTX *ctx;
 static int hostname_idx;
 static int error_idx;
@@ -116,10 +121,11 @@ MAKE_FUNCPTR( SSL_get_ex_new_index );
 MAKE_FUNCPTR( SSL_get_ex_data );
 MAKE_FUNCPTR( SSL_set_ex_data );
 MAKE_FUNCPTR( SSL_get_ex_data_X509_STORE_CTX_idx );
-MAKE_FUNCPTR( SSL_get_verify_result );
 MAKE_FUNCPTR( SSL_get_peer_certificate );
 MAKE_FUNCPTR( SSL_CTX_set_default_verify_paths );
 MAKE_FUNCPTR( SSL_CTX_set_verify );
+MAKE_FUNCPTR( SSL_get_current_cipher );
+MAKE_FUNCPTR( SSL_CIPHER_get_bits );
 
 MAKE_FUNCPTR( CRYPTO_num_locks );
 MAKE_FUNCPTR( CRYPTO_set_id_callback );
@@ -267,11 +273,17 @@ static DWORD netconn_verify_cert( PCCERT_CONTEXT cert, HCERTSTORE store,
     TRACE("verifying %s\n", debugstr_w( server ));
     chainPara.RequestedUsage.Usage.cUsageIdentifier = 1;
     chainPara.RequestedUsage.Usage.rgpszUsageIdentifier = server_auth;
-    if ((ret = CertGetCertificateChain( NULL, cert, NULL, store, &chainPara, 0,
+    if ((ret = CertGetCertificateChain( NULL, cert, NULL, store, &chainPara,
+                                        CERT_CHAIN_REVOCATION_CHECK_CHAIN_EXCLUDE_ROOT,
                                         NULL, &chain )))
     {
         if (chain->TrustStatus.dwErrorStatus)
         {
+            static const DWORD supportedErrors =
+                CERT_TRUST_IS_NOT_TIME_VALID |
+                CERT_TRUST_IS_UNTRUSTED_ROOT |
+                CERT_TRUST_IS_NOT_VALID_FOR_USAGE;
+
             if (chain->TrustStatus.dwErrorStatus & CERT_TRUST_IS_NOT_TIME_VALID)
             {
                 if (!(security_flags & SECURITY_FLAG_IGNORE_CERT_DATE_INVALID))
@@ -279,7 +291,10 @@ static DWORD netconn_verify_cert( PCCERT_CONTEXT cert, HCERTSTORE store,
             }
             else if (chain->TrustStatus.dwErrorStatus &
                      CERT_TRUST_IS_UNTRUSTED_ROOT)
-                err = ERROR_WINHTTP_SECURE_INVALID_CA;
+            {
+                if (!(security_flags & SECURITY_FLAG_IGNORE_UNKNOWN_CA))
+                    err = ERROR_WINHTTP_SECURE_INVALID_CA;
+            }
             else if ((chain->TrustStatus.dwErrorStatus &
                       CERT_TRUST_IS_OFFLINE_REVOCATION) ||
                      (chain->TrustStatus.dwErrorStatus &
@@ -293,23 +308,31 @@ static DWORD netconn_verify_cert( PCCERT_CONTEXT cert, HCERTSTORE store,
                 if (!(security_flags & SECURITY_FLAG_IGNORE_CERT_WRONG_USAGE))
                     err = ERROR_WINHTTP_SECURE_CERT_WRONG_USAGE;
             }
-            else
+            else if (chain->TrustStatus.dwErrorStatus & ~supportedErrors)
                 err = ERROR_WINHTTP_SECURE_INVALID_CERT;
         }
-        else
+        if (!err)
         {
             CERT_CHAIN_POLICY_PARA policyPara;
             SSL_EXTRA_CERT_CHAIN_POLICY_PARA sslExtraPolicyPara;
             CERT_CHAIN_POLICY_STATUS policyStatus;
+            CERT_CHAIN_CONTEXT chainCopy;
 
+            /* Clear chain->TrustStatus.dwErrorStatus so
+             * CertVerifyCertificateChainPolicy will verify additional checks
+             * rather than stopping with an existing, ignored error.
+             */
+            memcpy(&chainCopy, chain, sizeof(chainCopy));
+            chainCopy.TrustStatus.dwErrorStatus = 0;
             sslExtraPolicyPara.u.cbSize = sizeof(sslExtraPolicyPara);
             sslExtraPolicyPara.dwAuthType = AUTHTYPE_SERVER;
             sslExtraPolicyPara.pwszServerName = server;
+            sslExtraPolicyPara.fdwChecks = security_flags;
             policyPara.cbSize = sizeof(policyPara);
             policyPara.dwFlags = 0;
             policyPara.pvExtraPolicyPara = &sslExtraPolicyPara;
             ret = CertVerifyCertificateChainPolicy( CERT_CHAIN_POLICY_SSL,
-                                                    chain, &policyPara,
+                                                    &chainCopy, &policyPara,
                                                     &policyStatus );
             /* Any error in the policy status indicates that the
              * policy couldn't be verified.
@@ -317,10 +340,7 @@ static DWORD netconn_verify_cert( PCCERT_CONTEXT cert, HCERTSTORE store,
             if (ret && policyStatus.dwError)
             {
                 if (policyStatus.dwError == CERT_E_CN_NO_MATCH)
-                {
-                    if (!(security_flags & SECURITY_FLAG_IGNORE_CERT_CN_INVALID))
-                        err = ERROR_WINHTTP_SECURE_CERT_CN_INVALID;
-                }
+                    err = ERROR_WINHTTP_SECURE_CERT_CN_INVALID;
                 else
                     err = ERROR_WINHTTP_SECURE_INVALID_CERT;
             }
@@ -339,53 +359,49 @@ static int netconn_secure_verify( int preverify_ok, X509_STORE_CTX *ctx )
     WCHAR *server;
     BOOL ret = FALSE;
     netconn_t *conn;
+    HCERTSTORE store = CertOpenStore( CERT_STORE_PROV_MEMORY, 0, 0,
+     CERT_STORE_CREATE_NEW_FLAG, NULL );
 
     ssl = pX509_STORE_CTX_get_ex_data( ctx, pSSL_get_ex_data_X509_STORE_CTX_idx() );
     server = pSSL_get_ex_data( ssl, hostname_idx );
     conn = pSSL_get_ex_data( ssl, conn_idx );
-    if (preverify_ok)
+    if (store)
     {
-        HCERTSTORE store = CertOpenStore( CERT_STORE_PROV_MEMORY, 0, 0,
-         CERT_STORE_CREATE_NEW_FLAG, NULL );
+        X509 *cert;
+        int i;
+        PCCERT_CONTEXT endCert = NULL;
 
-        if (store)
+        ret = TRUE;
+        for (i = 0; ret && i < psk_num((struct stack_st *)ctx->chain); i++)
         {
-            X509 *cert;
-            int i;
-            PCCERT_CONTEXT endCert = NULL;
+            PCCERT_CONTEXT context;
 
-            ret = TRUE;
-            for (i = 0; ret && i < psk_num((struct stack_st *)ctx->chain); i++)
+            cert = (X509 *)psk_value((struct stack_st *)ctx->chain, i);
+            if ((context = X509_to_cert_context( cert )))
             {
-                PCCERT_CONTEXT context;
-
-                cert = (X509 *)psk_value((struct stack_st *)ctx->chain, i);
-                if ((context = X509_to_cert_context( cert )))
-                {
-                    if (i == 0)
-                        ret = CertAddCertificateContextToStore( store, context,
-                            CERT_STORE_ADD_ALWAYS, &endCert );
-                    else
-                        ret = CertAddCertificateContextToStore( store, context,
-                            CERT_STORE_ADD_ALWAYS, NULL );
-                    CertFreeCertificateContext( context );
-                }
+                if (i == 0)
+                    ret = CertAddCertificateContextToStore( store, context,
+                        CERT_STORE_ADD_ALWAYS, &endCert );
+                else
+                    ret = CertAddCertificateContextToStore( store, context,
+                        CERT_STORE_ADD_ALWAYS, NULL );
+                CertFreeCertificateContext( context );
             }
-            if (!endCert) ret = FALSE;
-            if (ret)
-            {
-                DWORD_PTR err = netconn_verify_cert( endCert, store, server,
-                                                     conn->security_flags );
-
-                if (err)
-                {
-                    pSSL_set_ex_data( ssl, error_idx, (void *)err );
-                    ret = FALSE;
-                }
-            }
-            CertFreeCertificateContext( endCert );
-            CertCloseStore( store, 0 );
         }
+        if (!endCert) ret = FALSE;
+        if (ret)
+        {
+            DWORD_PTR err = netconn_verify_cert( endCert, store, server,
+                                                 conn->security_flags );
+
+            if (err)
+            {
+                pSSL_set_ex_data( ssl, error_idx, (void *)err );
+                ret = FALSE;
+            }
+        }
+        CertFreeCertificateContext( endCert );
+        CertCloseStore( store, 0 );
     }
     return ret;
 }
@@ -446,10 +462,11 @@ BOOL netconn_init( netconn_t *conn, BOOL secure )
     LOAD_FUNCPTR( SSL_get_ex_data );
     LOAD_FUNCPTR( SSL_set_ex_data );
     LOAD_FUNCPTR( SSL_get_ex_data_X509_STORE_CTX_idx );
-    LOAD_FUNCPTR( SSL_get_verify_result );
     LOAD_FUNCPTR( SSL_get_peer_certificate );
     LOAD_FUNCPTR( SSL_CTX_set_default_verify_paths );
     LOAD_FUNCPTR( SSL_CTX_set_verify );
+    LOAD_FUNCPTR( SSL_get_current_cipher );
+    LOAD_FUNCPTR( SSL_CIPHER_get_bits );
 #undef LOAD_FUNCPTR
 
 #define LOAD_FUNCPTR(x) \
@@ -1051,5 +1068,24 @@ const void *netconn_get_certificate( netconn_t *conn )
     return ret;
 #else
     return NULL;
+#endif
+}
+
+int netconn_get_cipher_strength( netconn_t *conn )
+{
+#ifdef SONAME_LIBSSL
+#if defined(OPENSSL_VERSION_NUMBER) && (OPENSSL_VERSION_NUMBER >= 0x0090707f)
+    const SSL_CIPHER *cipher;
+#else
+    SSL_CIPHER *cipher;
+#endif
+    int bits = 0;
+
+    if (!conn->secure) return 0;
+    if (!(cipher = pSSL_get_current_cipher( conn->ssl_conn ))) return 0;
+    pSSL_CIPHER_get_bits( cipher, &bits );
+    return bits;
+#else
+    return 0;
 #endif
 }

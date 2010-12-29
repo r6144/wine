@@ -78,6 +78,7 @@ static XContext win_data_context;
 static Time last_user_time;
 static Window user_time_window;
 
+static const char foreign_window_prop[] = "__wine_x11_foreign_window";
 static const char whole_window_prop[] = "__wine_x11_whole_window";
 static const char client_window_prop[]= "__wine_x11_client_window";
 static const char icon_window_prop[]  = "__wine_x11_icon_window";
@@ -430,6 +431,10 @@ static void sync_window_cursor( struct x11drv_win_data *data )
     SERVER_END_REQ;
 
     set_window_cursor( data->hwnd, cursor );
+
+    /* setting the cursor can fail if the window isn't created yet */
+    /* so make sure that we try again once we receive a mouse event */
+    data->cursor = (HANDLE)~0u;
 }
 
 
@@ -474,8 +479,10 @@ static void sync_window_region( Display *display, struct x11drv_win_data *data, 
     }
     else
     {
-        RGNDATA *pRegionData = X11DRV_GetRegionData( hrgn, 0 );
-        if (pRegionData)
+        RGNDATA *pRegionData;
+
+        if (GetWindowLongW( data->hwnd, GWL_EXSTYLE ) & WS_EX_LAYOUTRTL) MirrorRgn( data->hwnd, hrgn );
+        if ((pRegionData = X11DRV_GetRegionData( hrgn, 0 )))
         {
             wine_tsx11_lock();
             XShapeCombineRectangles( display, data->whole_window, ShapeBounding,
@@ -1350,6 +1357,8 @@ static void set_xembed_flags( Display *display, struct x11drv_win_data *data, un
 {
     unsigned long info[2];
 
+    if (!data->whole_window) return;
+
     info[0] = 0; /* protocol version */
     info[1] = flags;
     wine_tsx11_lock();
@@ -1412,18 +1421,19 @@ static void unmap_window( Display *display, struct x11drv_win_data *data )
  */
 void make_window_embedded( Display *display, struct x11drv_win_data *data )
 {
-    if (data->mapped)
-    {
-        /* the window cannot be mapped before being embedded */
-        unmap_window( display, data );
-        data->embedded = TRUE;
+    BOOL was_mapped = data->mapped;
+    /* the window cannot be mapped before being embedded */
+    if (data->mapped) unmap_window( display, data );
+
+    data->embedded = TRUE;
+    data->managed = TRUE;
+    SetPropA( data->hwnd, managed_prop, (HANDLE)1 );
+    sync_window_style( display, data );
+
+    if (was_mapped)
         map_window( display, data, 0 );
-    }
     else
-    {
-        data->embedded = TRUE;
         set_xembed_flags( display, data, 0 );
-    }
 }
 
 
@@ -1615,6 +1625,8 @@ static void move_window_bits( struct x11drv_win_data *data, const RECT *old_rect
         hdc_src = hdc_dst = GetDCEx( data->hwnd, 0, DCX_CACHE );
     }
 
+    ExcludeUpdateRgn( hdc_dst, data->hwnd );
+
     code = X11DRV_START_EXPOSURES;
     ExtEscape( hdc_dst, X11DRV_ESCAPE, sizeof(code), (LPSTR)&code, 0, NULL );
 
@@ -1742,7 +1754,23 @@ done:
  */
 static void destroy_whole_window( Display *display, struct x11drv_win_data *data, BOOL already_destroyed )
 {
-    if (!data->whole_window) return;
+    if (!data->whole_window)
+    {
+        if (data->embedded)
+        {
+            Window xwin = (Window)GetPropA( data->hwnd, foreign_window_prop );
+            if (xwin)
+            {
+                wine_tsx11_lock();
+                if (!already_destroyed) XSelectInput( display, xwin, 0 );
+                XDeleteContext( display, xwin, winContext );
+                wine_tsx11_unlock();
+                RemovePropA( data->hwnd, foreign_window_prop );
+            }
+        }
+        return;
+    }
+
 
     TRACE( "win %p xwin %lx/%lx\n", data->hwnd, data->whole_window, data->client_window );
     wine_tsx11_lock();
@@ -1791,17 +1819,16 @@ void CDECL X11DRV_SetWindowText( HWND hwnd, LPCWSTR text )
  */
 void CDECL X11DRV_SetWindowStyle( HWND hwnd, INT offset, STYLESTRUCT *style )
 {
-    struct x11drv_win_data *data;
+    struct x11drv_win_data *data = X11DRV_get_win_data( hwnd );
     DWORD changed;
 
     if (hwnd == GetDesktopWindow()) return;
     changed = style->styleNew ^ style->styleOld;
 
-    if (offset == GWL_STYLE && (changed & WS_VISIBLE) && (style->styleNew & WS_VISIBLE))
+    /* if WS_VISIBLE was set through WM_SETREDRAW, map the window if it's the first time */
+    if (offset == GWL_STYLE && (changed & WS_VISIBLE) && (style->styleNew & WS_VISIBLE) && !data)
     {
-        /* we don't unmap windows, that causes trouble with the window manager */
-        if (!(data = X11DRV_get_win_data( hwnd )) &&
-            !(data = X11DRV_create_win_data( hwnd ))) return;
+        if (!(data = X11DRV_create_win_data( hwnd ))) return;
 
         if (data->whole_window && is_window_rect_mapped( &data->window_rect ))
         {
@@ -1810,20 +1837,13 @@ void CDECL X11DRV_SetWindowStyle( HWND hwnd, INT offset, STYLESTRUCT *style )
             if (!data->mapped) map_window( display, data, style->styleNew );
         }
     }
+    if (!data || !data->whole_window) return;
 
     if (offset == GWL_STYLE && (changed & WS_DISABLED))
-    {
-        data = X11DRV_get_win_data( hwnd );
-        if (data && data->whole_window)
-            set_wm_hints( thread_display(), data );
-    }
+        set_wm_hints( thread_display(), data );
 
-    if (offset == GWL_EXSTYLE && (changed & WS_EX_LAYERED))
-    {
-        /* changing WS_EX_LAYERED resets attributes */
-        if ((data = X11DRV_get_win_data( hwnd )) && data->whole_window)
-            sync_window_opacity( thread_display(), data->whole_window, 0, 0, 0 );
-    }
+    if (offset == GWL_EXSTYLE && (changed & WS_EX_LAYERED)) /* changing WS_EX_LAYERED resets attributes */
+        sync_window_opacity( thread_display(), data->whole_window, 0, 0, 0 );
 }
 
 
@@ -1862,6 +1882,7 @@ void CDECL X11DRV_DestroyWindow( HWND hwnd )
     }
 
     if (thread_data->last_focus == hwnd) thread_data->last_focus = 0;
+    if (thread_data->last_xic_hwnd == hwnd) thread_data->last_xic_hwnd = 0;
     if (data->hWMIconBitmap) DeleteObject( data->hWMIconBitmap );
     if (data->hWMIconMask) DeleteObject( data->hWMIconMask);
     wine_tsx11_lock();
@@ -1880,9 +1901,10 @@ void X11DRV_DestroyNotify( HWND hwnd, XEvent *event )
     struct x11drv_win_data *data;
 
     if (!(data = X11DRV_get_win_data( hwnd ))) return;
+    if (!data->embedded) FIXME( "window %p/%lx destroyed from the outside\n", hwnd, data->whole_window );
 
-    FIXME( "window %p/%lx destroyed from the outside\n", hwnd, data->whole_window );
     destroy_whole_window( display, data, TRUE );
+    if (data->embedded) SendMessageW( hwnd, WM_CLOSE, 0, 0 );
 }
 
 
@@ -1929,9 +1951,10 @@ BOOL CDECL X11DRV_CreateDesktopWindow( HWND hwnd )
     SERVER_START_REQ( get_window_rectangles )
     {
         req->handle = wine_server_user_handle( hwnd );
+        req->relative = COORDS_CLIENT;
         wine_server_call( req );
-        width  = reply->window.right - reply->window.left;
-        height = reply->window.bottom - reply->window.top;
+        width  = reply->window.right;
+        height = reply->window.bottom;
     }
     SERVER_END_REQ;
 
@@ -2033,6 +2056,122 @@ struct x11drv_win_data *X11DRV_create_win_data( HWND hwnd )
 }
 
 
+/* window procedure for foreign windows */
+static LRESULT WINAPI foreign_window_proc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam )
+{
+    switch(msg)
+    {
+    case WM_WINDOWPOSCHANGED:
+        update_systray_balloon_position();
+        break;
+    case WM_PARENTNOTIFY:
+        if (LOWORD(wparam) == WM_DESTROY)
+        {
+            TRACE( "%p: got parent notify destroy for win %lx\n", hwnd, lparam );
+            PostMessageW( hwnd, WM_CLOSE, 0, 0 );  /* so that we come back here once the child is gone */
+        }
+        return 0;
+    case WM_CLOSE:
+        if (GetWindow( hwnd, GW_CHILD )) return 0;  /* refuse to die if we still have children */
+        break;
+    }
+    return DefWindowProcW( hwnd, msg, wparam, lparam );
+}
+
+
+/***********************************************************************
+ *		create_foreign_window
+ *
+ * Create a foreign window for the specified X window and its ancestors
+ */
+HWND create_foreign_window( Display *display, Window xwin )
+{
+    static const WCHAR classW[] = {'_','_','w','i','n','e','_','x','1','1','_','f','o','r','e','i','g','n','_','w','i','n','d','o','w',0};
+    static BOOL class_registered;
+    struct x11drv_win_data *data;
+    HWND hwnd, parent;
+    Window xparent, xroot;
+    Window *xchildren;
+    unsigned int nchildren;
+    XWindowAttributes attr;
+    DWORD style = WS_CLIPCHILDREN;
+
+    if (!class_registered)
+    {
+        WNDCLASSEXW class;
+
+        memset( &class, 0, sizeof(class) );
+        class.cbSize        = sizeof(class);
+        class.lpfnWndProc   = foreign_window_proc;
+        class.lpszClassName = classW;
+        if (!RegisterClassExW( &class ) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
+        {
+            ERR( "Could not register foreign window class\n" );
+            return FALSE;
+        }
+        class_registered = TRUE;
+    }
+
+    wine_tsx11_lock();
+    if (XFindContext( display, xwin, winContext, (char **)&hwnd )) hwnd = 0;
+    if (hwnd)  /* already created */
+    {
+        wine_tsx11_unlock();
+        return hwnd;
+    }
+
+    XSelectInput( display, xwin, StructureNotifyMask );
+    if (!XGetWindowAttributes( display, xwin, &attr ) ||
+        !XQueryTree( display, xwin, &xroot, &xparent, &xchildren, &nchildren ))
+    {
+        XSelectInput( display, xwin, 0 );
+        wine_tsx11_unlock();
+        return 0;
+    }
+    XFree( xchildren );
+    wine_tsx11_unlock();
+
+    if (xparent == xroot)
+    {
+        parent = GetDesktopWindow();
+        style |= WS_POPUP;
+        attr.x += virtual_screen_rect.left;
+        attr.y += virtual_screen_rect.top;
+    }
+    else
+    {
+        parent = create_foreign_window( display, xparent );
+        style |= WS_CHILD;
+    }
+
+    hwnd = CreateWindowW( classW, NULL, style, attr.x, attr.y, attr.width, attr.height,
+                          parent, 0, 0, NULL );
+
+    if (!(data = alloc_win_data( display, hwnd )))
+    {
+        DestroyWindow( hwnd );
+        return 0;
+    }
+    SetRect( &data->window_rect, attr.x, attr.y, attr.x + attr.width, attr.y + attr.height );
+    data->whole_rect = data->client_rect = data->window_rect;
+    data->whole_window = data->client_window = 0;
+    data->embedded = TRUE;
+    data->mapped = TRUE;
+
+    SetPropA( hwnd, foreign_window_prop, (HANDLE)xwin );
+    wine_tsx11_lock();
+    XSaveContext( display, xwin, winContext, (char *)data->hwnd );
+    wine_tsx11_unlock();
+
+    ShowWindow( hwnd, SW_SHOW );
+
+    TRACE( "win %lx parent %p style %08x %s -> hwnd %p\n",
+           xwin, parent, style, wine_dbgstr_rect(&data->window_rect), hwnd );
+
+    return hwnd;
+}
+
+
 /***********************************************************************
  *		X11DRV_get_whole_window
  *
@@ -2080,6 +2219,8 @@ XIC X11DRV_get_ic( HWND hwnd )
     XIM xim;
 
     if (!data) return 0;
+
+    x11drv_thread_data()->last_xic_hwnd = hwnd;
     if (data->xic) return data->xic;
     if (!(xim = x11drv_thread_data()->xim)) return 0;
     return X11DRV_CreateIC( xim, data );
@@ -2094,6 +2235,7 @@ void CDECL X11DRV_GetDC( HDC hdc, HWND hwnd, HWND top, const RECT *win_rect,
 {
     struct x11drv_escape_set_drawable escape;
     struct x11drv_win_data *data = X11DRV_get_win_data( hwnd );
+    HWND parent;
 
     escape.code        = X11DRV_SET_DRAWABLE;
     escape.mode        = IncludeInferiors;
@@ -2101,6 +2243,15 @@ void CDECL X11DRV_GetDC( HDC hdc, HWND hwnd, HWND top, const RECT *win_rect,
     escape.gl_drawable = 0;
     escape.pixmap      = 0;
     escape.gl_copy     = FALSE;
+
+    escape.dc_rect.left         = win_rect->left - top_rect->left;
+    escape.dc_rect.top          = win_rect->top - top_rect->top;
+    escape.dc_rect.right        = win_rect->right - top_rect->left;
+    escape.dc_rect.bottom       = win_rect->bottom - top_rect->top;
+    escape.drawable_rect.left   = top_rect->left;
+    escape.drawable_rect.top    = top_rect->top;
+    escape.drawable_rect.right  = top_rect->right;
+    escape.drawable_rect.bottom = top_rect->bottom;
 
     if (top == hwnd)
     {
@@ -2118,22 +2269,25 @@ void CDECL X11DRV_GetDC( HDC hdc, HWND hwnd, HWND top, const RECT *win_rect,
     }
     else
     {
-        escape.drawable    = X11DRV_get_client_window( top );
+        /* find the first ancestor that has a drawable */
+        for (parent = hwnd; parent && parent != top; parent = GetAncestor( parent, GA_PARENT ))
+            if ((escape.drawable = X11DRV_get_client_window( parent ))) break;
+
+        if (escape.drawable)
+        {
+            POINT pt = { 0, 0 };
+            MapWindowPoints( top, parent, &pt, 1 );
+            OffsetRect( &escape.dc_rect, pt.x, pt.y );
+            OffsetRect( &escape.drawable_rect, -pt.x, -pt.y );
+        }
+        else escape.drawable = X11DRV_get_client_window( top );
+
         escape.fbconfig_id = data ? data->fbconfig_id : (XID)GetPropA( hwnd, fbconfig_id_prop );
         escape.gl_drawable = data ? data->gl_drawable : (Drawable)GetPropA( hwnd, gl_drawable_prop );
         escape.pixmap      = data ? data->pixmap : (Pixmap)GetPropA( hwnd, pixmap_prop );
         escape.gl_copy     = (escape.gl_drawable != 0);
         if (flags & DCX_CLIPCHILDREN) escape.mode = ClipByChildren;
     }
-
-    escape.dc_rect.left         = win_rect->left - top_rect->left;
-    escape.dc_rect.top          = win_rect->top - top_rect->top;
-    escape.dc_rect.right        = win_rect->right - top_rect->left;
-    escape.dc_rect.bottom       = win_rect->bottom - top_rect->top;
-    escape.drawable_rect.left   = top_rect->left;
-    escape.drawable_rect.top    = top_rect->top;
-    escape.drawable_rect.right  = top_rect->right;
-    escape.drawable_rect.bottom = top_rect->bottom;
 
     ExtEscape( hdc, X11DRV_ESCAPE, sizeof(escape), (LPSTR)&escape, 0, NULL );
 }
@@ -2205,6 +2359,7 @@ void CDECL X11DRV_SetParent( HWND hwnd, HWND parent, HWND old_parent )
 
     if (!data) return;
     if (parent == old_parent) return;
+    if (data->embedded) return;
 
     if (parent != GetDesktopWindow()) /* a child window */
     {
@@ -2335,7 +2490,7 @@ void CDECL X11DRV_WindowPosChanged( HWND hwnd, HWND insert_after, UINT swp_flags
             !memcmp( &valid_rects[0], &data->client_rect, sizeof(RECT) ))
         {
             /* if we have an X window the bits will be moved by the X server */
-            if (!data->whole_window)
+            if (!data->whole_window && (x_offset != 0 || y_offset != 0))
                 move_window_bits( data, &old_whole_rect, &data->whole_rect, &old_client_rect );
         }
         else
@@ -2355,10 +2510,11 @@ void CDECL X11DRV_WindowPosChanged( HWND hwnd, HWND insert_after, UINT swp_flags
     if (thread_data->current_event && thread_data->current_event->xany.window == data->whole_window)
         event_type = thread_data->current_event->type;
 
-    if (event_type != ConfigureNotify && event_type != PropertyNotify)
+    if (event_type != ConfigureNotify && event_type != PropertyNotify &&
+        event_type != GravityNotify && event_type != ReparentNotify)
         event_type = 0;  /* ignore other events */
 
-    if (data->mapped)
+    if (data->mapped && event_type != ReparentNotify)
     {
         if (((swp_flags & SWP_HIDEWINDOW) && !(new_style & WS_VISIBLE)) ||
             (event_type != ConfigureNotify &&
@@ -2668,7 +2824,7 @@ LRESULT CDECL X11DRV_SysCommand( HWND hwnd, WPARAM wparam, LPARAM lparam )
      * with a ButtonPress event */
     wine_tsx11_lock();
     XUngrabPointer( display, CurrentTime );
-    XSendEvent(display, root_window, False, SubstructureNotifyMask, &xev);
+    XSendEvent(display, root_window, False, SubstructureNotifyMask | SubstructureRedirectMask, &xev);
     wine_tsx11_unlock();
     return 0;
 }

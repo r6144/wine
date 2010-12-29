@@ -32,6 +32,8 @@
 
 #include "wine/test.h"
 
+static BOOL is_wow64;
+
 static LONG (WINAPI *pRegDeleteKeyExA)(HKEY, LPCSTR, REGSAM, DWORD);
 static BOOL (WINAPI *pIsWow64Process)(HANDLE, PBOOL);
 
@@ -40,7 +42,7 @@ DEFINE_GUID(GUID_NULL,0,0,0,0,0,0,0,0,0,0,0);
 static const char *msifile = "winetest-automation.msi";
 static const WCHAR szMsifile[] = {'w','i','n','e','t','e','s','t','-','a','u','t','o','m','a','t','i','o','n','.','m','s','i',0};
 static const WCHAR szMSITEST[] = { 'M','S','I','T','E','S','T',0 };
-static const WCHAR szProductCode[] = { '{','F','1','C','3','A','F','5','0','-','8','B','5','6','-','4','A','6','9','-','A','0','0','C','-','0','0','7','7','3','F','E','4','2','F','3','0','}',0 };
+static const WCHAR szProductCode[] = { '{','8','3','7','4','5','0','f','a','-','a','3','9','b','-','4','b','c','8','-','b','3','2','1','-','0','8','b','3','9','3','f','7','8','4','b','3','}',0 };
 static const WCHAR szUpgradeCode[] = { '{','C','E','0','6','7','E','8','D','-','2','E','1','A','-','4','3','6','7','-','B','7','3','4','-','4','E','B','2','B','D','A','D','6','5','6','5','}',0 };
 static const WCHAR szProductInfoException[] = { 'P','r','o','d','u','c','t','I','n','f','o',',','P','r','o','d','u','c','t',',','A','t','t','r','i','b','u','t','e',0 };
 static const WCHAR WINE_INSTALLPROPERTY_PACKAGENAMEW[] = {'P','a','c','k','a','g','e','N','a','m','e',0};
@@ -77,7 +79,7 @@ static const CHAR directory_dat[] = "Directory\tDirectory_Parent\tDefaultDir\n"
                                     "MSITESTDIR\tProgramFilesFolder\tmsitest\n"
                                     "NEWDIR\tCABOUTDIR\tnew\n"
                                     "ProgramFilesFolder\tTARGETDIR\t.\n"
-                                    "TARGETDIR\t\tSourceDir";
+                                    "TARGETDIR\t\tSourceDir\n";
 
 static const CHAR feature_dat[] = "Feature\tFeature_Parent\tTitle\tDescription\tDisplay\tLevel\tDirectory_\tAttributes\n"
                                   "s38\tS38\tL64\tL255\tI2\ti2\tS72\ti2\n"
@@ -123,7 +125,7 @@ static const CHAR install_exec_seq_dat[] = "Action\tCondition\tSequence\n"
                                            "InstallInitialize\t\t1500\n"
                                            "InstallValidate\t\t1400\n"
                                            "LaunchConditions\t\t100\n"
-                                           "WriteRegistryValues\tSourceDir And SOURCEDIR\t5000";
+                                           "WriteRegistryValues\tSourceDir And SOURCEDIR\t5000\n";
 
 static const CHAR media_dat[] = "DiskId\tLastSequence\tDiskPrompt\tCabinet\tVolumeLabel\tSource\n"
                                 "i2\ti4\tL64\tS255\tS32\tS72\n"
@@ -139,22 +141,23 @@ static const CHAR property_dat[] = "Property\tValue\n"
                                    "InstallMode\tTypical\n"
                                    "Manufacturer\tWine\n"
                                    "PIDTemplate\t12345<###-%%%%%%%>@@@@@\n"
-                                   "ProductCode\t{F1C3AF50-8B56-4A69-A00C-00773FE42F30}\n"
+                                   "ProductCode\t{837450fa-a39b-4bc8-b321-08b393f784b3}\n"
                                    "ProductID\tnone\n"
                                    "ProductLanguage\t1033\n"
                                    "ProductName\tMSITEST\n"
                                    "ProductVersion\t1.1.1\n"
                                    "PROMPTROLLBACKCOST\tP\n"
                                    "Setup\tSetup\n"
-                                   "UpgradeCode\t{CE067E8D-2E1A-4367-B734-4EB2BDAD6565}";
+                                   "UpgradeCode\t{CE067E8D-2E1A-4367-B734-4EB2BDAD6565}\n"
+                                   "MSIFASTINSTALL\t1\n";
 
 static const CHAR registry_dat[] = "Registry\tRoot\tKey\tName\tValue\tComponent_\n"
                                    "s72\ti2\tl255\tL255\tL0\ts72\n"
                                    "Registry\tRegistry\n"
-                                   "Apples\t2\tSOFTWARE\\Wine\\msitest\tName\timaname\tOne\n"
-                                   "Oranges\t2\tSOFTWARE\\Wine\\msitest\tnumber\t#314\tTwo\n"
-                                   "regdata\t2\tSOFTWARE\\Wine\\msitest\tblah\tbad\tdangler\n"
-                                   "OrderTest\t2\tSOFTWARE\\Wine\\msitest\tOrderTestName\tOrderTestValue\tcomponent";
+                                   "Apples\t1\tSOFTWARE\\Wine\\msitest\tName\timaname\tOne\n"
+                                   "Oranges\t1\tSOFTWARE\\Wine\\msitest\tnumber\t#314\tTwo\n"
+                                   "regdata\t1\tSOFTWARE\\Wine\\msitest\tblah\tbad\tdangler\n"
+                                   "OrderTest\t1\tSOFTWARE\\Wine\\msitest\tOrderTestName\tOrderTestValue\tcomponent\n";
 
 typedef struct _msi_table
 {
@@ -2427,9 +2430,8 @@ static void test_Installer_InstallProduct(void)
     int iValue, iCount;
     IDispatch *pStringList = NULL;
     REGSAM access = KEY_ALL_ACCESS;
-    BOOL wow64;
 
-    if (pIsWow64Process && pIsWow64Process(GetCurrentProcess(), &wow64) && wow64)
+    if (is_wow64)
         access |= KEY_WOW64_64KEY;
 
     create_test_files();
@@ -2514,7 +2516,7 @@ static void test_Installer_InstallProduct(void)
     ok(delete_pf("msitest\\filename", TRUE), "File not installed\n");
     ok(delete_pf("msitest", FALSE), "File not installed\n");
 
-    res = RegOpenKeyEx(HKEY_LOCAL_MACHINE, "SOFTWARE\\Wine\\msitest", 0, access, &hkey);
+    res = RegOpenKeyA(HKEY_CURRENT_USER, "SOFTWARE\\Wine\\msitest", &hkey);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     size = MAX_PATH;
@@ -2542,12 +2544,13 @@ static void test_Installer_InstallProduct(void)
 
     RegCloseKey(hkey);
 
-    res = delete_key_portable(HKEY_LOCAL_MACHINE, "SOFTWARE\\Wine\\msitest", access);
+    res = RegDeleteKeyA(HKEY_CURRENT_USER, "SOFTWARE\\Wine\\msitest");
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* Remove registry keys written by RegisterProduct standard action */
     res = delete_key_portable(HKEY_LOCAL_MACHINE,
-        "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{F1C3AF50-8B56-4A69-A00C-00773FE42F30}", access);
+        "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{837450fa-a39b-4bc8-b321-08b393f784b3}",
+                              KEY_WOW64_32KEY);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     res = delete_key_portable(HKEY_LOCAL_MACHINE,
@@ -2555,32 +2558,32 @@ static void test_Installer_InstallProduct(void)
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     res = find_registry_key(HKEY_LOCAL_MACHINE,
-        "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Installer\\UserData", "05FA3C1F65B896A40AC00077F34EF203", access, &hkey);
+        "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Installer\\UserData", "af054738b93a8cb43b12803b397f483b", access, &hkey);
     ok(res == ERROR_SUCCESS ||
        broken(res == ERROR_FILE_NOT_FOUND), /* win9x */
        "Expected ERROR_SUCCESS, got %d\n", res);
     if (res == ERROR_SUCCESS)
     {
-        res = delete_registry_key(hkey, "05FA3C1F65B896A40AC00077F34EF203", access);
+        res = delete_registry_key(hkey, "af054738b93a8cb43b12803b397f483b", access);
         ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
         RegCloseKey(hkey);
 
         res = delete_key_portable(HKEY_LOCAL_MACHINE,
-            "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Installer\\Products\\05FA3C1F65B896A40AC00077F34EF203", access);
+            "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Installer\\Products\\af054738b93a8cb43b12803b397f483b", access);
         ok(res == ERROR_FILE_NOT_FOUND, "Expected ERROR_FILE_NOT_FOUND, got %d\n", res);
     }
     else
     {
         /* win9x defaults to a per-machine install. */
         delete_key_portable(HKEY_LOCAL_MACHINE,
-            "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Installer\\Products\\05FA3C1F65B896A40AC00077F34EF203", access);
+            "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Installer\\Products\\af054738b93a8cb43b12803b397f483b", access);
     }
 
     /* Remove registry keys written by PublishProduct standard action */
     res = RegOpenKey(HKEY_CURRENT_USER, "SOFTWARE\\Microsoft\\Installer", &hkey);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
-    res = delete_registry_key(hkey, "Products\\05FA3C1F65B896A40AC00077F34EF203", KEY_ALL_ACCESS);
+    res = delete_registry_key(hkey, "Products\\af054738b93a8cb43b12803b397f483b", KEY_ALL_ACCESS);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     res = RegDeleteKeyA(hkey, "UpgradeCodes\\D8E760ECA1E276347B43E42BDBDA5656");
@@ -2730,6 +2733,10 @@ START_TEST(automation)
     IUnknown *pUnk;
 
     init_functionpointers();
+
+    if (pIsWow64Process)
+        pIsWow64Process(GetCurrentProcess(), &is_wow64);
+
     GetSystemTimeAsFileTime(&systemtime);
 
     GetCurrentDirectoryA(MAX_PATH, prev_path);

@@ -35,7 +35,7 @@ const unsigned char * WINAPI glGetString(unsigned int);
 typedef void* HPBUFFERARB;
 
 /* WGL_ARB_create_context */
-HGLRC (WINAPI *pwglCreateContextAttribsARB)(HDC hDC, HGLRC hShareContext, const int *attribList);
+static HGLRC (WINAPI *pwglCreateContextAttribsARB)(HDC hDC, HGLRC hShareContext, const int *attribList);
 /* GetLastError */
 #define ERROR_INVALID_VERSION_ARB 0x2095
 #define WGL_CONTEXT_MAJOR_VERSION_ARB 0x2091
@@ -590,13 +590,16 @@ struct wgl_thread_param
     HANDLE test_finished;
     HGLRC hglrc;
     BOOL hglrc_deleted;
+    DWORD last_error;
 };
 
 static DWORD WINAPI wgl_thread(void *param)
 {
     struct wgl_thread_param *p = param;
 
+    SetLastError(0xdeadbeef);
     p->hglrc_deleted = wglDeleteContext(p->hglrc);
+    p->last_error = GetLastError();
     SetEvent(p->test_finished);
 
     return 0;
@@ -608,6 +611,11 @@ static void test_deletecontext(HDC hdc)
     HGLRC hglrc = wglCreateContext(hdc);
     HANDLE thread_handle;
     DWORD res, tid;
+
+    SetLastError(0xdeadbeef);
+    res = wglDeleteContext(NULL);
+    ok(res == FALSE, "wglDeleteContext succeeded\n");
+    ok(GetLastError() == ERROR_INVALID_HANDLE, "Expected last error to be ERROR_INVALID_HANDLE, got %u\n", GetLastError());
 
     if(!hglrc)
     {
@@ -633,11 +641,18 @@ static void test_deletecontext(HDC hdc)
     {
         WaitForSingleObject(thread_handle, INFINITE);
         ok(thread_params.hglrc_deleted == FALSE, "Attempt to delete WGL context from another thread passed but should fail!\n");
+        ok(thread_params.last_error == ERROR_BUSY, "Expected last error to be ERROR_BUSY, got %u\n", thread_params.last_error);
     }
     CloseHandle(thread_params.test_finished);
 
     res = wglDeleteContext(hglrc);
     ok(res == TRUE, "wglDeleteContext failed\n");
+
+    /* Attempting to delete the same context twice should fail. */
+    SetLastError(0xdeadbeef);
+    res = wglDeleteContext(hglrc);
+    ok(res == FALSE, "wglDeleteContext succeeded\n");
+    ok(GetLastError() == ERROR_INVALID_HANDLE, "Expected last error to be ERROR_INVALID_HANDLE, got %u\n", GetLastError());
 
     /* WGL makes a context not current when deleting it. This differs from GLX behavior where
      * deletion takes place when the thread becomes not current. */

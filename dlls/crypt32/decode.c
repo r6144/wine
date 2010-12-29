@@ -205,7 +205,7 @@ static BOOL CRYPT_GetLen(const BYTE *pbEncoded, DWORD cbEncoded, DWORD *len)
  * pointer to the newly allocated memory.
  */
 static BOOL CRYPT_DecodeEnsureSpace(DWORD dwFlags,
- PCRYPT_DECODE_PARA pDecodePara, void *pvStructInfo, DWORD *pcbStructInfo,
+ const CRYPT_DECODE_PARA *pDecodePara, void *pvStructInfo, DWORD *pcbStructInfo,
  DWORD bytesNeeded)
 {
     BOOL ret = TRUE;
@@ -232,7 +232,7 @@ static BOOL CRYPT_DecodeEnsureSpace(DWORD dwFlags,
     return ret;
 }
 
-static void CRYPT_FreeSpace(PCRYPT_DECODE_PARA pDecodePara, LPVOID pv)
+static void CRYPT_FreeSpace(const CRYPT_DECODE_PARA *pDecodePara, LPVOID pv)
 {
     if (pDecodePara && pDecodePara->pfnFree)
         pDecodePara->pfnFree(pv);
@@ -611,7 +611,7 @@ struct AsnArrayItemSize
  */
 static BOOL CRYPT_AsnDecodeArray(const struct AsnArrayDescriptor *arrayDesc,
  const BYTE *pbEncoded, DWORD cbEncoded, DWORD dwFlags,
- PCRYPT_DECODE_PARA pDecodePara, void *pvStructInfo, DWORD *pcbStructInfo,
+ const CRYPT_DECODE_PARA *pDecodePara, void *pvStructInfo, DWORD *pcbStructInfo,
  DWORD *pcbDecoded)
 {
     BOOL ret = TRUE;
@@ -5565,6 +5565,124 @@ BOOL CRYPT_AsnDecodeCMSSignedInfo(const BYTE *pbEncoded, DWORD cbEncoded,
     ret = CRYPT_AsnDecodeSequence(items, sizeof(items) / sizeof(items[0]),
      pbEncoded, cbEncoded, dwFlags, pDecodePara, signedInfo, pcbSignedInfo,
      NULL, NULL);
+    TRACE("returning %d\n", ret);
+    return ret;
+}
+
+static BOOL CRYPT_AsnDecodeRecipientInfo(const BYTE *pbEncoded, DWORD cbEncoded,
+ DWORD dwFlags, void *pvStructInfo, DWORD *pcbStructInfo, DWORD *pcbDecoded)
+{
+    BOOL ret;
+    CMSG_KEY_TRANS_RECIPIENT_INFO *info = pvStructInfo;
+    struct AsnDecodeSequenceItem items[] = {
+     { ASN_INTEGER, offsetof(CMSG_KEY_TRANS_RECIPIENT_INFO, dwVersion),
+       CRYPT_AsnDecodeIntInternal, sizeof(DWORD), FALSE, FALSE, 0, 0 },
+     { ASN_SEQUENCEOF, offsetof(CMSG_KEY_TRANS_RECIPIENT_INFO,
+       RecipientId.u.IssuerSerialNumber), CRYPT_AsnDecodeIssuerSerialNumber,
+       sizeof(CERT_ISSUER_SERIAL_NUMBER), FALSE, TRUE,
+       offsetof(CMSG_KEY_TRANS_RECIPIENT_INFO,
+       RecipientId.u.IssuerSerialNumber.Issuer.pbData), 0 },
+     { ASN_SEQUENCEOF, offsetof(CMSG_KEY_TRANS_RECIPIENT_INFO,
+       KeyEncryptionAlgorithm), CRYPT_AsnDecodeAlgorithmId,
+       sizeof(CRYPT_ALGORITHM_IDENTIFIER), FALSE, TRUE,
+       offsetof(CMSG_KEY_TRANS_RECIPIENT_INFO,
+       KeyEncryptionAlgorithm.pszObjId), 0 },
+     { ASN_OCTETSTRING, offsetof(CMSG_KEY_TRANS_RECIPIENT_INFO, EncryptedKey),
+       CRYPT_AsnDecodeOctetsInternal, sizeof(CRYPT_DATA_BLOB), FALSE, TRUE,
+       offsetof(CMSG_KEY_TRANS_RECIPIENT_INFO, EncryptedKey.pbData), 0 },
+    };
+
+    TRACE("%p, %d, %08x, %p, %d, %p\n", pbEncoded, cbEncoded, dwFlags,
+     pvStructInfo, *pcbStructInfo, pcbDecoded);
+
+    ret = CRYPT_AsnDecodeSequence(items, sizeof(items) / sizeof(items[0]),
+     pbEncoded, cbEncoded, dwFlags, NULL, pvStructInfo, pcbStructInfo,
+     pcbDecoded, info ? info->RecipientId.u.IssuerSerialNumber.Issuer.pbData :
+     NULL);
+    if (info)
+        info->RecipientId.dwIdChoice = CERT_ID_ISSUER_SERIAL_NUMBER;
+    TRACE("returning %d\n", ret);
+    return ret;
+}
+
+static BOOL CRYPT_DecodeRecipientInfoArray(const BYTE *pbEncoded,
+ DWORD cbEncoded, DWORD dwFlags, void *pvStructInfo, DWORD *pcbStructInfo,
+ DWORD *pcbDecoded)
+{
+    BOOL ret;
+    struct AsnArrayDescriptor arrayDesc = { ASN_CONSTRUCTOR | ASN_SETOF,
+     offsetof(CRYPT_ENVELOPED_DATA, cRecipientInfo),
+     offsetof(CRYPT_ENVELOPED_DATA, rgRecipientInfo),
+     MEMBERSIZE(CRYPT_ENVELOPED_DATA, cRecipientInfo, encryptedContentInfo),
+     CRYPT_AsnDecodeRecipientInfo, sizeof(CMSG_KEY_TRANS_RECIPIENT_INFO), TRUE,
+     offsetof(CMSG_KEY_TRANS_RECIPIENT_INFO,
+     RecipientId.u.IssuerSerialNumber.Issuer.pbData) };
+
+    TRACE("%p, %d, %08x, %p, %d, %p\n", pbEncoded, cbEncoded, dwFlags,
+     pvStructInfo, *pcbStructInfo, pcbDecoded);
+
+    ret = CRYPT_AsnDecodeArray(&arrayDesc, pbEncoded, cbEncoded,
+     dwFlags, NULL, pvStructInfo, pcbStructInfo, pcbDecoded);
+    TRACE("returning %d\n", ret);
+    return ret;
+}
+
+static BOOL CRYPT_AsnDecodeEncryptedContentInfo(const BYTE *pbEncoded,
+ DWORD cbEncoded, DWORD dwFlags, void *pvStructInfo, DWORD *pcbStructInfo,
+ DWORD *pcbDecoded)
+{
+    BOOL ret;
+    CRYPT_ENCRYPTED_CONTENT_INFO *info = pvStructInfo;
+    struct AsnDecodeSequenceItem items[] = {
+     { ASN_OBJECTIDENTIFIER, offsetof(CRYPT_ENCRYPTED_CONTENT_INFO,
+       contentType), CRYPT_AsnDecodeOidInternal, sizeof(LPSTR),
+       FALSE, TRUE, offsetof(CRYPT_ENCRYPTED_CONTENT_INFO,
+       contentType), 0 },
+     { ASN_SEQUENCEOF, offsetof(CRYPT_ENCRYPTED_CONTENT_INFO,
+       contentEncryptionAlgorithm), CRYPT_AsnDecodeAlgorithmId,
+       sizeof(CRYPT_ALGORITHM_IDENTIFIER), FALSE, TRUE,
+       offsetof(CRYPT_ENCRYPTED_CONTENT_INFO,
+       contentEncryptionAlgorithm.pszObjId), 0 },
+     { ASN_CONTEXT | 0, offsetof(CRYPT_ENCRYPTED_CONTENT_INFO,
+       encryptedContent), CRYPT_AsnDecodeOctetsInternal,
+       sizeof(CRYPT_DATA_BLOB), TRUE, TRUE,
+       offsetof(CRYPT_ENCRYPTED_CONTENT_INFO, encryptedContent.pbData) },
+    };
+
+    TRACE("%p, %d, %08x, %p, %d, %p\n", pbEncoded, cbEncoded, dwFlags,
+     pvStructInfo, *pcbStructInfo, pcbDecoded);
+
+    ret = CRYPT_AsnDecodeSequence(items, sizeof(items) / sizeof(items[0]),
+     pbEncoded, cbEncoded, dwFlags, NULL, pvStructInfo, pcbStructInfo,
+     pcbDecoded, info ? info->contentType : NULL);
+    TRACE("returning %d\n", ret);
+    return ret;
+}
+
+BOOL CRYPT_AsnDecodePKCSEnvelopedData(const BYTE *pbEncoded, DWORD cbEncoded,
+ DWORD dwFlags, PCRYPT_DECODE_PARA pDecodePara,
+ CRYPT_ENVELOPED_DATA *envelopedData, DWORD *pcbEnvelopedData)
+{
+    BOOL ret;
+    struct AsnDecodeSequenceItem items[] = {
+     { ASN_INTEGER, offsetof(CRYPT_ENVELOPED_DATA, version),
+       CRYPT_AsnDecodeIntInternal, sizeof(DWORD), FALSE, FALSE, 0, 0 },
+     { ASN_CONSTRUCTOR | ASN_SETOF, offsetof(CRYPT_ENVELOPED_DATA,
+       cRecipientInfo), CRYPT_DecodeRecipientInfoArray,
+       MEMBERSIZE(CRYPT_ENVELOPED_DATA, cRecipientInfo, encryptedContentInfo),
+       FALSE, TRUE, offsetof(CRYPT_ENVELOPED_DATA, rgRecipientInfo), 0 },
+     { ASN_SEQUENCEOF, offsetof(CRYPT_ENVELOPED_DATA, encryptedContentInfo),
+       CRYPT_AsnDecodeEncryptedContentInfo,
+       sizeof(CRYPT_ENCRYPTED_CONTENT_INFO), FALSE, TRUE,
+       offsetof(CRYPT_ENVELOPED_DATA, encryptedContentInfo.contentType), 0 },
+    };
+
+    TRACE("%p, %d, %08x, %p, %p, %d\n", pbEncoded, cbEncoded, dwFlags,
+     pDecodePara, envelopedData, *pcbEnvelopedData);
+
+    ret = CRYPT_AsnDecodeSequence(items, sizeof(items) / sizeof(items[0]),
+     pbEncoded, cbEncoded, dwFlags, pDecodePara, envelopedData,
+     pcbEnvelopedData, NULL, NULL);
     TRACE("returning %d\n", ret);
     return ret;
 }

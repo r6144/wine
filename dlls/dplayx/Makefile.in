@@ -1,8 +1,4 @@
 EXTRADEFS = -DCOM_NO_WINDOWS_H
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = dplayx.dll
 IMPORTLIB = dplayx
 IMPORTS   = dxguid uuid winmm ole32 user32 advapi32
@@ -16,8 +12,9 @@ C_SRCS = \
 	dplayx_messages.c \
 	dplobby.c \
 	lobbysp.c \
-	name_server.c \
-	regsvr.c
+	name_server.c
+
+IDL_R_SRCS = dplayx.idl
 
 RC_SRCS = version.rc
 

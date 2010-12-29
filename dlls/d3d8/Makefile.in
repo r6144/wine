@@ -1,24 +1,18 @@
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = d3d8.dll
 IMPORTLIB = d3d8
 IMPORTS   = dxguid uuid wined3d
 
 C_SRCS = \
+	buffer.c \
 	cubetexture.c \
 	d3d8_main.c \
 	device.c \
 	directx.c \
-	indexbuffer.c \
-	pixelshader.c \
+	shader.c \
 	surface.c \
 	swapchain.c \
 	texture.c \
-	vertexbuffer.c \
 	vertexdeclaration.c \
-	vertexshader.c \
 	volume.c \
 	volumetexture.c
 

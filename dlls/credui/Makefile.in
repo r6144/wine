@@ -1,7 +1,3 @@
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = credui.dll
 IMPORTLIB = credui
 IMPORTS   = comctl32 user32 advapi32
@@ -16,6 +12,7 @@ RC_SRCS = \
 	credui_En.rc \
 	credui_Es.rc \
 	credui_Fr.rc \
+	credui_He.rc \
 	credui_Hu.rc \
 	credui_It.rc \
 	credui_Ko.rc \
@@ -27,6 +24,7 @@ RC_SRCS = \
 	credui_Ro.rc \
 	credui_Ru.rc \
 	credui_Si.rc \
+	credui_Sr.rc \
 	credui_Sv.rc \
 	credui_Uk.rc \
 	credui_Zh.rc

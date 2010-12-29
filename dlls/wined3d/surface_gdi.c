@@ -38,7 +38,7 @@ void surface_gdi_cleanup(IWineD3DSurfaceImpl *This)
 {
     TRACE("(%p) : Cleaning up.\n", This);
 
-    if (This->Flags & SFLAG_DIBSECTION)
+    if (This->flags & SFLAG_DIBSECTION)
     {
         /* Release the DC. */
         SelectObject(This->hDC, This->dib.holdbitmap);
@@ -49,7 +49,7 @@ void surface_gdi_cleanup(IWineD3DSurfaceImpl *This)
         This->resource.allocatedMemory = NULL;
     }
 
-    if (This->Flags & SFLAG_USERPTR) IWineD3DSurface_SetMem((IWineD3DSurface *)This, NULL);
+    if (This->flags & SFLAG_USERPTR) IWineD3DSurface_SetMem((IWineD3DSurface *)This, NULL);
     if (This->overlay_dest) list_remove(&This->overlay_entry);
 
     HeapFree(GetProcessHeap(), 0, This->palette9);
@@ -109,37 +109,19 @@ static void WINAPI IWineGDISurfaceImpl_UnLoad(IWineD3DSurface *iface)
     ERR("(%p): Please report to wine-devel\n", iface);
 }
 
-/*****************************************************************************
- * IWineD3DSurface::LockRect, GDI version
- *
- * Locks the surface and returns a pointer to the surface memory
- *
- * Params:
- *  pLockedRect: Address to return the locking info at
- *  pRect: Rectangle to lock
- *  Flags: Some flags
- *
- * Returns:
- *  WINED3D_OK on success
- *  WINED3DERR_INVALIDCALL on errors
- *
- *****************************************************************************/
-static HRESULT WINAPI
-IWineGDISurfaceImpl_LockRect(IWineD3DSurface *iface,
-                             WINED3DLOCKED_RECT* pLockedRect,
-                             CONST RECT* pRect,
-                             DWORD Flags)
+static HRESULT WINAPI IWineGDISurfaceImpl_Map(IWineD3DSurface *iface,
+        WINED3DLOCKED_RECT *pLockedRect, const RECT *pRect, DWORD flags)
 {
     IWineD3DSurfaceImpl *This = (IWineD3DSurfaceImpl *)iface;
 
     /* Already locked? */
-    if(This->Flags & SFLAG_LOCKED)
+    if (This->flags & SFLAG_LOCKED)
     {
         WARN("(%p) Surface already locked\n", This);
         /* What should I return here? */
         return WINED3DERR_INVALIDCALL;
     }
-    This->Flags |= SFLAG_LOCKED;
+    This->flags |= SFLAG_LOCKED;
 
     if(!This->resource.allocatedMemory) {
         /* This happens on gdi surfaces if the application set a user pointer and resets it.
@@ -149,44 +131,31 @@ IWineGDISurfaceImpl_LockRect(IWineD3DSurface *iface,
         This->resource.allocatedMemory = This->dib.bitmap_data;
     }
 
-    return IWineD3DBaseSurfaceImpl_LockRect(iface, pLockedRect, pRect, Flags);
+    return IWineD3DBaseSurfaceImpl_Map(iface, pLockedRect, pRect, flags);
 }
 
-/*****************************************************************************
- * IWineD3DSurface::UnlockRect, GDI version
- *
- * Unlocks a surface. This implementation doesn't do much, except updating
- * the window if the front buffer is unlocked
- *
- * Returns:
- *  WINED3D_OK on success
- *  WINED3DERR_INVALIDCALL on failure
- *
- *****************************************************************************/
-static HRESULT WINAPI
-IWineGDISurfaceImpl_UnlockRect(IWineD3DSurface *iface)
+static HRESULT WINAPI IWineGDISurfaceImpl_Unmap(IWineD3DSurface *iface)
 {
     IWineD3DSurfaceImpl *This = (IWineD3DSurfaceImpl *)iface;
-    IWineD3DSwapChainImpl *swapchain = NULL;
     TRACE("(%p)\n", This);
 
-    if (!(This->Flags & SFLAG_LOCKED))
+    if (!(This->flags & SFLAG_LOCKED))
     {
-        WARN("trying to Unlock an unlocked surf@%p\n", This);
+        WARN("Trying to unmap unmapped surfaces %p.\n", iface);
         return WINEDDERR_NOTLOCKED;
     }
 
     /* Tell the swapchain to update the screen */
-    if (SUCCEEDED(IWineD3DSurface_GetContainer(iface, &IID_IWineD3DSwapChain, (void **)&swapchain)))
+    if (This->container.type == WINED3D_CONTAINER_SWAPCHAIN)
     {
+        IWineD3DSwapChainImpl *swapchain = This->container.u.swapchain;
         if (This == swapchain->front_buffer)
         {
             x11_copy_to_screen(swapchain, &This->lockedRect);
         }
-        IWineD3DSwapChain_Release((IWineD3DSwapChain *) swapchain);
     }
 
-    This->Flags &= ~SFLAG_LOCKED;
+    This->flags &= ~SFLAG_LOCKED;
     memset(&This->lockedRect, 0, sizeof(RECT));
     return WINED3D_OK;
 }
@@ -205,23 +174,22 @@ IWineGDISurfaceImpl_UnlockRect(IWineD3DSurface *iface)
  *  WINED3D_OK on success
  *
  *****************************************************************************/
-static HRESULT WINAPI
-IWineGDISurfaceImpl_Flip(IWineD3DSurface *iface,
-                         IWineD3DSurface *override,
-                         DWORD Flags)
+static HRESULT WINAPI IWineGDISurfaceImpl_Flip(IWineD3DSurface *iface, IWineD3DSurface *override, DWORD flags)
 {
-    IWineD3DSwapChainImpl *swapchain = NULL;
+    IWineD3DSurfaceImpl *surface = (IWineD3DSurfaceImpl *)iface;
+    IWineD3DSwapChainImpl *swapchain;
     HRESULT hr;
 
-    if(FAILED(IWineD3DSurface_GetContainer(iface, &IID_IWineD3DSwapChain, (void **)&swapchain)))
+    if (surface->container.type != WINED3D_CONTAINER_SWAPCHAIN)
     {
         ERR("Flipped surface is not on a swapchain\n");
         return WINEDDERR_NOTFLIPPABLE;
     }
 
+    swapchain = surface->container.u.swapchain;
     hr = IWineD3DSwapChain_Present((IWineD3DSwapChain *)swapchain,
             NULL, NULL, swapchain->win_handle, NULL, 0);
-    IWineD3DSwapChain_Release((IWineD3DSwapChain *) swapchain);
+
     return hr;
 }
 
@@ -254,42 +222,41 @@ static HRESULT WINAPI IWineGDISurfaceImpl_GetDC(IWineD3DSurface *iface, HDC *pHD
 
     TRACE("(%p)->(%p)\n",This,pHDC);
 
-    if(!(This->Flags & SFLAG_DIBSECTION))
+    if (!(This->flags & SFLAG_DIBSECTION))
     {
         WARN("DC not supported on this surface\n");
         return WINED3DERR_INVALIDCALL;
     }
 
-    if(This->Flags & SFLAG_USERPTR) {
+    if (This->flags & SFLAG_USERPTR)
+    {
         ERR("Not supported on surfaces with an application-provided surfaces\n");
         return WINEDDERR_NODC;
     }
 
     /* Give more detailed info for ddraw */
-    if (This->Flags & SFLAG_DCINUSE)
+    if (This->flags & SFLAG_DCINUSE)
         return WINEDDERR_DCALREADYCREATED;
 
     /* Can't GetDC if the surface is locked */
-    if (This->Flags & SFLAG_LOCKED)
+    if (This->flags & SFLAG_LOCKED)
         return WINED3DERR_INVALIDCALL;
 
     memset(&lock, 0, sizeof(lock)); /* To be sure */
 
     /* Should have a DIB section already */
 
-    /* Lock the surface */
-    hr = IWineD3DSurface_LockRect(iface,
-                                  &lock,
-                                  NULL,
-                                  0);
-    if(FAILED(hr)) {
-        ERR("IWineD3DSurface_LockRect failed with hr = %08x\n", hr);
+    /* Map the surface. */
+    hr = IWineD3DSurface_Map(iface, &lock, NULL, 0);
+    if (FAILED(hr))
+    {
+        ERR("IWineD3DSurface_Map failed, hr %#x.\n", hr);
         /* keep the dib section */
         return hr;
     }
 
-    if (This->resource.format_desc->format == WINED3DFMT_P8_UINT
-            || This->resource.format_desc->format == WINED3DFMT_P8_UINT_A8_UNORM)
+    if (This->resource.format->id == WINED3DFMT_P8_UINT
+            || This->resource.format->id == WINED3DFMT_P8_UINT_A8_UNORM)
     {
         unsigned int n;
         const PALETTEENTRY *pal = NULL;
@@ -318,7 +285,7 @@ static HRESULT WINAPI IWineGDISurfaceImpl_GetDC(IWineD3DSurface *iface, HDC *pHD
 
     *pHDC = This->hDC;
     TRACE("returning %p\n",*pHDC);
-    This->Flags |= SFLAG_DCINUSE;
+    This->flags |= SFLAG_DCINUSE;
 
     return WINED3D_OK;
 }
@@ -328,7 +295,7 @@ static HRESULT WINAPI IWineGDISurfaceImpl_ReleaseDC(IWineD3DSurface *iface, HDC 
 
     TRACE("(%p)->(%p)\n",This,hDC);
 
-    if (!(This->Flags & SFLAG_DCINUSE))
+    if (!(This->flags & SFLAG_DCINUSE))
         return WINEDDERR_NODC;
 
     if (This->hDC !=hDC) {
@@ -337,9 +304,9 @@ static HRESULT WINAPI IWineGDISurfaceImpl_ReleaseDC(IWineD3DSurface *iface, HDC 
     }
 
     /* we locked first, so unlock now */
-    IWineD3DSurface_UnlockRect(iface);
+    IWineD3DSurface_Unmap(iface);
 
-    This->Flags &= ~SFLAG_DCINUSE;
+    This->flags &= ~SFLAG_DCINUSE;
 
     return WINED3D_OK;
 }
@@ -349,12 +316,12 @@ static HRESULT WINAPI IWineGDISurfaceImpl_RealizePalette(IWineD3DSurface *iface)
     RGBQUAD col[256];
     IWineD3DPaletteImpl *pal = This->palette;
     unsigned int n;
-    IWineD3DSwapChainImpl *swapchain;
     TRACE("(%p)\n", This);
 
     if (!pal) return WINED3D_OK;
 
-    if(This->Flags & SFLAG_DIBSECTION) {
+    if (This->flags & SFLAG_DIBSECTION)
+    {
         TRACE("(%p): Updating the hdc's palette\n", This);
         for (n=0; n<256; n++) {
             col[n].rgbRed   = pal->palents[n].peRed;
@@ -368,13 +335,13 @@ static HRESULT WINAPI IWineGDISurfaceImpl_RealizePalette(IWineD3DSurface *iface)
     /* Update the image because of the palette change. Some games like e.g Red Alert
        call SetEntries a lot to implement fading. */
     /* Tell the swapchain to update the screen */
-    if (SUCCEEDED(IWineD3DSurface_GetContainer(iface, &IID_IWineD3DSwapChain, (void **)&swapchain)))
+    if (This->container.type == WINED3D_CONTAINER_SWAPCHAIN)
     {
+        IWineD3DSwapChainImpl *swapchain = This->container.u.swapchain;
         if (This == swapchain->front_buffer)
         {
             x11_copy_to_screen(swapchain, NULL);
         }
-        IWineD3DSwapChain_Release((IWineD3DSwapChain *) swapchain);
     }
 
     return WINED3D_OK;
@@ -436,7 +403,8 @@ static HRESULT WINAPI IWineGDISurfaceImpl_SetMem(IWineD3DSurface *iface, void *M
         return WINED3DERR_INVALIDCALL;
     }
 
-    if(This->Flags & (SFLAG_LOCKED | SFLAG_DCINUSE)) {
+    if (This->flags & (SFLAG_LOCKED | SFLAG_DCINUSE))
+    {
         WARN("Surface is locked or the HDC is in use\n");
         return WINED3DERR_INVALIDCALL;
     }
@@ -445,7 +413,8 @@ static HRESULT WINAPI IWineGDISurfaceImpl_SetMem(IWineD3DSurface *iface, void *M
         void *release = NULL;
 
         /* Do I have to copy the old surface content? */
-        if(This->Flags & SFLAG_DIBSECTION) {
+        if (This->flags & SFLAG_DIBSECTION)
+        {
                 /* Release the DC. No need to hold the critical section for the update
             * Thread because this thread runs only on front buffers, but this method
             * fails for render targets in the check above.
@@ -457,19 +426,23 @@ static HRESULT WINAPI IWineGDISurfaceImpl_SetMem(IWineD3DSurface *iface, void *M
             This->dib.bitmap_data = NULL;
             This->resource.allocatedMemory = NULL;
             This->hDC = NULL;
-            This->Flags &= ~SFLAG_DIBSECTION;
-        } else if(!(This->Flags & SFLAG_USERPTR)) {
+            This->flags &= ~SFLAG_DIBSECTION;
+        }
+        else if(!(This->flags & SFLAG_USERPTR))
+        {
             release = This->resource.allocatedMemory;
         }
         This->resource.allocatedMemory = Mem;
-        This->Flags |= SFLAG_USERPTR | SFLAG_INSYSMEM;
+        This->flags |= SFLAG_USERPTR | SFLAG_INSYSMEM;
 
         /* Now free the old memory if any */
         HeapFree(GetProcessHeap(), 0, release);
-    } else if(This->Flags & SFLAG_USERPTR) {
-        /* LockRect and GetDC will re-create the dib section and allocated memory */
+    }
+    else if (This->flags & SFLAG_USERPTR)
+    {
+        /* Map() and GetDC() will re-create the dib section and allocated memory. */
         This->resource.allocatedMemory = NULL;
-        This->Flags &= ~SFLAG_USERPTR;
+        This->flags &= ~SFLAG_USERPTR;
     }
     return WINED3D_OK;
 }
@@ -503,10 +476,9 @@ const IWineD3DSurfaceVtbl IWineGDISurface_Vtbl =
     IWineGDISurfaceImpl_UnLoad,
     IWineD3DBaseSurfaceImpl_GetType,
     /* IWineD3DSurface */
-    IWineD3DBaseSurfaceImpl_GetContainer,
     IWineD3DBaseSurfaceImpl_GetDesc,
-    IWineGDISurfaceImpl_LockRect,
-    IWineGDISurfaceImpl_UnlockRect,
+    IWineGDISurfaceImpl_Map,
+    IWineGDISurfaceImpl_Unmap,
     IWineGDISurfaceImpl_GetDC,
     IWineGDISurfaceImpl_ReleaseDC,
     IWineGDISurfaceImpl_Flip,
@@ -531,7 +503,6 @@ const IWineD3DSurfaceVtbl IWineGDISurface_Vtbl =
     /* Internal use: */
     IWineGDISurfaceImpl_LoadTexture,
     IWineGDISurfaceImpl_BindTexture,
-    IWineD3DBaseSurfaceImpl_SetContainer,
     IWineD3DBaseSurfaceImpl_GetData,
     IWineD3DBaseSurfaceImpl_SetFormat,
     IWineGDISurfaceImpl_PrivateSetup,

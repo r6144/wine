@@ -1,11 +1,7 @@
 EXTRADEFS = -D_KERNEL32_
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = kernel32.dll
 IMPORTLIB = kernel32
-IMPORTS   = ntdll
+IMPORTS   = winecrt0 ntdll
 EXTRALIBS = @COREFOUNDATIONLIB@ @LIBPOLL@
 EXTRADLLFLAGS = -nodefaultlibs -Wb,-F,KERNEL32.dll -Wl,--image-base,0x7b800000
 
@@ -44,7 +40,8 @@ C_SRCS = \
 	toolhelp.c \
 	version.c \
 	virtual.c \
-	volume.c
+	volume.c \
+	wer.c
 
 RC_SRCS = \
 	locale_rc.rc \
@@ -65,6 +62,7 @@ MC_SRCS = \
 	nls/winerr_ptb.mc \
 	nls/winerr_ptg.mc \
 	nls/winerr_rus.mc \
+	nls/winerr_sve.mc \
 	nls/winerr_ukr.mc
 
 EXTRASUBDIRS = nls

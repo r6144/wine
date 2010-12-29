@@ -1,7 +1,3 @@
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = ddraw.dll
 IMPORTLIB = ddraw
 IMPORTS   = dxguid uuid ole32 user32 gdi32 advapi32
@@ -10,20 +6,18 @@ C_SRCS = \
 	clipper.c \
 	ddraw.c \
 	device.c \
-	direct3d.c \
 	executebuffer.c \
-	gamma.c \
 	light.c \
 	main.c \
 	material.c \
 	palette.c \
 	parent.c \
-	regsvr.c \
 	surface.c \
-	texture.c \
 	utils.c \
 	vertexbuffer.c \
 	viewport.c
+
+IDL_R_SRCS = ddraw_classes.idl
 
 RC_SRCS = version.rc
 

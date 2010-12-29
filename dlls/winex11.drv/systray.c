@@ -32,6 +32,7 @@
 
 #include <X11/Xlib.h>
 
+#define NONAMELESSUNION
 #include "windef.h"
 #include "winbase.h"
 #include "wingdi.h"
@@ -53,23 +54,53 @@ struct tray_icon
     HWND           owner;    /* the HWND passed in to the Shell_NotifyIcon call */
     HWND           window;   /* the adaptor window */
     HWND           tooltip;  /* Icon tooltip */
+    UINT           state;    /* state flags */
     UINT           id;       /* the unique id given by the app */
     UINT           callback_message;
-    WCHAR          tiptext[256]; /* Tooltip text. If empty => tooltip disabled */
-    WCHAR          tiptitle[64]; /* Tooltip title for ballon style tooltips.  If empty => tooltip is not balloon style. */
+    int            display;  /* display index, or -1 if hidden */
+    WCHAR          tiptext[128];    /* tooltip text */
+    WCHAR          info_text[256];  /* info balloon text */
+    WCHAR          info_title[64];  /* info balloon title */
+    UINT           info_flags;      /* flags for info balloon */
+    UINT           info_timeout;    /* timeout for info balloon */
+    HICON          info_icon;       /* info balloon icon */
 };
 
 static struct list icon_list = LIST_INIT( icon_list );
 
-static const WCHAR tray_classname[] = {'_','_','w','i','n','e','x','1','1','_','t','r','a','y','_','w','i','n','d','o','w',0};
+static const WCHAR icon_classname[] = {'_','_','w','i','n','e','x','1','1','_','t','r','a','y','_','i','c','o','n',0};
+static const WCHAR tray_classname[] = {'_','_','w','i','n','e','x','1','1','_','s','t','a','n','d','a','l','o','n','e','_','t','r','a','y',0};
 
+static BOOL show_icon( struct tray_icon *icon );
+static BOOL hide_icon( struct tray_icon *icon );
 static BOOL delete_icon( struct tray_icon *icon );
 
 #define SYSTEM_TRAY_REQUEST_DOCK  0
 #define SYSTEM_TRAY_BEGIN_MESSAGE   1
 #define SYSTEM_TRAY_CANCEL_MESSAGE  2
 
+Atom systray_atom = 0;
+
+#define MIN_DISPLAYED 8
 #define ICON_BORDER 2
+
+#define VALID_WIN_TIMER      1
+#define BALLOON_CREATE_TIMER 2
+#define BALLOON_SHOW_TIMER   3
+
+#define VALID_WIN_TIMEOUT        2000
+#define BALLOON_CREATE_TIMEOUT   2000
+#define BALLOON_SHOW_MIN_TIMEOUT 10000
+#define BALLOON_SHOW_MAX_TIMEOUT 30000
+
+static struct tray_icon *balloon_icon;
+static HWND balloon_window;
+static POINT balloon_pos;
+
+/* stand-alone tray window */
+static HWND standalone_tray;
+static int icon_cx, icon_cy;
+static unsigned int nb_displayed;
 
 /* retrieves icon record by owner window and ID */
 static struct tray_icon *get_icon(HWND owner, UINT id)
@@ -81,12 +112,11 @@ static struct tray_icon *get_icon(HWND owner, UINT id)
     return NULL;
 }
 
-/* create tooltip window for icon */
-static void create_tooltip(struct tray_icon *icon)
+static void init_common_controls(void)
 {
-    static BOOL tooltips_initialized = FALSE;
+    static BOOL initialized = FALSE;
 
-    if (!tooltips_initialized)
+    if (!initialized)
     {
         INITCOMMONCONTROLSEX init_tooltip;
 
@@ -94,24 +124,19 @@ static void create_tooltip(struct tray_icon *icon)
         init_tooltip.dwICC = ICC_TAB_CLASSES;
 
         InitCommonControlsEx(&init_tooltip);
-        tooltips_initialized = TRUE;
+        initialized = TRUE;
     }
-    if (icon->tiptitle[0] != 0)
-    {
-        icon->tooltip = CreateWindowExW( WS_EX_TOPMOST, TOOLTIPS_CLASSW, NULL,
-                                         WS_POPUP | TTS_ALWAYSTIP | TTS_BALLOON,
-                                         CW_USEDEFAULT, CW_USEDEFAULT,
-                                         CW_USEDEFAULT, CW_USEDEFAULT,
-                                         icon->window, NULL, NULL, NULL);
-    }
-    else
-    {
-        icon->tooltip = CreateWindowExW( WS_EX_TOPMOST, TOOLTIPS_CLASSW, NULL,
-                                         WS_POPUP | TTS_ALWAYSTIP,
-                                         CW_USEDEFAULT, CW_USEDEFAULT,
-                                         CW_USEDEFAULT, CW_USEDEFAULT,
-                                         icon->window, NULL, NULL, NULL);
-    }
+}
+
+/* create tooltip window for icon */
+static void create_tooltip(struct tray_icon *icon)
+{
+    init_common_controls();
+    icon->tooltip = CreateWindowExW( WS_EX_TOPMOST, TOOLTIPS_CLASSW, NULL,
+                                     WS_POPUP | TTS_ALWAYSTIP,
+                                     CW_USEDEFAULT, CW_USEDEFAULT,
+                                     CW_USEDEFAULT, CW_USEDEFAULT,
+                                     icon->window, NULL, NULL, NULL);
     if (icon->tooltip)
     {
         TTTOOLINFOW ti;
@@ -123,6 +148,101 @@ static void create_tooltip(struct tray_icon *icon)
         ti.lpszText = icon->tiptext;
         SendMessageW(icon->tooltip, TTM_ADDTOOLW, 0, (LPARAM)&ti);
     }
+}
+
+void update_systray_balloon_position(void)
+{
+    RECT rect;
+    POINT pos;
+
+    if (!balloon_icon) return;
+    GetWindowRect( balloon_icon->window, &rect );
+    pos.x = (rect.left + rect.right) / 2;
+    pos.y = (rect.top + rect.bottom) / 2;
+    if (pos.x == balloon_pos.x && pos.y == balloon_pos.y) return;  /* nothing changed */
+    balloon_pos = pos;
+    SendMessageW( balloon_window, TTM_TRACKPOSITION, 0, MAKELONG( pos.x, pos.y ));
+}
+
+static void balloon_create_timer( struct tray_icon *icon )
+{
+    TTTOOLINFOW ti;
+
+    init_common_controls();
+    balloon_window = CreateWindowExW( WS_EX_TOPMOST, TOOLTIPS_CLASSW, NULL,
+                                      WS_POPUP | TTS_ALWAYSTIP | TTS_NOPREFIX | TTS_BALLOON | TTS_CLOSE,
+                                      CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
+                                      icon->window, NULL, NULL, NULL);
+
+    memset( &ti, 0, sizeof(ti) );
+    ti.cbSize = sizeof(TTTOOLINFOW);
+    ti.hwnd = icon->window;
+    ti.uId = (UINT_PTR)icon->window;
+    ti.uFlags = TTF_TRACK | TTF_IDISHWND;
+    ti.lpszText = icon->info_text;
+    SendMessageW( balloon_window, TTM_ADDTOOLW, 0, (LPARAM)&ti );
+    if ((icon->info_flags & NIIF_ICONMASK) == NIIF_USER)
+        SendMessageW( balloon_window, TTM_SETTITLEW, (WPARAM)icon->info_icon, (LPARAM)icon->info_title );
+    else
+        SendMessageW( balloon_window, TTM_SETTITLEW, icon->info_flags, (LPARAM)icon->info_title );
+    balloon_icon = icon;
+    balloon_pos.x = balloon_pos.y = MAXLONG;
+    update_systray_balloon_position();
+    SendMessageW( balloon_window, TTM_TRACKACTIVATE, TRUE, (LPARAM)&ti );
+    KillTimer( icon->window, BALLOON_CREATE_TIMER );
+    SetTimer( icon->window, BALLOON_SHOW_TIMER, icon->info_timeout, NULL );
+}
+
+static BOOL show_balloon( struct tray_icon *icon )
+{
+    if (standalone_tray && !show_systray) return FALSE;  /* no systray window */
+    if (!icon->window) return FALSE;  /* not displayed */
+    if (!icon->info_text[0]) return FALSE;  /* no balloon */
+    balloon_icon = icon;
+    SetTimer( icon->window, BALLOON_CREATE_TIMER, BALLOON_CREATE_TIMEOUT, NULL );
+    return TRUE;
+}
+
+static void hide_balloon(void)
+{
+    if (!balloon_icon) return;
+    if (balloon_window)
+    {
+        KillTimer( balloon_icon->window, BALLOON_SHOW_TIMER );
+        DestroyWindow( balloon_window );
+        balloon_window = 0;
+    }
+    else KillTimer( balloon_icon->window, BALLOON_CREATE_TIMER );
+    balloon_icon = NULL;
+}
+
+static void show_next_balloon(void)
+{
+    struct tray_icon *icon;
+
+    LIST_FOR_EACH_ENTRY( icon, &icon_list, struct tray_icon, entry )
+        if (show_balloon( icon )) break;
+}
+
+static void update_balloon( struct tray_icon *icon )
+{
+    if (balloon_icon == icon)
+    {
+        hide_balloon();
+        show_balloon( icon );
+    }
+    else if (!balloon_icon)
+    {
+        if (!show_balloon( icon )) return;
+    }
+    if (!balloon_icon) show_next_balloon();
+}
+
+static void balloon_timer(void)
+{
+    if (balloon_icon) balloon_icon->info_text[0] = 0;  /* clear text now that balloon has been shown */
+    hide_balloon();
+    show_next_balloon();
 }
 
 /* synchronize tooltip text with tooltip window */
@@ -140,8 +260,109 @@ static void update_tooltip_text(struct tray_icon *icon)
     SendMessageW(icon->tooltip, TTM_UPDATETIPTEXTW, 0, (LPARAM)&ti);
 }
 
-/* window procedure for the tray window */
-static LRESULT WINAPI tray_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
+/* get the size of the stand-alone tray window */
+static SIZE get_window_size(void)
+{
+    SIZE size;
+    RECT rect;
+
+    rect.left = 0;
+    rect.top = 0;
+    rect.right = icon_cx * max( nb_displayed, MIN_DISPLAYED );
+    rect.bottom = icon_cy;
+    AdjustWindowRect( &rect, WS_CAPTION, FALSE );
+    size.cx = rect.right - rect.left;
+    size.cy = rect.bottom - rect.top;
+    return size;
+}
+
+/* get the position of an icon in the stand-alone tray */
+static POINT get_icon_pos( struct tray_icon *icon )
+{
+    POINT pos;
+
+    pos.x = icon_cx * icon->display;
+    pos.y = 0;
+    return pos;
+}
+
+/* window procedure for the standalone tray window */
+static LRESULT WINAPI standalone_tray_wndproc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam )
+{
+    switch (msg)
+    {
+    case WM_MOVE:
+        update_systray_balloon_position();
+        break;
+    case WM_CLOSE:
+        ShowWindow( hwnd, SW_HIDE );
+        hide_balloon();
+        show_systray = FALSE;
+        return 0;
+    case WM_DESTROY:
+        standalone_tray = 0;
+        break;
+    }
+    return DefWindowProcW( hwnd, msg, wparam, lparam );
+}
+
+/* add an icon to the standalone tray window */
+static void add_to_standalone_tray( struct tray_icon *icon )
+{
+    SIZE size;
+    POINT pos;
+
+    if (!standalone_tray)
+    {
+        static const WCHAR winname[] = {'W','i','n','e',' ','S','y','s','t','e','m',' ','T','r','a','y',0};
+
+        size = get_window_size();
+        standalone_tray = CreateWindowExW( 0, tray_classname, winname, WS_CAPTION | WS_SYSMENU,
+                                           CW_USEDEFAULT, CW_USEDEFAULT, size.cx, size.cy, 0, 0, 0, 0 );
+        if (!standalone_tray) return;
+    }
+
+    icon->display = nb_displayed;
+    pos = get_icon_pos( icon );
+    icon->window = CreateWindowW( icon_classname, NULL, WS_CHILD | WS_VISIBLE,
+                                  pos.x, pos.y, icon_cx, icon_cy, standalone_tray, NULL, NULL, icon );
+    if (!icon->window)
+    {
+        icon->display = -1;
+        return;
+    }
+    create_tooltip( icon );
+
+    nb_displayed++;
+    size = get_window_size();
+    SetWindowPos( standalone_tray, 0, 0, 0, size.cx, size.cy, SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOZORDER );
+    if (nb_displayed == 1 && show_systray) ShowWindow( standalone_tray, SW_SHOWNA );
+    TRACE( "added %u now %d icons\n", icon->id, nb_displayed );
+}
+
+/* remove an icon from the stand-alone tray */
+static void remove_from_standalone_tray( struct tray_icon *icon )
+{
+    struct tray_icon *ptr;
+    POINT pos;
+
+    if (icon->display == -1) return;
+
+    LIST_FOR_EACH_ENTRY( ptr, &icon_list, struct tray_icon, entry )
+    {
+        if (ptr == icon) continue;
+        if (ptr->display < icon->display) continue;
+        ptr->display--;
+        pos = get_icon_pos( ptr );
+        SetWindowPos( ptr->window, 0, pos.x, pos.y, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOZORDER );
+    }
+    icon->display = -1;
+    if (!--nb_displayed) ShowWindow( standalone_tray, SW_HIDE );
+    TRACE( "removed %u now %d icons\n", icon->id, nb_displayed );
+}
+
+/* window procedure for the individual tray icon window */
+static LRESULT WINAPI tray_icon_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 {
     struct tray_icon *icon = NULL;
     BOOL ret;
@@ -156,6 +377,10 @@ static LRESULT WINAPI tray_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
 
     switch (msg)
     {
+    case WM_CREATE:
+        SetTimer( hwnd, VALID_WIN_TIMER, VALID_WIN_TIMEOUT, NULL );
+        break;
+
     case WM_PAINT:
         {
             PAINTSTRUCT ps;
@@ -170,7 +395,7 @@ static LRESULT WINAPI tray_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
             DrawIconEx( hdc, (rc.left + rc.right - cx) / 2, (rc.top + rc.bottom - cy) / 2,
                         icon->image, cx, cy, 0, 0, DI_DEFAULTSIZE|DI_NORMAL );
             EndPaint(hwnd, &ps);
-            break;
+            return 0;
         }
 
     case WM_MOUSEMOVE:
@@ -191,57 +416,124 @@ static LRESULT WINAPI tray_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
             WARN( "application window was destroyed, removing icon %u\n", icon->id );
             delete_icon( icon );
         }
+        return 0;
+
+    case WM_WINDOWPOSCHANGED:
+        update_systray_balloon_position();
         break;
 
     case WM_TIMER:
-        if (!IsWindow( icon->owner )) delete_icon( icon );
+        switch (wparam)
+        {
+        case VALID_WIN_TIMER:
+            if (!IsWindow( icon->owner )) delete_icon( icon );
+            break;
+        case BALLOON_CREATE_TIMER:
+            balloon_create_timer( icon );
+            break;
+        case BALLOON_SHOW_TIMER:
+            balloon_timer();
+            break;
+        }
         return 0;
 
-    default:
-        return DefWindowProcW(hwnd, msg, wparam, lparam);
+    case WM_CLOSE:
+        if (icon->display == -1)
+        {
+            TRACE( "icon %u no longer embedded\n", icon->id );
+            hide_icon( icon );
+            add_to_standalone_tray( icon );
+        }
+        return 0;
     }
-    return 0;
+    return DefWindowProcW( hwnd, msg, wparam, lparam );
 }
 
 /* find the X11 window owner the system tray selection */
 static Window get_systray_selection_owner( Display *display )
 {
-    static Atom systray_atom;
     Window ret;
 
-    if (root_window != DefaultRootWindow( display )) return 0;
-
     wine_tsx11_lock();
-    if (!systray_atom)
-    {
-        if (DefaultScreen( display ) == 0)
-            systray_atom = x11drv_atom(_NET_SYSTEM_TRAY_S0);
-        else
-        {
-            char systray_buffer[29]; /* strlen(_NET_SYSTEM_TRAY_S4294967295)+1 */
-            sprintf( systray_buffer, "_NET_SYSTEM_TRAY_S%u", DefaultScreen( display ) );
-            systray_atom = XInternAtom( display, systray_buffer, False );
-        }
-    }
     ret = XGetSelectionOwner( display, systray_atom );
     wine_tsx11_unlock();
     return ret;
 }
 
+static BOOL init_systray(void)
+{
+    static BOOL init_done;
+    WNDCLASSEXW class;
+    Display *display;
 
-/* dock the given X window with the NETWM system tray */
-static void dock_systray_window( Display *display, HWND hwnd, Window systray_window )
+    if (root_window != DefaultRootWindow( gdi_display )) return FALSE;
+    if (init_done) return TRUE;
+
+    icon_cx = GetSystemMetrics( SM_CXSMICON ) + 2 * ICON_BORDER;
+    icon_cy = GetSystemMetrics( SM_CYSMICON ) + 2 * ICON_BORDER;
+
+    memset( &class, 0, sizeof(class) );
+    class.cbSize        = sizeof(class);
+    class.lpfnWndProc   = tray_icon_wndproc;
+    class.hIcon         = LoadIconW(0, (LPCWSTR)IDI_WINLOGO);
+    class.hCursor       = LoadCursorW( 0, (LPCWSTR)IDC_ARROW );
+    class.lpszClassName = icon_classname;
+    class.style         = CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS;
+
+    if (!RegisterClassExW( &class ) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
+    {
+        ERR( "Could not register icon tray window class\n" );
+        return FALSE;
+    }
+
+    class.lpfnWndProc   = standalone_tray_wndproc;
+    class.hbrBackground = (HBRUSH)COLOR_WINDOW;
+    class.lpszClassName = tray_classname;
+    class.style         = CS_DBLCLKS;
+
+    if (!RegisterClassExW( &class ) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
+    {
+        ERR( "Could not register standalone tray window class\n" );
+        return FALSE;
+    }
+
+    display = thread_init_display();
+    wine_tsx11_lock();
+    if (DefaultScreen( display ) == 0)
+        systray_atom = x11drv_atom(_NET_SYSTEM_TRAY_S0);
+    else
+    {
+        char systray_buffer[29]; /* strlen(_NET_SYSTEM_TRAY_S4294967295)+1 */
+        sprintf( systray_buffer, "_NET_SYSTEM_TRAY_S%u", DefaultScreen( display ) );
+        systray_atom = XInternAtom( display, systray_buffer, False );
+    }
+    XSelectInput( display, root_window, StructureNotifyMask );
+    wine_tsx11_unlock();
+
+    init_done = TRUE;
+    return TRUE;
+}
+
+/* dock the given icon with the NETWM system tray */
+static void dock_systray_icon( Display *display, struct tray_icon *icon, Window systray_window )
 {
     struct x11drv_win_data *data;
     XEvent ev;
     XSetWindowAttributes attr;
 
-    if (!(data = X11DRV_get_win_data( hwnd )) &&
-        !(data = X11DRV_create_win_data( hwnd ))) return;
+    icon->window = CreateWindowW( icon_classname, NULL, WS_CLIPSIBLINGS | WS_POPUP,
+                                  CW_USEDEFAULT, CW_USEDEFAULT, icon_cx, icon_cy,
+                                  NULL, NULL, NULL, icon );
+    if (!icon->window) return;
+
+    if (!(data = X11DRV_get_win_data( icon->window )) &&
+        !(data = X11DRV_create_win_data( icon->window ))) return;
 
     TRACE( "icon window %p/%lx managed %u\n", data->hwnd, data->whole_window, data->managed );
 
     make_window_embedded( display, data );
+    create_tooltip( icon );
+    ShowWindow( icon->window, SW_SHOWNA );
 
     /* send the docking request message */
     ev.xclient.type = ClientMessage;
@@ -262,67 +554,57 @@ static void dock_systray_window( Display *display, HWND hwnd, Window systray_win
     wine_tsx11_unlock();
 }
 
+/* dock systray windows again with the new owner */
+void change_systray_owner( Display *display, Window systray_window )
+{
+    struct tray_icon *icon;
+
+    TRACE( "new owner %lx\n", systray_window );
+    LIST_FOR_EACH_ENTRY( icon, &icon_list, struct tray_icon, entry )
+    {
+        if (icon->display == -1) continue;
+        hide_icon( icon );
+        dock_systray_icon( display, icon, systray_window );
+    }
+}
 
 /* hide a tray icon */
 static BOOL hide_icon( struct tray_icon *icon )
 {
+    struct x11drv_win_data *data;
+
     TRACE( "id=0x%x, hwnd=%p\n", icon->id, icon->owner );
 
     if (!icon->window) return TRUE;  /* already hidden */
+
+    /* make sure we don't try to unmap it, it confuses some systray docks */
+    if ((data = X11DRV_get_win_data( icon->window )) && data->embedded) data->mapped = FALSE;
 
     DestroyWindow(icon->window);
     DestroyWindow(icon->tooltip);
     icon->window = 0;
     icon->tooltip = 0;
+    remove_from_standalone_tray( icon );
+    update_balloon( icon );
     return TRUE;
 }
 
 /* make the icon visible */
 static BOOL show_icon( struct tray_icon *icon )
 {
-    RECT rect;
-    static BOOL class_registered;
     Window systray_window;
-    Display *display = thread_display();
+    Display *display = thread_init_display();
 
     TRACE( "id=0x%x, hwnd=%p\n", icon->id, icon->owner );
 
     if (icon->window) return TRUE;  /* already shown */
 
-    if (!class_registered)
-    {
-        WNDCLASSEXW class;
+    if ((systray_window = get_systray_selection_owner( display )))
+        dock_systray_icon( display, icon, systray_window );
+    else
+        add_to_standalone_tray( icon );
 
-        ZeroMemory( &class, sizeof(class) );
-        class.cbSize        = sizeof(class);
-        class.lpfnWndProc   = tray_wndproc;
-        class.hCursor       = LoadCursorW( 0, (LPCWSTR)IDC_ARROW );
-        class.lpszClassName = tray_classname;
-        class.style         = CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS;
-
-        if (!RegisterClassExW(&class) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
-        {
-            WINE_ERR( "Could not register tray window class\n" );
-            return FALSE;
-        }
-        class_registered = TRUE;
-    }
-
-    if (!(systray_window = get_systray_selection_owner( display ))) return FALSE;
-
-    rect.left = 0;
-    rect.top = 0;
-    rect.right = GetSystemMetrics( SM_CXSMICON ) + 2*ICON_BORDER;
-    rect.bottom = GetSystemMetrics( SM_CYSMICON ) + 2*ICON_BORDER;
-
-    icon->window = CreateWindowExW( WS_EX_APPWINDOW, tray_classname, NULL, WS_CLIPSIBLINGS | WS_POPUP,
-                                    CW_USEDEFAULT, CW_USEDEFAULT,
-                                    rect.right - rect.left, rect.bottom - rect.top,
-                                    NULL, NULL, NULL, icon );
-    create_tooltip( icon );
-    dock_systray_window( display, icon->window, systray_window );
-    SetTimer( icon->window, 1, 1000, NULL );
-    ShowWindow( icon->window, SW_SHOWNA );
+    update_balloon( icon );
     return TRUE;
 }
 
@@ -331,10 +613,9 @@ static BOOL modify_icon( struct tray_icon *icon, NOTIFYICONDATAW *nid )
 {
     TRACE( "id=0x%x hwnd=%p flags=%x\n", nid->uID, nid->hWnd, nid->uFlags );
 
-    if ((nid->uFlags & NIF_STATE) && (nid->dwStateMask & NIS_HIDDEN))
+    if (nid->uFlags & NIF_STATE)
     {
-        if (nid->dwState & NIS_HIDDEN) hide_icon( icon );
-        else show_icon( icon );
+        icon->state = (icon->state & ~nid->dwStateMask) | (nid->dwState & nid->dwStateMask);
     }
 
     if (nid->uFlags & NIF_ICON)
@@ -343,8 +624,12 @@ static BOOL modify_icon( struct tray_icon *icon, NOTIFYICONDATAW *nid )
         icon->image = CopyIcon(nid->hIcon);
         if (icon->window)
         {
-            struct x11drv_win_data *data = X11DRV_get_win_data( icon->window );
-            if (data) XClearArea( thread_display(), data->client_window, 0, 0, 0, 0, True );
+            if (icon->display != -1) InvalidateRect( icon->window, NULL, TRUE );
+            else
+            {
+                struct x11drv_win_data *data = X11DRV_get_win_data( icon->window );
+                if (data) XClearArea( gdi_display, data->client_window, 0, 0, 0, 0, True );
+            }
         }
     }
 
@@ -355,15 +640,19 @@ static BOOL modify_icon( struct tray_icon *icon, NOTIFYICONDATAW *nid )
     if (nid->uFlags & NIF_TIP)
     {
         lstrcpynW(icon->tiptext, nid->szTip, sizeof(icon->tiptext)/sizeof(WCHAR));
-        icon->tiptitle[0] = 0;
         if (icon->tooltip) update_tooltip_text(icon);
     }
     if (nid->uFlags & NIF_INFO && nid->cbSize >= NOTIFYICONDATAA_V2_SIZE)
     {
-        lstrcpynW(icon->tiptext, nid->szInfo, sizeof(icon->tiptext)/sizeof(WCHAR));
-        lstrcpynW(icon->tiptitle, nid->szInfoTitle, sizeof(icon->tiptitle)/sizeof(WCHAR));
-        if (icon->tooltip) update_tooltip_text(icon);
+        lstrcpynW( icon->info_text, nid->szInfo, sizeof(icon->info_text)/sizeof(WCHAR) );
+        lstrcpynW( icon->info_title, nid->szInfoTitle, sizeof(icon->info_title)/sizeof(WCHAR) );
+        icon->info_flags = nid->dwInfoFlags;
+        icon->info_timeout = max(min(nid->u.uTimeout, BALLOON_SHOW_MAX_TIMEOUT), BALLOON_SHOW_MIN_TIMEOUT);
+        icon->info_icon = nid->hBalloonIcon;
+        update_balloon( icon );
     }
+    if (icon->state & NIS_HIDDEN) hide_icon( icon );
+    else show_icon( icon );
     return TRUE;
 }
 
@@ -389,12 +678,9 @@ static BOOL add_icon(NOTIFYICONDATAW *nid)
     ZeroMemory(icon, sizeof(struct tray_icon));
     icon->id     = nid->uID;
     icon->owner  = nid->hWnd;
+    icon->display = -1;
 
     list_add_tail(&icon_list, &icon->entry);
-
-    /* if hidden state is specified, modify_icon will take care of it */
-    if (!((nid->uFlags & NIF_STATE) && (nid->dwStateMask & NIS_HIDDEN)))
-        show_icon( icon );
 
     return modify_icon( icon, nid );
 }
@@ -423,8 +709,7 @@ int CDECL wine_notify_icon( DWORD msg, NOTIFYICONDATAW *data )
     switch (msg)
     {
     case NIM_ADD:
-        if (!get_systray_selection_owner( thread_init_display() ))
-            return -1;  /* fall back to default handling */
+        if (!init_systray()) return -1;  /* fall back to default handling */
         ret = add_icon( data );
         break;
     case NIM_DELETE:

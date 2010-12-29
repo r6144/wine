@@ -95,7 +95,6 @@ typedef struct {
 typedef struct tagWINE_MCIDRIVER {
         UINT			wDeviceID;
         UINT			wType;
-	LPWSTR			lpstrElementName;
         LPWSTR			lpstrDeviceType;
         LPWSTR			lpstrAlias;
         HDRVR			hDriver;
@@ -145,10 +144,7 @@ LPWINE_MLD	MMDRV_GetRelated(HANDLE hndl, UINT srcType, BOOL bSrcCanBeID, UINT ds
 DWORD           MMDRV_Message(LPWINE_MLD mld, UINT wMsg, DWORD_PTR dwParam1, DWORD_PTR dwParam2);
 UINT		MMDRV_PhysicalFeatures(LPWINE_MLD mld, UINT uMsg, DWORD_PTR dwParam1, DWORD_PTR dwParam2);
 
-const char* 	MCI_MessageToString(UINT wMsg);
 DWORD           MCI_SendCommand(UINT wDevID, UINT16 wMsg, DWORD_PTR dwParam1, DWORD_PTR dwParam2);
-LPWSTR          MCI_strdupAtoW(LPCSTR str);
-LPSTR           MCI_strdupWtoA(LPCWSTR str);
 
 const char*     WINMM_ErrorToString(MMRESULT error);
 

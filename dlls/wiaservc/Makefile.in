@@ -1,7 +1,3 @@
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = wiaservc.dll
 IMPORTS   = uuid ole32 advapi32
 
@@ -10,6 +6,8 @@ C_SRCS = \
 	service.c \
 	wiadevmgr.c \
 	wiaservc_main.c
+
+IDL_R_SRCS = wiaservc.idl
 
 RC_SRCS = rsrc.rc
 

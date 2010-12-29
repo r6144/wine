@@ -409,6 +409,7 @@ HRESULT WINAPI RegisterDragDrop(HWND hwnd, LPDROPTARGET pDropTarget)
   HRESULT hr;
   IStream *stream;
   HANDLE map;
+  IUnknown *unk;
 
   TRACE("(%p,%p)\n", hwnd, pDropTarget);
 
@@ -449,7 +450,17 @@ HRESULT WINAPI RegisterDragDrop(HWND hwnd, LPDROPTARGET pDropTarget)
   hr = CreateStreamOnHGlobal(NULL, TRUE, &stream);
   if(FAILED(hr)) return hr;
 
-  hr = CoMarshalInterface(stream, &IID_IDropTarget, (IUnknown*)pDropTarget, MSHCTX_LOCAL, NULL, MSHLFLAGS_TABLESTRONG);
+  unk = NULL;
+  hr = IDropTarget_QueryInterface(pDropTarget, &IID_IUnknown, (void**)&unk);
+  if (SUCCEEDED(hr) && !unk) hr = E_NOINTERFACE;
+  if(FAILED(hr))
+  {
+      IStream_Release(stream);
+      return hr;
+  }
+  hr = CoMarshalInterface(stream, &IID_IDropTarget, unk, MSHCTX_LOCAL, NULL, MSHLFLAGS_TABLESTRONG);
+  IUnknown_Release(unk);
+
   if(SUCCEEDED(hr))
   {
     hr = create_map_from_stream(stream, &map);
@@ -801,12 +812,17 @@ static HRESULT EnumOLEVERB_Construct(HKEY hkeyVerb, ULONG index, IEnumOLEVERB **
 
 typedef struct
 {
-    const IEnumOLEVERBVtbl *lpvtbl;
+    IEnumOLEVERB IEnumOLEVERB_iface;
     LONG ref;
 
     HKEY hkeyVerb;
     ULONG index;
 } EnumOLEVERB;
+
+static inline EnumOLEVERB *impl_from_IEnumOLEVERB(IEnumOLEVERB *iface)
+{
+    return CONTAINING_RECORD(iface, EnumOLEVERB, IEnumOLEVERB_iface);
+}
 
 static HRESULT WINAPI EnumOLEVERB_QueryInterface(
     IEnumOLEVERB *iface, REFIID riid, void **ppv)
@@ -825,7 +841,7 @@ static HRESULT WINAPI EnumOLEVERB_QueryInterface(
 static ULONG WINAPI EnumOLEVERB_AddRef(
     IEnumOLEVERB *iface)
 {
-    EnumOLEVERB *This = (EnumOLEVERB *)iface;
+    EnumOLEVERB *This = impl_from_IEnumOLEVERB(iface);
     TRACE("()\n");
     return InterlockedIncrement(&This->ref);
 }
@@ -833,7 +849,7 @@ static ULONG WINAPI EnumOLEVERB_AddRef(
 static ULONG WINAPI EnumOLEVERB_Release(
     IEnumOLEVERB *iface)
 {
-    EnumOLEVERB *This = (EnumOLEVERB *)iface;
+    EnumOLEVERB *This = impl_from_IEnumOLEVERB(iface);
     LONG refs = InterlockedDecrement(&This->ref);
     TRACE("()\n");
     if (!refs)
@@ -848,7 +864,7 @@ static HRESULT WINAPI EnumOLEVERB_Next(
     IEnumOLEVERB *iface, ULONG celt, LPOLEVERB rgelt,
     ULONG *pceltFetched)
 {
-    EnumOLEVERB *This = (EnumOLEVERB *)iface;
+    EnumOLEVERB *This = impl_from_IEnumOLEVERB(iface);
     HRESULT hr = S_OK;
 
     TRACE("(%d, %p, %p)\n", celt, rgelt, pceltFetched);
@@ -935,7 +951,7 @@ static HRESULT WINAPI EnumOLEVERB_Next(
 static HRESULT WINAPI EnumOLEVERB_Skip(
     IEnumOLEVERB *iface, ULONG celt)
 {
-    EnumOLEVERB *This = (EnumOLEVERB *)iface;
+    EnumOLEVERB *This = impl_from_IEnumOLEVERB(iface);
 
     TRACE("(%d)\n", celt);
 
@@ -946,7 +962,7 @@ static HRESULT WINAPI EnumOLEVERB_Skip(
 static HRESULT WINAPI EnumOLEVERB_Reset(
     IEnumOLEVERB *iface)
 {
-    EnumOLEVERB *This = (EnumOLEVERB *)iface;
+    EnumOLEVERB *This = impl_from_IEnumOLEVERB(iface);
 
     TRACE("()\n");
 
@@ -958,7 +974,7 @@ static HRESULT WINAPI EnumOLEVERB_Clone(
     IEnumOLEVERB *iface,
     IEnumOLEVERB **ppenum)
 {
-    EnumOLEVERB *This = (EnumOLEVERB *)iface;
+    EnumOLEVERB *This = impl_from_IEnumOLEVERB(iface);
     HKEY hkeyVerb;
     TRACE("(%p)\n", ppenum);
     if (!DuplicateHandle(GetCurrentProcess(), This->hkeyVerb, GetCurrentProcess(), (HANDLE *)&hkeyVerb, 0, FALSE, DUPLICATE_SAME_ACCESS))
@@ -985,12 +1001,12 @@ static HRESULT EnumOLEVERB_Construct(HKEY hkeyVerb, ULONG index, IEnumOLEVERB **
         RegCloseKey(hkeyVerb);
         return E_OUTOFMEMORY;
     }
-    This->lpvtbl = &EnumOLEVERB_VTable;
+    This->IEnumOLEVERB_iface.lpVtbl = &EnumOLEVERB_VTable;
     This->ref = 1;
     This->index = index;
     This->hkeyVerb = hkeyVerb;
-    *ppenum = (IEnumOLEVERB *)&This->lpvtbl;
-    return S_OK;    
+    *ppenum = &This->IEnumOLEVERB_iface;
+    return S_OK;
 }
 
 /***********************************************************************
@@ -1170,13 +1186,12 @@ HRESULT WINAPI OleLoad(
     }
   }
 
-  if (SUCCEEDED(hres))
-    /*
-     * Initialize the object with it's IPersistStorage interface.
-     */
-    hres = IOleObject_QueryInterface(pUnk,
-				     &IID_IPersistStorage,
-				     (void**)&persistStorage);
+  /*
+   * Initialize the object with its IPersistStorage interface.
+   */
+  hres = IOleObject_QueryInterface(pUnk,
+                                   &IID_IPersistStorage,
+                                   (void**)&persistStorage);
 
   if (SUCCEEDED(hres))
   {
@@ -2213,19 +2228,19 @@ static void OLEDD_TrackMouseMove(TrackerWindowInfo* trackerInfo)
 
     if (*trackerInfo->pdwEffect & DROPEFFECT_MOVE)
     {
-      hCur = LoadCursorW(hProxyDll, MAKEINTRESOURCEW(1));
+      hCur = LoadCursorW(hProxyDll, MAKEINTRESOURCEW(2));
     }
     else if (*trackerInfo->pdwEffect & DROPEFFECT_COPY)
     {
-      hCur = LoadCursorW(hProxyDll, MAKEINTRESOURCEW(2));
+      hCur = LoadCursorW(hProxyDll, MAKEINTRESOURCEW(3));
     }
     else if (*trackerInfo->pdwEffect & DROPEFFECT_LINK)
     {
-      hCur = LoadCursorW(hProxyDll, MAKEINTRESOURCEW(3));
+      hCur = LoadCursorW(hProxyDll, MAKEINTRESOURCEW(4));
     }
     else
     {
-      hCur = LoadCursorW(hProxyDll, MAKEINTRESOURCEW(0));
+      hCur = LoadCursorW(hProxyDll, MAKEINTRESOURCEW(1));
     }
 
     SetCursor(hCur);
@@ -2519,7 +2534,17 @@ HRESULT WINAPI OleCreate(
             if (SUCCEEDED(hres2))
             {
                 DWORD dwConnection;
-                hres = IOleCache_Cache(pOleCache, pFormatEtc, ADVF_PRIMEFIRST, &dwConnection);
+                if (renderopt == OLERENDER_DRAW && !pFormatEtc) {
+                    FORMATETC pfe;
+                    pfe.cfFormat = 0;
+                    pfe.ptd = NULL;
+                    pfe.dwAspect = DVASPECT_CONTENT;
+                    pfe.lindex = -1;
+                    pfe.tymed = TYMED_NULL;
+                    hres = IOleCache_Cache(pOleCache, &pfe, ADVF_PRIMEFIRST, &dwConnection);
+                }
+                else
+                    hres = IOleCache_Cache(pOleCache, pFormatEtc, ADVF_PRIMEFIRST, &dwConnection);
                 IOleCache_Release(pOleCache);
             }
         }

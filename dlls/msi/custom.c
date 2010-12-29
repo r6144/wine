@@ -222,13 +222,6 @@ UINT ACTION_CustomAction(MSIPACKAGE *package, LPCWSTR action, UINT script, BOOL 
         if (type & msidbCustomActionTypeNoImpersonate)
             WARN("msidbCustomActionTypeNoImpersonate not handled\n");
 
-        if (type & msidbCustomActionTypeRollback)
-        {
-            FIXME("Rollback only action... rollbacks not supported yet\n");
-            schedule_action(package, ROLLBACK_SCRIPT, action);
-            rc = ERROR_SUCCESS;
-            goto end;
-        }
         if (!execute)
         {
             LPWSTR actiondata = msi_dup_property(package->db, action);
@@ -238,12 +231,17 @@ UINT ACTION_CustomAction(MSIPACKAGE *package, LPCWSTR action, UINT script, BOOL 
 
             if (type & msidbCustomActionTypeCommit)
             {
-                TRACE("Deferring Commit Action!\n");
+                TRACE("Deferring commit action\n");
                 schedule_action(package, COMMIT_SCRIPT, deferred);
+            }
+            else if (type & msidbCustomActionTypeRollback)
+            {
+                FIXME("Deferring rollback only action... rollbacks not supported yet\n");
+                schedule_action(package, ROLLBACK_SCRIPT, deferred);
             }
             else
             {
-                TRACE("Deferring Action!\n");
+                TRACE("Deferring action\n");
                 schedule_action(package, INSTALL_SCRIPT, deferred);
             }
 
@@ -258,20 +256,14 @@ UINT ACTION_CustomAction(MSIPACKAGE *package, LPCWSTR action, UINT script, BOOL 
         {
             LPWSTR actiondata = msi_dup_property( package->db, action );
 
-            switch (script)
-            {
-            case INSTALL_SCRIPT:
+            if (type & msidbCustomActionTypeInScript)
                 package->scheduled_action_running = TRUE;
-                break;
-            case COMMIT_SCRIPT:
+
+            if (type & msidbCustomActionTypeCommit)
                 package->commit_action_running = TRUE;
-                break;
-            case ROLLBACK_SCRIPT:
+
+            if (type & msidbCustomActionTypeRollback)
                 package->rollback_action_running = TRUE;
-                break;
-            default:
-                break;
-            }
 
             if (deferred_data)
                 set_deferred_action_props(package, deferred_data);
@@ -363,60 +355,91 @@ end:
     return rc;
 }
 
-
-static UINT store_binary_to_temp(MSIPACKAGE *package, LPCWSTR source,
-                                LPWSTR tmp_file)
+static MSIBINARY *create_temp_binary( MSIPACKAGE *package, LPCWSTR source, BOOL dll )
 {
     static const WCHAR query[] = {
         'S','E','L','E','C','T',' ','*',' ','F','R','O','M',' ',
         '`','B','i' ,'n','a','r','y','`',' ','W','H','E','R','E',' ',
         '`','N','a','m','e','`',' ','=',' ','\'','%','s','\'',0};
-    MSIRECORD *row = 0;
+    MSIRECORD *row;
+    MSIBINARY *binary;
     HANDLE file;
     CHAR buffer[1024];
-    WCHAR fmt[MAX_PATH];
-    DWORD sz = MAX_PATH;
+    WCHAR fmt[MAX_PATH], tmpfile[MAX_PATH];
+    DWORD sz = MAX_PATH, write;
     UINT r;
 
     if (msi_get_property(package->db, cszTempFolder, fmt, &sz) != ERROR_SUCCESS)
         GetTempPathW(MAX_PATH, fmt);
 
-    if (GetTempFileNameW(fmt, szMsi, 0, tmp_file) == 0)
+    if (!GetTempFileNameW( fmt, szMsi, 0, tmpfile ))
     {
-        TRACE("Unable to create file\n");
-        return ERROR_FUNCTION_FAILED;
+        TRACE("unable to create temp file %s (%u)\n", debugstr_w(tmpfile), GetLastError());
+        return NULL;
     }
-    track_tempfile(package, tmp_file);
 
     row = MSI_QueryGetRecord(package->db, query, source);
     if (!row)
-        return ERROR_FUNCTION_FAILED;
+        return NULL;
 
-    /* write out the file */
-    file = CreateFileW(tmp_file, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
-                       FILE_ATTRIBUTE_NORMAL, NULL);
-    if (file == INVALID_HANDLE_VALUE)
-        r = ERROR_FUNCTION_FAILED;
-    else
+    if (!(binary = msi_alloc_zero( sizeof(MSIBINARY) )))
     {
-        do
+        msiobj_release( &row->hdr );
+        return NULL;
+    }
+    file = CreateFileW( tmpfile, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL );
+    if (file == INVALID_HANDLE_VALUE)
+    {
+        msiobj_release( &row->hdr );
+        msi_free( binary );
+        return NULL;
+    }
+    do
+    {
+        sz = sizeof(buffer);
+        r = MSI_RecordReadStream( row, 2, buffer, &sz );
+        if (r != ERROR_SUCCESS)
         {
-            DWORD write;
-            sz = sizeof buffer;
-            r = MSI_RecordReadStream(row, 2, buffer, &sz);
-            if (r != ERROR_SUCCESS)
-            {
-                ERR("Failed to get stream\n");
-                break;
-            }
-            WriteFile(file, buffer, sz, &write, NULL);
-        } while (sz == sizeof buffer);
-        CloseHandle(file);
+            ERR("Failed to get stream\n");
+            break;
+        }
+        WriteFile( file, buffer, sz, &write, NULL );
+    } while (sz == sizeof buffer);
+
+    CloseHandle( file );
+    msiobj_release( &row->hdr );
+    if (r != ERROR_SUCCESS)
+    {
+        DeleteFileW( tmpfile );
+        msi_free( binary );
+        return NULL;
     }
 
-    msiobj_release(&row->hdr);
+    /* keep a reference to prevent the dll from being unloaded */
+    if (dll && !(binary->module = LoadLibraryW( tmpfile )))
+    {
+        ERR("failed to load dll %s (%u)\n", debugstr_w( binary->tmpfile ), GetLastError() );
+        DeleteFileW( tmpfile );
+        msi_free( binary );
+        return NULL;
+    }
+    binary->source = strdupW( source );
+    binary->tmpfile = strdupW( tmpfile );
+    list_add_tail( &package->binaries, &binary->entry );
+    return binary;
+}
 
-    return r;
+static MSIBINARY *get_temp_binary( MSIPACKAGE *package, LPCWSTR source, BOOL dll )
+{
+    MSIBINARY *binary;
+
+    LIST_FOR_EACH_ENTRY( binary, &package->binaries, MSIBINARY, entry )
+    {
+        if (!strcmpW( binary->source, source ))
+            return binary;
+    }
+
+    return create_temp_binary( package, source, dll );
 }
 
 static void file_running_action(MSIPACKAGE* package, HANDLE Handle,
@@ -602,7 +625,7 @@ static void handle_msi_break( LPCWSTR target )
     if( !GetEnvironmentVariableW( MsiBreak, val, MAX_PATH ))
         return;
 
-    if( lstrcmpiW( val, target ))
+    if( strcmpiW( val, target ))
         return;
 
     msg = msi_alloc( (lstrlenW(format) + 10) * sizeof(WCHAR) );
@@ -623,7 +646,7 @@ static UINT get_action_info( const GUID *guid, INT *type, MSIHANDLE *handle,
     IWineMsiRemoteCustomAction *rca = NULL;
     HRESULT r;
 
-    r = DllGetClassObject( &CLSID_IWineMsiRemoteCustomAction,
+    r = DllGetClassObject( &CLSID_WineMsiRemoteCustomAction,
                            &IID_IClassFactory, (LPVOID *)&cf );
     if (FAILED(r))
     {
@@ -883,20 +906,15 @@ static UINT HANDLE_CustomType1(MSIPACKAGE *package, LPCWSTR source,
                                LPCWSTR target, const INT type, LPCWSTR action)
 {
     msi_custom_action_info *info;
-    WCHAR tmp_file[MAX_PATH];
+    MSIBINARY *binary;
     UINT r;
 
-    r = store_binary_to_temp(package, source, tmp_file);
-    if (r != ERROR_SUCCESS)
-        return r;
+    if (!(binary = get_temp_binary( package, source, TRUE )))
+        return ERROR_FUNCTION_FAILED;
 
-    TRACE("Calling function %s from %s\n",debugstr_w(target),
-          debugstr_w(tmp_file));
+    TRACE("Calling function %s from %s\n", debugstr_w(target), debugstr_w(binary->tmpfile));
 
-    if (!strchrW(tmp_file,'.'))
-        strcatW(tmp_file, szDot);
-
-    info = do_msidbCustomActionTypeDll( package, type, tmp_file, target, action );
+    info = do_msidbCustomActionTypeDll( package, type, binary->tmpfile, target, action );
 
     r = wait_thread_handle( info );
     release_custom_action_data( info );
@@ -906,7 +924,6 @@ static UINT HANDLE_CustomType1(MSIPACKAGE *package, LPCWSTR source,
 static UINT HANDLE_CustomType2(MSIPACKAGE *package, LPCWSTR source,
                                LPCWSTR target, const INT type, LPCWSTR action)
 {
-    WCHAR tmp_file[MAX_PATH];
     STARTUPINFOW si;
     PROCESS_INFORMATION info;
     BOOL rc;
@@ -914,29 +931,27 @@ static UINT HANDLE_CustomType2(MSIPACKAGE *package, LPCWSTR source,
     WCHAR *deformated = NULL;
     WCHAR *cmd;
     static const WCHAR spc[] = {' ',0};
+    MSIBINARY *binary;
     UINT r;
 
     memset(&si,0,sizeof(STARTUPINFOW));
 
-    r = store_binary_to_temp(package, source, tmp_file);
-    if (r != ERROR_SUCCESS)
-        return r;
+    if (!(binary = get_temp_binary( package, source, FALSE )))
+        return ERROR_FUNCTION_FAILED;
 
     deformat_string(package,target,&deformated);
 
-    len = strlenW(tmp_file)+2;
-
+    len = strlenW( binary->tmpfile ) + 2;
     if (deformated)
         len += strlenW(deformated);
 
     cmd = msi_alloc(sizeof(WCHAR)*len);
 
-    strcpyW(cmd,tmp_file);
+    strcpyW( cmd, binary->tmpfile );
     if (deformated)
     {
         strcatW(cmd,spc);
         strcatW(cmd,deformated);
-
         msi_free(deformated);
     }
 
@@ -1441,13 +1456,13 @@ void ACTION_FinishCustomActions(const MSIPACKAGE* package)
 }
 
 typedef struct _msi_custom_remote_impl {
-    const IWineMsiRemoteCustomActionVtbl *lpVtbl;
+    IWineMsiRemoteCustomAction IWineMsiRemoteCustomAction_iface;
     LONG refs;
 } msi_custom_remote_impl;
 
-static inline msi_custom_remote_impl* mcr_from_IWineMsiRemoteCustomAction( IWineMsiRemoteCustomAction* iface )
+static inline msi_custom_remote_impl *impl_from_IWineMsiRemoteCustomAction( IWineMsiRemoteCustomAction *iface )
 {
-    return (msi_custom_remote_impl*) iface;
+    return CONTAINING_RECORD(iface, msi_custom_remote_impl, IWineMsiRemoteCustomAction_iface);
 }
 
 static HRESULT WINAPI mcr_QueryInterface( IWineMsiRemoteCustomAction *iface,
@@ -1466,14 +1481,14 @@ static HRESULT WINAPI mcr_QueryInterface( IWineMsiRemoteCustomAction *iface,
 
 static ULONG WINAPI mcr_AddRef( IWineMsiRemoteCustomAction *iface )
 {
-    msi_custom_remote_impl* This = mcr_from_IWineMsiRemoteCustomAction( iface );
+    msi_custom_remote_impl* This = impl_from_IWineMsiRemoteCustomAction( iface );
 
     return InterlockedIncrement( &This->refs );
 }
 
 static ULONG WINAPI mcr_Release( IWineMsiRemoteCustomAction *iface )
 {
-    msi_custom_remote_impl* This = mcr_from_IWineMsiRemoteCustomAction( iface );
+    msi_custom_remote_impl* This = impl_from_IWineMsiRemoteCustomAction( iface );
     ULONG r;
 
     r = InterlockedDecrement( &This->refs );
@@ -1516,7 +1531,7 @@ HRESULT create_msi_custom_remote( IUnknown *pOuter, LPVOID *ppObj )
     if (!This)
         return E_OUTOFMEMORY;
 
-    This->lpVtbl = &msi_custom_remote_vtbl;
+    This->IWineMsiRemoteCustomAction_iface.lpVtbl = &msi_custom_remote_vtbl;
     This->refs = 1;
 
     *ppObj = This;

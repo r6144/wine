@@ -1,7 +1,3 @@
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = avifil32.dll
 IMPORTLIB = avifil32
 IMPORTS   = uuid msacm32 msvfw32 winmm ole32 user32 advapi32
@@ -15,9 +11,10 @@ C_SRCS = \
 	factory.c \
 	getframe.c \
 	icmstream.c \
-	regsvr.c \
 	tmpfile.c \
 	wavfile.c
+
+IDL_R_SRCS = avifil32.idl
 
 RC_SRCS = \
 	avifile_Cs.rc \
@@ -26,6 +23,7 @@ RC_SRCS = \
 	avifile_En.rc \
 	avifile_Es.rc \
 	avifile_Fr.rc \
+	avifile_He.rc \
 	avifile_Hu.rc \
 	avifile_It.rc \
 	avifile_Ja.rc \
@@ -38,6 +36,7 @@ RC_SRCS = \
 	avifile_Ro.rc \
 	avifile_Ru.rc \
 	avifile_Si.rc \
+	avifile_Sr.rc \
 	avifile_Sv.rc \
 	avifile_Tr.rc \
 	avifile_Uk.rc \

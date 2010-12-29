@@ -4,18 +4,18 @@
 @ stdcall D3DXAssembleShaderFromResourceA(long str ptr ptr long ptr ptr)
 @ stdcall D3DXAssembleShaderFromResourceW(long wstr ptr ptr long ptr ptr)
 @ stdcall D3DXBoxBoundProbe(ptr ptr ptr ptr)
-@ stub D3DXCheckCubeTextureRequirements
+@ stdcall D3DXCheckCubeTextureRequirements(ptr ptr ptr long ptr ptr)
 @ stdcall D3DXCheckTextureRequirements(ptr ptr ptr ptr long ptr ptr)
 @ stdcall D3DXCheckVersion(long long)
-@ stub D3DXCheckVolumeTextureRequirements
+@ stdcall D3DXCheckVolumeTextureRequirements(ptr ptr ptr ptr ptr long ptr ptr)
 @ stub D3DXCleanMesh
-@ stdcall D3DXColorAdjustContrast(ptr ptr long)
-@ stdcall D3DXColorAdjustSaturation(ptr ptr long)
-@ stdcall D3DXCompileShader(ptr long ptr ptr ptr ptr long ptr ptr ptr)
-@ stub D3DXCompileShaderFromFileA
-@ stub D3DXCompileShaderFromFileW
-@ stub D3DXCompileShaderFromResourceA
-@ stub D3DXCompileShaderFromResourceW
+@ stdcall D3DXColorAdjustContrast(ptr ptr float)
+@ stdcall D3DXColorAdjustSaturation(ptr ptr float)
+@ stdcall D3DXCompileShader(ptr long ptr ptr str str long ptr ptr ptr)
+@ stdcall D3DXCompileShaderFromFileA(str ptr ptr str str long ptr ptr ptr)
+@ stdcall D3DXCompileShaderFromFileW(wstr ptr ptr str str long ptr ptr ptr)
+@ stdcall D3DXCompileShaderFromResourceA(ptr str ptr ptr str str long ptr ptr ptr)
+@ stdcall D3DXCompileShaderFromResourceW(ptr wstr ptr ptr str str long ptr ptr ptr)
 @ stdcall D3DXComputeBoundingBox(ptr long long ptr ptr)
 @ stdcall D3DXComputeBoundingSphere(ptr long long ptr ptr)
 @ stub D3DXComputeIMTFromPerTexelSignal
@@ -31,10 +31,10 @@
 @ stub D3DXConvertMeshSubsetToSingleStrip
 @ stub D3DXConvertMeshSubsetToStrips
 @ stub D3DXCreateAnimationController
-@ stdcall D3DXCreateBox(ptr long long long ptr ptr)
+@ stdcall D3DXCreateBox(ptr float float float ptr ptr)
 @ stdcall D3DXCreateBuffer(long ptr)
 @ stub D3DXCreateCompressedAnimationSet
-@ stub D3DXCreateCubeTexture
+@ stdcall D3DXCreateCubeTexture(ptr long long long long long ptr)
 @ stub D3DXCreateCubeTextureFromFileA
 @ stub D3DXCreateCubeTextureFromFileExA
 @ stub D3DXCreateCubeTextureFromFileExW
@@ -45,7 +45,7 @@
 @ stub D3DXCreateCubeTextureFromResourceExA
 @ stub D3DXCreateCubeTextureFromResourceExW
 @ stub D3DXCreateCubeTextureFromResourceW
-@ stub D3DXCreateCylinder
+@ stdcall D3DXCreateCylinder(ptr long long long long long ptr ptr)
 @ stdcall D3DXCreateEffect(ptr ptr long ptr ptr long ptr ptr ptr)
 @ stdcall D3DXCreateEffectCompiler(ptr long ptr ptr long ptr ptr)
 @ stdcall D3DXCreateEffectCompilerFromFileA(str ptr ptr long ptr ptr)
@@ -71,8 +71,8 @@
 @ stub D3DXCreateKeyframedAnimationSet
 @ stdcall D3DXCreateLine(ptr ptr)
 @ stdcall D3DXCreateMatrixStack(long ptr)
-@ stub D3DXCreateMesh
-@ stub D3DXCreateMeshFVF
+@ stdcall D3DXCreateMesh(long long long ptr ptr ptr)
+@ stdcall D3DXCreateMeshFVF(long long long long ptr ptr)
 @ stub D3DXCreateNPatchMesh
 @ stub D3DXCreatePMeshFromStream
 @ stub D3DXCreatePatchMesh
@@ -87,26 +87,26 @@
 @ stub D3DXCreateSkinInfo
 @ stub D3DXCreateSkinInfoFromBlendedMesh
 @ stub D3DXCreateSkinInfoFVF
-@ stdcall D3DXCreateSphere(ptr long long long ptr ptr)
+@ stdcall D3DXCreateSphere(ptr float long long ptr ptr)
 @ stdcall D3DXCreateSprite(ptr ptr)
-@ stub D3DXCreateTeapot
+@ stdcall D3DXCreateTeapot(ptr ptr ptr)
 @ stub D3DXCreateTextA
 @ stub D3DXCreateTextW
 @ stdcall D3DXCreateTexture(ptr long long long long long long ptr)
-@ stdcall D3DXCreateTextureFromFileA(ptr ptr ptr)
-@ stub D3DXCreateTextureFromFileExA
-@ stdcall D3DXCreateTextureFromFileExW(ptr ptr long long long long long long long long long ptr ptr ptr)
-@ stub D3DXCreateTextureFromFileInMemory
+@ stdcall D3DXCreateTextureFromFileA(ptr str ptr)
+@ stdcall D3DXCreateTextureFromFileExA(ptr str long long long long long long long long long ptr ptr ptr)
+@ stdcall D3DXCreateTextureFromFileExW(ptr wstr long long long long long long long long long ptr ptr ptr)
+@ stdcall D3DXCreateTextureFromFileInMemory(ptr ptr long ptr)
 @ stdcall D3DXCreateTextureFromFileInMemoryEx(ptr ptr long long long long long long long long long long ptr ptr ptr)
-@ stub D3DXCreateTextureFromFileW
-@ stub D3DXCreateTextureFromResourceA
-@ stub D3DXCreateTextureFromResourceExA
-@ stub D3DXCreateTextureFromResourceExW
-@ stub D3DXCreateTextureFromResourceW
+@ stdcall D3DXCreateTextureFromFileW(ptr wstr ptr)
+@ stdcall D3DXCreateTextureFromResourceA(ptr ptr str ptr)
+@ stdcall D3DXCreateTextureFromResourceExA(ptr ptr str long long long long long long long long long ptr ptr ptr)
+@ stdcall D3DXCreateTextureFromResourceExW(ptr ptr wstr long long long long long long long long long ptr ptr ptr)
+@ stdcall D3DXCreateTextureFromResourceW(ptr ptr wstr ptr)
 @ stub D3DXCreateTextureGutterHelper
 @ stub D3DXCreateTextureShader
 @ stub D3DXCreateTorus
-@ stub D3DXCreateVolumeTexture
+@ stdcall D3DXCreateVolumeTexture(ptr long long long long long long long ptr)
 @ stub D3DXCreateVolumeTextureFromFileA
 @ stub D3DXCreateVolumeTextureFromFileExA
 @ stub D3DXCreateVolumeTextureFromFileExW
@@ -122,13 +122,13 @@
 @ stub D3DXDisassembleEffect
 @ stub D3DXDisassembleShader
 @ stub D3DXFileCreate
-@ stub D3DXFillCubeTexture
+@ stdcall D3DXFillCubeTexture(ptr ptr ptr)
 @ stub D3DXFillCubeTextureTX
-@ stub D3DXFillTexture
+@ stdcall D3DXFillTexture(ptr ptr ptr)
 @ stub D3DXFillTextureTX
-@ stub D3DXFillVolumeTexture
+@ stdcall D3DXFillVolumeTexture(ptr ptr ptr)
 @ stub D3DXFillVolumeTextureTX
-@ stub D3DXFilterTexture
+@ stdcall D3DXFilterTexture(ptr ptr long long)
 @ stdcall D3DXFindShaderComment(ptr long ptr ptr)
 @ stub D3DXFloat16To32Array
 @ stub D3DXFloat32To16Array
@@ -138,8 +138,8 @@
 @ stub D3DXFrameFind
 @ stub D3DXFrameNumNamedMatrices
 @ stub D3DXFrameRegisterNamedMatrices
-@ stdcall D3DXFresnelTerm(long long)
-@ stub D3DXFVFFromDeclarator
+@ stdcall D3DXFresnelTerm(float float)
+@ stdcall D3DXFVFFromDeclarator(ptr ptr)
 @ stub D3DXGatherFragments
 @ stub D3DXGatherFragmentsFromFileA
 @ stub D3DXGatherFragmentsFromFileW
@@ -147,7 +147,7 @@
 @ stub D3DXGatherFragmentsFromResourceW
 @ stub D3DXGenerateOutputDecl
 @ stub D3DXGeneratePMesh
-@ stub D3DXGetDeclLength
+@ stdcall D3DXGetDeclLength(ptr)
 @ stdcall D3DXGetDeclVertexSize(ptr long)
 @ stdcall D3DXGetDriverLevel(ptr)
 @ stdcall D3DXGetFVFVertexSize(long)
@@ -196,8 +196,8 @@
 @ stub D3DXLoadVolumeFromResourceA
 @ stub D3DXLoadVolumeFromResourceW
 @ stub D3DXLoadVolumeFromVolume
-@ stdcall D3DXMatrixAffineTransformation(ptr long ptr ptr ptr)
-@ stdcall D3DXMatrixAffineTransformation2D(ptr long ptr long ptr)
+@ stdcall D3DXMatrixAffineTransformation(ptr float ptr ptr ptr)
+@ stdcall D3DXMatrixAffineTransformation2D(ptr float ptr float ptr)
 @ stdcall D3DXMatrixDecompose(ptr ptr ptr ptr)
 @ stdcall D3DXMatrixDeterminant(ptr)
 @ stdcall D3DXMatrixInverse(ptr ptr ptr)
@@ -205,28 +205,28 @@
 @ stdcall D3DXMatrixLookAtRH(ptr ptr ptr ptr)
 @ stdcall D3DXMatrixMultiply(ptr ptr ptr)
 @ stdcall D3DXMatrixMultiplyTranspose(ptr ptr ptr)
-@ stdcall D3DXMatrixOrthoLH(ptr long long long long)
-@ stdcall D3DXMatrixOrthoOffCenterLH(ptr long long long long long long)
-@ stdcall D3DXMatrixOrthoOffCenterRH(ptr long long long long long long)
-@ stdcall D3DXMatrixOrthoRH(ptr long long long long)
-@ stdcall D3DXMatrixPerspectiveFovLH(ptr long long long long)
-@ stdcall D3DXMatrixPerspectiveFovRH(ptr long long long long)
-@ stdcall D3DXMatrixPerspectiveLH(ptr long long long long)
-@ stdcall D3DXMatrixPerspectiveOffCenterLH(ptr long long long long long long)
-@ stdcall D3DXMatrixPerspectiveOffCenterRH(ptr long long long long long long)
-@ stdcall D3DXMatrixPerspectiveRH(ptr long long long long)
+@ stdcall D3DXMatrixOrthoLH(ptr float float float float)
+@ stdcall D3DXMatrixOrthoOffCenterLH(ptr float float float float float float)
+@ stdcall D3DXMatrixOrthoOffCenterRH(ptr float float float float float float)
+@ stdcall D3DXMatrixOrthoRH(ptr float float float float)
+@ stdcall D3DXMatrixPerspectiveFovLH(ptr float float float float)
+@ stdcall D3DXMatrixPerspectiveFovRH(ptr float float float float)
+@ stdcall D3DXMatrixPerspectiveLH(ptr float float float float)
+@ stdcall D3DXMatrixPerspectiveOffCenterLH(ptr float float float float float float)
+@ stdcall D3DXMatrixPerspectiveOffCenterRH(ptr float float float float float float)
+@ stdcall D3DXMatrixPerspectiveRH(ptr float float float float)
 @ stdcall D3DXMatrixReflect(ptr ptr)
-@ stdcall D3DXMatrixRotationAxis(ptr ptr long)
+@ stdcall D3DXMatrixRotationAxis(ptr ptr float)
 @ stdcall D3DXMatrixRotationQuaternion(ptr ptr)
-@ stdcall D3DXMatrixRotationX(ptr long)
-@ stdcall D3DXMatrixRotationY(ptr long)
-@ stdcall D3DXMatrixRotationYawPitchRoll(ptr long long long)
-@ stdcall D3DXMatrixRotationZ(ptr long)
-@ stdcall D3DXMatrixScaling(ptr long long long)
+@ stdcall D3DXMatrixRotationX(ptr float)
+@ stdcall D3DXMatrixRotationY(ptr float)
+@ stdcall D3DXMatrixRotationYawPitchRoll(ptr float float float)
+@ stdcall D3DXMatrixRotationZ(ptr float)
+@ stdcall D3DXMatrixScaling(ptr float float float)
 @ stdcall D3DXMatrixShadow(ptr ptr ptr)
 @ stdcall D3DXMatrixTransformation(ptr ptr ptr ptr ptr ptr ptr)
-@ stdcall D3DXMatrixTransformation2D(ptr ptr long ptr ptr long ptr)
-@ stdcall D3DXMatrixTranslation(ptr long long long)
+@ stdcall D3DXMatrixTransformation2D(ptr ptr float ptr ptr float ptr)
+@ stdcall D3DXMatrixTranslation(ptr float float float)
 @ stdcall D3DXMatrixTranspose(ptr ptr)
 @ stub D3DXOptimizeFaces
 @ stub D3DXOptimizeVertices
@@ -236,22 +236,22 @@
 @ stdcall D3DXPlaneNormalize(ptr ptr)
 @ stdcall D3DXPlaneTransform(ptr ptr ptr)
 @ stdcall D3DXPlaneTransformArray(ptr long ptr long ptr long)
-@ stub D3DXPreprocessShader
-@ stub D3DXPreprocessShaderFromFileA
-@ stub D3DXPreprocessShaderFromFileW
-@ stub D3DXPreprocessShaderFromResourceA
-@ stub D3DXPreprocessShaderFromResourceW
-@ stdcall D3DXQuaternionBaryCentric(ptr ptr ptr ptr long long)
+@ stdcall D3DXPreprocessShader(ptr long ptr ptr ptr ptr)
+@ stdcall D3DXPreprocessShaderFromFileA(str ptr ptr ptr ptr)
+@ stdcall D3DXPreprocessShaderFromFileW(wstr ptr ptr ptr ptr)
+@ stdcall D3DXPreprocessShaderFromResourceA(long str ptr ptr ptr ptr)
+@ stdcall D3DXPreprocessShaderFromResourceW(long wstr ptr ptr ptr ptr)
+@ stdcall D3DXQuaternionBaryCentric(ptr ptr ptr ptr float float)
 @ stdcall D3DXQuaternionExp(ptr ptr)
 @ stdcall D3DXQuaternionInverse(ptr ptr)
 @ stdcall D3DXQuaternionLn(ptr ptr)
 @ stdcall D3DXQuaternionMultiply(ptr ptr ptr)
 @ stdcall D3DXQuaternionNormalize(ptr ptr)
-@ stdcall D3DXQuaternionRotationAxis(ptr ptr long)
+@ stdcall D3DXQuaternionRotationAxis(ptr ptr float)
 @ stdcall D3DXQuaternionRotationMatrix(ptr ptr)
-@ stdcall D3DXQuaternionRotationYawPitchRoll(ptr long long long)
-@ stdcall D3DXQuaternionSlerp(ptr ptr ptr long)
-@ stdcall D3DXQuaternionSquad(ptr ptr ptr ptr ptr long)
+@ stdcall D3DXQuaternionRotationYawPitchRoll(ptr float float float)
+@ stdcall D3DXQuaternionSlerp(ptr ptr ptr float)
+@ stdcall D3DXQuaternionSquad(ptr ptr ptr ptr ptr float)
 @ stub D3DXQuaternionSquadSetup
 @ stdcall D3DXQuaternionToAxisAngle(ptr ptr ptr)
 @ stub D3DXRectPatchSize
@@ -291,7 +291,7 @@
 @ stub D3DXSHRotateZ
 @ stub D3DXSHScale
 @ stub D3DXSimplifyMesh
-@ stdcall D3DXSphereBoundProbe(ptr long ptr ptr)
+@ stdcall D3DXSphereBoundProbe(ptr float ptr ptr)
 @ stub D3DXSplitMesh
 @ stub D3DXTessellateNPatches
 @ stub D3DXTessellateRectPatch
@@ -302,9 +302,9 @@
 @ stub D3DXUVAtlasPartition
 @ stub D3DXValidMesh
 @ stub D3DXValidPatchMesh
-@ stdcall D3DXVec2BaryCentric(ptr ptr ptr ptr long long)
-@ stdcall D3DXVec2CatmullRom(ptr ptr ptr ptr ptr long)
-@ stdcall D3DXVec2Hermite(ptr ptr ptr ptr ptr long)
+@ stdcall D3DXVec2BaryCentric(ptr ptr ptr ptr float float)
+@ stdcall D3DXVec2CatmullRom(ptr ptr ptr ptr ptr float)
+@ stdcall D3DXVec2Hermite(ptr ptr ptr ptr ptr float)
 @ stdcall D3DXVec2Normalize(ptr ptr)
 @ stdcall D3DXVec2Transform(ptr ptr ptr)
 @ stdcall D3DXVec2TransformArray(ptr long ptr long ptr long)
@@ -312,9 +312,9 @@
 @ stdcall D3DXVec2TransformCoordArray(ptr long ptr long ptr long)
 @ stdcall D3DXVec2TransformNormal(ptr ptr ptr)
 @ stdcall D3DXVec2TransformNormalArray(ptr long ptr long ptr long)
-@ stdcall D3DXVec3BaryCentric(ptr ptr ptr ptr long long)
-@ stdcall D3DXVec3CatmullRom(ptr ptr ptr ptr ptr long)
-@ stdcall D3DXVec3Hermite(ptr ptr ptr ptr ptr long)
+@ stdcall D3DXVec3BaryCentric(ptr ptr ptr ptr float float)
+@ stdcall D3DXVec3CatmullRom(ptr ptr ptr ptr ptr float)
+@ stdcall D3DXVec3Hermite(ptr ptr ptr ptr ptr float)
 @ stdcall D3DXVec3Normalize(ptr ptr)
 @ stdcall D3DXVec3Project(ptr ptr ptr ptr ptr ptr)
 @ stdcall D3DXVec3ProjectArray(ptr long ptr long ptr ptr ptr ptr long)
@@ -326,10 +326,10 @@
 @ stdcall D3DXVec3TransformNormalArray(ptr long ptr long ptr long)
 @ stdcall D3DXVec3Unproject(ptr ptr ptr ptr ptr ptr)
 @ stdcall D3DXVec3UnprojectArray(ptr long ptr long ptr ptr ptr ptr long)
-@ stdcall D3DXVec4BaryCentric(ptr ptr ptr ptr long long)
-@ stdcall D3DXVec4CatmullRom(ptr ptr ptr ptr ptr long)
+@ stdcall D3DXVec4BaryCentric(ptr ptr ptr ptr float float)
+@ stdcall D3DXVec4CatmullRom(ptr ptr ptr ptr ptr float)
 @ stdcall D3DXVec4Cross(ptr ptr ptr ptr)
-@ stdcall D3DXVec4Hermite(ptr ptr ptr ptr ptr long)
+@ stdcall D3DXVec4Hermite(ptr ptr ptr ptr ptr float)
 @ stdcall D3DXVec4Normalize(ptr ptr)
 @ stdcall D3DXVec4Transform(ptr ptr ptr)
 @ stdcall D3DXVec4TransformArray(ptr long ptr long ptr long)

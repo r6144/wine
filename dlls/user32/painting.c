@@ -160,10 +160,7 @@ static void update_visible_region( struct dce *dce )
     if (dce->clip_rgn) CombineRgn( vis_rgn, vis_rgn, dce->clip_rgn,
                                    (flags & DCX_INTERSECTRGN) ? RGN_AND : RGN_DIFF );
 
-    /* map region to DC coordinates */
-    OffsetRgn( vis_rgn, -win_rect.left, -win_rect.top );
-    SelectVisRgn( dce->hdc, vis_rgn );
-    DeleteObject( vis_rgn );
+    __wine_set_visible_region( dce->hdc, vis_rgn, &win_rect );
 }
 
 
@@ -399,23 +396,18 @@ static void make_dc_dirty( struct dce *dce )
  * rectangle. In addition, pWnd->parent DCEs may need to be updated if
  * DCX_CLIPCHILDREN flag is set.
  */
-void invalidate_dce( HWND hwnd, const RECT *rect )
+void invalidate_dce( HWND hwnd, const RECT *extra_rect )
 {
-    RECT window_rect, extra_rect;
+    RECT window_rect;
     struct dce *dce;
     HWND hwndScope = GetAncestor( hwnd, GA_PARENT );
 
     if (!hwndScope) return;
 
     GetWindowRect( hwnd, &window_rect );
-    if (rect)
-    {
-        extra_rect = *rect;
-        MapWindowPoints( hwndScope, 0, (POINT *)&extra_rect, 2 );
-    }
 
     TRACE("%p scope hwnd = %p %s (%s)\n",
-          hwnd, hwndScope, wine_dbgstr_rect(&window_rect), wine_dbgstr_rect(rect) );
+          hwnd, hwndScope, wine_dbgstr_rect(&window_rect), wine_dbgstr_rect(extra_rect) );
 
     /* walk all DCEs and fixup non-empty entries */
 
@@ -442,7 +434,7 @@ void invalidate_dce( HWND hwnd, const RECT *rect )
                 RECT dce_rect, tmp;
                 GetWindowRect( dce->hwnd, &dce_rect );
                 if (IntersectRect( &tmp, &dce_rect, &window_rect ) ||
-                    (rect && IntersectRect( &tmp, &dce_rect, &extra_rect )))
+                    (extra_rect && IntersectRect( &tmp, &dce_rect, extra_rect )))
                     make_dc_dirty( dce );
             }
         }
@@ -645,8 +637,7 @@ static HRGN send_ncpaint( HWND hwnd, HWND *child, UINT *flags )
 
         /* check if update rgn overlaps with nonclient area */
         type = GetRgnBox( whole_rgn, &update );
-        GetClientRect( hwnd, &client );
-        MapWindowPoints( hwnd, 0, (POINT *)&client, 2 );
+        WIN_GetRectangles( hwnd, COORDS_SCREEN, 0, &client );
 
         if ((*flags & UPDATE_NONCLIENT) ||
             update.left < client.left || update.top < client.top ||
@@ -810,6 +801,7 @@ static HWND fix_caret(HWND hWnd, const RECT *scroll_rect, INT dx, INT dy,
     RECT rect, mapped_rcCaret;
     BOOL hide_caret = FALSE;
 
+    info.cbSize = sizeof(info);
     if (!GetGUIThreadInfo( GetCurrentThreadId(), &info )) return 0;
     if (!info.hwndCaret) return 0;
     
@@ -909,8 +901,8 @@ BOOL WINAPI EndPaint( HWND hwnd, const PAINTSTRUCT *lps )
  */
 HDC WINAPI GetDCEx( HWND hwnd, HRGN hrgnClip, DWORD flags )
 {
-    static const DWORD clip_flags = DCX_PARENTCLIP | DCX_CLIPSIBLINGS | DCX_CLIPCHILDREN | DCX_WINDOW;
-    static const DWORD user_flags = clip_flags | DCX_NORESETATTRS; /* flags that can be set by user */
+    const DWORD clip_flags = DCX_PARENTCLIP | DCX_CLIPSIBLINGS | DCX_CLIPCHILDREN | DCX_WINDOW;
+    const DWORD user_flags = clip_flags | DCX_NORESETATTRS; /* flags that can be set by user */
     struct dce *dce;
     BOOL bUpdateVisRgn = TRUE;
     HWND parent;
@@ -1032,6 +1024,8 @@ HDC WINAPI GetDCEx( HWND hwnd, HRGN hrgnClip, DWORD flags )
         dce->flags |= flags & (DCX_INTERSECTRGN | DCX_EXCLUDERGN);
         bUpdateVisRgn = TRUE;
     }
+
+    if (GetWindowLongW( hwnd, GWL_EXSTYLE ) & WS_EX_LAYOUTRTL) SetLayout( dce->hdc, LAYOUT_RTL );
 
     dce->hwnd = hwnd;
     dce->flags = (dce->flags & ~user_flags) | (flags & user_flags);
@@ -1209,6 +1203,12 @@ BOOL WINAPI RedrawWindow( HWND hwnd, const RECT *rect, HRGN hrgn, UINT flags )
  */
 BOOL WINAPI UpdateWindow( HWND hwnd )
 {
+    if (!hwnd)
+    {
+        SetLastError( ERROR_INVALID_WINDOW_HANDLE );
+        return FALSE;
+    }
+
     return RedrawWindow( hwnd, NULL, 0, RDW_UPDATENOW | RDW_ALLCHILDREN );
 }
 
@@ -1296,8 +1296,6 @@ INT WINAPI GetUpdateRgn( HWND hwnd, HRGN hrgn, BOOL erase )
 
     if ((update_rgn = send_ncpaint( hwnd, NULL, &flags )))
     {
-        POINT offset;
-
         retval = CombineRgn( hrgn, update_rgn, 0, RGN_COPY );
         if (send_erase( hwnd, flags, update_rgn, NULL, NULL ))
         {
@@ -1305,9 +1303,7 @@ INT WINAPI GetUpdateRgn( HWND hwnd, HRGN hrgn, BOOL erase )
             get_update_flags( hwnd, NULL, &flags );
         }
         /* map region to client coordinates */
-        offset.x = offset.y = 0;
-        ScreenToClient( hwnd, &offset );
-        OffsetRgn( hrgn, offset.x, offset.y );
+        map_window_region( 0, hwnd, hrgn );
     }
     return retval;
 }
@@ -1331,8 +1327,10 @@ BOOL WINAPI GetUpdateRect( HWND hwnd, LPRECT rect, BOOL erase )
         if (GetRgnBox( update_rgn, rect ) != NULLREGION)
         {
             HDC hdc = GetDCEx( hwnd, 0, DCX_USESTYLE );
+            DWORD layout = SetLayout( hdc, 0 );  /* MapWindowPoints mirrors already */
             MapWindowPoints( 0, hwnd, (LPPOINT)rect, 2 );
             DPtoLP( hdc, (LPPOINT)rect, 2 );
+            SetLayout( hdc, layout );
             ReleaseDC( hwnd, hdc );
         }
     }
@@ -1492,8 +1490,7 @@ INT WINAPI ScrollWindowEx( HWND hwnd, INT dx, INT dy,
             RECT r, dummy;
             for (i = 0; list[i]; i++)
             {
-                GetWindowRect( list[i], &r );
-                MapWindowPoints( 0, hwnd, (POINT *)&r, 2 );
+                WIN_GetRectangles( list[i], COORDS_PARENT, &r, NULL );
                 if (!rect || IntersectRect(&dummy, &r, rect))
                     SetWindowPos( list[i], 0, r.left + dx, r.top  + dy, 0, 0,
                                   SWP_NOZORDER | SWP_NOSIZE | SWP_NOACTIVATE |

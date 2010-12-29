@@ -1,7 +1,3 @@
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = mpr.dll
 IMPORTLIB = mpr
 IMPORTS   = user32 advapi32
@@ -23,6 +19,7 @@ RC_SRCS = \
 	mpr_Eo.rc \
 	mpr_Es.rc \
 	mpr_Fr.rc \
+	mpr_He.rc \
 	mpr_Hu.rc \
 	mpr_It.rc \
 	mpr_Ja.rc \
@@ -35,6 +32,7 @@ RC_SRCS = \
 	mpr_Ro.rc \
 	mpr_Ru.rc \
 	mpr_Si.rc \
+	mpr_Sr.rc \
 	mpr_Sv.rc \
 	mpr_Tr.rc \
 	mpr_Uk.rc \

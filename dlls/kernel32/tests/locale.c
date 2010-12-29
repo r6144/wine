@@ -67,23 +67,13 @@ static inline int isdigitW( WCHAR wc )
 static HMODULE hKernel32;
 static WORD enumCount;
 
-typedef BOOL (WINAPI *EnumSystemLanguageGroupsAFn)(LANGUAGEGROUP_ENUMPROC,
-                                                   DWORD, LONG_PTR);
-static EnumSystemLanguageGroupsAFn pEnumSystemLanguageGroupsA;
-typedef BOOL (WINAPI *EnumLanguageGroupLocalesAFn)(LANGGROUPLOCALE_ENUMPROC,
-                                                   LGRPID, DWORD, LONG_PTR);
-static EnumLanguageGroupLocalesAFn pEnumLanguageGroupLocalesA;
-typedef BOOL (WINAPI *EnumUILanguagesAFn)(UILANGUAGE_ENUMPROC,
-                                                   DWORD, LONG_PTR);
-static EnumUILanguagesAFn pEnumUILanguagesA;
-
-typedef INT (WINAPI *FoldStringAFn)(DWORD, LPCSTR, INT, LPSTR, INT);
-static FoldStringAFn pFoldStringA;
-typedef INT (WINAPI *FoldStringWFn)(DWORD, LPCWSTR, INT, LPWSTR, INT);
-static FoldStringWFn pFoldStringW;
-
-typedef BOOL (WINAPI *IsValidLanguageGroupFn)(LGRPID, DWORD);
-static IsValidLanguageGroupFn pIsValidLanguageGroup;
+static BOOL (WINAPI *pEnumSystemLanguageGroupsA)(LANGUAGEGROUP_ENUMPROC, DWORD, LONG_PTR);
+static BOOL (WINAPI *pEnumLanguageGroupLocalesA)(LANGGROUPLOCALE_ENUMPROC, LGRPID, DWORD, LONG_PTR);
+static BOOL (WINAPI *pEnumUILanguagesA)(UILANGUAGE_ENUMPROC, DWORD, LONG_PTR);
+static BOOL (WINAPI *pEnumSystemLocalesEx)(LOCALE_ENUMPROCEX, DWORD, LPARAM, LPVOID);
+static INT (WINAPI *pFoldStringA)(DWORD, LPCSTR, INT, LPSTR, INT);
+static INT (WINAPI *pFoldStringW)(DWORD, LPCWSTR, INT, LPWSTR, INT);
+static BOOL (WINAPI *pIsValidLanguageGroup)(LGRPID, DWORD);
 
 static void InitFunctionPointers(void)
 {
@@ -94,6 +84,7 @@ static void InitFunctionPointers(void)
   pFoldStringW = (void*)GetProcAddress(hKernel32, "FoldStringW");
   pIsValidLanguageGroup = (void*)GetProcAddress(hKernel32, "IsValidLanguageGroup");
   pEnumUILanguagesA = (void*)GetProcAddress(hKernel32, "EnumUILanguagesA");
+  pEnumSystemLocalesEx = (void*)GetProcAddress(hKernel32, "EnumSystemLocalesEx");
 }
 
 #define eq(received, expected, label, type) \
@@ -2200,7 +2191,7 @@ static void test_FoldStringW(void)
 
       ok(dst[0] == ch || strchrW(outOfSequenceDigits, ch) ||
          /* Wine (correctly) maps all Unicode 4.0+ digits */
-         isdigitW(ch) || (ch >= 0x24F5 && ch <= 0x24FD) || ch == 0x24FF ||
+         isdigitW(ch) || (ch >= 0x24F5 && ch <= 0x24FD) || ch == 0x24FF || ch == 0x19da ||
          (ch >= 0x1369 && ch <= 0x1371),
          "MAP_FOLDDIGITS: ch %d 0x%04x Expected unchanged got %d\n", ch, ch, dst[0]);
     }
@@ -2346,6 +2337,29 @@ static void test_EnumSystemLanguageGroupsA(void)
   pEnumSystemLanguageGroupsA(langgrp_procA, LGRPID_SUPPORTED, 0);
 }
 
+static BOOL CALLBACK enum_func( LPWSTR name, DWORD flags, LPARAM lparam )
+{
+    trace( "%s %x\n", wine_dbgstr_w(name), flags );
+    return TRUE;
+}
+
+static void test_EnumSystemLocalesEx(void)
+{
+    BOOL ret;
+
+    if (!pEnumSystemLocalesEx)
+    {
+        win_skip( "EnumSystemLocalesEx not available\n" );
+        return;
+    }
+    SetLastError( 0xdeadbeef );
+    ret = pEnumSystemLocalesEx( enum_func, LOCALE_ALL, 0, (void *)1 );
+    ok( !ret, "should have failed\n" );
+    ok( GetLastError() == ERROR_INVALID_PARAMETER, "wrong error %u\n", GetLastError() );
+    SetLastError( 0xdeadbeef );
+    ret = pEnumSystemLocalesEx( enum_func, 0, 0, NULL );
+    ok( ret, "failed err %u\n", GetLastError() );
+}
 
 static BOOL CALLBACK lgrplocale_procA(LGRPID lgrpid, LCID lcid, LPSTR lpszNum,
                                       LONG_PTR lParam)
@@ -2677,7 +2691,7 @@ static void test_GetStringTypeW(void)
                                     C1_SPACE | C1_BLANK,
                                     C1_SPACE | C1_BLANK};
 
-    static const WCHAR undefined[] = {0x378, 0x379, 0x65f, 0xfff8, 0xfffe};
+    static const WCHAR undefined[] = {0x378, 0x379, 0x604, 0xfff8, 0xfffe};
 
                                   /* Lu, Ll, Lt */
     static const WCHAR alpha[] = {0x47, 0x67, 0x1c5};
@@ -2801,6 +2815,7 @@ START_TEST(locale)
   test_FoldStringW();
   test_ConvertDefaultLocale();
   test_EnumSystemLanguageGroupsA();
+  test_EnumSystemLocalesEx();
   test_EnumLanguageGroupLocalesA();
   test_SetLocaleInfoA();
   test_EnumUILanguageA();

@@ -332,6 +332,7 @@ void WINAPIV NdrMesProcEncodeDecode(handle_t Handle, const MIDL_STUB_DESC * pStu
     /* the value to return to the client from the remote procedure */
     LONG_PTR RetVal = 0;
     const RPC_CLIENT_INTERFACE *client_interface;
+    __ms_va_list args;
 
     TRACE("Handle %p, pStubDesc %p, pFormat %p, ...\n", Handle, pStubDesc, pFormat);
 
@@ -396,11 +397,9 @@ void WINAPIV NdrMesProcEncodeDecode(handle_t Handle, const MIDL_STUB_DESC * pStu
     TRACE("MIDL stub version = 0x%x\n", pStubDesc->MIDLVersion);
 
     /* needed for conformance of top-level objects */
-#ifdef __i386__
-    pEsMsg->StubMsg.StackTop = *(unsigned char **)(&pFormat+1);
-#else
-# warning Stack not retrieved for your CPU architecture
-#endif
+    __ms_va_start( args, pFormat );
+    pEsMsg->StubMsg.StackTop = va_arg( args, unsigned char * );
+    __ms_va_end( args );
 
     switch (pEsMsg->Operation)
     {
@@ -442,6 +441,12 @@ void WINAPIV NdrMesProcEncodeDecode(handle_t Handle, const MIDL_STUB_DESC * pStu
 
 void RPC_ENTRY NdrMesTypeDecode2(handle_t Handle, const MIDL_TYPE_PICKLING_INFO *pPicklingInfo,
     const MIDL_STUB_DESC *pStubDesc, PFORMAT_STRING pFormatString, void *pObject)
+{
+    FIXME("(%p, %p, %p, %p, %p)\n", Handle, pPicklingInfo, pStubDesc, pFormatString, pObject);
+}
+
+void RPC_ENTRY NdrMesTypeEncode2(handle_t Handle, const MIDL_TYPE_PICKLING_INFO *pPicklingInfo,
+    const MIDL_STUB_DESC *pStubDesc, PFORMAT_STRING pFormatString, const void *pObject)
 {
     FIXME("(%p, %p, %p, %p, %p)\n", Handle, pPicklingInfo, pStubDesc, pFormatString, pObject);
 }

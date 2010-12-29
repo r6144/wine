@@ -1,7 +1,3 @@
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = msrle32.dll
 IMPORTS   = winmm user32
 
@@ -16,6 +12,7 @@ RC_SRCS = \
 	msrle_En.rc \
 	msrle_Es.rc \
 	msrle_Fr.rc \
+	msrle_He.rc \
 	msrle_Hu.rc \
 	msrle_It.rc \
 	msrle_Ja.rc \
@@ -28,6 +25,7 @@ RC_SRCS = \
 	msrle_Ro.rc \
 	msrle_Ru.rc \
 	msrle_Si.rc \
+	msrle_Sr.rc \
 	msrle_Sv.rc \
 	msrle_Tr.rc \
 	msrle_Uk.rc

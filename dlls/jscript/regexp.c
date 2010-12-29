@@ -79,7 +79,7 @@ typedef struct {
 } JSRegExp;
 
 typedef struct {
-    DispatchEx dispex;
+    jsdisp_t dispex;
 
     JSRegExp *jsregexp;
     BSTR str;
@@ -3404,7 +3404,7 @@ static HRESULT do_regexp_match_next(script_ctx_t *ctx, RegExpInstance *regexp, D
     return S_OK;
 }
 
-HRESULT regexp_match_next(script_ctx_t *ctx, DispatchEx *dispex, DWORD rem_flags, const WCHAR *str,
+HRESULT regexp_match_next(script_ctx_t *ctx, jsdisp_t *dispex, DWORD rem_flags, const WCHAR *str,
         DWORD len, const WCHAR **cp, match_result_t **parens, DWORD *parens_size, DWORD *parens_cnt,
         match_result_t *ret)
 {
@@ -3423,7 +3423,7 @@ HRESULT regexp_match_next(script_ctx_t *ctx, DispatchEx *dispex, DWORD rem_flags
     return hres;
 }
 
-HRESULT regexp_match(script_ctx_t *ctx, DispatchEx *dispex, const WCHAR *str, DWORD len, BOOL gflag,
+HRESULT regexp_match(script_ctx_t *ctx, jsdisp_t *dispex, const WCHAR *str, DWORD len, BOOL gflag,
         match_result_t **match_result, DWORD *result_cnt)
 {
     RegExpInstance *This = (RegExpInstance*)dispex;
@@ -3583,13 +3583,14 @@ static HRESULT RegExp_toString(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, D
 static HRESULT create_match_array(script_ctx_t *ctx, BSTR input, const match_result_t *result,
         const match_result_t *parens, DWORD parens_cnt, jsexcept_t *ei, IDispatch **ret)
 {
-    DispatchEx *array;
+    jsdisp_t *array;
     VARIANT var;
     int i;
     HRESULT hres = S_OK;
 
     static const WCHAR indexW[] = {'i','n','d','e','x',0};
     static const WCHAR inputW[] = {'i','n','p','u','t',0};
+    static const WCHAR lastIndexW[] = {'l','a','s','t','I','n','d','e','x',0};
     static const WCHAR zeroW[] = {'0',0};
 
     hres = create_array(ctx, parens_cnt+1, &array);
@@ -3617,6 +3618,11 @@ static HRESULT create_match_array(script_ctx_t *ctx, BSTR input, const match_res
         if(FAILED(hres))
             break;
 
+        V_I4(&var) = result->str-input+result->len;
+        hres = jsdisp_propput_name(array, lastIndexW, &var, ei, NULL/*FIXME*/);
+        if(FAILED(hres))
+            break;
+
         V_VT(&var) = VT_BSTR;
         V_BSTR(&var) = input;
         hres = jsdisp_propput_name(array, inputW, &var, ei, NULL/*FIXME*/);
@@ -3638,7 +3644,7 @@ static HRESULT create_match_array(script_ctx_t *ctx, BSTR input, const match_res
         return hres;
     }
 
-    *ret = (IDispatch*)_IDispatchEx_(array);
+    *ret = to_disp(array);
     return S_OK;
 }
 
@@ -3781,7 +3787,7 @@ static HRESULT RegExp_value(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, DISP
     return S_OK;
 }
 
-static void RegExp_destructor(DispatchEx *dispex)
+static void RegExp_destructor(jsdisp_t *dispex)
 {
     RegExpInstance *This = (RegExpInstance*)dispex;
 
@@ -3812,7 +3818,7 @@ static const builtin_info_t RegExp_info = {
     NULL
 };
 
-static HRESULT alloc_regexp(script_ctx_t *ctx, DispatchEx *object_prototype, RegExpInstance **ret)
+static HRESULT alloc_regexp(script_ctx_t *ctx, jsdisp_t *object_prototype, RegExpInstance **ret)
 {
     RegExpInstance *regexp;
     HRESULT hres;
@@ -3835,7 +3841,7 @@ static HRESULT alloc_regexp(script_ctx_t *ctx, DispatchEx *object_prototype, Reg
     return S_OK;
 }
 
-HRESULT create_regexp(script_ctx_t *ctx, const WCHAR *exp, int len, DWORD flags, DispatchEx **ret)
+HRESULT create_regexp(script_ctx_t *ctx, const WCHAR *exp, int len, DWORD flags, jsdisp_t **ret)
 {
     RegExpInstance *regexp;
     HRESULT hres;
@@ -3869,14 +3875,14 @@ HRESULT create_regexp(script_ctx_t *ctx, const WCHAR *exp, int len, DWORD flags,
     return S_OK;
 }
 
-HRESULT create_regexp_var(script_ctx_t *ctx, VARIANT *src_arg, VARIANT *flags_arg, DispatchEx **ret)
+HRESULT create_regexp_var(script_ctx_t *ctx, VARIANT *src_arg, VARIANT *flags_arg, jsdisp_t **ret)
 {
     const WCHAR *opt = emptyW, *src;
     DWORD flags;
     HRESULT hres;
 
     if(V_VT(src_arg) == VT_DISPATCH) {
-        DispatchEx *obj;
+        jsdisp_t *obj;
 
         obj = iface_to_jsdisp((IUnknown*)V_DISPATCH(src_arg));
         if(obj) {
@@ -3915,13 +3921,17 @@ HRESULT create_regexp_var(script_ctx_t *ctx, VARIANT *src_arg, VARIANT *flags_ar
     return create_regexp(ctx, src, -1, flags, ret);
 }
 
-HRESULT regexp_string_match(script_ctx_t *ctx, DispatchEx *re, BSTR str,
+HRESULT regexp_string_match(script_ctx_t *ctx, jsdisp_t *re, BSTR str,
         VARIANT *retv, jsexcept_t *ei)
 {
+    static const WCHAR indexW[] = {'i','n','d','e','x',0};
+    static const WCHAR inputW[] = {'i','n','p','u','t',0};
+    static const WCHAR lastIndexW[] = {'l','a','s','t','I','n','d','e','x',0};
+
     RegExpInstance *regexp = (RegExpInstance*)re;
     match_result_t *match_result;
     DWORD match_cnt, i, length;
-    DispatchEx *array;
+    jsdisp_t *array;
     VARIANT var;
     HRESULT hres;
 
@@ -3985,14 +3995,30 @@ HRESULT regexp_string_match(script_ctx_t *ctx, DispatchEx *re, BSTR str,
             break;
     }
 
+    while(SUCCEEDED(hres)) {
+        V_VT(&var) = VT_I4;
+        V_I4(&var) = match_result[match_cnt-1].str-str;
+        hres = jsdisp_propput_name(array, indexW, &var, ei, NULL/*FIXME*/);
+        if(FAILED(hres))
+            break;
+
+        V_I4(&var) = match_result[match_cnt-1].str-str+match_result[match_cnt-1].len;
+        hres = jsdisp_propput_name(array, lastIndexW, &var, ei, NULL/*FIXME*/);
+        if(FAILED(hres))
+            break;
+
+        V_VT(&var) = VT_BSTR;
+        V_BSTR(&var) = str;
+        hres = jsdisp_propput_name(array, inputW, &var, ei, NULL/*FIXME*/);
+        break;
+    }
+
     heap_free(match_result);
 
-    if(SUCCEEDED(hres) && retv) {
-        V_VT(retv) = VT_DISPATCH;
-        V_DISPATCH(retv) = (IDispatch*)_IDispatchEx_(array);
-    }else {
+    if(SUCCEEDED(hres) && retv)
+        var_set_jsdisp(retv, array);
+    else
         jsdisp_release(array);
-    }
     return hres;
 }
 
@@ -4058,7 +4084,7 @@ static HRESULT RegExpConstr_value(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags
         if(arg_cnt(dp)) {
             VARIANT *arg = get_arg(dp,0);
             if(V_VT(arg) == VT_DISPATCH) {
-                DispatchEx *jsdisp = iface_to_jsdisp((IUnknown*)V_DISPATCH(arg));
+                jsdisp_t *jsdisp = iface_to_jsdisp((IUnknown*)V_DISPATCH(arg));
                 if(jsdisp) {
                     if(is_class(jsdisp, JSCLASS_REGEXP)) {
                         if(arg_cnt(dp) > 1 && V_VT(get_arg(dp,1)) != VT_EMPTY) {
@@ -4066,12 +4092,10 @@ static HRESULT RegExpConstr_value(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags
                             return throw_regexp_error(ctx, ei, IDS_REGEXP_SYNTAX_ERROR, NULL);
                         }
 
-                        if(retv) {
-                            V_VT(retv) = VT_DISPATCH;
-                            V_DISPATCH(retv) = (IDispatch*)_IDispatchEx_(jsdisp);
-                        }else {
+                        if(retv)
+                            var_set_jsdisp(retv, jsdisp);
+                        else
                             jsdisp_release(jsdisp);
-                        }
                         return S_OK;
                     }
                     jsdisp_release(jsdisp);
@@ -4080,7 +4104,7 @@ static HRESULT RegExpConstr_value(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags
         }
         /* fall through */
     case DISPATCH_CONSTRUCT: {
-        DispatchEx *ret;
+        jsdisp_t *ret;
         HRESULT hres;
 
         if(!arg_cnt(dp)) {
@@ -4092,12 +4116,10 @@ static HRESULT RegExpConstr_value(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags
         if(FAILED(hres))
             return hres;
 
-        if(retv) {
-            V_VT(retv) = VT_DISPATCH;
-            V_DISPATCH(retv) = (IDispatch*)_IDispatchEx_(ret);
-        }else {
+        if(retv)
+            var_set_jsdisp(retv, ret);
+        else
             jsdisp_release(ret);
-        }
         return S_OK;
     }
     default:
@@ -4122,7 +4144,7 @@ static const builtin_info_t RegExpConstr_info = {
     NULL
 };
 
-HRESULT create_regexp_constr(script_ctx_t *ctx, DispatchEx *object_prototype, DispatchEx **ret)
+HRESULT create_regexp_constr(script_ctx_t *ctx, jsdisp_t *object_prototype, jsdisp_t **ret)
 {
     RegExpInstance *regexp;
     HRESULT hres;

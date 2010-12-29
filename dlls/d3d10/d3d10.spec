@@ -1,6 +1,6 @@
 @ stub D3D10CompileEffectFromMemory
-@ stub D3D10CompileShader
-@ stub D3D10CreateBlob
+@ stdcall D3D10CompileShader(ptr long str ptr ptr str str long ptr ptr)
+@ stdcall D3D10CreateBlob(long ptr) d3dcompiler_43.D3DCreateBlob
 @ stdcall D3D10CreateDevice(ptr long ptr long long ptr)
 @ stdcall D3D10CreateDeviceAndSwapChain(ptr long ptr long long ptr ptr ptr)
 @ stdcall D3D10CreateEffectFromMemory(ptr long long ptr ptr ptr)
@@ -9,11 +9,11 @@
 @ stub D3D10DisassembleEffect
 @ stub D3D10DisassembleShader
 @ stdcall D3D10GetGeometryShaderProfile(ptr)
-@ stub D3D10GetInputAndOutputSignatureBlob
-@ stub D3D10GetInputSignatureBlob
-@ stub D3D10GetOutputSignatureBlob
+@ stdcall D3D10GetInputAndOutputSignatureBlob(ptr long ptr) d3dcompiler_43.D3DGetInputAndOutputSignatureBlob
+@ stdcall D3D10GetInputSignatureBlob(ptr long ptr) d3dcompiler_43.D3DGetInputSignatureBlob
+@ stdcall D3D10GetOutputSignatureBlob(ptr long ptr) d3dcompiler_43.D3DGetOutputSignatureBlob
 @ stdcall D3D10GetPixelShaderProfile(ptr)
-@ stub D3D10GetShaderDebugInfo
+@ stdcall D3D10GetShaderDebugInfo(ptr long ptr) d3dcompiler_43.D3DGetDebugInfo
 @ stub D3D10GetVersion
 @ stdcall D3D10GetVertexShaderProfile(ptr)
 @ stub D3D10PreprocessShader

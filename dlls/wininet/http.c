@@ -1539,6 +1539,20 @@ static DWORD HTTP_ResolveName(http_request_t *lpwhr)
     return ERROR_SUCCESS;
 }
 
+static BOOL HTTP_GetRequestURL(http_request_t *req, LPWSTR buf)
+{
+    LPHTTPHEADERW host_header;
+
+    static const WCHAR formatW[] = {'h','t','t','p',':','/','/','%','s','%','s',0};
+
+    host_header = HTTP_GetHeader(req, hostW);
+    if(!host_header)
+        return FALSE;
+
+    sprintfW(buf, formatW, host_header->lpszValue, req->lpszPath); /* FIXME */
+    return TRUE;
+}
+
 
 /***********************************************************************
  *           HTTPREQ_Destroy (internal)
@@ -1553,8 +1567,18 @@ static void HTTPREQ_Destroy(object_header_t *hdr)
 
     TRACE("\n");
 
-    if(lpwhr->hCacheFile)
+    if(lpwhr->hCacheFile) {
+        WCHAR url[INTERNET_MAX_URL_LENGTH];
+        FILETIME ft;
+
         CloseHandle(lpwhr->hCacheFile);
+
+        memset(&ft, 0, sizeof(FILETIME));
+        if(HTTP_GetRequestURL(lpwhr, url)) {
+            CommitUrlCacheEntryW(url, lpwhr->lpszCacheFile, ft, ft,
+                    NORMAL_CACHE_ENTRY, NULL, 0, NULL, 0);
+        }
+    }
 
     HeapFree(GetProcessHeap(), 0, lpwhr->lpszCacheFile);
 
@@ -1604,20 +1628,6 @@ static void HTTPREQ_CloseConnection(object_header_t *hdr)
 
     INTERNET_SendCallback(&lpwhr->hdr, lpwhr->hdr.dwContext,
                           INTERNET_STATUS_CONNECTION_CLOSED, 0, 0);
-}
-
-static BOOL HTTP_GetRequestURL(http_request_t *req, LPWSTR buf)
-{
-    LPHTTPHEADERW host_header;
-
-    static const WCHAR formatW[] = {'h','t','t','p',':','/','/','%','s','%','s',0};
-
-    host_header = HTTP_GetHeader(req, hostW);
-    if(!host_header)
-        return FALSE;
-
-    sprintfW(buf, formatW, host_header->lpszValue, req->lpszPath); /* FIXME */
-    return TRUE;
 }
 
 static BOOL HTTP_KeepAlive(http_request_t *lpwhr)
@@ -1680,18 +1690,25 @@ static DWORD HTTPREQ_QueryOption(object_header_t *hdr, DWORD option, void *buffe
 
     case INTERNET_OPTION_SECURITY_FLAGS:
     {
-        http_session_t *lpwhs;
-        lpwhs = req->lpHttpSession;
+        DWORD flags;
+        int bits;
 
         if (*size < sizeof(ULONG))
             return ERROR_INSUFFICIENT_BUFFER;
 
         *size = sizeof(DWORD);
-        if (lpwhs->hdr.dwFlags & INTERNET_FLAG_SECURE)
-            *(DWORD*)buffer = SECURITY_FLAG_SECURE;
+        flags = 0;
+        if (req->hdr.dwFlags & INTERNET_FLAG_SECURE)
+            flags |= SECURITY_FLAG_SECURE;
+        flags |= req->netConnection.security_flags;
+        bits = NETCON_GetCipherStrength(&req->netConnection);
+        if (bits >= 128)
+            flags |= SECURITY_FLAG_STRENGTH_STRONG;
+        else if (bits >= 56)
+            flags |= SECURITY_FLAG_STRENGTH_MEDIUM;
         else
-            *(DWORD*)buffer = 0;
-        FIXME("Semi-STUB INTERNET_OPTION_SECURITY_FLAGS: %x\n",*(DWORD*)buffer);
+            flags |= SECURITY_FLAG_STRENGTH_WEAK;
+        *(DWORD *)buffer = flags;
         return ERROR_SUCCESS;
     }
 
@@ -1809,60 +1826,34 @@ static DWORD HTTPREQ_QueryOption(object_header_t *hdr, DWORD option, void *buffe
     case INTERNET_OPTION_SECURITY_CERTIFICATE_STRUCT: {
         PCCERT_CONTEXT context;
 
-        if(*size < sizeof(INTERNET_CERTIFICATE_INFOW)) {
-            *size = sizeof(INTERNET_CERTIFICATE_INFOW);
+        if(*size < sizeof(INTERNET_CERTIFICATE_INFOA)) {
+            *size = sizeof(INTERNET_CERTIFICATE_INFOA);
             return ERROR_INSUFFICIENT_BUFFER;
         }
 
         context = (PCCERT_CONTEXT)NETCON_GetCert(&(req->netConnection));
         if(context) {
-            INTERNET_CERTIFICATE_INFOW *info = (INTERNET_CERTIFICATE_INFOW*)buffer;
+            INTERNET_CERTIFICATE_INFOA *info = (INTERNET_CERTIFICATE_INFOA*)buffer;
             DWORD len;
 
             memset(info, 0, sizeof(INTERNET_CERTIFICATE_INFOW));
             info->ftExpiry = context->pCertInfo->NotAfter;
             info->ftStart = context->pCertInfo->NotBefore;
-            if(unicode) {
-                len = CertNameToStrW(context->dwCertEncodingType,
-                        &context->pCertInfo->Subject, CERT_SIMPLE_NAME_STR, NULL, 0);
-                info->lpszSubjectInfo = LocalAlloc(0, len*sizeof(WCHAR));
-                if(info->lpszSubjectInfo)
-                    CertNameToStrW(context->dwCertEncodingType,
-                             &context->pCertInfo->Subject, CERT_SIMPLE_NAME_STR,
-                             info->lpszSubjectInfo, len);
-                len = CertNameToStrW(context->dwCertEncodingType,
-                         &context->pCertInfo->Issuer, CERT_SIMPLE_NAME_STR, NULL, 0);
-                info->lpszIssuerInfo = LocalAlloc(0, len*sizeof(WCHAR));
-                if (info->lpszIssuerInfo)
-                    CertNameToStrW(context->dwCertEncodingType,
-                             &context->pCertInfo->Issuer, CERT_SIMPLE_NAME_STR,
-                             info->lpszIssuerInfo, len);
-            }else {
-                INTERNET_CERTIFICATE_INFOA *infoA = (INTERNET_CERTIFICATE_INFOA*)info;
-
-                len = CertNameToStrA(context->dwCertEncodingType,
-                         &context->pCertInfo->Subject, CERT_SIMPLE_NAME_STR, NULL, 0);
-                infoA->lpszSubjectInfo = LocalAlloc(0, len);
-                if(infoA->lpszSubjectInfo)
-                    CertNameToStrA(context->dwCertEncodingType,
-                             &context->pCertInfo->Subject, CERT_SIMPLE_NAME_STR,
-                             infoA->lpszSubjectInfo, len);
-                len = CertNameToStrA(context->dwCertEncodingType,
-                         &context->pCertInfo->Issuer, CERT_SIMPLE_NAME_STR, NULL, 0);
-                infoA->lpszIssuerInfo = LocalAlloc(0, len);
-                if(infoA->lpszIssuerInfo)
-                    CertNameToStrA(context->dwCertEncodingType,
-                             &context->pCertInfo->Issuer, CERT_SIMPLE_NAME_STR,
-                             infoA->lpszIssuerInfo, len);
-            }
-
-            /*
-             * Contrary to MSDN, these do not appear to be set.
-             * lpszProtocolName
-             * lpszSignatureAlgName
-             * lpszEncryptionAlgName
-             * dwKeySize
-             */
+            len = CertNameToStrA(context->dwCertEncodingType,
+                     &context->pCertInfo->Subject, CERT_SIMPLE_NAME_STR, NULL, 0);
+            info->lpszSubjectInfo = LocalAlloc(0, len);
+            if(info->lpszSubjectInfo)
+                CertNameToStrA(context->dwCertEncodingType,
+                         &context->pCertInfo->Subject, CERT_SIMPLE_NAME_STR,
+                         info->lpszSubjectInfo, len);
+            len = CertNameToStrA(context->dwCertEncodingType,
+                     &context->pCertInfo->Issuer, CERT_SIMPLE_NAME_STR, NULL, 0);
+            info->lpszIssuerInfo = LocalAlloc(0, len);
+            if(info->lpszIssuerInfo)
+                CertNameToStrA(context->dwCertEncodingType,
+                         &context->pCertInfo->Issuer, CERT_SIMPLE_NAME_STR,
+                         info->lpszIssuerInfo, len);
+            info->dwKeySize = NETCON_GetCipherStrength(&req->netConnection);
             CertFreeCertificateContext(context);
             return ERROR_SUCCESS;
         }
@@ -1877,6 +1868,17 @@ static DWORD HTTPREQ_SetOption(object_header_t *hdr, DWORD option, void *buffer,
     http_request_t *req = (http_request_t*)hdr;
 
     switch(option) {
+    case INTERNET_OPTION_SECURITY_FLAGS:
+    {
+        DWORD flags;
+
+        if (!buffer || size != sizeof(DWORD))
+            return ERROR_INVALID_PARAMETER;
+        flags = *(DWORD *)buffer;
+        TRACE("%08x\n", flags);
+        req->netConnection.security_flags = flags;
+        return ERROR_SUCCESS;
+    }
     case INTERNET_OPTION_SEND_TIMEOUT:
     case INTERNET_OPTION_RECEIVE_TIMEOUT:
         TRACE("INTERNET_OPTION_SEND/RECEIVE_TIMEOUT\n");
@@ -3777,7 +3779,9 @@ static DWORD HTTP_HttpSendRequestW(http_request_t *lpwhr, LPCWSTR lpszHeaders,
             {
                 WCHAR *new_url, szNewLocation[INTERNET_MAX_URL_LENGTH];
                 dwBufferSize=sizeof(szNewLocation);
-                if ((dwStatusCode==HTTP_STATUS_REDIRECT || dwStatusCode==HTTP_STATUS_MOVED) &&
+                if ((dwStatusCode == HTTP_STATUS_REDIRECT ||
+                     dwStatusCode == HTTP_STATUS_MOVED ||
+                     dwStatusCode == HTTP_STATUS_REDIRECT_METHOD) &&
                     HTTP_HttpQueryInfoW(lpwhr,HTTP_QUERY_LOCATION,szNewLocation,&dwBufferSize,NULL) == ERROR_SUCCESS)
                 {
                     if (strcmpW(lpwhr->lpszVerb, szGET) && strcmpW(lpwhr->lpszVerb, szHEAD))
@@ -5161,5 +5165,23 @@ static BOOL HTTP_VerifyValidHeader(http_request_t *lpwhr, LPCWSTR field)
 BOOL WINAPI IsHostInProxyBypassList(DWORD flags, LPCSTR szHost, DWORD length)
 {
    FIXME("STUB: flags=%d host=%s length=%d\n",flags,szHost,length);
+   return FALSE;
+}
+
+/***********************************************************************
+ *           InternetShowSecurityInfoByURLA (@)
+ */
+BOOL WINAPI InternetShowSecurityInfoByURLA(LPCSTR url, HWND window)
+{
+   FIXME("stub: %s %p\n", url, window);
+   return FALSE;
+}
+
+/***********************************************************************
+ *           InternetShowSecurityInfoByURLW (@)
+ */
+BOOL WINAPI InternetShowSecurityInfoByURLW(LPCWSTR url, HWND window)
+{
+   FIXME("stub: %s %p\n", debugstr_w(url), window);
    return FALSE;
 }

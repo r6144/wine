@@ -917,7 +917,6 @@ static HMODULE16 NE_DoLoadBuiltinModule( const IMAGE_DOS_HEADER *mz_header, cons
     NE_MODULE *pModule;
     HMODULE16 hModule;
     HINSTANCE16 hInstance;
-    OSVERSIONINFOW versionInfo;
     SIZE_T mapping_size = ~0UL;  /* assume builtins don't contain invalid offsets... */
 
     hModule = build_module( mz_header, mapping_size, file_name );
@@ -927,9 +926,8 @@ static HMODULE16 NE_DoLoadBuiltinModule( const IMAGE_DOS_HEADER *mz_header, cons
     pModule->owner32 = owner32;
 
     /* fake the expected version the module should have according to the current Windows version */
-    versionInfo.dwOSVersionInfoSize = sizeof(versionInfo);
-    if (GetVersionExW( &versionInfo ))
-        pModule->ne_expver = MAKEWORD( versionInfo.dwMinorVersion, versionInfo.dwMajorVersion );
+    pModule->ne_expver = MAKEWORD( NtCurrentTeb()->Peb->OSMajorVersion,
+                                   NtCurrentTeb()->Peb->OSMinorVersion );
 
     hInstance = NE_DoLoadModule( pModule );
     if (hInstance < 32) NE_FreeModule( hModule, 0 );
@@ -1219,7 +1217,7 @@ DWORD NE_StartTask(void)
 
     if ( hInstance >= 32 )
     {
-        CONTEXT86 context;
+        CONTEXT context;
 
         /* Enter instance handles into task struct */
 
@@ -2049,7 +2047,7 @@ HMODULE WINAPI MapHModuleSL(HMODULE16 hmod)
 /***************************************************************************
  *		MapHInstLS			(KERNEL.472)
  */
-void WINAPI MapHInstLS16( CONTEXT86 *context )
+void WINAPI MapHInstLS16( CONTEXT *context )
 {
     context->Eax = MapHModuleLS( (HMODULE)context->Eax );
 }
@@ -2057,7 +2055,7 @@ void WINAPI MapHInstLS16( CONTEXT86 *context )
 /***************************************************************************
  *		MapHInstSL			(KERNEL.473)
  */
-void WINAPI MapHInstSL16( CONTEXT86 *context )
+void WINAPI MapHInstSL16( CONTEXT *context )
 {
     context->Eax = (DWORD)MapHModuleSL( context->Eax );
 }

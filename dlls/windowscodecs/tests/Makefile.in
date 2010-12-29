@@ -1,13 +1,11 @@
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 TESTDLL   = windowscodecs.dll
 IMPORTS   = ole32 windowscodecs
 
 C_SRCS = \
 	bmpformat.c \
 	converter.c \
+	icoformat.c \
+	info.c \
 	palette.c \
 	stream.c
 

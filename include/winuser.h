@@ -710,7 +710,9 @@ typedef struct tagWINDOWPLACEMENT
 #define BS_GROUPBOX            0x00000007L
 #define BS_USERBUTTON          0x00000008L
 #define BS_AUTORADIOBUTTON     0x00000009L
+#define BS_PUSHBOX             0x0000000AL
 #define BS_OWNERDRAW           0x0000000BL
+#define BS_TYPEMASK            0x0000000FL
 #define BS_LEFTTEXT            0x00000020L
 #define BS_RIGHTBUTTON         BS_LEFTTEXT
 
@@ -2106,6 +2108,34 @@ typedef struct _ICONINFO {
 	HBITMAP	hbmColor;
 } ICONINFO, *PICONINFO;
 
+typedef struct _ICONINFOEXA
+{
+    DWORD     cbSize;
+    BOOL      fIcon;
+    DWORD     xHotspot;
+    DWORD     yHotspot;
+    HBITMAP   hbmMask;
+    HBITMAP   hbmColor;
+    WORD      wResID;
+    CHAR      szModName[MAX_PATH];
+    CHAR      szResName[MAX_PATH];
+} ICONINFOEXA, *PICONINFOEXA;
+
+typedef struct _ICONINFOEXW
+{
+    DWORD     cbSize;
+    BOOL      fIcon;
+    DWORD     xHotspot;
+    DWORD     yHotspot;
+    HBITMAP   hbmMask;
+    HBITMAP   hbmColor;
+    WORD      wResID;
+    WCHAR     szModName[MAX_PATH];
+    WCHAR     szResName[MAX_PATH];
+} ICONINFOEXW, *PICONINFOEXW;
+
+DECL_WINELIB_TYPE_AW(ICONINFOEX);
+DECL_WINELIB_TYPE_AW(PICONINFOEX);
 
 typedef struct tagCURSORINFO
 {
@@ -4632,6 +4662,9 @@ WINUSERAPI HWND        WINAPI GetFocus(void);
 WINUSERAPI HWND        WINAPI GetForegroundWindow(void);
 WINUSERAPI BOOL        WINAPI GetGUIThreadInfo(DWORD,GUITHREADINFO*);
 WINUSERAPI BOOL        WINAPI GetIconInfo(HICON,PICONINFO);
+WINUSERAPI BOOL        WINAPI GetIconInfoExA(HICON,ICONINFOEXA*);
+WINUSERAPI BOOL        WINAPI GetIconInfoExW(HICON,ICONINFOEXW*);
+#define                       GetIconInfoEx WINELIB_NAME_AW(GetIconInfoEx)
 WINUSERAPI BOOL        WINAPI GetInputState(void);
 WINUSERAPI UINT        WINAPI GetInternalWindowPos(HWND,LPRECT,LPPOINT);
 WINUSERAPI UINT        WINAPI GetKBCodePage(void);
@@ -4781,6 +4814,7 @@ WINUSERAPI BOOL        WINAPI IsDialogMessageA(HWND,LPMSG);
 WINUSERAPI BOOL        WINAPI IsDialogMessageW(HWND,LPMSG);
 #define                       IsDialogMessage WINELIB_NAME_AW(IsDialogMessage)
 WINUSERAPI UINT        WINAPI IsDlgButtonChecked(HWND,int);
+WINUSERAPI BOOL        WINAPI IsGUIThread(BOOL);
 WINUSERAPI BOOL        WINAPI IsHungAppWindow(HWND);
 WINUSERAPI BOOL        WINAPI IsIconic(HWND);
 WINUSERAPI BOOL        WINAPI IsMenu(HMENU);

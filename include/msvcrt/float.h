@@ -60,14 +60,12 @@ extern "C" {
 #define LDBL_RADIX  _LDBL_RADIX
 #define LDBL_ROUNDS _LDBL_ROUNDS
 
-/* _controlfp masks and bitflags - x86 only so far */
-#ifdef __i386__
-
 /* Control word masks for unMask */
-#define _MCW_EM 0x0008001F  /* Error masks */
-#define _MCW_IC 0x00040000  /* Infinity */
-#define _MCW_RC 0x00000300  /* Rounding */
-#define _MCW_PC 0x00030000  /* Precision */
+#define _MCW_EM 0x0008001f
+#define _MCW_IC 0x00040000
+#define _MCW_RC 0x00000300
+#define _MCW_PC 0x00030000
+#define _MCW_DN 0x03000000
 
 /* Control word values for unNew (use with related unMask above) */
 #define _EM_INVALID    0x00000010
@@ -85,7 +83,11 @@ extern "C" {
 #define _PC_24         0x00020000
 #define _PC_53         0x00010000
 #define _PC_64         0x00000000
-#endif
+#define _DN_SAVE       0x00000000
+#define _DN_FLUSH      0x01000000
+#define _DN_FLUSH_OPERANDS_SAVE_RESULTS 0x02000000
+#define _DN_SAVE_OPERANDS_FLUSH_RESULTS 0x03000000
+#define _EM_AMBIGUOUS  0x80000000
 
 /* _statusfp bit flags */
 #define _SW_INEXACT    0x00000001 /* inexact (precision) */
@@ -125,6 +127,16 @@ extern "C" {
 #define _FPE_STACKOVERFLOW      0x8a
 #define _FPE_STACKUNDERFLOW     0x8b
 #define _FPE_EXPLICITGEN        0x8c
+
+#if defined(__i386__)
+#define _CW_DEFAULT (_RC_NEAR + _PC_53 + _EM_INVALID + _EM_ZERODIVIDE + _EM_OVERFLOW + _EM_UNDERFLOW + _EM_INEXACT + _EM_DENORMAL)
+#elif defined(__x86_64__)
+#define _CW_DEFAULT (_RC_NEAR + _PC_64 + _EM_INVALID + _EM_ZERODIVIDE + _EM_OVERFLOW + _EM_UNDERFLOW + _EM_INEXACT + _EM_DENORMAL)
+#endif
+
+unsigned int __cdecl _control87(unsigned int, unsigned int);
+unsigned int __cdecl _controlfp(unsigned int, unsigned int);
+errno_t __cdecl _controlfp_s(unsigned int *, unsigned int, unsigned int);
 
 double __cdecl _copysign (double, double);
 double __cdecl _chgsign (double);

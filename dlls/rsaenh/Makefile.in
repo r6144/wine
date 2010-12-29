@@ -1,8 +1,4 @@
 EXTRADEFS = -DCOM_NO_WINDOWS_H
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = rsaenh.dll
 IMPORTLIB = rsaenh
 IMPORTS   = crypt32 advapi32
@@ -20,6 +16,6 @@ C_SRCS = \
 	rsaenh.c \
 	sha2.c
 
-RC_SRCS = version.rc
+RC_SRCS = rsrc.rc
 
 @MAKE_DLL_RULES@

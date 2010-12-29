@@ -1,7 +1,3 @@
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = winecfg.exe
 APPMODE   = -mwindows
 IMPORTS   = uuid comdlg32 comctl32 shell32 ole32 winmm shlwapi uxtheme user32 gdi32 advapi32
@@ -40,11 +36,14 @@ RC_SRCS = \
 	Ro.rc \
 	Ru.rc \
 	Si.rc \
+	Sr.rc \
 	Sv.rc \
 	Tr.rc \
 	Uk.rc \
 	Zh.rc \
 	winecfg.rc
+
+MANPAGE = winecfg.man
 
 SVG_SRCS = \
 	logo.svg \

@@ -250,6 +250,8 @@ static void fillcontrols(mixer *mmixer)
         long min, max;
 
         TRACE("Filling control %d\n", id);
+        if (!mline->elem)
+            break;
         if (id == 1 && !mline->elem)
             continue;
 
@@ -332,16 +334,20 @@ static void filllines(mixer *mmixer, snd_mixer_elem_t *mastelem, snd_mixer_elem_
     snd_mixer_elem_t *elem;
     line *mline = mmixer->lines;
 
-    /* Master control */
-    MultiByteToWideChar(CP_UNIXCP, 0, snd_mixer_selem_get_name(mastelem), -1, mline->name, sizeof(mline->name)/sizeof(WCHAR));
-    mline->component = getcomponenttype(snd_mixer_selem_get_name(mastelem));
-    mline->dst = 0;
-    mline->capt = 0;
-    mline->elem = mastelem;
-    mline->chans = chans(mmixer, mastelem, 0);
+    if (mastelem) {
+        /* Master control */
+        MultiByteToWideChar(CP_UNIXCP, 0, snd_mixer_selem_get_name(mastelem), -1, mline->name, sizeof(mline->name)/sizeof(WCHAR));
+        mline->component = getcomponenttype(snd_mixer_selem_get_name(mastelem));
+        mline->dst = 0;
+        mline->capt = 0;
+        mline->elem = mastelem;
+        mline->chans = chans(mmixer, mastelem, 0);
 
-    snd_mixer_elem_set_callback(mastelem, &elem_callback);
-    snd_mixer_elem_set_callback_private(mastelem, mmixer);
+        snd_mixer_elem_set_callback(mastelem, &elem_callback);
+        snd_mixer_elem_set_callback_private(mastelem, mmixer);
+    } else {
+        MultiByteToWideChar(CP_UNIXCP, 0, "Empty Master Element", -1, mline->name, sizeof(mline->name)/sizeof(WCHAR));
+    }
 
     /* Capture control
      * Note: since mmixer->dests = 1, it means only playback control is visible
@@ -395,6 +401,21 @@ static void filllines(mixer *mmixer, snd_mixer_elem_t *mastelem, snd_mixer_elem_
         }
 }
 
+static void filllines_no_master(mixer *mmixer, snd_mixer_elem_t *captelem, int capt)
+{
+    line *mline = mmixer->lines;
+
+    MultiByteToWideChar(CP_UNIXCP, 0, snd_mixer_selem_get_name(captelem), -1, mline->name, sizeof(mline->name)/sizeof(WCHAR));
+    mline->component = getcomponenttype(snd_mixer_selem_get_name(captelem));
+    mline->dst = 0;
+    mline->capt = 1;
+    mline->elem = captelem;
+    mline->chans = chans(mmixer, captelem, 1);
+
+    snd_mixer_elem_set_callback(captelem, &elem_callback);
+    snd_mixer_elem_set_callback_private(captelem, mmixer);
+}
+
 /* Windows api wants to have a 'master' device to which all slaves are attached
  * There are 2 ones in this code:
  * - 'Master', fall back to 'Headphone' if unavailable, and if that's not available 'PCM'
@@ -410,11 +431,11 @@ static void ALSA_MixerInit(void)
     info = HeapAlloc( GetProcessHeap(), 0, snd_ctl_card_info_sizeof());
     for (x = 0; x < MAX_MIXERS; ++x)
     {
-        int card, err, capcontrols = 0;
+        int card, err, capcontrols, total_elems = 0;
         char cardind[6], cardname[10];
 
         snd_ctl_t *ctl;
-        snd_mixer_elem_t *elem, *mastelem = NULL, *headelem = NULL, *captelem = NULL, *pcmelem = NULL;
+        snd_mixer_elem_t *elem, *mastelem = NULL, *headelem = NULL, *captelem = NULL, *pcmelem = NULL, *micelem = NULL;
 
         memset(info, 0, snd_ctl_card_info_sizeof());
         memset(&mixdev[mixnum], 0, sizeof(*mixdev));
@@ -465,11 +486,20 @@ static void ALSA_MixerInit(void)
         /* First, lets see what's available..
          * If there are multiple Master or Captures, all except 1 will be added as slaves
          */
+        total_elems = snd_mixer_get_count(mixdev[mixnum].mix);
+        TRACE("Total elems: %d\n", total_elems);
+
         for (elem = snd_mixer_first_elem(mixdev[mixnum].mix); elem; elem = snd_mixer_elem_next(elem))
             if (!strcasecmp(snd_mixer_selem_get_name(elem), "Master") && !mastelem)
+            {
                 mastelem = elem;
+                ++(mixdev[mixnum].chans);
+            }
             else if (!strcasecmp(snd_mixer_selem_get_name(elem), "Capture") && !captelem)
                 captelem = elem;
+            else if (!strcasecmp(snd_mixer_selem_get_name(elem), "Mic") && !micelem && !mastelem && total_elems == 1)
+                /* this is what snd-usb-audio mics look like; just a Mic control and that's it.*/
+                micelem = elem;
             else if (!blacklisted(elem))
             {
                 DWORD comp = getcomponenttype(snd_mixer_selem_get_name(elem));
@@ -490,13 +520,12 @@ static void ALSA_MixerInit(void)
                         headelem = elem;
                     else if (!strcasecmp(snd_mixer_selem_get_name(elem), "PCM") && !pcmelem)
                         pcmelem = elem;
-                    else
-                        ++(mixdev[mixnum].chans);
+                    ++(mixdev[mixnum].chans);
                 }
             }
 
-        /* Add master channel, uncounted channels and an extra for capture  */
-        mixdev[mixnum].chans += !!mastelem + !!headelem + !!pcmelem + 1;
+        /* Add dummy capture channel, wanted by Windows  */
+        mixdev[mixnum].chans += 1;
 
         /* If there is only 'Capture' and 'Master', this device is not worth it */
         if (mixdev[mixnum].chans == 2)
@@ -519,7 +548,7 @@ static void ALSA_MixerInit(void)
             mastelem = pcmelem;
             capcontrols -= !!snd_mixer_selem_has_capture_switch(mastelem);
         }
-        else if (!mastelem)
+        else if (!mastelem && !captelem && !micelem)
         {
             /* If there is nothing sensible that can act as 'Master' control, something is wrong */
             FIXME("No master control found on %s, disabling mixer\n", snd_ctl_card_info_get_name(info));
@@ -549,7 +578,10 @@ static void ALSA_MixerInit(void)
         if (!mixdev[mixnum].lines || !mixdev[mixnum].controls)
             goto close;
 
-        filllines(&mixdev[mixnum], mastelem, captelem, capcontrols);
+        if (mastelem)
+            filllines(&mixdev[mixnum], mastelem, captelem, capcontrols);
+        else if (micelem)
+            filllines_no_master(&mixdev[mixnum], micelem, 1);
         fillcontrols(&mixdev[mixnum]);
 
         TRACE("%s: Amount of controls: %i/%i, name: %s\n", cardname, mixdev[mixnum].dests, mixdev[mixnum].chans, debugstr_w(mixdev[mixnum].mixername));

@@ -1,11 +1,7 @@
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = quartz.dll
 IMPORTLIB = quartz
-IMPORTS   = strmiids uuid dsound msacm32 msvfw32 ole32 oleaut32 shlwapi rpcrt4 user32 gdi32 advapi32
-EXTRADEFS = -DENTRY_PREFIX=QUARTZ_ -DPROXY_DELEGATION -DREGISTER_PROXY_DLL
+IMPORTS   = strmiids strmbase uuid dsound msacm32 msvfw32 ole32 oleaut32 shlwapi rpcrt4 user32 gdi32 advapi32
+EXTRADEFS = -DENTRY_PREFIX=QUARTZ_ -DPROXY_DELEGATION -DWINE_REGISTER_DLL
 
 C_SRCS = \
 	acmwrapper.c \
@@ -16,7 +12,6 @@ C_SRCS = \
 	enumfilters.c \
 	enummedia.c \
 	enummoniker.c \
-	enumpins.c \
 	enumregfilters.c \
 	filesource.c \
 	filtergraph.c \
@@ -29,13 +24,13 @@ C_SRCS = \
 	pin.c \
 	regsvr.c \
 	systemclock.c \
-	transform.c \
 	videorenderer.c \
 	waveparser.c
 
 RC_SRCS = version.rc
 
 IDL_P_SRCS = quartz_strmif.idl
+IDL_R_SRCS = quartz_strmif.idl
 
 EXTRA_OBJS = dlldata.o
 

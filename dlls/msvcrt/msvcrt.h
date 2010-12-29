@@ -47,6 +47,11 @@
 #define MSVCRT_I64_MIN    (-MSVCRT_I64_MAX-1)
 #define MSVCRT_UI64_MAX   (((unsigned __int64)0xffffffff << 32) | 0xffffffff)
 
+#define MSVCRT__MAX_DRIVE  3
+#define MSVCRT__MAX_DIR    256
+#define MSVCRT__MAX_FNAME  256
+#define MSVCRT__MAX_EXT    256
+
 typedef unsigned short MSVCRT_wchar_t;
 typedef unsigned short MSVCRT_wint_t;
 typedef unsigned short MSVCRT_wctype_t;
@@ -79,6 +84,7 @@ typedef void (*__cdecl MSVCRT__beginthread_start_routine_t)(void *);
 typedef unsigned int (__stdcall *MSVCRT__beginthreadex_start_routine_t)(void *);
 typedef int (*__cdecl MSVCRT__onexit_t)(void);
 typedef void (__cdecl *MSVCRT_invalid_parameter_handler)(const MSVCRT_wchar_t*, const MSVCRT_wchar_t*, const MSVCRT_wchar_t*, unsigned, MSVCRT_uintptr_t);
+typedef void (__cdecl *MSVCRT_purecall_handler)(void);
 
 typedef struct {long double x;} MSVCRT__LDOUBLE;
 
@@ -110,6 +116,7 @@ struct __thread_data {
     MSVCRT_wchar_t                 *wasctime_buffer;    /* buffer for wasctime */
     struct MSVCRT_tm                time_buffer;        /* buffer for localtime/gmtime */
     char                           *strerror_buffer;    /* buffer for strerror */
+    MSVCRT_wchar_t                 *wcserror_buffer;    /* buffer for wcserror */
     int                             fpecode;
     MSVCRT_terminate_function       terminate_handler;
     MSVCRT_unexpected_function      unexpected_handler;
@@ -538,6 +545,7 @@ struct MSVCRT__stat64 {
 #define MSVCRT_ENOSYS  40
 #define MSVCRT_ENOTEMPTY 41
 #define MSVCRT_EILSEQ    42
+#define MSVCRT_STRUNCATE 80
 
 #define MSVCRT_LC_ALL          0
 #define MSVCRT_LC_COLLATE      1
@@ -645,6 +653,12 @@ struct MSVCRT__stat64 {
 #define MSVCRT__FPCLASS_PN   0x0100  /* Positive Normal */
 #define MSVCRT__FPCLASS_PINF 0x0200  /* Positive Infinity */
 
+#define MSVCRT__MCW_EM        0x0008001f
+#define MSVCRT__MCW_IC        0x00040000
+#define MSVCRT__MCW_RC        0x00000300
+#define MSVCRT__MCW_PC        0x00030000
+#define MSVCRT__MCW_DN        0x03000000
+
 #define MSVCRT__EM_INVALID    0x00000010
 #define MSVCRT__EM_DENORMAL   0x00080000
 #define MSVCRT__EM_ZERODIVIDE 0x00000008
@@ -660,6 +674,11 @@ struct MSVCRT__stat64 {
 #define MSVCRT__PC_24         0x00020000
 #define MSVCRT__PC_53         0x00010000
 #define MSVCRT__PC_64         0x00000000
+#define MSVCRT__DN_SAVE       0x00000000
+#define MSVCRT__DN_FLUSH      0x01000000
+#define MSVCRT__DN_FLUSH_OPERANDS_SAVE_RESULTS 0x02000000
+#define MSVCRT__DN_SAVE_OPERANDS_FLUSH_RESULTS 0x03000000
+#define MSVCRT__EM_AMBIGUOUS  0x80000000
 
 #define MSVCRT_CLOCKS_PER_SEC 1000
 
@@ -711,6 +730,8 @@ typedef void (__cdecl *MSVCRT___sighandler_t)(int);
 
 #define MSVCRT__TRUNCATE ((MSVCRT_size_t)-1)
 
+#define _MAX__TIME64_T    (((MSVCRT___time64_t)0x00000007 << 32) | 0x93406FFF)
+
 void  __cdecl    MSVCRT_free(void*);
 void* __cdecl    MSVCRT_malloc(MSVCRT_size_t);
 void* __cdecl    MSVCRT_calloc(MSVCRT_size_t,MSVCRT_size_t);
@@ -742,6 +763,8 @@ MSVCRT_FILE*   __cdecl MSVCRT__wfdopen(int, const MSVCRT_wchar_t *);
 int            __cdecl MSVCRT_vsnprintf(char *str, MSVCRT_size_t len, const char *format, __ms_va_list valist);
 int            __cdecl MSVCRT_vsnwprintf(MSVCRT_wchar_t *str, MSVCRT_size_t len,
                                        const MSVCRT_wchar_t *format, __ms_va_list valist );
+int            __cdecl MSVCRT_sprintf(char*,const char*,...);
+int            __cdecl MSVCRT__scprintf(const char*,...);
 int            __cdecl MSVCRT_raise(int sig);
 
 typedef struct MSVCRT_tagLC_ID {
@@ -836,6 +859,35 @@ void __cdecl    _wsearchenv(const MSVCRT_wchar_t*, const MSVCRT_wchar_t*, MSVCRT
 MSVCRT_intptr_t __cdecl MSVCRT__spawnvpe(int, const char*, const char* const*, const char* const*);
 void __cdecl MSVCRT__invalid_parameter(const MSVCRT_wchar_t *expr, const MSVCRT_wchar_t *func,
                                        const MSVCRT_wchar_t *file, unsigned int line, MSVCRT_uintptr_t arg);
+
+/* Maybe one day we'll enable the invalid parameter handlers with the full set of information (msvcrXXd)
+ *      #define MSVCRT_INVALID_PMT(x) MSVCRT_call_invalid_parameter_handler(x, __FUNCTION__, __FILE__, __LINE__, 0)
+ *      #define MSVCRT_CHECK_PMT(x)   ((x) ? TRUE : MSVCRT_INVALID_PMT(#x),FALSE)
+ * Until this is done, just keep the same semantics for CHECK_PMT(), but without generating / sending
+ * any information
+ * NB : MSVCRT_call_invalid_parameter_handler is a wrapper around MSVCRT__invalid_parameter in order
+ * to do the Ansi to Unicode transformation
+ */
+#define MSVCRT_INVALID_PMT(x) MSVCRT__invalid_parameter(NULL, NULL, NULL, 0, 0)
+#define MSVCRT_CHECK_PMT(x)   ((x) || (MSVCRT_INVALID_PMT(0),FALSE))
 #endif
+
+typedef struct pf_output_t
+{
+    int used;
+    int len;
+    BOOL unicode;
+    union {
+        LPWSTR W;
+        LPSTR  A;
+    } buf;
+    union {
+        LPWSTR W;
+        LPSTR  A;
+    } grow;
+} pf_output;
+
+int pf_vsnprintf( pf_output *out, const WCHAR *format,
+                  MSVCRT__locale_t locale, BOOL valid, __ms_va_list valist );
 
 #endif /* __WINE_MSVCRT_H */

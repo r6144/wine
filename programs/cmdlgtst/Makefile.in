@@ -1,7 +1,3 @@
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = cmdlgtst.exe
 APPMODE   = -mwindows
 IMPORTS   = comdlg32 user32 gdi32
@@ -16,6 +12,7 @@ RC_SRCS = \
 	En.rc \
 	Es.rc \
 	Fr.rc \
+	He.rc \
 	It.rc \
 	Ja.rc \
 	Ko.rc \

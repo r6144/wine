@@ -68,4 +68,31 @@ typedef struct _SOCKET_ADDRESS_LIST {
         SOCKET_ADDRESS  Address[1];
 } SOCKET_ADDRESS_LIST, *LPSOCKET_ADDRESS_LIST;
 
+typedef enum {
+    ScopeLevelInterface    = 1,
+    ScopeLevelLink         = 2,
+    ScopeLevelSubnet       = 3,
+    ScopeLevelAdmin        = 4,
+    ScopeLevelSite         = 5,
+    ScopeLevelOrganization = 8,
+    ScopeLevelGlobal       = 14
+} SCOPE_LEVEL;
+
+/*
+ * Macros for retrieving control message data returned by WSARecvMsg()
+ */
+#define WSA_CMSG_DATA(cmsg)     ((UCHAR*)((WSACMSGHDR*)(cmsg)+1))
+#define WSA_CMSG_FIRSTHDR(mhdr) ((mhdr)->Control.len >= sizeof(WSACMSGHDR) ? (WSACMSGHDR *) (mhdr)->Control.buf : (WSACMSGHDR *) 0)
+#define WSA_CMSG_ALIGN(len)     (((len) + sizeof(SIZE_T) - 1) & ~(sizeof(SIZE_T) - 1))
+/*
+ * Next Header: If the response is too short (or the next message in the response
+ * is too short) then return NULL, otherwise return the next control message.
+ */
+#define WSA_CMSG_NXTHDR(mhdr,cmsg) \
+        (!(cmsg) ? WSA_CMSG_FIRSTHDR(mhdr) : \
+         ((mhdr)->Control.len < sizeof(WSACMSGHDR) ? NULL : \
+         (((unsigned char*)(((WSACMSGHDR*)((unsigned char*)cmsg + WSA_CMSG_ALIGN(cmsg->cmsg_len)))+1) > ((unsigned char*)(mhdr)->Control.buf + (mhdr)->Control.len)) ? NULL : \
+          (((unsigned char*)cmsg + WSA_CMSG_ALIGN(cmsg->cmsg_len)+WSA_CMSG_ALIGN(((WSACMSGHDR*)((unsigned char*)cmsg + WSA_CMSG_ALIGN(cmsg->cmsg_len)))->cmsg_len) > ((unsigned char*)(mhdr)->Control.buf + (mhdr)->Control.len)) ? NULL : \
+           (WSACMSGHDR*)((unsigned char*)cmsg + WSA_CMSG_ALIGN(cmsg->cmsg_len))))))
+
 #endif /* _WS2DEF_ */

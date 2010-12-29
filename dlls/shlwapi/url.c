@@ -273,9 +273,10 @@ HRESULT WINAPI UrlCanonicalizeW(LPCWSTR pszUrl, LPWSTR pszCanonicalized,
     HRESULT hr = S_OK;
     DWORD EscapeFlags;
     LPCWSTR wk1, root;
-    LPWSTR lpszUrlCpy, wk2, mp, mp2;
+    LPWSTR lpszUrlCpy, url, wk2, mp, mp2;
     INT state;
     DWORD nByteLen, nLen, nWkLen;
+    BOOL is_file_url;
     WCHAR slash = '\0';
 
     static const WCHAR wszFile[] = {'f','i','l','e',':'};
@@ -295,22 +296,39 @@ HRESULT WINAPI UrlCanonicalizeW(LPCWSTR pszUrl, LPWSTR pszCanonicalized,
         return S_OK;
     }
 
+    /* Remove '\t' characters from URL */
     nByteLen = (strlenW(pszUrl) + 1) * sizeof(WCHAR); /* length in bytes */
+    url = HeapAlloc(GetProcessHeap(), 0, nByteLen);
+    if(!url)
+        return E_OUTOFMEMORY;
+
+    wk1 = pszUrl;
+    wk2 = url;
+    do {
+        while(*wk1 == '\t')
+            wk1++;
+        *wk2++ = *wk1;
+    } while(*wk1++);
+
     /* Allocate memory for simplified URL (before escaping) */
+    nByteLen = (wk2-url)*sizeof(WCHAR);
     lpszUrlCpy = HeapAlloc(GetProcessHeap(), 0,
             nByteLen+sizeof(wszFilePrefix)+sizeof(WCHAR));
+    if(!lpszUrlCpy) {
+        HeapFree(GetProcessHeap(), 0, url);
+        return E_OUTOFMEMORY;
+    }
+
+    is_file_url = !strncmpW(wszFile, url, sizeof(wszFile)/sizeof(WCHAR));
 
     if ((nByteLen >= sizeof(wszHttp) &&
-         !memcmp(wszHttp, pszUrl, sizeof(wszHttp))) ||
-        (nByteLen >= sizeof(wszFile) &&
-         !memcmp(wszFile, pszUrl, sizeof(wszFile))))
+         !memcmp(wszHttp, url, sizeof(wszHttp))) || is_file_url)
         slash = '/';
 
-    if((dwFlags & URL_FILE_USE_PATHURL) && nByteLen >= sizeof(wszFile)
-            && !memcmp(wszFile, pszUrl, sizeof(wszFile)))
+    if((dwFlags & (URL_FILE_USE_PATHURL | URL_WININET_COMPATIBILITY)) && is_file_url)
         slash = '\\';
 
-    if(nByteLen >= sizeof(wszRes) && !memcmp(wszRes, pszUrl, sizeof(wszRes))) {
+    if(nByteLen >= sizeof(wszRes) && !memcmp(wszRes, url, sizeof(wszRes))) {
         dwFlags &= ~URL_FILE_USE_PATHURL;
         slash = '\0';
     }
@@ -326,14 +344,14 @@ HRESULT WINAPI UrlCanonicalizeW(LPCWSTR pszUrl, LPWSTR pszCanonicalized,
      *         6   have location (found /) save root location
      */
 
-    wk1 = pszUrl;
+    wk1 = url;
     wk2 = lpszUrlCpy;
     state = 0;
 
-    if(pszUrl[1] == ':') { /* Assume path */
+    if(url[1] == ':') { /* Assume path */
         memcpy(wk2, wszFilePrefix, sizeof(wszFilePrefix));
         wk2 += sizeof(wszFilePrefix)/sizeof(WCHAR);
-        if (dwFlags & URL_FILE_USE_PATHURL)
+        if (dwFlags & (URL_FILE_USE_PATHURL | URL_WININET_COMPATIBILITY))
         {
             slash = '\\';
             --wk2;
@@ -341,6 +359,7 @@ HRESULT WINAPI UrlCanonicalizeW(LPCWSTR pszUrl, LPWSTR pszCanonicalized,
         else
             dwFlags |= URL_ESCAPE_UNSAFE;
         state = 5;
+        is_file_url = TRUE;
     }
 
     while (*wk1) {
@@ -361,14 +380,47 @@ HRESULT WINAPI UrlCanonicalizeW(LPCWSTR pszUrl, LPWSTR pszCanonicalized,
             if (*wk1 != '/') {state = 6; break;}
             *wk2++ = *wk1++;
             if((dwFlags & URL_FILE_USE_PATHURL) && nByteLen >= sizeof(wszLocalhost)
-                        && !strncmpW(wszFile, pszUrl, sizeof(wszFile)/sizeof(WCHAR))
+                        && is_file_url
                         && !memcmp(wszLocalhost, wk1, sizeof(wszLocalhost))){
                 wk1 += sizeof(wszLocalhost)/sizeof(WCHAR);
                 while(*wk1 == '\\' && (dwFlags & URL_FILE_USE_PATHURL))
                     wk1++;
             }
-            if(*wk1 == '/' && (dwFlags & URL_FILE_USE_PATHURL))
+
+            if(*wk1 == '/' && (dwFlags & URL_FILE_USE_PATHURL)){
                 wk1++;
+            }else if(is_file_url){
+                const WCHAR *body = wk1;
+
+                while(*body == '/')
+                    ++body;
+
+                if(isalnumW(*body) && *(body+1) == ':'){
+                    if(!(dwFlags & (URL_WININET_COMPATIBILITY | URL_FILE_USE_PATHURL))){
+                        if(slash)
+                            *wk2++ = slash;
+                        else
+                            *wk2++ = '/';
+                    }
+                }else{
+                    if(dwFlags & URL_WININET_COMPATIBILITY){
+                        if(*wk1 == '/' && *(wk1+1) != '/'){
+                            *wk2++ = '\\';
+                        }else{
+                            *wk2++ = '\\';
+                            *wk2++ = '\\';
+                        }
+                    }else{
+                        if(*wk1 == '/' && *(wk1+1) != '/'){
+                            if(slash)
+                                *wk2++ = slash;
+                            else
+                                *wk2++ = '/';
+                        }
+                    }
+                }
+                wk1 = body;
+            }
             state = 4;
             break;
         case 3:
@@ -483,6 +535,7 @@ HRESULT WINAPI UrlCanonicalizeW(LPCWSTR pszUrl, LPWSTR pszCanonicalized,
         default:
             FIXME("how did we get here - state=%d\n", state);
             HeapFree(GetProcessHeap(), 0, lpszUrlCpy);
+            HeapFree(GetProcessHeap(), 0, url);
             return E_INVALIDARG;
         }
         *wk2 = '\0';
@@ -495,7 +548,7 @@ HRESULT WINAPI UrlCanonicalizeW(LPCWSTR pszUrl, LPWSTR pszCanonicalized,
 
     if((dwFlags & URL_UNESCAPE) ||
        ((dwFlags & URL_FILE_USE_PATHURL) && nByteLen >= sizeof(wszFile)
-                && !memcmp(wszFile, pszUrl, sizeof(wszFile))))
+                && !memcmp(wszFile, url, sizeof(wszFile))))
         UrlUnescapeW(lpszUrlCpy, NULL, &nLen, URL_UNESCAPE_INPLACE);
 
     if((EscapeFlags = dwFlags & (URL_ESCAPE_UNSAFE |
@@ -518,6 +571,7 @@ HRESULT WINAPI UrlCanonicalizeW(LPCWSTR pszUrl, LPWSTR pszCanonicalized,
     }
 
     HeapFree(GetProcessHeap(), 0, lpszUrlCpy);
+    HeapFree(GetProcessHeap(), 0, url);
 
     if (hr == S_OK)
 	TRACE("result %s\n", debugstr_w(pszCanonicalized));
@@ -676,7 +730,9 @@ HRESULT WINAPI UrlCombineW(LPCWSTR pszBase, LPCWSTR pszRelative,
             const WCHAR htmW[] = {'.','h','t','m',0};
             const int len_htmW = 4;
 
-            if (work - base.pszSuffix > len_htmW * sizeof(WCHAR)) {
+            if (base.nScheme == URL_SCHEME_HTTP || base.nScheme == URL_SCHEME_HTTPS)
+                manual_search = TRUE;
+            else if (work - base.pszSuffix > len_htmW * sizeof(WCHAR)) {
                 work -= len_htmW;
                 if (strncmpiW(work, htmW, len_htmW) == 0)
                     manual_search = TRUE;
@@ -696,15 +752,15 @@ HRESULT WINAPI UrlCombineW(LPCWSTR pszBase, LPCWSTR pszRelative,
             /* search backwards starting from the current position */
             while (*work != '/' && work > base.pszSuffix + sizeloc)
                 --work;
-            if (work > base.pszSuffix + sizeloc)
-                base.cchSuffix = work - base.pszSuffix + 1;
+            base.cchSuffix = work - base.pszSuffix + 1;
         }else {
             /* search backwards starting from the end of the string */
             work = strrchrW((base.pszSuffix+sizeloc), '/');
             if (work) {
                 len = (DWORD)(work - base.pszSuffix + 1);
                 base.cchSuffix = len;
-            }
+            }else
+                base.cchSuffix = sizeloc;
         }
 
 	/*
@@ -747,6 +803,15 @@ HRESULT WINAPI UrlCombineW(LPCWSTR pszBase, LPCWSTR pszRelative,
 		process_case = 4;
 		break;
 	    }
+            if (*mrelative == '#') {
+                if(!(work = strchrW(base.pszSuffix+base.cchSuffix, '#')))
+                    work = (LPWSTR)base.pszSuffix + strlenW(base.pszSuffix);
+
+                memcpy(preliminary, base.pszProtocol, (work-base.pszProtocol)*sizeof(WCHAR));
+                preliminary[work-base.pszProtocol] = '\0';
+                process_case = 1;
+                break;
+            }
             process_case = (*base.pszSuffix == '/' || base.nScheme == URL_SCHEME_MK) ? 5 : 3;
 	    break;
 	}
@@ -1002,8 +1067,8 @@ HRESULT WINAPI UrlEscapeW(
     DWORD slashes = 0;
     static const WCHAR localhost[] = {'l','o','c','a','l','h','o','s','t',0};
 
-    TRACE("(%s %p %p 0x%08x)\n", debugstr_w(pszUrl), pszEscaped,
-	  pcchEscaped, dwFlags);
+    TRACE("(%p(%s) %p %p 0x%08x)\n", pszUrl, debugstr_w(pszUrl),
+            pszEscaped, pcchEscaped, dwFlags);
 
     if(!pszUrl || !pcchEscaped)
         return E_INVALIDARG;
@@ -1013,6 +1078,12 @@ HRESULT WINAPI UrlEscapeW(
 		   URL_DONT_ESCAPE_EXTRA_INFO |
 		   URL_ESCAPE_PERCENT))
         FIXME("Unimplemented flags: %08x\n", dwFlags);
+
+    if(pszUrl == pszEscaped) {
+        dst = HeapAlloc(GetProcessHeap(), 0, *pcchEscaped*sizeof(WCHAR));
+        if(!dst)
+            return E_OUTOFMEMORY;
+    }
 
     /* fix up flags */
     if (dwFlags & URL_ESCAPE_SPACES_ONLY)
@@ -1130,12 +1201,18 @@ HRESULT WINAPI UrlEscapeW(
 
     if(needed < *pcchEscaped) {
         *dst = '\0';
-	ret = S_OK;
+        if(pszUrl == pszEscaped)
+            memcpy(pszEscaped, dst-needed, (needed+1)*sizeof(WCHAR));
+
+        ret = S_OK;
     } else {
         needed++; /* add one for the '\0' */
-	ret = E_POINTER;
+        ret = E_POINTER;
     }
     *pcchEscaped = needed;
+
+    if(pszUrl == pszEscaped)
+        HeapFree(GetProcessHeap(), 0, dst);
     return ret;
 }
 
@@ -1901,6 +1978,10 @@ static LPCWSTR  URL_ScanID(LPCWSTR start, LPDWORD size, WINE_URL_SCAN_TYPE type)
 	    else
 		cont = FALSE;
 	}
+
+	if(*start != ':')
+	    *size = 0;
+
         break;
 
     case USERPASS:
@@ -2124,7 +2205,7 @@ HRESULT WINAPI UrlGetPartW(LPCWSTR pszIn, LPWSTR pszOut, LPDWORD pcchOut,
 
 	switch (dwPart) {
 	case URL_PART_SCHEME:
-	    if (!pl.szScheme || scheme == URL_SCHEME_UNKNOWN) {
+	    if (!pl.szScheme) {
 	        *pcchOut = 0;
 	        return S_FALSE;
 	    }

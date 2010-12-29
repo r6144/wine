@@ -194,6 +194,24 @@ INT WINAPI SetupPromptReboot( HSPFILEQ file_queue, HWND owner, BOOL scan_only )
 }
 
 /***********************************************************************
+ *      SetupQueryDrivesInDiskSpaceListA (SETUPAPI.@)
+ */
+BOOL WINAPI SetupQueryDrivesInDiskSpaceListA(HDSKSPC disk_space, PSTR return_buffer, DWORD return_buffer_size, PDWORD required_size)
+{
+    FIXME("%p, %p, %d, %p\n", disk_space, return_buffer, return_buffer_size, required_size);
+    return FALSE;
+}
+
+/***********************************************************************
+ *      SetupQueryDrivesInDiskSpaceListW (SETUPAPI.@)
+ */
+BOOL WINAPI SetupQueryDrivesInDiskSpaceListW(HDSKSPC disk_space, PWSTR return_buffer, DWORD return_buffer_size, PDWORD required_size)
+{
+    FIXME("%p, %p, %d, %p\n", disk_space, return_buffer, return_buffer_size, required_size);
+    return FALSE;
+}
+
+/***********************************************************************
  *      SetupSetSourceListA (SETUPAPI.@)
  */
 BOOL WINAPI SetupSetSourceListA(DWORD flags, PCSTR *list, UINT count)
@@ -208,26 +226,6 @@ BOOL WINAPI SetupSetSourceListA(DWORD flags, PCSTR *list, UINT count)
 BOOL WINAPI SetupSetSourceListW(DWORD flags, PCWSTR *list, UINT count)
 {
     FIXME("0x%08x %p %d\n", flags, list, count);
-    return FALSE;
-}
-
-/***********************************************************************
- *      SetupDiGetINFClassA (SETUPAPI.@)
- */
-BOOL WINAPI SetupDiGetINFClassA(PCSTR inf, LPGUID class_guid, PSTR class_name,
-        DWORD size, PDWORD required_size)
-{
-    FIXME("%s %p %p %d %p\n", debugstr_a(inf), class_guid, class_name, size, required_size);
-    return FALSE;
-}
-
-/***********************************************************************
- *      SetupDiGetINFClassW (SETUPAPI.@)
- */
-BOOL WINAPI SetupDiGetINFClassW(PCWSTR inf, LPGUID class_guid, PWSTR class_name,
-        DWORD size, PDWORD required_size)
-{
-    FIXME("%s %p %p %d %p\n", debugstr_w(inf), class_guid, class_name, size, required_size);
     return FALSE;
 }
 
@@ -417,3 +415,14 @@ BOOL WINAPI SetupDiDeleteDeviceInfo(HDEVINFO DeviceInfoSet, PSP_DEVINFO_DATA Dev
     SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
     return FALSE;
  }
+
+/***********************************************************************
+ *              SetupDiLoadClassIcon  (SETUPAPI.@)
+ */
+BOOL WINAPI SetupDiLoadClassIcon(const GUID *ClassGuid, HICON *LargeIcon, PINT MiniIconIndex)
+{
+    FIXME(": stub %s, %p, %p\n", debugstr_guid(ClassGuid), LargeIcon, MiniIconIndex);
+
+    SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
+    return FALSE;
+}

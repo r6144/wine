@@ -191,6 +191,9 @@ static HRESULT WINAPI HTMLWindow2_QueryInterface(IHTMLWindow2 *iface, REFIID rii
     }else if(IsEqualGUID(&IID_IHTMLPrivateWindow, riid)) {
         TRACE("(%p)->(IID_IHTMLPrivateWindow %p)\n", This, ppv);
         *ppv = HTMLPRIVWINDOW(This);
+    }else if(IsEqualGUID(&IID_IServiceProvider, riid)) {
+        TRACE("(%p)->(IID_IServiceProvider %p)\n", This, ppv);
+        *ppv = SERVPROV(This);
     }else if(dispex_query_interface(&This->dispex, riid, ppv)) {
         return *ppv ? S_OK : E_NOINTERFACE;
     }
@@ -987,7 +990,7 @@ static HRESULT WINAPI HTMLWindow2_get_document(IHTMLWindow2 *iface, IHTMLDocumen
 
     if(This->doc) {
         /* FIXME: We should return a wrapper object here */
-        *p = HTMLDOC(&This->doc->basedoc);
+        *p = &This->doc->basedoc.IHTMLDocument2_iface;
         IHTMLDocument2_AddRef(*p);
     }else {
         *p = NULL;
@@ -1140,8 +1143,10 @@ static HRESULT WINAPI HTMLWindow2_execScript(IHTMLWindow2 *iface, BSTR scode, BS
         VARIANT *pvarRet)
 {
     HTMLWindow *This = HTMLWINDOW2_THIS(iface);
-    FIXME("(%p)->(%s %s %p)\n", This, debugstr_w(scode), debugstr_w(language), pvarRet);
-    return E_NOTIMPL;
+
+    TRACE("(%p)->(%s %s %p)\n", This, debugstr_w(scode), debugstr_w(language), pvarRet);
+
+    return exec_script(This, scode, language, pvarRet);
 }
 
 static HRESULT WINAPI HTMLWindow2_toString(IHTMLWindow2 *iface, BSTR *String)
@@ -1270,7 +1275,8 @@ static HRESULT HTMLWindow_invoke(IUnknown *iface, DISPID id, LCID lcid, WORD fla
     case GLOBAL_ELEMENTVAR: {
         IHTMLElement *elem;
 
-        hres = IHTMLDocument3_getElementById(HTMLDOC3(&This->doc->basedoc), prop->name, &elem);
+        hres = IHTMLDocument3_getElementById(&This->doc->basedoc.IHTMLDocument3_iface,
+                                             prop->name, &elem);
         if(FAILED(hres))
             return hres;
 
@@ -1996,7 +2002,8 @@ static HRESULT WINAPI WindowDispEx_GetDispID(IDispatchEx *iface, BSTR bstrName, 
         global_prop_t *prop;
         IHTMLElement *elem;
 
-        hres = IHTMLDocument3_getElementById(HTMLDOC3(&This->doc->basedoc), bstrName, &elem);
+        hres = IHTMLDocument3_getElementById(&This->doc->basedoc.IHTMLDocument3_iface,
+                                             bstrName, &elem);
         if(SUCCEEDED(hres) && elem) {
             IHTMLElement_Release(elem);
 
@@ -2112,6 +2119,52 @@ static const IDispatchExVtbl WindowDispExVtbl = {
     WindowDispEx_GetNameSpaceParent
 };
 
+#define SERVPROV_THIS(iface) DEFINE_THIS(HTMLWindow, ServiceProvider, iface)
+
+static HRESULT WINAPI HTMLWindowSP_QueryInterface(IServiceProvider *iface, REFIID riid, void **ppv)
+{
+    HTMLWindow *This = SERVPROV_THIS(iface);
+    return IHTMLWindow2_QueryInterface(HTMLWINDOW2(This), riid, ppv);
+}
+
+static ULONG WINAPI HTMLWindowSP_AddRef(IServiceProvider *iface)
+{
+    HTMLWindow *This = SERVPROV_THIS(iface);
+    return IHTMLWindow2_AddRef(HTMLWINDOW2(This));
+}
+
+static ULONG WINAPI HTMLWindowSP_Release(IServiceProvider *iface)
+{
+    HTMLWindow *This = SERVPROV_THIS(iface);
+    return IHTMLWindow2_Release(HTMLWINDOW2(This));
+}
+
+static HRESULT WINAPI HTMLWindowSP_QueryService(IServiceProvider *iface, REFGUID guidService, REFIID riid, void **ppv)
+{
+    HTMLWindow *This = SERVPROV_THIS(iface);
+
+    if(IsEqualGUID(guidService, &IID_IHTMLWindow2)) {
+        TRACE("IID_IHTMLWindow2\n");
+        return IHTMLWindow2_QueryInterface(HTMLWINDOW2(This), riid, ppv);
+    }
+
+    TRACE("(%p)->(%s %s %p)\n", This, debugstr_guid(guidService), debugstr_guid(riid), ppv);
+
+    if(!This->doc_obj)
+        return E_NOINTERFACE;
+
+    return IServiceProvider_QueryService(SERVPROV(&This->doc_obj->basedoc), guidService, riid, ppv);
+}
+
+#undef SERVPROV_THIS
+
+static const IServiceProviderVtbl ServiceProviderVtbl = {
+    HTMLWindowSP_QueryInterface,
+    HTMLWindowSP_AddRef,
+    HTMLWindowSP_Release,
+    HTMLWindowSP_QueryService
+};
+
 static const tid_t HTMLWindow_iface_tids[] = {
     IHTMLWindow2_tid,
     IHTMLWindow3_tid,
@@ -2151,6 +2204,7 @@ HRESULT HTMLWindow_Create(HTMLDocumentObj *doc_obj, nsIDOMWindow *nswindow, HTML
     window->lpHTMLWindow4Vtbl = &HTMLWindow4Vtbl;
     window->lpIHTMLPrivateWindowVtbl = &HTMLPrivateWindowVtbl;
     window->lpIDispatchExVtbl = &WindowDispExVtbl;
+    window->lpServiceProviderVtbl = &ServiceProviderVtbl;
     window->ref = 1;
     window->doc_obj = doc_obj;
 

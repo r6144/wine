@@ -1,13 +1,10 @@
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = msvcp90.dll
 IMPORTS   = msvcrt
 MODCFLAGS = @BUILTINFLAG@
-EXTRAINCL = -I$(TOPSRCDIR)/include/msvcrt
+EXTRAINCL = -I$(top_srcdir)/include/msvcrt
 
 C_SRCS = \
+	exception.c \
 	memory.c \
 	msvcp90_main.c \
 	string.c

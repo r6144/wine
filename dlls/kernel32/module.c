@@ -368,6 +368,7 @@ void MODULE_get_binary_info( HANDLE hfile, struct binary_info *info )
  *  executable file runs under. lpBinaryType can be set to one of the following
  *  values:
  *   SCS_32BIT_BINARY: A Win32 based application
+ *   SCS_64BIT_BINARY: A Win64 based application
  *   SCS_DOS_BINARY: An MS-Dos based application
  *   SCS_WOW_BINARY: A Win16 based application
  *   SCS_PIF_BINARY: A PIF file that executes an MS-Dos based app
@@ -377,7 +378,7 @@ void MODULE_get_binary_info( HANDLE hfile, struct binary_info *info )
  *  To find the binary type, this function reads in the files header information.
  *  If extended header information is not present it will assume that the file
  *  is a DOS executable. If extended header information is present it will
- *  determine if the file is a 16 or 32 bit Windows executable by checking the
+ *  determine if the file is a 16, 32 or 64 bit Windows executable by checking the
  *  flags in the header.
  *
  *  ".com" and ".pif" files are only recognized by their file name extension,
@@ -848,6 +849,14 @@ static HMODULE load_library( const UNICODE_STRING *libname, DWORD flags )
     NTSTATUS nts;
     HMODULE hModule;
     WCHAR *load_path;
+    static const DWORD unsupported_flags = 
+        LOAD_IGNORE_CODE_AUTHZ_LEVEL |
+        LOAD_LIBRARY_AS_IMAGE_RESOURCE |
+        LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE |
+        LOAD_LIBRARY_REQUIRE_SIGNED_TARGET;
+
+    if( flags & unsupported_flags)
+        FIXME("unsupported flag(s) used (flags: 0x%08x)\n", flags & ~unsupported_flags);
 
     load_path = MODULE_get_dll_load_path( flags & LOAD_WITH_ALTERED_SEARCH_PATH ? libname->Buffer : NULL );
 
@@ -856,7 +865,7 @@ static HMODULE load_library( const UNICODE_STRING *libname, DWORD flags )
         ULONG magic;
 
         LdrLockLoaderLock( 0, NULL, &magic );
-        if (!(nts = LdrGetDllHandle( load_path, flags, libname, &hModule )))
+        if (!LdrGetDllHandle( load_path, flags, libname, &hModule ))
         {
             LdrAddRefDll( 0, hModule );
             LdrUnlockLoaderLock( 0, magic );

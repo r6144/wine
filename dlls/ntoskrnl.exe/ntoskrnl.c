@@ -1524,6 +1524,39 @@ MM_SYSTEMSIZE WINAPI MmQuerySystemSize(void)
     return MmLargeSystem;
 }
 
+/***********************************************************************
+ *           KeInitializeDpc   (NTOSKRNL.EXE.@)
+ */
+VOID WINAPI KeInitializeDpc(PRKDPC Dpc, PKDEFERRED_ROUTINE DeferredRoutine, PVOID DeferredContext)
+{
+    FIXME("stub\n");
+}
+
+/***********************************************************************
+ *           READ_REGISTER_BUFFER_UCHAR   (NTOSKRNL.EXE.@)
+ */
+VOID WINAPI READ_REGISTER_BUFFER_UCHAR(PUCHAR Register, PUCHAR Buffer, ULONG Count)
+{
+    FIXME("stub\n");
+}
+
+/*****************************************************
+ *           PoSetPowerState   (NTOSKRNL.EXE.@)
+ */
+POWER_STATE WINAPI PoSetPowerState(PDEVICE_OBJECT DeviceObject, POWER_STATE_TYPE Type, POWER_STATE State)
+{
+    FIXME("(%p %u %u) stub\n", DeviceObject, Type, State.DeviceState);
+    return State;
+}
+
+/*****************************************************
+ *           IoWMIRegistrationControl   (NTOSKRNL.EXE.@)
+ */
+NTSTATUS WINAPI IoWMIRegistrationControl(PDEVICE_OBJECT DeviceObject, ULONG Action)
+{
+    FIXME("(%p %u ) stub\n", DeviceObject, Action);
+    return STATUS_SUCCESS;
+}
 
 /*****************************************************
  *           DllMain

@@ -478,12 +478,7 @@ static void test_saxreader(void)
 
     hr = CoCreateInstance(&CLSID_SAXXMLReader, NULL, CLSCTX_INPROC_SERVER,
             &IID_ISAXXMLReader, (LPVOID*)&reader);
-
-    if(FAILED(hr))
-    {
-        skip("Failed to create SAXXMLReader instance\n");
-        return;
-    }
+    ok(hr == S_OK, "Expected S_OK, got %08x\n", hr);
 
     hr = ISAXXMLReader_getContentHandler(reader, NULL);
     ok(hr == E_POINTER, "Expected E_POINTER, got %08x\n", hr);
@@ -585,6 +580,7 @@ static void test_saxreader(void)
     }
     bstrData = SysAllocString(szSimpleXML);
     hr = IXMLDOMDocument_loadXML(domDocument, bstrData, &vBool);
+    ok(hr == S_OK, "Expected S_OK, got %08x\n", hr);
     V_VT(&var) = VT_UNKNOWN;
     V_UNKNOWN(&var) = (IUnknown*)domDocument;
 
@@ -598,14 +594,86 @@ static void test_saxreader(void)
     SysFreeString(bstrData);
 }
 
+/* UTF-8 data with UTF-8 BOM and UTF-16 in prolog */
+static const CHAR UTF8BOMTest[] =
+"\xEF\xBB\xBF<?xml version = \"1.0\" encoding = \"UTF-16\"?>\n"
+"<a></a>\n";
+
+struct enc_test_entry_t {
+    const GUID *guid;
+    const char *clsid;
+    const char *data;
+    HRESULT hr;
+    int todo;
+};
+
+static const struct enc_test_entry_t encoding_test_data[] = {
+    { &CLSID_SAXXMLReader,   "CLSID_SAXXMLReader",   UTF8BOMTest, 0xc00ce56f, 1 },
+    { &CLSID_SAXXMLReader30, "CLSID_SAXXMLReader30", UTF8BOMTest, 0xc00ce56f, 1 },
+    { &CLSID_SAXXMLReader40, "CLSID_SAXXMLReader40", UTF8BOMTest, S_OK, 0 },
+    { &CLSID_SAXXMLReader60, "CLSID_SAXXMLReader60", UTF8BOMTest, S_OK, 0 },
+    { 0 }
+};
+
+static void test_encoding(void)
+{
+    const struct enc_test_entry_t *entry = encoding_test_data;
+    static const WCHAR testXmlW[] = {'t','e','s','t','.','x','m','l',0};
+    static const CHAR testXmlA[] = "test.xml";
+    ISAXXMLReader *reader;
+    DWORD written;
+    HANDLE file;
+    HRESULT hr;
+
+    while (entry->guid)
+    {
+        hr = CoCreateInstance(entry->guid, NULL, CLSCTX_INPROC_SERVER, &IID_ISAXXMLReader, (void**)&reader);
+        if (hr != S_OK)
+        {
+            win_skip("can't create %s instance\n", entry->clsid);
+            entry++;
+            continue;
+        }
+
+        file = CreateFileA(testXmlA, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+        ok(file != INVALID_HANDLE_VALUE, "Could not create file: %u\n", GetLastError());
+        WriteFile(file, UTF8BOMTest, sizeof(UTF8BOMTest)-1, &written, NULL);
+        CloseHandle(file);
+
+        hr = ISAXXMLReader_parseURL(reader, testXmlW);
+        if (entry->todo)
+            todo_wine ok(hr == entry->hr, "Expected 0x%08x, got 0x%08x. CLSID %s\n", entry->hr, hr, entry->clsid);
+        else
+            ok(hr == entry->hr, "Expected 0x%08x, got 0x%08x. CLSID %s\n", entry->hr, hr, entry->clsid);
+
+        DeleteFileA(testXmlA);
+        ISAXXMLReader_Release(reader);
+
+        entry++;
+    }
+}
+
 START_TEST(saxreader)
 {
+    ISAXXMLReader *reader;
     HRESULT hr;
 
     hr = CoInitialize(NULL);
     ok(hr == S_OK, "failed to init com\n");
 
+    hr = CoCreateInstance(&CLSID_SAXXMLReader, NULL, CLSCTX_INPROC_SERVER,
+            &IID_ISAXXMLReader, (void**)&reader);
+
+    if(FAILED(hr))
+    {
+        skip("Failed to create SAXXMLReader instance\n");
+        CoUninitialize();
+        return;
+    }
+    ISAXXMLReader_Release(reader);
+
     test_saxreader();
+    test_encoding();
 
     CoUninitialize();
 }

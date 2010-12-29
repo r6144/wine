@@ -32,13 +32,13 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(wincodecs);
 
+extern BOOL WINAPI WIC_DllMain(HINSTANCE, DWORD, LPVOID) DECLSPEC_HIDDEN;
+
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 {
 
     switch (fdwReason)
     {
-        case DLL_WINE_PREATTACH:
-            return FALSE;    /* prefer native version */
         case DLL_PROCESS_ATTACH:
             DisableThreadLibraryCalls(hinstDLL);
             break;
@@ -46,7 +46,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
             break;
     }
 
-    return TRUE;
+    return WIC_DllMain(hinstDLL, fdwReason, lpvReserved);
 }
 
 HRESULT copy_pixels(UINT bpp, const BYTE *srcbuffer,
@@ -55,9 +55,21 @@ HRESULT copy_pixels(UINT bpp, const BYTE *srcbuffer,
 {
     UINT bytesperrow;
     UINT row_offset; /* number of bits into the source rows where the data starts */
+    WICRect rect;
 
-    if (rc->X < 0 || rc->Y < 0 || rc->X+rc->Width > srcwidth || rc->Y+rc->Height > srcheight)
-        return E_INVALIDARG;
+    if (!rc)
+    {
+        rect.X = 0;
+        rect.Y = 0;
+        rect.Width = srcwidth;
+        rect.Height = srcheight;
+        rc = &rect;
+    }
+    else
+    {
+        if (rc->X < 0 || rc->Y < 0 || rc->X+rc->Width > srcwidth || rc->Y+rc->Height > srcheight)
+            return E_INVALIDARG;
+    }
 
     bytesperrow = ((bpp * rc->Width)+7)/8;
 
@@ -66,6 +78,13 @@ HRESULT copy_pixels(UINT bpp, const BYTE *srcbuffer,
 
     if ((dststride * rc->Height) > dstbuffersize)
         return E_INVALIDARG;
+
+    /* if the whole bitmap is copied and the buffer format matches then it's a matter of a single memcpy */
+    if (rc->X == 0 && rc->Y == 0 && rc->Width == srcwidth && rc->Height == srcheight && srcstride == dststride)
+    {
+        memcpy(dstbuffer, srcbuffer, srcstride * srcheight);
+        return S_OK;
+    }
 
     row_offset = rc->X * bpp;
 

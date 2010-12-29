@@ -37,6 +37,9 @@
 #include "winetest.h"
 #include "resource.h"
 
+/* Don't submit the results if more than SKIP_LIMIT tests have been skipped */
+#define SKIP_LIMIT 10
+
 struct wine_test
 {
     char *name;
@@ -48,10 +51,12 @@ struct wine_test
 };
 
 char *tag = NULL;
+char *description = NULL;
+char *url = NULL;
 char *email = NULL;
 BOOL aborting = FALSE;
 static struct wine_test *wine_tests;
-static int nr_of_files, nr_of_tests;
+static int nr_of_files, nr_of_tests, nr_of_skips;
 static int nr_native_dlls;
 static const char whitespace[] = " \t\r\n";
 static const char testexe[] = "_test.exe";
@@ -60,6 +65,7 @@ static char build_id[64];
 /* filters for running only specific tests */
 static char *filters[64];
 static unsigned int nb_filters = 0;
+static BOOL exclude_tests = FALSE;
 
 /* Needed to check for .NET dlls */
 static HMODULE hmscoree;
@@ -86,17 +92,18 @@ static BOOL test_filtered_out( LPCSTR module, LPCSTR testname )
     if (p) *p = 0;
     len = strlen(dllname);
 
-    if (!nb_filters) return FALSE;
+    if (!nb_filters) return exclude_tests;
     for (i = 0; i < nb_filters; i++)
     {
         if (!strncmp( dllname, filters[i], len ))
         {
-            if (!filters[i][len]) return FALSE;
+            if (!filters[i][len]) return exclude_tests;
             if (filters[i][len] != ':') continue;
-            if (!testname || !strcmp( testname, &filters[i][len+1] )) return FALSE;
+            if (testname && !strcmp( testname, &filters[i][len+1] )) return exclude_tests;
+            if (!testname && !exclude_tests) return FALSE;
         }
     }
-    return TRUE;
+    return !exclude_tests;
 }
 
 static char * get_file_version(char * file_name)
@@ -219,6 +226,8 @@ static void print_version (void)
     static const char platform[] = "alpha";
 #elif defined(__powerpc__)
     static const char platform[] = "powerpc";
+#elif defined(__arm__)
+    static const char platform[] = "arm";
 #else
 # error CPU unknown
 #endif
@@ -244,6 +253,10 @@ static void print_version (void)
     xprintf ("    bRunningUnderWine=%d\n", running_under_wine ());
     xprintf ("    bRunningOnVisibleDesktop=%d\n", running_on_visible_desktop ());
     xprintf ("    Submitter=%s\n", email );
+    if (description)
+        xprintf ("    Description=%s\n", description );
+    if (url)
+        xprintf ("    URL=%s\n", url );
     xprintf ("    dwMajorVersion=%u\n    dwMinorVersion=%u\n"
              "    dwBuildNumber=%u\n    PlatformId=%u\n    szCSDVersion=%s\n",
              ver.dwMajorVersion, ver.dwMinorVersion, ver.dwBuildNumber,
@@ -566,8 +579,7 @@ get_subtests (const char *tempdir, struct wine_test *test, LPTSTR res_name)
             test->subtests = heap_realloc (test->subtests,
                                            allocated * sizeof(char*));
         }
-        if (!test_filtered_out( test->name, index ))
-            test->subtests[test->subtest_count++] = heap_strdup(index);
+        test->subtests[test->subtest_count++] = heap_strdup(index);
         index = strtok (NULL, whitespace);
     }
     test->subtests = heap_realloc (test->subtests,
@@ -583,14 +595,24 @@ get_subtests (const char *tempdir, struct wine_test *test, LPTSTR res_name)
 static void
 run_test (struct wine_test* test, const char* subtest, HANDLE out_file, const char *tempdir)
 {
-    int status;
     const char* file = get_test_source_file(test->name, subtest);
-    char *cmd = strmake (NULL, "%s %s", test->exename, subtest);
 
-    xprintf ("%s:%s start %s -\n", test->name, subtest, file);
-    status = run_ex (cmd, out_file, tempdir, 120000);
-    heap_free (cmd);
-    xprintf ("%s:%s done (%d)\n", test->name, subtest, status);
+    if (test_filtered_out( test->name, subtest ))
+    {
+        report (R_STEP, "Skipping: %s:%s", test->name, subtest);
+        xprintf ("%s:%s skipped %s -\n", test->name, subtest, file);
+        nr_of_skips++;
+    }
+    else
+    {
+        int status;
+        char *cmd = strmake (NULL, "%s %s", test->exename, subtest);
+        report (R_STEP, "Running: %s:%s", test->name, subtest);
+        xprintf ("%s:%s start %s -\n", test->name, subtest, file);
+        status = run_ex (cmd, out_file, tempdir, 120000);
+        heap_free (cmd);
+        xprintf ("%s:%s done (%d)\n", test->name, subtest, status);
+    }
 }
 
 static BOOL CALLBACK
@@ -686,14 +708,19 @@ extract_test_proc (HMODULE hModule, LPCTSTR lpszType,
     ULONG_PTR cookie;
 
     if (aborting) return TRUE;
-    if (test_filtered_out( lpszName, NULL )) return TRUE;
-
-    CharLowerA(lpszName);
-    extract_test (&wine_tests[nr_of_files], tempdir, lpszName);
 
     /* Check if the main dll is present on this system */
+    CharLowerA(lpszName);
     strcpy(dllname, lpszName);
     *strstr(dllname, testexe) = 0;
+
+    if (test_filtered_out( lpszName, NULL ))
+    {
+        nr_of_skips++;
+        xprintf ("    %s=skipped\n", dllname);
+        return TRUE;
+    }
+    extract_test (&wine_tests[nr_of_files], tempdir, lpszName);
 
     if (pCreateActCtxA != NULL && pActivateActCtx != NULL &&
         pDeactivateActCtx != NULL && pReleaseActCtx != NULL)
@@ -885,6 +912,7 @@ run_tests (char *logname, char *outdir)
     report (R_PROGRESS, 0, nr_of_files);
     nr_of_files = 0;
     nr_of_tests = 0;
+    nr_of_skips = 0;
     if (!EnumResourceNames (NULL, "TESTRES", extract_test_proc, (LPARAM)tempdir))
         report (R_FATAL, "Can't enumerate test files: %d",
                 GetLastError ());
@@ -915,9 +943,7 @@ run_tests (char *logname, char *outdir)
 
 	for (j = 0; j < test->subtest_count; j++) {
             if (aborting) break;
-            report (R_STEP, "Running: %s:%s", test->name,
-                    test->subtests[j]);
-	    run_test (test, test->subtests[j], logfile, tempdir);
+            run_test (test, test->subtests[j], logfile, tempdir);
         }
 
         if (test->maindllpath) {
@@ -1001,12 +1027,15 @@ usage (void)
 " -d DIR    Use DIR as temp directory (default: %%TEMP%%\\wct)\n"
 " -e        preserve the environment\n"
 " -h        print this message and exit\n"
+" -i INFO   an optional description of the test platform\n"
 " -m MAIL   an email address to enable developers to contact you\n"
+" -n        exclude the specified tests\n"
 " -p        shutdown when the tests are done\n"
 " -q        quiet mode, no output at all\n"
 " -o FILE   put report into FILE, do not submit\n"
 " -s FILE   submit FILE, do not run tests\n"
 " -t TAG    include TAG of characters [-.0-9a-zA-Z] in the report\n"
+" -u URL    include TestBot URL in the report\n"
 " -x DIR    Extract tests to DIR (default: .\\wct) and exit\n");
 }
 
@@ -1052,12 +1081,22 @@ int main( int argc, char *argv[] )
         case '?':
             usage ();
             exit (0);
+        case 'i':
+            if (!(description = argv[++i]))
+            {
+                usage();
+                exit( 2 );
+            }
+            break;
         case 'm':
             if (!(email = argv[++i]))
             {
                 usage();
                 exit( 2 );
             }
+            break;
+        case 'n':
+            exclude_tests = TRUE;
             break;
         case 'p':
             poweroff = 1;
@@ -1099,6 +1138,13 @@ int main( int argc, char *argv[] )
                 exit (2);
             }
             break;
+        case 'u':
+            if (!(url = argv[++i]))
+            {
+                usage();
+                exit( 2 );
+            }
+            break;
         case 'x':
             report (R_TEXTMODE);
             if (!(extract = argv[++i]))
@@ -1116,7 +1162,12 @@ int main( int argc, char *argv[] )
         }
     }
     if (!submit && !extract) {
+        int is_win9x = (GetVersion() & 0x80000000) != 0;
+
         report (R_STATUS, "Starting up");
+
+        if (is_win9x)
+            report (R_WARNING, "Running on win9x is not supported. You won't be able to submit results.");
 
         if (!running_on_visible_desktop ())
             report (R_FATAL, "Tests must be run on a visible desktop");
@@ -1137,27 +1188,24 @@ int main( int argc, char *argv[] )
             SetEnvironmentVariableA( "WINETEST_REPORT_SUCCESS", "0" );
         }
 
-        if (!nb_filters)  /* don't submit results when filtering */
-        {
-            while (!tag) {
-                if (!interactive)
-                    report (R_FATAL, "Please specify a tag (-t option) if "
-                            "running noninteractive!");
-                if (guiAskTag () == IDABORT) exit (1);
-            }
-            report (R_TAG);
-
-            while (!email) {
-                if (!interactive)
-                    report (R_FATAL, "Please specify an email address (-m option) to enable developers\n"
-                            "    to contact you about your report if necessary.");
-                if (guiAskEmail () == IDABORT) exit (1);
-            }
-
-            if (!build_id[0])
-                report( R_WARNING, "You won't be able to submit results without a valid build id.\n"
-                        "To submit results, winetest needs to be built from a git checkout." );
+        while (!tag) {
+            if (!interactive)
+                report (R_FATAL, "Please specify a tag (-t option) if "
+                        "running noninteractive!");
+            if (guiAskTag () == IDABORT) exit (1);
         }
+        report (R_TAG);
+
+        while (!email) {
+            if (!interactive)
+                report (R_FATAL, "Please specify an email address (-m option) to enable developers\n"
+                        "    to contact you about your report if necessary.");
+            if (guiAskEmail () == IDABORT) exit (1);
+        }
+
+        if (!build_id[0])
+            report( R_WARNING, "You won't be able to submit results without a valid build id.\n"
+                    "To submit results, winetest needs to be built from a git checkout." );
 
         if (!logname) {
             logname = run_tests (NULL, outdir);
@@ -1165,7 +1213,7 @@ int main( int argc, char *argv[] )
                 DeleteFileA(logname);
                 exit (0);
             }
-            if (build_id[0] && !nb_filters && !nr_native_dlls &&
+            if (build_id[0] && nr_of_skips <= SKIP_LIMIT && !nr_native_dlls && !is_win9x &&
                 report (R_ASK, MB_YESNO, "Do you want to submit the test results?") == IDYES)
                 if (!send_file (logname) && !DeleteFileA(logname))
                     report (R_WARNING, "Can't remove logfile: %u", GetLastError());

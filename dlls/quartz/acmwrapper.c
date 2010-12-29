@@ -37,13 +37,13 @@
 #include "wine/unicode.h"
 #include "wine/debug.h"
 
-#include "transform.h"
-
 WINE_DEFAULT_DEBUG_CHANNEL(quartz);
 
 typedef struct ACMWrapperImpl
 {
-    TransformFilterImpl tf;
+    TransformFilter tf;
+    IUnknown *seekthru_unk;
+
     HACMSTREAM has;
     LPWAVEFORMATEX pWfIn;
     LPWAVEFORMATEX pWfOut;
@@ -52,9 +52,11 @@ typedef struct ACMWrapperImpl
     LONGLONG lasttime_sent;
 } ACMWrapperImpl;
 
-static HRESULT ACMWrapper_ProcessSampleData(InputPin *pin, IMediaSample *pSample)
+static const IBaseFilterVtbl ACMWrapper_Vtbl;
+
+static HRESULT WINAPI ACMWrapper_Receive(TransformFilter *tf, IMediaSample *pSample)
 {
-    ACMWrapperImpl* This = (ACMWrapperImpl*)pin->pin.pinInfo.pFilter;
+    ACMWrapperImpl* This = (ACMWrapperImpl*)tf;
     AM_MEDIA_TYPE amt;
     IMediaSample* pOutSample = NULL;
     DWORD cbDstStream, cbSrcStream;
@@ -65,31 +67,22 @@ static HRESULT ACMWrapper_ProcessSampleData(InputPin *pin, IMediaSample *pSample
     MMRESULT res;
     HRESULT hr;
     LONGLONG tStart = -1, tStop = -1, tMed;
+    LONGLONG mtStart = -1, mtStop = -1, mtMed;
 
-    EnterCriticalSection(&This->tf.csFilter);
-    if (This->tf.state == State_Stopped)
-    {
-        LeaveCriticalSection(&This->tf.csFilter);
-        return VFW_E_WRONG_STATE;
-    }
-
-    if (pin->end_of_stream || pin->flushing)
-    {
-        LeaveCriticalSection(&This->tf.csFilter);
-        return S_FALSE;
-    }
-
+    EnterCriticalSection(&This->tf.filter.csFilter);
     hr = IMediaSample_GetPointer(pSample, &pbSrcStream);
     if (FAILED(hr))
     {
         ERR("Cannot get pointer to sample data (%x)\n", hr);
-        LeaveCriticalSection(&This->tf.csFilter);
+        LeaveCriticalSection(&This->tf.filter.csFilter);
         return hr;
     }
 
     preroll = (IMediaSample_IsPreroll(pSample) == S_OK);
 
     IMediaSample_GetTime(pSample, &tStart, &tStop);
+    if (IMediaSample_GetMediaTime(pSample, &mtStart, &mtStop) != S_OK)
+        mtStart = mtStop = -1;
     cbSrcStream = IMediaSample_GetActualDataLength(pSample);
 
     /* Prevent discontinuities when codecs 'absorb' data but not give anything back in return */
@@ -104,6 +97,7 @@ static HRESULT ACMWrapper_ProcessSampleData(InputPin *pin, IMediaSample *pSample
         WARN("Discontinuity\n");
 
     tMed = tStart;
+    mtMed = mtStart;
 
     TRACE("Sample data ptr = %p, size = %d\n", pbSrcStream, cbSrcStream);
 
@@ -111,7 +105,7 @@ static HRESULT ACMWrapper_ProcessSampleData(InputPin *pin, IMediaSample *pSample
     if (FAILED(hr))
     {
         ERR("Unable to retrieve media type\n");
-        LeaveCriticalSection(&This->tf.csFilter);
+        LeaveCriticalSection(&This->tf.filter.csFilter);
         return hr;
     }
 
@@ -120,11 +114,11 @@ static HRESULT ACMWrapper_ProcessSampleData(InputPin *pin, IMediaSample *pSample
 
     while(hr == S_OK && ash.cbSrcLength)
     {
-        hr = OutputPin_GetDeliveryBuffer((OutputPin*)This->tf.ppPins[1], &pOutSample, NULL, NULL, 0);
+        hr = BaseOutputPinImpl_GetDeliveryBuffer((BaseOutputPin*)This->tf.ppPins[1], &pOutSample, NULL, NULL, 0);
         if (FAILED(hr))
         {
             ERR("Unable to get delivery buffer (%x)\n", hr);
-            LeaveCriticalSection(&This->tf.csFilter);
+            LeaveCriticalSection(&This->tf.filter.csFilter);
             return hr;
         }
         IMediaSample_SetPreroll(pOutSample, preroll);
@@ -202,11 +196,26 @@ static HRESULT ACMWrapper_ProcessSampleData(InputPin *pin, IMediaSample *pSample
             ERR("No valid timestamp found\n");
             IMediaSample_SetTime(pOutSample, NULL, NULL);
         }
+
+        if (mtStart < 0) {
+            IMediaSample_SetMediaTime(pOutSample, NULL, NULL);
+        } else if (ash.cbSrcLengthUsed == cbSrcStream) {
+            IMediaSample_SetMediaTime(pOutSample, &mtStart, &mtStop);
+            mtStart = mtMed = mtStop;
+        } else if (mtStop >= mtStart) {
+            mtMed = mtStop - mtStart;
+            mtMed = mtStart + mtMed * ash.cbSrcLengthUsed / cbSrcStream;
+            IMediaSample_SetMediaTime(pOutSample, &mtStart, &mtMed);
+            mtStart = mtMed;
+        } else {
+            IMediaSample_SetMediaTime(pOutSample, NULL, NULL);
+        }
+
         TRACE("Sample stop time: %u.%03u\n", (DWORD)(tStart/10000000), (DWORD)((tStart/10000)%1000));
 
-        LeaveCriticalSection(&This->tf.csFilter);
-        hr = OutputPin_SendSample((OutputPin*)This->tf.ppPins[1], pOutSample);
-        EnterCriticalSection(&This->tf.csFilter);
+        LeaveCriticalSection(&This->tf.filter.csFilter);
+        hr = BaseOutputPinImpl_Deliver((BaseOutputPin*)This->tf.ppPins[1], pOutSample);
+        EnterCriticalSection(&This->tf.filter.csFilter);
 
         if (hr != S_OK && hr != VFW_E_NOT_CONNECTED) {
             if (FAILED(hr))
@@ -230,16 +239,19 @@ error:
     This->lasttime_real = tStop;
     This->lasttime_sent = tMed;
 
-    LeaveCriticalSection(&This->tf.csFilter);
+    LeaveCriticalSection(&This->tf.filter.csFilter);
     return hr;
 }
 
-static HRESULT ACMWrapper_ConnectInput(InputPin *pin, const AM_MEDIA_TYPE * pmt)
+static HRESULT WINAPI ACMWrapper_SetMediaType(TransformFilter *tf, PIN_DIRECTION dir, const AM_MEDIA_TYPE * pmt)
 {
-    ACMWrapperImpl* This = (ACMWrapperImpl *)pin->pin.pinInfo.pFilter;
+    ACMWrapperImpl* This = (ACMWrapperImpl *)tf;
     MMRESULT res;
 
-    TRACE("(%p)->(%p)\n", This, pmt);
+    TRACE("(%p)->(%i %p)\n", This, dir, pmt);
+
+    if (dir != PINDIR_INPUT)
+        return S_OK;
 
     /* Check root (GUID w/o FOURCC) */
     if ((IsEqualIID(&pmt->majortype, &MEDIATYPE_Audio)) &&
@@ -247,7 +259,11 @@ static HRESULT ACMWrapper_ConnectInput(InputPin *pin, const AM_MEDIA_TYPE * pmt)
         (IsEqualIID(&pmt->formattype, &FORMAT_WaveFormatEx)))
     {
         HACMSTREAM drv;
+        WAVEFORMATEX *wfx = (WAVEFORMATEX*)pmt->pbFormat;
         AM_MEDIA_TYPE* outpmt = &This->tf.pmt;
+
+        if (!wfx || wfx->wFormatTag == WAVE_FORMAT_PCM || wfx->wFormatTag == WAVE_FORMAT_EXTENSIBLE)
+            return VFW_E_TYPE_NOT_ACCEPTED;
         FreeMediaType(outpmt);
 
         This->pWfIn = (LPWAVEFORMATEX)pmt->pbFormat;
@@ -271,8 +287,6 @@ static HRESULT ACMWrapper_ConnectInput(InputPin *pin, const AM_MEDIA_TYPE * pmt)
         {
             This->has = drv;
 
-            /* Update buffer size of media samples in output */
-            ((OutputPin*)This->tf.ppPins[1])->allocProps.cbBuffer = This->pWfOut->nAvgBytesPerSec / 2;
             TRACE("Connection accepted\n");
             return S_OK;
         }
@@ -286,28 +300,78 @@ static HRESULT ACMWrapper_ConnectInput(InputPin *pin, const AM_MEDIA_TYPE * pmt)
     return VFW_E_TYPE_NOT_ACCEPTED;
 }
 
-static HRESULT ACMWrapper_Cleanup(InputPin *pin)
+static HRESULT WINAPI ACMWrapper_CompleteConnect(TransformFilter *tf, PIN_DIRECTION dir, IPin *pin)
 {
-    ACMWrapperImpl *This = (ACMWrapperImpl *)pin->pin.pinInfo.pFilter;
+    ACMWrapperImpl* This = (ACMWrapperImpl *)tf;
+    MMRESULT res;
+    HACMSTREAM drv;
 
-    TRACE("(%p)->()\n", This);
+    TRACE("(%p)\n", This);
 
-    if (This->has)
-        acmStreamClose(This->has, 0);
+    if (dir != PINDIR_INPUT)
+        return S_OK;
 
-    This->has = 0;
-    This->lasttime_real = This->lasttime_sent = -1;
+    if (!(res = acmStreamOpen(&drv, NULL, This->pWfIn, This->pWfOut, NULL, 0, 0, 0)))
+    {
+        This->has = drv;
+
+        TRACE("Connection accepted\n");
+        return S_OK;
+    }
+
+    FIXME("acmStreamOpen returned %d\n", res);
+    TRACE("Unable to find a suitable ACM decompressor\n");
+    return VFW_E_TYPE_NOT_ACCEPTED;
+}
+
+static HRESULT WINAPI ACMWrapper_BreakConnect(TransformFilter *tf, PIN_DIRECTION dir)
+{
+    ACMWrapperImpl *This = (ACMWrapperImpl *)tf;
+
+    TRACE("(%p)->(%i)\n", This,dir);
+
+    if (dir == PINDIR_INPUT)
+    {
+        if (This->has)
+            acmStreamClose(This->has, 0);
+
+        This->has = 0;
+        This->lasttime_real = This->lasttime_sent = -1;
+    }
 
     return S_OK;
 }
 
-static const TransformFuncsTable ACMWrapper_FuncsTable = {
+static HRESULT WINAPI ACMWrapper_DecideBufferSize(TransformFilter *tf, IMemAllocator *pAlloc, ALLOCATOR_PROPERTIES *ppropInputRequest)
+{
+    ACMWrapperImpl *pACM = (ACMWrapperImpl*)tf;
+    ALLOCATOR_PROPERTIES actual;
+
+    if (!ppropInputRequest->cbAlign)
+        ppropInputRequest->cbAlign = 1;
+
+    if (ppropInputRequest->cbBuffer < pACM->pWfOut->nAvgBytesPerSec / 2)
+            ppropInputRequest->cbBuffer = pACM->pWfOut->nAvgBytesPerSec / 2;
+
+    if (!ppropInputRequest->cBuffers)
+        ppropInputRequest->cBuffers = 1;
+
+    return IMemAllocator_SetProperties(pAlloc, ppropInputRequest, &actual);
+}
+
+static const TransformFilterFuncTable ACMWrapper_FuncsTable = {
+    ACMWrapper_DecideBufferSize,
     NULL,
-    ACMWrapper_ProcessSampleData,
+    ACMWrapper_Receive,
     NULL,
     NULL,
-    ACMWrapper_ConnectInput,
-    ACMWrapper_Cleanup
+    ACMWrapper_SetMediaType,
+    ACMWrapper_CompleteConnect,
+    ACMWrapper_BreakConnect,
+    NULL,
+    NULL,
+    NULL,
+    NULL
 };
 
 HRESULT ACMWrapper_create(IUnknown * pUnkOuter, LPVOID * ppv)
@@ -322,17 +386,55 @@ HRESULT ACMWrapper_create(IUnknown * pUnkOuter, LPVOID * ppv)
     if (pUnkOuter)
         return CLASS_E_NOAGGREGATION;
 
-    /* Note: This memory is managed by the transform filter once created */
-    This = CoTaskMemAlloc(sizeof(ACMWrapperImpl));
-    ZeroMemory(This, sizeof(ACMWrapperImpl));
-
-    hr = TransformFilter_Create(&(This->tf), &CLSID_ACMWrapper, &ACMWrapper_FuncsTable, NULL, NULL, NULL);
+    hr = TransformFilter_Construct(&ACMWrapper_Vtbl, sizeof(ACMWrapperImpl), &CLSID_ACMWrapper, &ACMWrapper_FuncsTable, (IBaseFilter**)&This);
 
     if (FAILED(hr))
         return hr;
+    else
+    {
+        ISeekingPassThru *passthru;
+        hr = CoCreateInstance(&CLSID_SeekingPassThru, (IUnknown*)This, CLSCTX_INPROC_SERVER, &IID_IUnknown, (void**)&This->seekthru_unk);
+        IUnknown_QueryInterface(This->seekthru_unk, &IID_ISeekingPassThru, (void**)&passthru);
+        ISeekingPassThru_Init(passthru, FALSE, (IPin*)This->tf.ppPins[0]);
+        ISeekingPassThru_Release(passthru);
+    }
 
     *ppv = This;
     This->lasttime_real = This->lasttime_sent = -1;
 
     return hr;
 }
+
+HRESULT WINAPI ACMWrapper_QueryInterface(IBaseFilter * iface, REFIID riid, LPVOID * ppv)
+{
+    HRESULT hr;
+    ACMWrapperImpl *This = (ACMWrapperImpl *)iface;
+    TRACE("(%p/%p)->(%s, %p)\n", This, iface, qzdebugstr_guid(riid), ppv);
+
+    if (IsEqualIID(riid, &IID_IMediaSeeking))
+        return IUnknown_QueryInterface(This->seekthru_unk, riid, ppv);
+
+    hr = TransformFilterImpl_QueryInterface(iface, riid, ppv);
+
+    return hr;
+}
+
+
+static const IBaseFilterVtbl ACMWrapper_Vtbl =
+{
+    ACMWrapper_QueryInterface,
+    BaseFilterImpl_AddRef,
+    TransformFilterImpl_Release,
+    BaseFilterImpl_GetClassID,
+    TransformFilterImpl_Stop,
+    TransformFilterImpl_Pause,
+    TransformFilterImpl_Run,
+    BaseFilterImpl_GetState,
+    BaseFilterImpl_SetSyncSource,
+    BaseFilterImpl_GetSyncSource,
+    BaseFilterImpl_EnumPins,
+    TransformFilterImpl_FindPin,
+    BaseFilterImpl_QueryFilterInfo,
+    BaseFilterImpl_JoinFilterGraph,
+    BaseFilterImpl_QueryVendorInfo
+};

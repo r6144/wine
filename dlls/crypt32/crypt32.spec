@@ -40,6 +40,7 @@
 @ stdcall CertEnumPhysicalStore(ptr long ptr ptr)
 @ stdcall CertEnumSystemStore(long ptr ptr ptr)
 @ stdcall CertFindAttribute(str long ptr)
+@ stdcall CertFindChainInStore(ptr long long long ptr ptr)
 @ stdcall CertFindCRLInStore(ptr long long long ptr ptr)
 @ stdcall CertFindCTLInStore(ptr long long long ptr ptr)
 @ stdcall CertFindCertificateInStore(ptr long long long ptr ptr)
@@ -113,7 +114,7 @@
 @ stub CryptDecryptMessage
 @ stdcall CryptEncodeObject(long str ptr ptr ptr)
 @ stdcall CryptEncodeObjectEx(long str ptr long ptr ptr ptr)
-@ stub CryptEncryptMessage
+@ stdcall CryptEncryptMessage(ptr long ptr ptr long ptr ptr)
 @ stub CryptEnumOIDFunction
 @ stdcall CryptEnumOIDInfo(long long ptr ptr)
 @ stub CryptEnumProvidersU
@@ -181,7 +182,7 @@
 @ stub CryptSignAndEncryptMessage
 @ stdcall CryptSignCertificate(long long long ptr long ptr ptr ptr ptr)
 @ stub CryptSignHashU
-@ stub CryptSignMessage
+@ stdcall CryptSignMessage(ptr long long ptr ptr ptr ptr)
 @ stub CryptSignMessageWithKey
 @ stdcall CryptUnprotectData(ptr ptr ptr ptr ptr long ptr)
 @ stdcall CryptUnregisterDefaultOIDFunction(long str wstr)

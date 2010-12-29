@@ -105,6 +105,7 @@ struct schan_transport;
 struct schan_buffers
 {
     SIZE_T offset;
+    SIZE_T limit;
     const SecBufferDesc *desc;
     int current_buffer_idx;
     BOOL allow_buffer_resize;
@@ -492,6 +493,7 @@ static void init_schan_buffers(struct schan_buffers *s, const PSecBufferDesc des
         int (*get_next_buffer)(const struct schan_transport *, struct schan_buffers *))
 {
     s->offset = 0;
+    s->limit = 0;
     s->desc = desc;
     s->current_buffer_idx = -1;
     s->allow_buffer_resize = FALSE;
@@ -599,6 +601,16 @@ static ssize_t schan_pull(gnutls_transport_ptr_t transport, void *buff, size_t b
         return -1;
     }
 
+    if (t->in.limit != 0 && t->in.offset + buff_len >= t->in.limit)
+    {
+        buff_len = t->in.limit - t->in.offset;
+        if (buff_len == 0)
+        {
+            pgnutls_transport_set_errno(t->ctx->session, EAGAIN);
+            return -1;
+        }
+    }
+
     memcpy(buff, b, buff_len);
     t->in.offset += buff_len;
 
@@ -681,7 +693,7 @@ static SECURITY_STATUS SEC_ENTRY schan_InitializeSecurityContextW(
     struct schan_transport transport;
     int err;
 
-    TRACE("%p %p %s %d %d %d %p %d %p %p %p %p\n", phCredential, phContext,
+    TRACE("%p %p %s 0x%08x %d %d %p %d %p %p %p %p\n", phCredential, phContext,
      debugstr_w(pszTargetName), fContextReq, Reserved1, TargetDataRep, pInput,
      Reserved1, phNewContext, pOutput, pfContextAttr, ptsExpiry);
 
@@ -762,6 +774,14 @@ static SECURITY_STATUS SEC_ENTRY schan_InitializeSecurityContextW(
 
     /* Perform the TLS handshake */
     err = pgnutls_handshake(ctx->session);
+
+    if(transport.in.offset && transport.in.offset != pInput->pBuffers[0].cbBuffer) {
+        if(pInput->cBuffers<2 || pInput->pBuffers[1].BufferType!=SECBUFFER_EMPTY)
+            return SEC_E_INVALID_TOKEN;
+
+        pInput->pBuffers[1].BufferType = SECBUFFER_EXTRA;
+        pInput->pBuffers[1].cbBuffer = pInput->pBuffers[0].cbBuffer-transport.in.offset;
+    }
 
     out_buffers = &transport.out;
     if (out_buffers->current_buffer_idx != -1)
@@ -1144,6 +1164,62 @@ static int schan_decrypt_message_get_next_buffer(const struct schan_transport *t
     return -1;
 }
 
+static int schan_validate_decrypt_buffer_desc(PSecBufferDesc message)
+{
+    int data_idx = -1;
+    unsigned int empty_count = 0;
+    unsigned int i;
+
+    if (message->cBuffers < 4)
+    {
+        WARN("Less than four buffers passed\n");
+        return -1;
+    }
+
+    for (i = 0; i < message->cBuffers; ++i)
+    {
+        SecBuffer *b = &message->pBuffers[i];
+        if (b->BufferType == SECBUFFER_DATA)
+        {
+            if (data_idx != -1)
+            {
+                WARN("More than one data buffer passed\n");
+                return -1;
+            }
+            data_idx = i;
+        }
+        else if (b->BufferType == SECBUFFER_EMPTY)
+            ++empty_count;
+    }
+
+    if (data_idx == -1)
+    {
+        WARN("No data buffer passed\n");
+        return -1;
+    }
+
+    if (empty_count < 3)
+    {
+        WARN("Less than three empty buffers passed\n");
+        return -1;
+    }
+
+    return data_idx;
+}
+
+static void schan_decrypt_fill_buffer(PSecBufferDesc message, ULONG buffer_type, void *data, ULONG size)
+{
+    int idx;
+    SecBuffer *buffer;
+
+    idx = schan_find_sec_buffer_idx(message, 0, SECBUFFER_EMPTY);
+    buffer = &message->pBuffers[idx];
+
+    buffer->BufferType = buffer_type;
+    buffer->pvBuffer = data;
+    buffer->cbBuffer = size;
+}
+
 static SECURITY_STATUS SEC_ENTRY schan_DecryptMessage(PCtxtHandle context_handle,
         PSecBufferDesc message, ULONG message_seq_no, PULONG quality)
 {
@@ -1152,9 +1228,11 @@ static SECURITY_STATUS SEC_ENTRY schan_DecryptMessage(PCtxtHandle context_handle
     SecBuffer *buffer;
     SIZE_T data_size;
     char *data;
+    unsigned expected_size;
     ssize_t received = 0;
     ssize_t ret;
     int idx;
+    unsigned char *buf_ptr;
 
     TRACE("context_handle %p, message %p, message_seq_no %d, quality %p\n",
             context_handle, message, message_seq_no, quality);
@@ -1164,19 +1242,35 @@ static SECURITY_STATUS SEC_ENTRY schan_DecryptMessage(PCtxtHandle context_handle
 
     dump_buffer_desc(message);
 
-    idx = schan_find_sec_buffer_idx(message, 0, SECBUFFER_DATA);
+    idx = schan_validate_decrypt_buffer_desc(message);
     if (idx == -1)
-    {
-        WARN("No data buffer passed\n");
-        return SEC_E_INTERNAL_ERROR;
-    }
+        return SEC_E_INVALID_TOKEN;
     buffer = &message->pBuffers[idx];
+    buf_ptr = buffer->pvBuffer;
+
+    expected_size = 5 + ((buf_ptr[3] << 8) | buf_ptr[4]);
+    if(buffer->cbBuffer < expected_size)
+    {
+        TRACE("Expected %u bytes, but buffer only contains %u bytes\n", expected_size, buffer->cbBuffer);
+        buffer->BufferType = SECBUFFER_MISSING;
+        buffer->cbBuffer = expected_size - buffer->cbBuffer;
+
+        /* This is a bit weird, but windows does it too */
+        idx = schan_find_sec_buffer_idx(message, 0, SECBUFFER_EMPTY);
+        buffer = &message->pBuffers[idx];
+        buffer->BufferType = SECBUFFER_MISSING;
+        buffer->cbBuffer = expected_size - buffer->cbBuffer;
+
+        TRACE("Returning SEC_E_INCOMPLETE_MESSAGE\n");
+        return SEC_E_INCOMPLETE_MESSAGE;
+    }
 
     data_size = buffer->cbBuffer;
     data = HeapAlloc(GetProcessHeap(), 0, data_size);
 
     transport.ctx = ctx;
     init_schan_buffers(&transport.in, message, schan_decrypt_message_get_next_buffer);
+    transport.in.limit = expected_size;
     init_schan_buffers(&transport.out, NULL, NULL);
     pgnutls_transport_set_ptr(ctx->session, (gnutls_transport_ptr_t)&transport);
 
@@ -1212,9 +1306,21 @@ static SECURITY_STATUS SEC_ENTRY schan_DecryptMessage(PCtxtHandle context_handle
 
     TRACE("Received %zd bytes\n", received);
 
-    memcpy(buffer->pvBuffer, data, received);
-    buffer->cbBuffer = received;
+    memcpy(buf_ptr + 5, data, received);
     HeapFree(GetProcessHeap(), 0, data);
+
+    schan_decrypt_fill_buffer(message, SECBUFFER_DATA,
+        buf_ptr + 5, received);
+
+    schan_decrypt_fill_buffer(message, SECBUFFER_STREAM_TRAILER,
+        buf_ptr + 5 + received, buffer->cbBuffer - 5 - received);
+
+    if(buffer->cbBuffer > expected_size)
+        schan_decrypt_fill_buffer(message, SECBUFFER_EXTRA,
+            buf_ptr + expected_size, buffer->cbBuffer - expected_size);
+
+    buffer->BufferType = SECBUFFER_STREAM_HEADER;
+    buffer->cbBuffer = 5;
 
     return SEC_E_OK;
 }

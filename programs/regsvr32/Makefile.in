@@ -1,8 +1,4 @@
 EXTRADEFS = -DWINE_NO_UNICODE_MACROS
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = regsvr32.exe
 APPMODE   = -mconsole
 IMPORTS   = ole32
@@ -11,5 +7,7 @@ C_SRCS = \
 	regsvr32.c
 
 RC_SRCS = regsvr32.rc
+
+MANPAGE = regsvr32.man
 
 @MAKE_PROG_RULES@

@@ -111,6 +111,8 @@ DWORD WINAPI NotifyAddrChange(PHANDLE Handle, LPOVERLAPPED overlapped);
 
 DWORD WINAPI NotifyRouteChange(PHANDLE Handle, LPOVERLAPPED overlapped);
 
+BOOL WINAPI CancelIPChangeNotify(LPOVERLAPPED overlapped);
+
 DWORD WINAPI GetAdapterIndex(IN LPWSTR AdapterName, OUT PULONG IfIndex);
 
 DWORD WINAPI AddIPAddress(IPAddr Address, IPMask IpMask, DWORD IfIndex,
@@ -140,6 +142,11 @@ DWORD WINAPI GetFriendlyIfIndex(DWORD IfIndex);
 DWORD WINAPI EnableRouter(HANDLE* pHandle, OVERLAPPED* pOverlapped);
 
 DWORD WINAPI UnenableRouter(OVERLAPPED* pOverlapped, LPDWORD lpdwEnableCount);
+
+#ifdef _WINSOCK2API_
+ULONG WINAPI GetAdaptersAddresses(ULONG family, ULONG flags, PVOID reserved,
+                                  PIP_ADAPTER_ADDRESSES aa, PULONG buflen);
+#endif
 
 #ifdef __cplusplus
 }

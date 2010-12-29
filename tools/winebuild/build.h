@@ -47,6 +47,7 @@ typedef enum
     TYPE_STDCALL,      /* stdcall function (Win32) */
     TYPE_CDECL,        /* cdecl function (Win32) */
     TYPE_VARARGS,      /* varargs function (Win32) */
+    TYPE_THISCALL,     /* thiscall function (Win32 on i386) */
     TYPE_EXTERN,       /* external symbol (Win32) */
     TYPE_NBTYPES
 } ORD_TYPE;
@@ -57,6 +58,25 @@ typedef enum
     SPEC_WIN32
 } SPEC_TYPE;
 
+enum arg_type
+{
+    ARG_WORD,     /* 16-bit word */
+    ARG_SWORD,    /* 16-bit signed word */
+    ARG_SEGPTR,   /* segmented pointer */
+    ARG_SEGSTR,   /* segmented pointer to Ansi string */
+    ARG_LONG,     /* long */
+    ARG_PTR,      /* pointer */
+    ARG_STR,      /* pointer to Ansi string */
+    ARG_WSTR,     /* pointer to Unicode string */
+    ARG_INT64,    /* 64-bit integer */
+    ARG_INT128,   /* 128-bit integer */
+    ARG_FLOAT,    /* 32-bit float */
+    ARG_DOUBLE,   /* 64-bit float */
+    ARG_MAXARG = ARG_DOUBLE
+};
+
+#define MAX_ARGUMENTS 32
+
 typedef struct
 {
     int n_values;
@@ -65,7 +85,8 @@ typedef struct
 
 typedef struct
 {
-    char arg_types[21];
+    unsigned int  nb_args;
+    enum arg_type args[MAX_ARGUMENTS];
 } ORD_FUNCTION;
 
 typedef struct
@@ -135,6 +156,13 @@ extern char *target_alias;
 extern enum target_cpu target_cpu;
 extern enum target_platform target_platform;
 
+struct strarray
+{
+    const char **str;
+    unsigned int count;
+    unsigned int max;
+};
+
 /* entry point flags */
 #define FLAG_NORELAY   0x01  /* don't use relay debugging for this function */
 #define FLAG_NONAME    0x02  /* don't export function by name */
@@ -179,6 +207,7 @@ extern enum target_platform target_platform;
 #define	IMAGE_SUBSYSTEM_NATIVE      1
 #define	IMAGE_SUBSYSTEM_WINDOWS_GUI 2
 #define	IMAGE_SUBSYSTEM_WINDOWS_CUI 3
+#define	IMAGE_SUBSYSTEM_WINDOWS_CE_GUI 9
 
 /* global functions */
 
@@ -199,6 +228,11 @@ extern void *xrealloc (void *ptr, size_t size);
 extern char *xstrdup( const char *str );
 extern char *strupper(char *s);
 extern int strendswith(const char* str, const char* end);
+extern char *strmake(const char* fmt, ...) __attribute__((__format__ (__printf__, 1, 2 )));
+extern struct strarray *strarray_init(void);
+extern void strarray_add( struct strarray *array, ... );
+extern void strarray_addv( struct strarray *array, char * const *argv );
+extern void strarray_free( struct strarray *array );
 extern DECLSPEC_NORETURN void fatal_error( const char *msg, ... )
    __attribute__ ((__format__ (__printf__, 1, 2)));
 extern DECLSPEC_NORETURN void fatal_perror( const char *msg, ... )
@@ -211,9 +245,10 @@ extern int output( const char *format, ... )
    __attribute__ ((__format__ (__printf__, 1, 2)));
 extern void output_cfi( const char *format, ... )
    __attribute__ ((__format__ (__printf__, 1, 2)));
+extern void spawn( struct strarray *array );
 extern char *find_tool( const char *name, const char * const *names );
-extern const char *get_as_command(void);
-extern const char *get_ld_command(void);
+extern struct strarray *get_as_command(void);
+extern struct strarray *get_ld_command(void);
 extern const char *get_nm_command(void);
 extern char *get_temp_file_name( const char *prefix, const char *suffix );
 extern void output_standard_file_header(void);
@@ -230,6 +265,7 @@ extern enum target_cpu get_cpu_from_name( const char *name );
 extern unsigned int get_alignment(unsigned int align);
 extern unsigned int get_page_size(void);
 extern unsigned int get_ptr_size(void);
+extern unsigned int get_args_size( const ORDDEF *odp );
 extern const char *asm_name( const char *func );
 extern const char *func_declaration( const char *func );
 extern const char *asm_globl( const char *func );
@@ -243,7 +279,6 @@ extern void output_gnu_stack_note(void);
 
 extern void add_import_dll( const char *name, const char *filename );
 extern void add_delayed_import( const char *name );
-extern void add_ignore_symbol( const char *name );
 extern void add_extra_ld_symbol( const char *name );
 extern void read_undef_symbols( DLLSPEC *spec, char **argv );
 extern void resolve_imports( DLLSPEC *spec );

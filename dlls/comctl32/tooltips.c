@@ -636,7 +636,8 @@ TOOLTIPS_Show (TOOLTIPS_INFO *infoPtr, BOOL track_activate)
             if (!(style & TTS_BALLOON))
                 rect.top  -= (size.cy / 2);
         }
-        infoPtr->bToolBelow = TRUE;
+        if (!(infoPtr->bToolBelow = (infoPtr->yTrackPos + size.cy <= GetSystemMetrics(SM_CYSCREEN))))
+            rect.top -= size.cy;
 
         if (!(toolPtr->uFlags & TTF_ABSOLUTE))
         {
@@ -1430,7 +1431,7 @@ TOOLTIPS_HitTestT (const TOOLTIPS_INFO *infoPtr, LPTTHITTESTINFOW lptthit,
 
 
 static LRESULT
-TOOLTIPS_NewToolRectT (TOOLTIPS_INFO *infoPtr, const TTTOOLINFOW *ti, BOOL isW)
+TOOLTIPS_NewToolRectT (TOOLTIPS_INFO *infoPtr, const TTTOOLINFOW *ti)
 {
     INT nTool;
 
@@ -1840,15 +1841,7 @@ TOOLTIPS_UpdateTipTextT (TOOLTIPS_INFO *infoPtr, const TTTOOLINFOW *ti, BOOL isW
 
 
 static LRESULT
-TOOLTIPS_WindowFromPoint (HWND hwnd, WPARAM wParam, LPARAM lParam)
-{
-    return (LRESULT)WindowFromPoint (*((LPPOINT)lParam));
-}
-
-
-
-static LRESULT
-TOOLTIPS_Create (HWND hwnd, const CREATESTRUCTW *lpcs)
+TOOLTIPS_Create (HWND hwnd)
 {
     TOOLTIPS_INFO *infoPtr;
 
@@ -2220,8 +2213,8 @@ TOOLTIPS_WindowProc (HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
                                       uMsg == TTM_HITTESTW);
 	case TTM_NEWTOOLRECTA:
 	case TTM_NEWTOOLRECTW:
-	    return TOOLTIPS_NewToolRectT (infoPtr, (LPTTTOOLINFOW)lParam,
-                                          uMsg == TTM_NEWTOOLRECTW);
+	    return TOOLTIPS_NewToolRectT (infoPtr, (LPTTTOOLINFOW)lParam);
+
 	case TTM_POP:
 	    return TOOLTIPS_Pop (infoPtr);
 
@@ -2268,11 +2261,10 @@ TOOLTIPS_WindowProc (HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
                                             uMsg == TTM_UPDATETIPTEXTW);
 
 	case TTM_WINDOWFROMPOINT:
-	    return TOOLTIPS_WindowFromPoint (hwnd, wParam, lParam);
-
+	    return (LRESULT)WindowFromPoint (*((LPPOINT)lParam));
 
 	case WM_CREATE:
-	    return TOOLTIPS_Create (hwnd, (LPCREATESTRUCTW)lParam);
+	    return TOOLTIPS_Create (hwnd);
 
 	case WM_DESTROY:
 	    return TOOLTIPS_Destroy (infoPtr);

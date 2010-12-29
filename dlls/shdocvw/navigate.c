@@ -34,8 +34,8 @@ WINE_DEFAULT_DEBUG_CHANNEL(shdocvw);
 static const WCHAR emptyW[] = {0};
 
 typedef struct {
-    const IBindStatusCallbackVtbl  *lpBindStatusCallbackVtbl;
-    const IHttpNegotiateVtbl       *lpHttpNegotiateVtbl;
+    IBindStatusCallback  IBindStatusCallback_iface;
+    IHttpNegotiate       IHttpNegotiate_iface;
 
     LONG ref;
 
@@ -46,9 +46,6 @@ typedef struct {
     BSTR headers;
     ULONG post_data_len;
 } BindStatusCallback;
-
-#define BINDSC(x)  ((IBindStatusCallback*) &(x)->lpBindStatusCallbackVtbl)
-#define HTTPNEG(x) ((IHttpNegotiate*)      &(x)->lpHttpNegotiateVtbl)
 
 static void dump_BINDINFO(BINDINFO *bi)
 {
@@ -125,41 +122,43 @@ static HRESULT set_dochost_url(DocHost *This, const WCHAR *url)
 
     heap_free(This->url);
     This->url = new_url;
+
+    This->container_vtbl->SetURL(This, This->url);
     return S_OK;
 }
 
-#define BINDSC_THIS(iface) DEFINE_THIS(BindStatusCallback, BindStatusCallback, iface)
+static inline BindStatusCallback *impl_from_IBindStatusCallback(IBindStatusCallback *iface)
+{
+    return CONTAINING_RECORD(iface, BindStatusCallback, IBindStatusCallback_iface);
+}
 
 static HRESULT WINAPI BindStatusCallback_QueryInterface(IBindStatusCallback *iface,
                                                         REFIID riid, void **ppv)
 {
-    BindStatusCallback *This = BINDSC_THIS(iface);
-
-    *ppv = NULL;
+    BindStatusCallback *This = impl_from_IBindStatusCallback(iface);
 
     if(IsEqualGUID(&IID_IUnknown, riid)) {
         TRACE("(%p)->(IID_IUnknown %p)\n", This, ppv);
-        *ppv = BINDSC(This);
+        *ppv = &This->IBindStatusCallback_iface;
     }else if(IsEqualGUID(&IID_IBindStatusCallback, riid)) {
         TRACE("(%p)->(IID_IBindStatusCallback %p)\n", This, ppv);
-        *ppv = BINDSC(This);
+        *ppv = &This->IBindStatusCallback_iface;
     }else if(IsEqualGUID(&IID_IHttpNegotiate, riid)) {
         TRACE("(%p)->(IID_IHttpNegotiate %p)\n", This, ppv);
-        *ppv = HTTPNEG(This);
+        *ppv = &This->IHttpNegotiate_iface;
+    }else {
+        *ppv = NULL;
+        WARN("(%p)->(%s %p)\n", This, debugstr_guid(riid), ppv);
+        return E_NOINTERFACE;
     }
 
-    if(*ppv) {
-        IBindStatusCallback_AddRef(BINDSC(This));
-        return S_OK;
-    }
-
-    WARN("(%p)->(%s %p)\n", This, debugstr_guid(riid), ppv);
-    return E_NOINTERFACE;
+    IUnknown_AddRef((IUnknown*)*ppv);
+    return S_OK;
 }
 
 static ULONG WINAPI BindStatusCallback_AddRef(IBindStatusCallback *iface)
 {
-    BindStatusCallback *This = BINDSC_THIS(iface);
+    BindStatusCallback *This = impl_from_IBindStatusCallback(iface);
     LONG ref = InterlockedIncrement(&This->ref);
 
     TRACE("(%p) ref=%d\n", This, ref);
@@ -169,14 +168,14 @@ static ULONG WINAPI BindStatusCallback_AddRef(IBindStatusCallback *iface)
 
 static ULONG WINAPI BindStatusCallback_Release(IBindStatusCallback *iface)
 {
-    BindStatusCallback *This = BINDSC_THIS(iface);
+    BindStatusCallback *This = impl_from_IBindStatusCallback(iface);
     LONG ref = InterlockedDecrement(&This->ref);
 
     TRACE("(%p) ref=%d\n", This, ref);
 
     if(!ref) {
         if(This->doc_host)
-            IOleClientSite_Release(CLIENTSITE(This->doc_host));
+            IOleClientSite_Release(&This->doc_host->IOleClientSite_iface);
         if(This->post_data)
             GlobalFree(This->post_data);
         SysFreeString(This->headers);
@@ -190,7 +189,7 @@ static ULONG WINAPI BindStatusCallback_Release(IBindStatusCallback *iface)
 static HRESULT WINAPI BindStatusCallback_OnStartBinding(IBindStatusCallback *iface,
        DWORD dwReserved, IBinding *pbind)
 {
-    BindStatusCallback *This = BINDSC_THIS(iface);
+    BindStatusCallback *This = impl_from_IBindStatusCallback(iface);
 
     TRACE("(%p)->(%d %p)\n", This, dwReserved, pbind);
 
@@ -200,7 +199,7 @@ static HRESULT WINAPI BindStatusCallback_OnStartBinding(IBindStatusCallback *ifa
 static HRESULT WINAPI BindStatusCallback_GetPriority(IBindStatusCallback *iface,
        LONG *pnPriority)
 {
-    BindStatusCallback *This = BINDSC_THIS(iface);
+    BindStatusCallback *This = impl_from_IBindStatusCallback(iface);
     FIXME("(%p)->(%p)\n", This, pnPriority);
     return E_NOTIMPL;
 }
@@ -208,7 +207,7 @@ static HRESULT WINAPI BindStatusCallback_GetPriority(IBindStatusCallback *iface,
 static HRESULT WINAPI BindStatusCallback_OnLowResource(IBindStatusCallback *iface,
        DWORD reserved)
 {
-    BindStatusCallback *This = BINDSC_THIS(iface);
+    BindStatusCallback *This = impl_from_IBindStatusCallback(iface);
     FIXME("(%p)->(%d)\n", This, reserved);
     return E_NOTIMPL;
 }
@@ -216,7 +215,7 @@ static HRESULT WINAPI BindStatusCallback_OnLowResource(IBindStatusCallback *ifac
 static HRESULT WINAPI BindStatusCallback_OnProgress(IBindStatusCallback *iface,
         ULONG ulProgress, ULONG ulProgressMax, ULONG ulStatusCode, LPCWSTR szStatusText)
 {
-    BindStatusCallback *This = BINDSC_THIS(iface);
+    BindStatusCallback *This = impl_from_IBindStatusCallback(iface);
 
     TRACE("(%p)->(%d %d %d %s)\n", This, ulProgress, ulProgressMax, ulStatusCode,
           debugstr_w(szStatusText));
@@ -245,14 +244,14 @@ static HRESULT WINAPI BindStatusCallback_OnProgress(IBindStatusCallback *iface,
 static HRESULT WINAPI BindStatusCallback_OnStopBinding(IBindStatusCallback *iface,
         HRESULT hresult, LPCWSTR szError)
 {
-    BindStatusCallback *This = BINDSC_THIS(iface);
+    BindStatusCallback *This = impl_from_IBindStatusCallback(iface);
 
     TRACE("(%p)->(%08x %s)\n", This, hresult, debugstr_w(szError));
 
     set_status_text(This, emptyW);
 
     if(This->doc_host) {
-        IOleClientSite_Release(CLIENTSITE(This->doc_host));
+        IOleClientSite_Release(&This->doc_host->IOleClientSite_iface);
         This->doc_host = NULL;
     }
 
@@ -262,7 +261,7 @@ static HRESULT WINAPI BindStatusCallback_OnStopBinding(IBindStatusCallback *ifac
 static HRESULT WINAPI BindStatusCallback_GetBindInfo(IBindStatusCallback *iface,
         DWORD *grfBINDF, BINDINFO *pbindinfo)
 {
-    BindStatusCallback *This = BINDSC_THIS(iface);
+    BindStatusCallback *This = impl_from_IBindStatusCallback(iface);
 
     TRACE("(%p)->(%p %p)\n", This, grfBINDF, pbindinfo);
 
@@ -274,8 +273,8 @@ static HRESULT WINAPI BindStatusCallback_GetBindInfo(IBindStatusCallback *iface,
         pbindinfo->stgmedData.tymed = TYMED_HGLOBAL;
         pbindinfo->stgmedData.u.hGlobal = This->post_data;
         pbindinfo->cbstgmedData = This->post_data_len;
-        pbindinfo->stgmedData.pUnkForRelease = (IUnknown*)BINDSC(This);
-        IBindStatusCallback_AddRef(BINDSC(This));
+        pbindinfo->stgmedData.pUnkForRelease = (IUnknown*)&This->IBindStatusCallback_iface;
+        IBindStatusCallback_AddRef(&This->IBindStatusCallback_iface);
     }
 
     return S_OK;
@@ -284,7 +283,7 @@ static HRESULT WINAPI BindStatusCallback_GetBindInfo(IBindStatusCallback *iface,
 static HRESULT WINAPI BindStatusCallback_OnDataAvailable(IBindStatusCallback *iface,
         DWORD grfBSCF, DWORD dwSize, FORMATETC *pformatetc, STGMEDIUM *pstgmed)
 {
-    BindStatusCallback *This = BINDSC_THIS(iface);
+    BindStatusCallback *This = impl_from_IBindStatusCallback(iface);
     FIXME("(%p)->(%08x %d %p %p)\n", This, grfBSCF, dwSize, pformatetc, pstgmed);
     return E_NOTIMPL;
 }
@@ -292,14 +291,12 @@ static HRESULT WINAPI BindStatusCallback_OnDataAvailable(IBindStatusCallback *if
 static HRESULT WINAPI BindStatusCallback_OnObjectAvailable(IBindStatusCallback *iface,
         REFIID riid, IUnknown *punk)
 {
-    BindStatusCallback *This = BINDSC_THIS(iface);
+    BindStatusCallback *This = impl_from_IBindStatusCallback(iface);
 
     TRACE("(%p)->(%s %p)\n", This, debugstr_guid(riid), punk);
 
     return dochost_object_available(This->doc_host, punk);
 }
-
-#undef BSC_THIS
 
 static const IBindStatusCallbackVtbl BindStatusCallbackVtbl = {
     BindStatusCallback_QueryInterface,
@@ -315,31 +312,34 @@ static const IBindStatusCallbackVtbl BindStatusCallbackVtbl = {
     BindStatusCallback_OnObjectAvailable
 };
 
-#define HTTPNEG_THIS(iface) DEFINE_THIS(BindStatusCallback, HttpNegotiate, iface)
+static inline BindStatusCallback *impl_from_IHttpNegotiate(IHttpNegotiate *iface)
+{
+    return CONTAINING_RECORD(iface, BindStatusCallback, IHttpNegotiate_iface);
+}
 
 static HRESULT WINAPI HttpNegotiate_QueryInterface(IHttpNegotiate *iface,
                                                    REFIID riid, void **ppv)
 {
-    BindStatusCallback *This = HTTPNEG_THIS(iface);
-    return IBindStatusCallback_QueryInterface(BINDSC(This), riid, ppv);
+    BindStatusCallback *This = impl_from_IHttpNegotiate(iface);
+    return IBindStatusCallback_QueryInterface(&This->IBindStatusCallback_iface, riid, ppv);
 }
 
 static ULONG WINAPI HttpNegotiate_AddRef(IHttpNegotiate *iface)
 {
-    BindStatusCallback *This = HTTPNEG_THIS(iface);
-    return IBindStatusCallback_AddRef(BINDSC(This));
+    BindStatusCallback *This = impl_from_IHttpNegotiate(iface);
+    return IBindStatusCallback_AddRef(&This->IBindStatusCallback_iface);
 }
 
 static ULONG WINAPI HttpNegotiate_Release(IHttpNegotiate *iface)
 {
-    BindStatusCallback *This = HTTPNEG_THIS(iface);
-    return IBindStatusCallback_Release(BINDSC(This));
+    BindStatusCallback *This = impl_from_IHttpNegotiate(iface);
+    return IBindStatusCallback_Release(&This->IBindStatusCallback_iface);
 }
 
 static HRESULT WINAPI HttpNegotiate_BeginningTransaction(IHttpNegotiate *iface,
         LPCWSTR szURL, LPCWSTR szHeaders, DWORD dwReserved, LPWSTR *pszAdditionalHeaders)
 {
-    BindStatusCallback *This = HTTPNEG_THIS(iface);
+    BindStatusCallback *This = impl_from_IHttpNegotiate(iface);
 
     TRACE("(%p)->(%s %s %d %p)\n", This, debugstr_w(szURL), debugstr_w(szHeaders),
           dwReserved, pszAdditionalHeaders);
@@ -357,13 +357,11 @@ static HRESULT WINAPI HttpNegotiate_OnResponse(IHttpNegotiate *iface,
         DWORD dwResponseCode, LPCWSTR szResponseHeaders, LPCWSTR szRequestHeaders,
         LPWSTR *pszAdditionalRequestHeaders)
 {
-    BindStatusCallback *This = HTTPNEG_THIS(iface);
+    BindStatusCallback *This = impl_from_IHttpNegotiate(iface);
     TRACE("(%p)->(%d %s %s %p)\n", This, dwResponseCode, debugstr_w(szResponseHeaders),
           debugstr_w(szRequestHeaders), pszAdditionalRequestHeaders);
     return S_OK;
 }
-
-#undef HTTPNEG_THIS
 
 static const IHttpNegotiateVtbl HttpNegotiateVtbl = {
     HttpNegotiate_QueryInterface,
@@ -378,8 +376,8 @@ static BindStatusCallback *create_callback(DocHost *doc_host, LPCWSTR url, PBYTE
 {
     BindStatusCallback *ret = heap_alloc(sizeof(BindStatusCallback));
 
-    ret->lpBindStatusCallbackVtbl = &BindStatusCallbackVtbl;
-    ret->lpHttpNegotiateVtbl      = &HttpNegotiateVtbl;
+    ret->IBindStatusCallback_iface.lpVtbl = &BindStatusCallbackVtbl;
+    ret->IHttpNegotiate_iface.lpVtbl      = &HttpNegotiateVtbl;
 
     ret->ref = 1;
     ret->url = heap_strdupW(url);
@@ -388,7 +386,7 @@ static BindStatusCallback *create_callback(DocHost *doc_host, LPCWSTR url, PBYTE
     ret->headers = headers ? SysAllocString(headers) : NULL;
 
     ret->doc_host = doc_host;
-    IOleClientSite_AddRef(CLIENTSITE(doc_host));
+    IOleClientSite_AddRef(&doc_host->IOleClientSite_iface);
 
     if(post_data) {
         ret->post_data = GlobalAlloc(0, post_data_len);
@@ -544,7 +542,7 @@ static HRESULT bind_to_object(DocHost *This, IMoniker *mon, LPCWSTR url, IBindCt
         return hres;
 
     IBindCtx_RegisterObjectParam(bindctx, (LPOLESTR)SZ_HTML_CLIENTSITE_OBJECTPARAM,
-                                 (IUnknown*)CLIENTSITE(This));
+                                 (IUnknown*)&This->IOleClientSite_iface);
 
     hres = IMoniker_BindToObject(mon, bindctx, NULL, &IID_IUnknown, (void**)&unk);
     if(SUCCEEDED(hres)) {
@@ -710,12 +708,12 @@ static HRESULT navigate_bsc(DocHost *This, BindStatusCallback *bsc, IMoniker *mo
     if(This->document)
         deactivate_document(This);
 
-    CreateAsyncBindCtx(0, BINDSC(bsc), 0, &bindctx);
+    CreateAsyncBindCtx(0, &bsc->IBindStatusCallback_iface, 0, &bindctx);
 
     if(This->frame)
         IOleInPlaceFrame_EnableModeless(This->frame, FALSE);
 
-    hres = bind_to_object(This, mon, bsc->url, bindctx, BINDSC(bsc));
+    hres = bind_to_object(This, mon, bsc->url, bindctx, &bsc->IBindStatusCallback_iface);
 
     if(This->frame)
         IOleInPlaceFrame_EnableModeless(This->frame, TRUE);
@@ -739,7 +737,7 @@ static void navigate_bsc_proc(DocHost *This, task_header_t *t)
 
     navigate_bsc(This, task->bsc, NULL);
 
-    IBindStatusCallback_Release(BINDSC(task->bsc));
+    IBindStatusCallback_Release(&task->bsc->IBindStatusCallback_iface);
 }
 
 
@@ -759,7 +757,7 @@ HRESULT navigate_url(DocHost *This, LPCWSTR url, const VARIANT *Flags,
                 Flags, Flags ? V_VT(Flags) : -1, TargetFrameName,
                 TargetFrameName ? V_VT(TargetFrameName) : -1);
 
-    if(PostData && V_VT(PostData) == (VT_ARRAY | VT_UI1)) {
+    if(PostData && V_VT(PostData) == (VT_ARRAY | VT_UI1) && V_ARRAY(PostData)) {
         SafeArrayAccessData(V_ARRAY(PostData), (void**)&post_data);
         post_data_len = V_ARRAY(PostData)->rgsabound[0].cElements;
     }
@@ -781,7 +779,8 @@ HRESULT navigate_url(DocHost *This, LPCWSTR url, const VARIANT *Flags,
             DWORD size;
 
             size = sizeof(new_url)/sizeof(WCHAR);
-            hres = UrlApplySchemeW(url, new_url, &size, URL_APPLY_GUESSSCHEME);
+            hres = UrlApplySchemeW(url, new_url, &size,
+                    URL_APPLY_GUESSSCHEME | URL_APPLY_DEFAULT);
             if(FAILED(hres)) {
                 WARN("UrlApplyScheme failed: %08x\n", hres);
                 new_url[0] = 0;
@@ -846,7 +845,7 @@ static HRESULT navigate_hlink(DocHost *This, IMoniker *mon, IBindCtx *bindctx,
     }else {
         bsc = create_callback(This, url, post_data, post_data_len, headers);
         hres = navigate_bsc(This, bsc, mon);
-        IBindStatusCallback_Release(BINDSC(bsc));
+        IBindStatusCallback_Release(&bsc->IBindStatusCallback_iface);
     }
 
     CoTaskMemFree(url);
@@ -881,30 +880,44 @@ HRESULT go_home(DocHost *This)
     return navigate_url(This, wszPageName, NULL, NULL, NULL, NULL);
 }
 
-#define HLINKFRAME_THIS(iface) DEFINE_THIS(WebBrowser, HlinkFrame, iface)
+HRESULT get_location_url(DocHost *This, BSTR *ret)
+{
+    FIXME("semi-stub\n");
+
+    *ret = This->url ? SysAllocString(This->url) : SysAllocStringLen(NULL, 0);
+    if(!*ret)
+        return E_OUTOFMEMORY;
+
+    return This->url ? S_OK : S_FALSE;
+}
+
+static inline HlinkFrame *impl_from_IHlinkFrame(IHlinkFrame *iface)
+{
+    return CONTAINING_RECORD(iface, HlinkFrame, IHlinkFrame_iface);
+}
 
 static HRESULT WINAPI HlinkFrame_QueryInterface(IHlinkFrame *iface, REFIID riid, void **ppv)
 {
-    WebBrowser *This = HLINKFRAME_THIS(iface);
-    return IWebBrowser2_QueryInterface(WEBBROWSER2(This), riid, ppv);
+    HlinkFrame *This = impl_from_IHlinkFrame(iface);
+    return IUnknown_QueryInterface(This->outer, riid, ppv);
 }
 
 static ULONG WINAPI HlinkFrame_AddRef(IHlinkFrame *iface)
 {
-    WebBrowser *This = HLINKFRAME_THIS(iface);
-    return IWebBrowser2_AddRef(WEBBROWSER2(This));
+    HlinkFrame *This = impl_from_IHlinkFrame(iface);
+    return IUnknown_AddRef(This->outer);
 }
 
 static ULONG WINAPI HlinkFrame_Release(IHlinkFrame *iface)
 {
-    WebBrowser *This = HLINKFRAME_THIS(iface);
-    return IWebBrowser2_Release(WEBBROWSER2(This));
+    HlinkFrame *This = impl_from_IHlinkFrame(iface);
+    return IUnknown_Release(This->outer);
 }
 
 static HRESULT WINAPI HlinkFrame_SetBrowseContext(IHlinkFrame *iface,
                                                   IHlinkBrowseContext *pihlbc)
 {
-    WebBrowser *This = HLINKFRAME_THIS(iface);
+    HlinkFrame *This = impl_from_IHlinkFrame(iface);
     FIXME("(%p)->(%p)\n", This, pihlbc);
     return E_NOTIMPL;
 }
@@ -912,7 +925,7 @@ static HRESULT WINAPI HlinkFrame_SetBrowseContext(IHlinkFrame *iface,
 static HRESULT WINAPI HlinkFrame_GetBrowseContext(IHlinkFrame *iface,
                                                   IHlinkBrowseContext **ppihlbc)
 {
-    WebBrowser *This = HLINKFRAME_THIS(iface);
+    HlinkFrame *This = impl_from_IHlinkFrame(iface);
     FIXME("(%p)->(%p)\n", This, ppihlbc);
     return E_NOTIMPL;
 }
@@ -920,7 +933,7 @@ static HRESULT WINAPI HlinkFrame_GetBrowseContext(IHlinkFrame *iface,
 static HRESULT WINAPI HlinkFrame_Navigate(IHlinkFrame *iface, DWORD grfHLNF, LPBC pbc,
                                           IBindStatusCallback *pibsc, IHlink *pihlNavigate)
 {
-    WebBrowser *This = HLINKFRAME_THIS(iface);
+    HlinkFrame *This = impl_from_IHlinkFrame(iface);
     IMoniker *mon;
     LPWSTR location = NULL;
 
@@ -945,13 +958,13 @@ static HRESULT WINAPI HlinkFrame_Navigate(IHlinkFrame *iface, DWORD grfHLNF, LPB
         return E_NOTIMPL;
     }
 
-    return navigate_hlink(&This->doc_host, mon, pbc, pibsc);
+    return navigate_hlink(This->doc_host, mon, pbc, pibsc);
 }
 
 static HRESULT WINAPI HlinkFrame_OnNavigate(IHlinkFrame *iface, DWORD grfHLNF,
         IMoniker *pimkTarget, LPCWSTR pwzLocation, LPCWSTR pwzFriendlyName, DWORD dwreserved)
 {
-    WebBrowser *This = HLINKFRAME_THIS(iface);
+    HlinkFrame *This = impl_from_IHlinkFrame(iface);
     FIXME("(%p)->(%08x %p %s %s %d)\n", This, grfHLNF, pimkTarget, debugstr_w(pwzLocation),
           debugstr_w(pwzFriendlyName), dwreserved);
     return E_NOTIMPL;
@@ -960,13 +973,11 @@ static HRESULT WINAPI HlinkFrame_OnNavigate(IHlinkFrame *iface, DWORD grfHLNF,
 static HRESULT WINAPI HlinkFrame_UpdateHlink(IHlinkFrame *iface, ULONG uHLID,
         IMoniker *pimkTarget, LPCWSTR pwzLocation, LPCWSTR pwzFriendlyName)
 {
-    WebBrowser *This = HLINKFRAME_THIS(iface);
+    HlinkFrame *This = impl_from_IHlinkFrame(iface);
     FIXME("(%p)->(%u %p %s %s)\n", This, uHLID, pimkTarget, debugstr_w(pwzLocation),
           debugstr_w(pwzFriendlyName));
     return E_NOTIMPL;
 }
-
-#undef HLINKFRAME_THIS
 
 static const IHlinkFrameVtbl HlinkFrameVtbl = {
     HlinkFrame_QueryInterface,
@@ -979,111 +990,112 @@ static const IHlinkFrameVtbl HlinkFrameVtbl = {
     HlinkFrame_UpdateHlink
 };
 
-#define TARGETFRAME2_THIS(iface) DEFINE_THIS(WebBrowser, ITargetFrame2, iface)
+static inline HlinkFrame *impl_from_ITargetFrame2(ITargetFrame2 *iface)
+{
+    return CONTAINING_RECORD(iface, HlinkFrame, IHlinkFrame_iface);
+}
 
 static HRESULT WINAPI TargetFrame2_QueryInterface(ITargetFrame2 *iface, REFIID riid, void **ppv)
 {
-    WebBrowser *This = TARGETFRAME2_THIS(iface);
-    return IWebBrowser2_QueryInterface(WEBBROWSER2(This), riid, ppv);
+    HlinkFrame *This = impl_from_ITargetFrame2(iface);
+    return IUnknown_QueryInterface(This->outer, riid, ppv);
 }
 
 static ULONG WINAPI TargetFrame2_AddRef(ITargetFrame2 *iface)
 {
-    WebBrowser *This = TARGETFRAME2_THIS(iface);
-    return IWebBrowser2_AddRef(WEBBROWSER2(This));
+    HlinkFrame *This = impl_from_ITargetFrame2(iface);
+    return IUnknown_AddRef(This->outer);
 }
 
 static ULONG WINAPI TargetFrame2_Release(ITargetFrame2 *iface)
 {
-    WebBrowser *This = TARGETFRAME2_THIS(iface);
-    return IWebBrowser2_Release(WEBBROWSER2(This));
+    HlinkFrame *This = impl_from_ITargetFrame2(iface);
+    return IUnknown_Release(This->outer);
 }
 
 static HRESULT WINAPI TargetFrame2_SetFrameName(ITargetFrame2 *iface, LPCWSTR pszFrameName)
 {
-    WebBrowser *This = TARGETFRAME2_THIS(iface);
+    HlinkFrame *This = impl_from_ITargetFrame2(iface);
     FIXME("(%p)->(%s)\n", This, debugstr_w(pszFrameName));
     return E_NOTIMPL;
 }
 
 static HRESULT WINAPI TargetFrame2_GetFrameName(ITargetFrame2 *iface, LPWSTR *ppszFrameName)
 {
-    WebBrowser *This = TARGETFRAME2_THIS(iface);
+    HlinkFrame *This = impl_from_ITargetFrame2(iface);
     FIXME("(%p)->(%p)\n", This, ppszFrameName);
     return E_NOTIMPL;
 }
 
 static HRESULT WINAPI TargetFrame2_GetParentFrame(ITargetFrame2 *iface, IUnknown **ppunkParent)
 {
-    WebBrowser *This = TARGETFRAME2_THIS(iface);
+    HlinkFrame *This = impl_from_ITargetFrame2(iface);
     FIXME("(%p)->(%p)\n", This, ppunkParent);
     return E_NOTIMPL;
 }
 
 static HRESULT WINAPI TargetFrame2_SetFrameSrc(ITargetFrame2 *iface, LPCWSTR pszFrameSrc)
 {
-    WebBrowser *This = TARGETFRAME2_THIS(iface);
+    HlinkFrame *This = impl_from_ITargetFrame2(iface);
     FIXME("(%p)->(%s)\n", This, debugstr_w(pszFrameSrc));
     return E_NOTIMPL;
 }
 
 static HRESULT WINAPI TargetFrame2_GetFrameSrc(ITargetFrame2 *iface, LPWSTR *ppszFrameSrc)
 {
-    WebBrowser *This = TARGETFRAME2_THIS(iface);
+    HlinkFrame *This = impl_from_ITargetFrame2(iface);
     FIXME("(%p)->()\n", This);
     return E_NOTIMPL;
 }
 
 static HRESULT WINAPI TargetFrame2_GetFramesContainer(ITargetFrame2 *iface, IOleContainer **ppContainer)
 {
-    WebBrowser *This = TARGETFRAME2_THIS(iface);
+    HlinkFrame *This = impl_from_ITargetFrame2(iface);
     FIXME("(%p)->(%p)\n", This, ppContainer);
     return E_NOTIMPL;
 }
 
 static HRESULT WINAPI TargetFrame2_SetFrameOptions(ITargetFrame2 *iface, DWORD dwFlags)
 {
-    WebBrowser *This = TARGETFRAME2_THIS(iface);
+    HlinkFrame *This = impl_from_ITargetFrame2(iface);
     FIXME("(%p)->(%x)\n", This, dwFlags);
     return E_NOTIMPL;
 }
 
 static HRESULT WINAPI TargetFrame2_GetFrameOptions(ITargetFrame2 *iface, DWORD *pdwFlags)
 {
-    WebBrowser *This = TARGETFRAME2_THIS(iface);
+    HlinkFrame *This = impl_from_ITargetFrame2(iface);
     FIXME("(%p)->(%p)\n", This, pdwFlags);
     return E_NOTIMPL;
 }
 
 static HRESULT WINAPI TargetFrame2_SetFrameMargins(ITargetFrame2 *iface, DWORD dwWidth, DWORD dwHeight)
 {
-    WebBrowser *This = TARGETFRAME2_THIS(iface);
+    HlinkFrame *This = impl_from_ITargetFrame2(iface);
     FIXME("(%p)->(%d %d)\n", This, dwWidth, dwHeight);
     return E_NOTIMPL;
 }
 
 static HRESULT WINAPI TargetFrame2_GetFrameMargins(ITargetFrame2 *iface, DWORD *pdwWidth, DWORD *pdwHeight)
 {
-    WebBrowser *This = TARGETFRAME2_THIS(iface);
+    HlinkFrame *This = impl_from_ITargetFrame2(iface);
     FIXME("(%p)->(%p %p)\n", This, pdwWidth, pdwHeight);
     return E_NOTIMPL;
 }
 
 static HRESULT WINAPI TargetFrame2_FindFrame(ITargetFrame2 *iface, LPCWSTR pszTargetName, DWORD dwFlags, IUnknown **ppunkTargetFrame)
 {
-    WebBrowser *This = TARGETFRAME2_THIS(iface);
+    HlinkFrame *This = impl_from_ITargetFrame2(iface);
     FIXME("(%p)->(%s %x %p)\n", This, debugstr_w(pszTargetName), dwFlags, ppunkTargetFrame);
     return E_NOTIMPL;
 }
 
 static HRESULT WINAPI TargetFrame2_GetTargetAlias(ITargetFrame2 *iface, LPCWSTR pszTargetName, LPWSTR *ppszTargetAlias)
 {
-    WebBrowser *This = TARGETFRAME2_THIS(iface);
+    HlinkFrame *This = impl_from_ITargetFrame2(iface);
     FIXME("(%p)->(%s %p)\n", This, debugstr_w(pszTargetName), ppszTargetAlias);
     return E_NOTIMPL;
 }
-
-#undef TARGETFRAME2_THIS
 
 static const ITargetFrame2Vtbl TargetFrame2Vtbl = {
     TargetFrame2_QueryInterface,
@@ -1103,8 +1115,27 @@ static const ITargetFrame2Vtbl TargetFrame2Vtbl = {
     TargetFrame2_GetTargetAlias
 };
 
-void WebBrowser_HlinkFrame_Init(WebBrowser *This)
+BOOL HlinkFrame_QI(HlinkFrame *This, REFIID riid, void **ppv)
 {
-    This->lpHlinkFrameVtbl = &HlinkFrameVtbl;
-    This->lpITargetFrame2Vtbl = &TargetFrame2Vtbl;
+    if(IsEqualGUID(&IID_IHlinkFrame, riid)) {
+        TRACE("(%p)->(IID_IHlinkFrame %p)\n", This, ppv);
+        *ppv = &This->IHlinkFrame_iface;
+    }else if(IsEqualGUID(&IID_ITargetFrame2, riid)) {
+        TRACE("(%p)->(IID_ITargetFrame2 %p)\n", This, ppv);
+        *ppv = &This->ITargetFrame2_iface;
+    }else {
+        return FALSE;
+    }
+
+    IUnknown_AddRef((IUnknown*)*ppv);
+    return TRUE;
+}
+
+void HlinkFrame_Init(HlinkFrame *This, IUnknown *outer, DocHost *doc_host)
+{
+    This->IHlinkFrame_iface.lpVtbl   = &HlinkFrameVtbl;
+    This->ITargetFrame2_iface.lpVtbl = &TargetFrame2Vtbl;
+
+    This->outer = outer;
+    This->doc_host = doc_host;
 }

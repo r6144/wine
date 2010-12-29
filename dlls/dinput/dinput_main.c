@@ -44,6 +44,8 @@
 #include "winbase.h"
 #include "winuser.h"
 #include "winerror.h"
+#include "objbase.h"
+#include "rpcproxy.h"
 #include "dinput_private.h"
 #include "device_private.h"
 
@@ -794,24 +796,29 @@ static const IDirectInput8WVtbl ddi8wvt = {
 typedef struct
 {
     /* IUnknown fields */
-    const IClassFactoryVtbl    *lpVtbl;
-    LONG                        ref;
+    IClassFactory IClassFactory_iface;
+    LONG          ref;
 } IClassFactoryImpl;
 
+static inline IClassFactoryImpl *impl_from_IClassFactory(IClassFactory *iface)
+{
+        return CONTAINING_RECORD(iface, IClassFactoryImpl, IClassFactory_iface);
+}
+
 static HRESULT WINAPI DICF_QueryInterface(LPCLASSFACTORY iface,REFIID riid,LPVOID *ppobj) {
-	IClassFactoryImpl *This = (IClassFactoryImpl *)iface;
+	IClassFactoryImpl *This = impl_from_IClassFactory(iface);
 
 	FIXME("(%p)->(%s,%p),stub!\n",This,debugstr_guid(riid),ppobj);
 	return E_NOINTERFACE;
 }
 
 static ULONG WINAPI DICF_AddRef(LPCLASSFACTORY iface) {
-	IClassFactoryImpl *This = (IClassFactoryImpl *)iface;
+	IClassFactoryImpl *This = impl_from_IClassFactory(iface);
 	return InterlockedIncrement(&(This->ref));
 }
 
 static ULONG WINAPI DICF_Release(LPCLASSFACTORY iface) {
-	IClassFactoryImpl *This = (IClassFactoryImpl *)iface;
+	IClassFactoryImpl *This = impl_from_IClassFactory(iface);
 	/* static class, won't be  freed */
 	return InterlockedDecrement(&(This->ref));
 }
@@ -819,7 +826,7 @@ static ULONG WINAPI DICF_Release(LPCLASSFACTORY iface) {
 static HRESULT WINAPI DICF_CreateInstance(
 	LPCLASSFACTORY iface,LPUNKNOWN pOuter,REFIID riid,LPVOID *ppobj
 ) {
-	IClassFactoryImpl *This = (IClassFactoryImpl *)iface;
+	IClassFactoryImpl *This = impl_from_IClassFactory(iface);
 
 	TRACE("(%p)->(%p,%s,%p)\n",This,pOuter,debugstr_guid(riid),ppobj);
         if ( IsEqualGUID( &IID_IUnknown, riid ) ||
@@ -840,7 +847,7 @@ static HRESULT WINAPI DICF_CreateInstance(
 }
 
 static HRESULT WINAPI DICF_LockServer(LPCLASSFACTORY iface,BOOL dolock) {
-	IClassFactoryImpl *This = (IClassFactoryImpl *)iface;
+	IClassFactoryImpl *This = impl_from_IClassFactory(iface);
 	FIXME("(%p)->(%d),stub!\n",This,dolock);
 	return S_OK;
 }
@@ -852,7 +859,7 @@ static const IClassFactoryVtbl DICF_Vtbl = {
 	DICF_CreateInstance,
 	DICF_LockServer
 };
-static IClassFactoryImpl DINPUT_CF = {&DICF_Vtbl, 1 };
+static IClassFactoryImpl DINPUT_CF = {{&DICF_Vtbl}, 1 };
 
 /***********************************************************************
  *		DllCanUnloadNow (DINPUT.@)
@@ -876,6 +883,22 @@ HRESULT WINAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID *ppv)
 
     FIXME("(%s,%s,%p): no interface found.\n", debugstr_guid(rclsid), debugstr_guid(riid), ppv);
     return CLASS_E_CLASSNOTAVAILABLE;
+}
+
+/***********************************************************************
+ *		DllRegisterServer (DINPUT.@)
+ */
+HRESULT WINAPI DllRegisterServer(void)
+{
+    return __wine_register_resources( DINPUT_instance, NULL );
+}
+
+/***********************************************************************
+ *		DllUnregisterServer (DINPUT.@)
+ */
+HRESULT WINAPI DllUnregisterServer(void)
+{
+    return __wine_unregister_resources( DINPUT_instance, NULL );
 }
 
 /******************************************************************************

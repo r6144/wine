@@ -1,8 +1,4 @@
 EXTRADEFS = -DCOM_NO_WINDOWS_H
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = wuapi.dll
 IMPORTS   = uuid ole32 advapi32
 
@@ -10,9 +6,13 @@ C_SRCS = \
 	downloader.c \
 	installer.c \
 	main.c \
-	regsvr.c \
 	searcher.c \
 	session.c \
 	updates.c
+
+IDL_TLB_SRCS = wuapi_tlb.idl
+IDL_R_SRCS   = wuapi_tlb.idl
+
+RC_SRCS = rsrc.rc
 
 @MAKE_DLL_RULES@

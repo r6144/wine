@@ -30,7 +30,6 @@
 #include "winreg.h"
 #include "winternl.h"
 #include "winerror.h"
-#include "wownt32.h"
 #include "gdi_private.h"
 #include "wine/unicode.h"
 #include "wine/debug.h"
@@ -296,6 +295,7 @@ static void construct_window_to_viewport(DC *dc, XFORM *xform)
     xform->eM22 = scaleY;
     xform->eDx  = (double)dc->vportOrgX - scaleX * (double)dc->wndOrgX;
     xform->eDy  = (double)dc->vportOrgY - scaleY * (double)dc->wndOrgY;
+    if (dc->layout & LAYOUT_RTL) xform->eDx = dc->vis_rect.right - dc->vis_rect.left - 1 - xform->eDx;
 }
 
 /***********************************************************************
@@ -550,6 +550,7 @@ BOOL restore_dc_state( HDC hdc, INT level )
         if (dc->hMetaRgn) DeleteObject( dc->hMetaRgn );
         dc->hMetaRgn = 0;
     }
+    DC_UpdateXforms( dc );
     CLIPPING_UpdateGCRegion( dc );
 
     SelectObject( hdc, dcs->hBitmap );
@@ -666,8 +667,11 @@ HDC WINAPI CreateDCW( LPCWSTR driver, LPCWSTR device, LPCWSTR output,
         goto error;
     }
 
-    SetRectRgn( dc->hVisRgn, 0, 0,
-                GetDeviceCaps( hdc, DESKTOPHORZRES ), GetDeviceCaps( hdc, DESKTOPVERTRES ) );
+    dc->vis_rect.left   = 0;
+    dc->vis_rect.top    = 0;
+    dc->vis_rect.right  = GetDeviceCaps( hdc, DESKTOPHORZRES );
+    dc->vis_rect.bottom = GetDeviceCaps( hdc, DESKTOPVERTRES );
+    SetRectRgn(dc->hVisRgn, dc->vis_rect.left, dc->vis_rect.top, dc->vis_rect.right, dc->vis_rect.bottom);
 
     DC_InitDC( dc );
     release_dc_ptr( dc );
@@ -768,6 +772,10 @@ HDC WINAPI CreateCompatibleDC( HDC hdc )
     TRACE("(%p): returning %p\n", hdc, dc->hSelf );
 
     dc->hBitmap = GDI_inc_ref_count( GetStockObject( DEFAULT_BITMAP ));
+    dc->vis_rect.left   = 0;
+    dc->vis_rect.top    = 0;
+    dc->vis_rect.right  = 1;
+    dc->vis_rect.bottom = 1;
     if (!(dc->hVisRgn = CreateRectRgn( 0, 0, 1, 1 ))) goto error;   /* default bitmap is 1x1 */
 
     /* Copy the driver-specific physical device info into
@@ -860,8 +868,12 @@ HDC WINAPI ResetDCW( HDC hdc, const DEVMODEW *devmode )
             if (ret)  /* reset the visible region */
             {
                 dc->dirty = 0;
-                SetRectRgn( dc->hVisRgn, 0, 0, GetDeviceCaps( hdc, DESKTOPHORZRES ),
-                            GetDeviceCaps( hdc, DESKTOPVERTRES ) );
+                dc->vis_rect.left   = 0;
+                dc->vis_rect.top    = 0;
+                dc->vis_rect.right  = GetDeviceCaps( hdc, DESKTOPHORZRES );
+                dc->vis_rect.bottom = GetDeviceCaps( hdc, DESKTOPVERTRES );
+                SetRectRgn( dc->hVisRgn, dc->vis_rect.left, dc->vis_rect.top,
+                            dc->vis_rect.right, dc->vis_rect.bottom );
                 CLIPPING_UpdateGCRegion( dc );
             }
         }
@@ -1057,9 +1069,8 @@ BOOL WINAPI GetDCOrgEx( HDC hDC, LPPOINT lpp )
 
     if (!lpp) return FALSE;
     if (!(dc = get_dc_ptr( hDC ))) return FALSE;
-
-    lpp->x = lpp->y = 0;
-    if (dc->funcs->pGetDCOrgEx) dc->funcs->pGetDCOrgEx( dc->physDev, lpp );
+    lpp->x = dc->vis_rect.left;
+    lpp->y = dc->vis_rect.top;
     release_dc_ptr( dc );
     return TRUE;
 }
@@ -1433,7 +1444,7 @@ WORD WINAPI SetHookFlags( HDC hdc, WORD flags )
     else if (flags & DCHF_VALIDATEVISRGN || !flags)
         ret = InterlockedExchange( &dc->dirty, 0 );
 
-    GDI_ReleaseObj( dc );
+    GDI_ReleaseObj( hdc );
     return ret;
 }
 

@@ -85,7 +85,7 @@ static const WCHAR szToGuidFmt[] =
 
 typedef struct
 {
-    const IEnumDMOVtbl         *lpVtbl;
+    IEnumDMO                    IEnumDMO_iface;
     LONG			ref;
     DWORD			index;
     const GUID*                 guidCategory;
@@ -96,6 +96,11 @@ typedef struct
     DMO_PARTIAL_MEDIATYPE       *pOutTypes;
     HKEY                        hkey;
 } IEnumDMOImpl;
+
+static inline IEnumDMOImpl *impl_from_IEnumDMO(IEnumDMO *iface)
+{
+    return CONTAINING_RECORD(iface, IEnumDMOImpl, IEnumDMO_iface);
+}
 
 static HRESULT read_types(HKEY root, LPCWSTR key, ULONG *supplied, ULONG requested, DMO_PARTIAL_MEDIATYPE* types);
 
@@ -328,12 +333,10 @@ lend:
 
 
 /**************************************************************************
-*   IEnumDMO_Destructor
+*   IEnumDMOImpl_Destructor
 */
-static BOOL IEnumDMO_Destructor(IEnumDMO* iface)
+static BOOL IEnumDMOImpl_Destructor(IEnumDMOImpl* This)
 {
-    IEnumDMOImpl *This = (IEnumDMOImpl *)iface;
-
     TRACE("%p\n", This);
 
     if (This->hkey)
@@ -366,7 +369,7 @@ static IEnumDMO * IEnumDMO_Constructor(
     if (lpedmo)
     {
         lpedmo->ref = 1;
-        lpedmo->lpVtbl = &edmovt;
+        lpedmo->IEnumDMO_iface.lpVtbl = &edmovt;
         lpedmo->index = -1;
 	lpedmo->guidCategory = guidCategory;
 	lpedmo->dwFlags = dwFlags;
@@ -413,7 +416,7 @@ static IEnumDMO * IEnumDMO_Constructor(
 lerr:
         if(!ret)
         {
-            IEnumDMO_Destructor((IEnumDMO*)lpedmo);
+            IEnumDMOImpl_Destructor(lpedmo);
             HeapFree(GetProcessHeap(),0,lpedmo);
             lpedmo = NULL;
         }
@@ -430,7 +433,7 @@ lerr:
  */
 static ULONG WINAPI IEnumDMO_fnAddRef(IEnumDMO * iface)
 {
-    IEnumDMOImpl *This = (IEnumDMOImpl *)iface;
+    IEnumDMOImpl *This = impl_from_IEnumDMO(iface);
     return InterlockedIncrement(&This->ref);
 }
 
@@ -443,7 +446,7 @@ static HRESULT WINAPI IEnumDMO_fnQueryInterface(
     REFIID riid,
     LPVOID *ppvObj)
 {
-    IEnumDMOImpl *This = (IEnumDMOImpl *)iface;
+    IEnumDMOImpl *This = impl_from_IEnumDMO(iface);
 
     *ppvObj = NULL;
 
@@ -467,12 +470,12 @@ static HRESULT WINAPI IEnumDMO_fnQueryInterface(
  */
 static ULONG WINAPI IEnumDMO_fnRelease(IEnumDMO * iface)
 {
-    IEnumDMOImpl *This = (IEnumDMOImpl *)iface;
+    IEnumDMOImpl *This = impl_from_IEnumDMO(iface);
     ULONG refCount = InterlockedDecrement(&This->ref);
 
     if (!refCount)
     {
-        IEnumDMO_Destructor((IEnumDMO*)This);
+        IEnumDMOImpl_Destructor(This);
         HeapFree(GetProcessHeap(),0,This);
     }
     return refCount;
@@ -499,7 +502,7 @@ static HRESULT WINAPI IEnumDMO_fnNext(
     UINT count = 0;
     HRESULT hres = S_OK;
 
-    IEnumDMOImpl *This = (IEnumDMOImpl *)iface;
+    IEnumDMOImpl *This = impl_from_IEnumDMO(iface);
 
     TRACE("--> (%p) %d %p %p %p\n", iface, cItemsToFetch, pCLSID, Names, pcItemsFetched);
 
@@ -638,7 +641,7 @@ static HRESULT WINAPI IEnumDMO_fnNext(
  */
 static HRESULT WINAPI IEnumDMO_fnSkip(IEnumDMO * iface, DWORD cItemsToSkip)
 {
-    IEnumDMOImpl *This = (IEnumDMOImpl *)iface;
+    IEnumDMOImpl *This = impl_from_IEnumDMO(iface);
 
     This->index += cItemsToSkip;
 
@@ -651,7 +654,7 @@ static HRESULT WINAPI IEnumDMO_fnSkip(IEnumDMO * iface, DWORD cItemsToSkip)
  */
 static HRESULT WINAPI IEnumDMO_fnReset(IEnumDMO * iface)
 {
-    IEnumDMOImpl *This = (IEnumDMOImpl *)iface;
+    IEnumDMOImpl *This = impl_from_IEnumDMO(iface);
 
     This->index = -1;
 
@@ -664,7 +667,7 @@ static HRESULT WINAPI IEnumDMO_fnReset(IEnumDMO * iface)
  */
 static HRESULT WINAPI IEnumDMO_fnClone(IEnumDMO * iface, IEnumDMO **ppEnum)
 {
-    IEnumDMOImpl *This = (IEnumDMOImpl *)iface;
+    IEnumDMOImpl *This = impl_from_IEnumDMO(iface);
 
     FIXME("(%p)->() to (%p)->() E_NOTIMPL\n", This, ppEnum);
 

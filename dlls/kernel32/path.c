@@ -162,7 +162,7 @@ static BOOL add_boot_rename_entry( LPCWSTR source, LPCWSTR dest, DWORD flags )
 
     if (NtCreateKey( &Reboot, KEY_ALL_ACCESS, &attr, 0, NULL, 0, NULL ) != STATUS_SUCCESS)
     {
-        WARN("Error creating key for reboot managment [%s]\n",
+        WARN("Error creating key for reboot management [%s]\n",
              "SYSTEM\\CurrentControlSet\\Control\\Session Manager");
         RtlFreeUnicodeString( &source_name );
         RtlFreeUnicodeString( &dest_name );
@@ -660,10 +660,20 @@ UINT WINAPI GetTempFileNameW( LPCWSTR path, LPCWSTR prefix, UINT unique, LPWSTR 
 
     int i;
     LPWSTR p;
+    DWORD attr;
 
     if ( !path || !buffer )
     {
         SetLastError( ERROR_INVALID_PARAMETER );
+        return 0;
+    }
+
+    /* ensure that the provided directory exists */
+    attr = GetFileAttributesW(path);
+    if (attr == INVALID_FILE_ATTRIBUTES || !(attr & FILE_ATTRIBUTE_DIRECTORY))
+    {
+        TRACE("path not found %s\n", debugstr_w(path));
+        SetLastError( ERROR_DIRECTORY );
         return 0;
     }
 

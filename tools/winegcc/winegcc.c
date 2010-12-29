@@ -312,6 +312,68 @@ static const strarray* get_translator(struct options *opts)
     return ret;
 }
 
+/* check that file is a library for the correct platform */
+static int check_platform( struct options *opts, const char *file )
+{
+    int ret = 0, fd = open( file, O_RDONLY );
+    if (fd != -1)
+    {
+        unsigned char header[16];
+        if (read( fd, header, sizeof(header) ) == sizeof(header))
+        {
+            /* FIXME: only ELF is supported, platform is not checked beyond 32/64 */
+            if (!memcmp( header, "\177ELF", 4 ))
+            {
+                if (header[4] == 2)  /* 64-bit */
+                    ret = (opts->force_pointer_size == 8 ||
+                           (!opts->force_pointer_size && opts->target_cpu == CPU_x86_64));
+                else
+                    ret = (opts->force_pointer_size == 4 ||
+                           (!opts->force_pointer_size && opts->target_cpu != CPU_x86_64));
+            }
+        }
+        close( fd );
+    }
+    return ret;
+}
+
+static char *get_lib_dir( struct options *opts )
+{
+    static const char *stdlibpath[] = { LIBDIR, "/usr/lib", "/usr/local/lib", "/lib" };
+    static const char libwine[] = "/libwine.so";
+    unsigned int i;
+
+    for (i = 0; i < sizeof(stdlibpath)/sizeof(stdlibpath[0]); i++)
+    {
+        char *p, *buffer = xmalloc( strlen(stdlibpath[i]) + strlen(libwine) + 3 );
+        strcpy( buffer, stdlibpath[i] );
+        p = buffer + strlen(buffer);
+        while (p > buffer && p[-1] == '/') p--;
+        strcpy( p, libwine );
+        if (check_platform( opts, buffer )) goto found;
+        if (p > buffer + 2 && (!memcmp( p - 2, "32", 2 ) || !memcmp( p - 2, "64", 2 ))) p -= 2;
+        if (opts->force_pointer_size == 4 || (!opts->force_pointer_size && opts->target_cpu != CPU_x86_64))
+        {
+            strcpy( p, "32" );
+            strcat( p, libwine );
+            if (check_platform( opts, buffer )) goto found;
+        }
+        if (opts->force_pointer_size == 8 || (!opts->force_pointer_size && opts->target_cpu == CPU_x86_64))
+        {
+            strcpy( p, "64" );
+            strcat( p, libwine );
+            if (check_platform( opts, buffer )) goto found;
+        }
+        free( buffer );
+        continue;
+
+    found:
+        buffer[strlen(buffer) - strlen(libwine)] = 0;
+        return buffer;
+    }
+    return xstrdup( LIBDIR );
+}
+
 static void compile(struct options* opts, const char* lang)
 {
     strarray* comp_args = strarray_alloc();
@@ -578,7 +640,6 @@ static const char *mingw_unicode_hack( struct options *opts )
 
 static void build(struct options* opts)
 {
-    static const char *stdlibpath[] = { DLLDIR, LIBDIR, "/usr/lib", "/usr/local/lib", "/lib" };
     strarray *lib_dirs, *files;
     strarray *spec_args, *link_args;
     char *output_file;
@@ -628,9 +689,10 @@ static void build(struct options* opts)
     /* prepare the linking path */
     if (!opts->wine_objdir)
     {
+        char *lib_dir = get_lib_dir( opts );
         lib_dirs = strarray_dup(opts->lib_dirs);
-	for ( j = 0; j < sizeof(stdlibpath)/sizeof(stdlibpath[0]); j++ )
-	    strarray_add(lib_dirs, stdlibpath[j]);
+        strarray_add( lib_dirs, strmake( "%s/wine", lib_dir ));
+        strarray_add( lib_dirs, lib_dir );
     }
     else
     {
@@ -745,14 +807,11 @@ static void build(struct options* opts)
         for ( j = 0; j < lib_dirs->size; j++ )
             strarray_add(link_args, strmake("-L%s", lib_dirs->base[j]));
 
-        if (!opts->nostartfiles)
+        if (!opts->nodefaultlibs)
         {
             add_library(opts, lib_dirs, files, "winecrt0");
-            if (!opts->nodefaultlibs)
-            {
-                add_library(opts, lib_dirs, files, "kernel32");
-                add_library(opts, lib_dirs, files, "ntdll");
-            }
+            add_library(opts, lib_dirs, files, "kernel32");
+            add_library(opts, lib_dirs, files, "ntdll");
         }
         if (opts->shared && !opts->nostdlib) add_library(opts, lib_dirs, files, "wine");
         if (!opts->shared && opts->use_msvcrt && opts->target_platform == PLATFORM_CYGWIN)
@@ -833,15 +892,12 @@ static void build(struct options* opts)
         add_library(opts, lib_dirs, files, "user32");
     }
 
-    if (!opts->nostartfiles)
+    if (!opts->nodefaultlibs)
     {
         add_library(opts, lib_dirs, files, "winecrt0");
-        if (!opts->nodefaultlibs)
-        {
-            if (opts->win16_app) add_library(opts, lib_dirs, files, "kernel");
-            add_library(opts, lib_dirs, files, "kernel32");
-            add_library(opts, lib_dirs, files, "ntdll");
-        }
+        if (opts->win16_app) add_library(opts, lib_dirs, files, "kernel");
+        add_library(opts, lib_dirs, files, "kernel32");
+        add_library(opts, lib_dirs, files, "ntdll");
     }
     if (!opts->nostdlib) add_library(opts, lib_dirs, files, "wine");
 

@@ -79,7 +79,7 @@ static LRESULT CALLBACK mmioDosIOProc(LPMMIOINFO lpmmioinfo, UINT uMessage,
                 lpmmioinfo->adwInfo[0] = OpenFile(szFileName, &ofs, lpmmioinfo->dwFlags & 0xFFFF);
             }
 	    if (lpmmioinfo->adwInfo[0] == HFILE_ERROR)
-		ret = MMIOERR_CANNOTOPEN;
+		ret = MMIOERR_FILENOTFOUND;
 	}
 	break;
 
@@ -383,39 +383,40 @@ static FOURCC MMIO_ParseExtA(LPCSTR szFileName)
     LPSTR extEnd;
     LPSTR extStart;
 
+    CHAR ext[5];
+
     TRACE("(%s)\n", debugstr_a(szFileName));
 
     if (!szFileName)
 	return ret;
 
-    /* Find the last '.' */
-    extStart = strrchr(szFileName,'.');
+    /* Find the last '+' */
+    extEnd = strrchr(szFileName,'+');
 
-    if (!extStart) {
-         ERR("No . in szFileName: %s\n", debugstr_a(szFileName));
+    if (!extEnd) {
+         /* No + so just an extension */
+         return ret;
     } else {
-        CHAR ext[5];
-
-        /* Find the '+' afterwards */
-        extEnd = strchr(extStart,'+');
-        if (extEnd) {
-
-            if (extEnd - extStart - 1 > 4)
-                WARN("Extension length > 4\n");
-            lstrcpynA(ext, extStart + 1, min(extEnd-extStart,5));
-
-        } else {
-            /* No + so just an extension */
-            if (strlen(extStart) > 4) {
-                WARN("Extension length > 4\n");
-            }
-            lstrcpynA(ext, extStart + 1, 5);
+        /* Find the first '.' before '+' */
+        extStart = extEnd - 1;
+        while (extStart >= szFileName && *extStart != '.') {
+            extStart--;
         }
-        TRACE("Got extension: %s\n", debugstr_a(ext));
-
-        /* FOURCC codes identifying file-extensions must be uppercase */
-        ret = mmioStringToFOURCCA(ext, MMIO_TOUPPER);
+        if (extStart < szFileName) {
+            ERR("No extension in szFileName: %s\n", debugstr_a(szFileName));
+            return ret;
+        }
     }
+
+    if (extEnd - extStart - 1 > 4)
+        WARN("Extension length > 4\n");
+    lstrcpynA(ext, extStart + 1, min(extEnd-extStart,5));
+
+    TRACE("Got extension: %s\n", debugstr_a(ext));
+
+    /* FOURCC codes identifying file-extensions must be uppercase */
+    ret = mmioStringToFOURCCA(ext, MMIO_TOUPPER);
+
     return ret;
 }
 
@@ -616,13 +617,13 @@ static HMMIO MMIO_Open(LPSTR szFileName, MMIOINFO* refmminfo, DWORD dwOpenFlags,
     if (refmminfo->fccIOProc == 0 && refmminfo->pIOProc == NULL) {
 	wm->info.fccIOProc = MMIO_ParseExtA(szFileName);
 	/* Handle any unhandled/error case. Assume DOS file */
-	if (wm->info.fccIOProc == 0)
+	if (wm->info.fccIOProc == 0) {
 	    wm->info.fccIOProc = FOURCC_DOS;
-	if (!(wm->ioProc = MMIO_FindProcNode(wm->info.fccIOProc))) {
-	    /* If not found, retry with FOURCC_DOS */
-	    wm->info.fccIOProc = FOURCC_DOS;
-	    if (!(wm->ioProc = MMIO_FindProcNode(wm->info.fccIOProc)))
-		goto error2;
+	    wm->ioProc = &defaultProcs[0];
+	}
+	else if (!(wm->ioProc = MMIO_FindProcNode(wm->info.fccIOProc))) {
+	    /* If not found, assume DOS file */
+	    wm->ioProc = &defaultProcs[0];
 	}
 	wm->bTmpIOProc = FALSE;
     }
@@ -1314,7 +1315,7 @@ MMRESULT WINAPI mmioRenameA(LPCSTR szFileName, LPCSTR szNewFileName,
 
     /* Handle any unhandled/error case from above. Assume DOS file */
     if (!lpmmioinfo || (lpmmioinfo->fccIOProc == 0 && lpmmioinfo->pIOProc == NULL && ioProc == NULL))
-	ioProc = MMIO_FindProcNode(FOURCC_DOS);
+	ioProc = &defaultProcs[0];
     /* if just the four character code is present, look up IO proc */
     else if (lpmmioinfo->pIOProc == NULL)
         ioProc = MMIO_FindProcNode(lpmmioinfo->fccIOProc);

@@ -27,7 +27,7 @@
 #include "winbase.h"
 #include "winuser.h"
 #include "ole2.h"
-#include "msxml2.h"
+#include "msxml6.h"
 
 #include "msxml_private.h"
 
@@ -40,13 +40,13 @@ WINE_DEFAULT_DEBUG_CHANNEL(msxml);
 typedef struct _dom_pi
 {
     xmlnode node;
-    const struct IXMLDOMProcessingInstructionVtbl *lpVtbl;
+    IXMLDOMProcessingInstruction IXMLDOMProcessingInstruction_iface;
     LONG ref;
 } dom_pi;
 
 static inline dom_pi *impl_from_IXMLDOMProcessingInstruction( IXMLDOMProcessingInstruction *iface )
 {
-    return (dom_pi *)((char*)iface - FIELD_OFFSET(dom_pi, lpVtbl));
+    return CONTAINING_RECORD(iface, dom_pi, IXMLDOMProcessingInstruction_iface);
 }
 
 static HRESULT WINAPI dom_pi_QueryInterface(
@@ -58,14 +58,15 @@ static HRESULT WINAPI dom_pi_QueryInterface(
     TRACE("(%p)->(%s %p)\n", This, debugstr_guid(riid), ppvObject);
 
     if ( IsEqualGUID( riid, &IID_IXMLDOMProcessingInstruction ) ||
+         IsEqualGUID( riid, &IID_IXMLDOMNode ) ||
          IsEqualGUID( riid, &IID_IDispatch ) ||
          IsEqualGUID( riid, &IID_IUnknown ) )
     {
         *ppvObject = iface;
     }
-    else if ( IsEqualGUID( riid, &IID_IXMLDOMNode ) )
+    else if(node_query_interface(&This->node, riid, ppvObject))
     {
-        *ppvObject = IXMLDOMNode_from_impl(&This->node);
+        return *ppvObject ? S_OK : E_NOINTERFACE;
     }
     else
     {
@@ -169,8 +170,8 @@ static HRESULT WINAPI dom_pi_Invoke(
     hr = get_typeinfo(IXMLDOMProcessingInstruction_tid, &typeinfo);
     if(SUCCEEDED(hr))
     {
-       hr = ITypeInfo_Invoke(typeinfo, &(This->lpVtbl), dispIdMember, wFlags, pDispParams,
-                pVarResult, pExcepInfo, puArgErr);
+       hr = ITypeInfo_Invoke(typeinfo, &This->IXMLDOMProcessingInstruction_iface, dispIdMember,
+                wFlags, pDispParams, pVarResult, pExcepInfo, puArgErr);
         ITypeInfo_Release(typeinfo);
     }
 
@@ -182,33 +183,39 @@ static HRESULT WINAPI dom_pi_get_nodeName(
     BSTR* p )
 {
     dom_pi *This = impl_from_IXMLDOMProcessingInstruction( iface );
-    return IXMLDOMNode_get_nodeName( IXMLDOMNode_from_impl(&This->node), p );
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    return node_get_nodeName(&This->node, p);
 }
 
 static HRESULT WINAPI dom_pi_get_nodeValue(
     IXMLDOMProcessingInstruction *iface,
-    VARIANT* var1 )
+    VARIANT* value)
 {
     dom_pi *This = impl_from_IXMLDOMProcessingInstruction( iface );
-    return IXMLDOMNode_get_nodeValue( IXMLDOMNode_from_impl(&This->node), var1 );
+
+    TRACE("(%p)->(%p)\n", This, value);
+
+    return node_get_content(&This->node, value);
 }
 
 static HRESULT WINAPI dom_pi_put_nodeValue(
     IXMLDOMProcessingInstruction *iface,
-    VARIANT var1 )
+    VARIANT value)
 {
     dom_pi *This = impl_from_IXMLDOMProcessingInstruction( iface );
     BSTR sTarget;
-    static const WCHAR szXML[] = {'x','m','l',0};
     HRESULT hr;
 
-    TRACE("%p\n", This );
+    TRACE("(%p)->(v%d)\n", This, V_VT(&value));
 
     /* Cannot set data to a PI node whose target is 'xml' */
     hr = dom_pi_get_nodeName(iface, &sTarget);
     if(hr == S_OK)
     {
-        if(lstrcmpW( sTarget, szXML) == 0)
+        static const WCHAR xmlW[] = {'x','m','l',0};
+        if(lstrcmpW( sTarget, xmlW) == 0)
         {
             SysFreeString(sTarget);
             return E_FAIL;
@@ -217,7 +224,7 @@ static HRESULT WINAPI dom_pi_put_nodeValue(
         SysFreeString(sTarget);
     }
 
-    return IXMLDOMNode_put_nodeValue( IXMLDOMNode_from_impl(&This->node), var1 );
+    return node_put_value(&This->node, &value);
 }
 
 static HRESULT WINAPI dom_pi_get_nodeType(
@@ -225,7 +232,11 @@ static HRESULT WINAPI dom_pi_get_nodeType(
     DOMNodeType* domNodeType )
 {
     dom_pi *This = impl_from_IXMLDOMProcessingInstruction( iface );
-    return IXMLDOMNode_get_nodeType( IXMLDOMNode_from_impl(&This->node), domNodeType );
+
+    TRACE("(%p)->(%p)\n", This, domNodeType);
+
+    *domNodeType = NODE_PROCESSING_INSTRUCTION;
+    return S_OK;
 }
 
 static HRESULT WINAPI dom_pi_get_parentNode(
@@ -233,7 +244,10 @@ static HRESULT WINAPI dom_pi_get_parentNode(
     IXMLDOMNode** parent )
 {
     dom_pi *This = impl_from_IXMLDOMProcessingInstruction( iface );
-    return IXMLDOMNode_get_parentNode( IXMLDOMNode_from_impl(&This->node), parent );
+
+    TRACE("(%p)->(%p)\n", This, parent);
+
+    return node_get_parent(&This->node, parent);
 }
 
 static HRESULT WINAPI dom_pi_get_childNodes(
@@ -241,7 +255,10 @@ static HRESULT WINAPI dom_pi_get_childNodes(
     IXMLDOMNodeList** outList)
 {
     dom_pi *This = impl_from_IXMLDOMProcessingInstruction( iface );
-    return IXMLDOMNode_get_childNodes( IXMLDOMNode_from_impl(&This->node), outList );
+
+    TRACE("(%p)->(%p)\n", This, outList);
+
+    return node_get_child_nodes(&This->node, outList);
 }
 
 static HRESULT WINAPI dom_pi_get_firstChild(
@@ -249,7 +266,10 @@ static HRESULT WINAPI dom_pi_get_firstChild(
     IXMLDOMNode** domNode)
 {
     dom_pi *This = impl_from_IXMLDOMProcessingInstruction( iface );
-    return IXMLDOMNode_get_firstChild( IXMLDOMNode_from_impl(&This->node), domNode );
+
+    TRACE("(%p)->(%p)\n", This, domNode);
+
+    return return_null_node(domNode);
 }
 
 static HRESULT WINAPI dom_pi_get_lastChild(
@@ -257,7 +277,10 @@ static HRESULT WINAPI dom_pi_get_lastChild(
     IXMLDOMNode** domNode)
 {
     dom_pi *This = impl_from_IXMLDOMProcessingInstruction( iface );
-    return IXMLDOMNode_get_lastChild( IXMLDOMNode_from_impl(&This->node), domNode );
+
+    TRACE("(%p)->(%p)\n", This, domNode);
+
+    return return_null_node(domNode);
 }
 
 static HRESULT WINAPI dom_pi_get_previousSibling(
@@ -265,7 +288,10 @@ static HRESULT WINAPI dom_pi_get_previousSibling(
     IXMLDOMNode** domNode)
 {
     dom_pi *This = impl_from_IXMLDOMProcessingInstruction( iface );
-    return IXMLDOMNode_get_previousSibling( IXMLDOMNode_from_impl(&This->node), domNode );
+
+    TRACE("(%p)->(%p)\n", This, domNode);
+
+    return node_get_previous_sibling(&This->node, domNode);
 }
 
 static HRESULT WINAPI dom_pi_get_nextSibling(
@@ -273,7 +299,10 @@ static HRESULT WINAPI dom_pi_get_nextSibling(
     IXMLDOMNode** domNode)
 {
     dom_pi *This = impl_from_IXMLDOMProcessingInstruction( iface );
-    return IXMLDOMNode_get_nextSibling( IXMLDOMNode_from_impl(&This->node), domNode );
+
+    TRACE("(%p)->(%p)\n", This, domNode);
+
+    return node_get_next_sibling(&This->node, domNode);
 }
 
 static HRESULT WINAPI dom_pi_get_attributes(
@@ -281,16 +310,23 @@ static HRESULT WINAPI dom_pi_get_attributes(
     IXMLDOMNamedNodeMap** attributeMap)
 {
     dom_pi *This = impl_from_IXMLDOMProcessingInstruction( iface );
-    return IXMLDOMNode_get_attributes( IXMLDOMNode_from_impl(&This->node), attributeMap );
+
+    TRACE("(%p)->(%p)\n", This, attributeMap);
+
+    *attributeMap = create_nodemap((IXMLDOMNode*)&This->IXMLDOMProcessingInstruction_iface);
+    return S_OK;
 }
 
 static HRESULT WINAPI dom_pi_insertBefore(
     IXMLDOMProcessingInstruction *iface,
-    IXMLDOMNode* newNode, VARIANT var1,
+    IXMLDOMNode* newNode, VARIANT refChild,
     IXMLDOMNode** outOldNode)
 {
     dom_pi *This = impl_from_IXMLDOMProcessingInstruction( iface );
-    return IXMLDOMNode_insertBefore( IXMLDOMNode_from_impl(&This->node), newNode, var1, outOldNode );
+
+    FIXME("(%p)->(%p x%d %p) needs test\n", This, newNode, V_VT(&refChild), outOldNode);
+
+    return node_insert_before(&This->node, newNode, &refChild, outOldNode);
 }
 
 static HRESULT WINAPI dom_pi_replaceChild(
@@ -300,7 +336,10 @@ static HRESULT WINAPI dom_pi_replaceChild(
     IXMLDOMNode** outOldNode)
 {
     dom_pi *This = impl_from_IXMLDOMProcessingInstruction( iface );
-    return IXMLDOMNode_replaceChild( IXMLDOMNode_from_impl(&This->node), newNode, oldNode, outOldNode );
+
+    FIXME("(%p)->(%p %p %p) needs test\n", This, newNode, oldNode, outOldNode);
+
+    return node_replace_child(&This->node, newNode, oldNode, outOldNode);
 }
 
 static HRESULT WINAPI dom_pi_removeChild(
@@ -337,10 +376,11 @@ static HRESULT WINAPI dom_pi_get_ownerDocument(
 
 static HRESULT WINAPI dom_pi_cloneNode(
     IXMLDOMProcessingInstruction *iface,
-    VARIANT_BOOL pbool, IXMLDOMNode** outNode)
+    VARIANT_BOOL deep, IXMLDOMNode** outNode)
 {
     dom_pi *This = impl_from_IXMLDOMProcessingInstruction( iface );
-    return IXMLDOMNode_cloneNode( IXMLDOMNode_from_impl(&This->node), pbool, outNode );
+    TRACE("(%p)->(%d %p)\n", This, deep, outNode);
+    return node_clone( &This->node, deep, outNode );
 }
 
 static HRESULT WINAPI dom_pi_get_nodeTypeString(
@@ -348,7 +388,12 @@ static HRESULT WINAPI dom_pi_get_nodeTypeString(
     BSTR* p)
 {
     dom_pi *This = impl_from_IXMLDOMProcessingInstruction( iface );
-    return IXMLDOMNode_get_nodeTypeString( IXMLDOMNode_from_impl(&This->node), p );
+    static const WCHAR processinginstructionW[] =
+        {'p','r','o','c','e','s','s','i','n','g','i','n','s','t','r','u','c','t','i','o','n',0};
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    return return_bstr(processinginstructionW, p);
 }
 
 static HRESULT WINAPI dom_pi_get_text(
@@ -364,23 +409,27 @@ static HRESULT WINAPI dom_pi_put_text(
     BSTR p)
 {
     dom_pi *This = impl_from_IXMLDOMProcessingInstruction( iface );
-    return IXMLDOMNode_put_text( IXMLDOMNode_from_impl(&This->node), p );
+    TRACE("(%p)->(%s)\n", This, debugstr_w(p));
+    return node_put_text( &This->node, p );
 }
 
 static HRESULT WINAPI dom_pi_get_specified(
     IXMLDOMProcessingInstruction *iface,
-    VARIANT_BOOL* pbool)
+    VARIANT_BOOL* isSpecified)
 {
     dom_pi *This = impl_from_IXMLDOMProcessingInstruction( iface );
-    return IXMLDOMNode_get_specified( IXMLDOMNode_from_impl(&This->node), pbool );
+    FIXME("(%p)->(%p) stub!\n", This, isSpecified);
+    *isSpecified = VARIANT_TRUE;
+    return S_OK;
 }
 
 static HRESULT WINAPI dom_pi_get_definition(
     IXMLDOMProcessingInstruction *iface,
-    IXMLDOMNode** domNode)
+    IXMLDOMNode** definitionNode)
 {
     dom_pi *This = impl_from_IXMLDOMProcessingInstruction( iface );
-    return IXMLDOMNode_get_definition( IXMLDOMNode_from_impl(&This->node), domNode );
+    FIXME("(%p)->(%p)\n", This, definitionNode);
+    return E_NOTIMPL;
 }
 
 static HRESULT WINAPI dom_pi_get_nodeTypedValue(
@@ -401,10 +450,11 @@ static HRESULT WINAPI dom_pi_put_nodeTypedValue(
 
 static HRESULT WINAPI dom_pi_get_dataType(
     IXMLDOMProcessingInstruction *iface,
-    VARIANT* var1)
+    VARIANT* typename)
 {
     dom_pi *This = impl_from_IXMLDOMProcessingInstruction( iface );
-    return IXMLDOMNode_get_dataType( IXMLDOMNode_from_impl(&This->node), var1 );
+    TRACE("(%p)->(%p)\n", This, typename);
+    return return_null_var( typename );
 }
 
 static HRESULT WINAPI dom_pi_put_dataType(
@@ -420,7 +470,10 @@ static HRESULT WINAPI dom_pi_get_xml(
     BSTR* p)
 {
     dom_pi *This = impl_from_IXMLDOMProcessingInstruction( iface );
-    return IXMLDOMNode_get_xml( IXMLDOMNode_from_impl(&This->node), p );
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    return node_get_xml(&This->node, FALSE, FALSE, p);
 }
 
 static HRESULT WINAPI dom_pi_transformNode(
@@ -449,10 +502,12 @@ static HRESULT WINAPI dom_pi_selectSingleNode(
 
 static HRESULT WINAPI dom_pi_get_parsed(
     IXMLDOMProcessingInstruction *iface,
-    VARIANT_BOOL* pbool)
+    VARIANT_BOOL* isParsed)
 {
     dom_pi *This = impl_from_IXMLDOMProcessingInstruction( iface );
-    return IXMLDOMNode_get_parsed( IXMLDOMNode_from_impl(&This->node), pbool );
+    FIXME("(%p)->(%p) stub!\n", This, isParsed);
+    *isParsed = VARIANT_TRUE;
+    return S_OK;
 }
 
 static HRESULT WINAPI dom_pi_get_namespaceURI(
@@ -465,18 +520,20 @@ static HRESULT WINAPI dom_pi_get_namespaceURI(
 
 static HRESULT WINAPI dom_pi_get_prefix(
     IXMLDOMProcessingInstruction *iface,
-    BSTR* p)
+    BSTR* prefix)
 {
     dom_pi *This = impl_from_IXMLDOMProcessingInstruction( iface );
-    return IXMLDOMNode_get_prefix( IXMLDOMNode_from_impl(&This->node), p );
+    TRACE("(%p)->(%p)\n", This, prefix);
+    return return_null_bstr( prefix );
 }
 
 static HRESULT WINAPI dom_pi_get_baseName(
     IXMLDOMProcessingInstruction *iface,
-    BSTR* p)
+    BSTR* name)
 {
     dom_pi *This = impl_from_IXMLDOMProcessingInstruction( iface );
-    return IXMLDOMNode_get_baseName( IXMLDOMNode_from_impl(&This->node), p );
+    TRACE("(%p)->(%p)\n", This, name);
+    return node_get_base_name( &This->node, name );
 }
 
 static HRESULT WINAPI dom_pi_transformNodeToObject(
@@ -491,9 +548,12 @@ static HRESULT WINAPI dom_pi_get_target(
     IXMLDOMProcessingInstruction *iface,
     BSTR *p)
 {
-    /* target returns the same value as nodeName property */
     dom_pi *This = impl_from_IXMLDOMProcessingInstruction( iface );
-    return IXMLDOMNode_get_nodeName( IXMLDOMNode_from_impl(&This->node), p );
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    /* target returns the same value as nodeName property */
+    return node_get_nodeName(&This->node, p);
 }
 
 static HRESULT WINAPI dom_pi_get_data(
@@ -501,16 +561,18 @@ static HRESULT WINAPI dom_pi_get_data(
     BSTR *p)
 {
     dom_pi *This = impl_from_IXMLDOMProcessingInstruction( iface );
-    HRESULT hr = E_FAIL;
-    VARIANT vRet;
+    HRESULT hr;
+    VARIANT ret;
+
+    TRACE("(%p)->(%p)\n", This, p);
 
     if(!p)
         return E_INVALIDARG;
 
-    hr = IXMLDOMNode_get_nodeValue( IXMLDOMNode_from_impl(&This->node), &vRet );
+    hr = IXMLDOMProcessingInstruction_get_nodeValue( iface, &ret );
     if(hr == S_OK)
     {
-        *p = V_BSTR(&vRet);
+        *p = V_BSTR(&ret);
     }
 
     return hr;
@@ -521,10 +583,9 @@ static HRESULT WINAPI dom_pi_put_data(
     BSTR data)
 {
     dom_pi *This = impl_from_IXMLDOMProcessingInstruction( iface );
-    HRESULT hr = E_FAIL;
+    HRESULT hr;
     VARIANT val;
     BSTR sTarget;
-    static const WCHAR szXML[] = {'x','m','l',0};
 
     TRACE("(%p)->(%s)\n", This, debugstr_w(data) );
 
@@ -532,7 +593,8 @@ static HRESULT WINAPI dom_pi_put_data(
     hr = dom_pi_get_nodeName(iface, &sTarget);
     if(hr == S_OK)
     {
-        if(lstrcmpW( sTarget, szXML) == 0)
+        static const WCHAR xmlW[] = {'x','m','l',0};
+        if(lstrcmpW( sTarget, xmlW) == 0)
         {
             SysFreeString(sTarget);
             return E_FAIL;
@@ -544,9 +606,7 @@ static HRESULT WINAPI dom_pi_put_data(
     V_VT(&val) = VT_BSTR;
     V_BSTR(&val) = data;
 
-    hr = IXMLDOMNode_put_nodeValue( IXMLDOMNode_from_impl(&This->node), val );
-
-    return hr;
+    return IXMLDOMProcessingInstruction_put_nodeValue( iface, val );
 }
 
 static const struct IXMLDOMProcessingInstructionVtbl dom_pi_vtbl =
@@ -608,12 +668,12 @@ IUnknown* create_pi( xmlNodePtr pi )
     if ( !This )
         return NULL;
 
-    This->lpVtbl = &dom_pi_vtbl;
+    This->IXMLDOMProcessingInstruction_iface.lpVtbl = &dom_pi_vtbl;
     This->ref = 1;
 
-    init_xmlnode(&This->node, pi, (IUnknown*)&This->lpVtbl, NULL);
+    init_xmlnode(&This->node, pi, (IXMLDOMNode*)&This->IXMLDOMProcessingInstruction_iface, NULL);
 
-    return (IUnknown*) &This->lpVtbl;
+    return (IUnknown*)&This->IXMLDOMProcessingInstruction_iface;
 }
 
 #endif

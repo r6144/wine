@@ -1,7 +1,3 @@
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = mapi32.dll
 IMPORTLIB = mapi32
 IMPORTS   = uuid shlwapi shell32 user32 advapi32
@@ -21,6 +17,7 @@ RC_SRCS = \
 	Es.rc \
 	Fr.rc \
 	Ga.rc \
+	He.rc \
 	Hu.rc \
 	It.rc \
 	Ja.rc \
@@ -33,6 +30,8 @@ RC_SRCS = \
 	Ro.rc \
 	Ru.rc \
 	Si.rc \
+	Sr.rc \
+	Sv.rc \
 	Uk.rc \
 	version.rc
 

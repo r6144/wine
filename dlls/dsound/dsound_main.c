@@ -49,6 +49,7 @@
 #include "dsound.h"
 #include "dsconf.h"
 #include "ks.h"
+#include "rpcproxy.h"
 #include "initguid.h"
 #include "ksmedia.h"
 #include "dsdriver.h"
@@ -99,6 +100,7 @@ int ds_default_sample_rate = 44100;
 int ds_default_bits_per_sample = 16;
 static int ds_default_playback;
 static int ds_default_capture;
+static HINSTANCE instance;
 
 /*
  * Get a config key from either the app-specific or the default config
@@ -504,15 +506,20 @@ DirectSoundCaptureEnumerateW(
 typedef  HRESULT (*FnCreateInstance)(REFIID riid, LPVOID *ppobj);
  
 typedef struct {
-    const IClassFactoryVtbl *lpVtbl;
+    IClassFactory IClassFactory_iface;
     REFCLSID rclsid;
     FnCreateInstance pfnCreateInstance;
 } IClassFactoryImpl;
 
+static inline IClassFactoryImpl *impl_from_IClassFactory(IClassFactory *iface)
+{
+    return CONTAINING_RECORD(iface, IClassFactoryImpl, IClassFactory_iface);
+}
+
 static HRESULT WINAPI
 DSCF_QueryInterface(LPCLASSFACTORY iface, REFIID riid, LPVOID *ppobj)
 {
-    IClassFactoryImpl *This = (IClassFactoryImpl *)iface;
+    IClassFactoryImpl *This = impl_from_IClassFactory(iface);
     TRACE("(%p, %s, %p)\n", This, debugstr_guid(riid), ppobj);
     if (ppobj == NULL)
         return E_POINTER;
@@ -544,7 +551,7 @@ static HRESULT WINAPI DSCF_CreateInstance(
     REFIID riid,
     LPVOID *ppobj)
 {
-    IClassFactoryImpl *This = (IClassFactoryImpl *)iface;
+    IClassFactoryImpl *This = impl_from_IClassFactory(iface);
     TRACE("(%p, %p, %s, %p)\n", This, pOuter, debugstr_guid(riid), ppobj);
 
     if (pOuter)
@@ -560,7 +567,7 @@ static HRESULT WINAPI DSCF_CreateInstance(
  
 static HRESULT WINAPI DSCF_LockServer(LPCLASSFACTORY iface, BOOL dolock)
 {
-    IClassFactoryImpl *This = (IClassFactoryImpl *)iface;
+    IClassFactoryImpl *This = impl_from_IClassFactory(iface);
     FIXME("(%p, %d) stub!\n", This, dolock);
     return S_OK;
 }
@@ -574,13 +581,13 @@ static const IClassFactoryVtbl DSCF_Vtbl = {
 };
 
 static IClassFactoryImpl DSOUND_CF[] = {
-    { &DSCF_Vtbl, &CLSID_DirectSound, (FnCreateInstance)DSOUND_Create },
-    { &DSCF_Vtbl, &CLSID_DirectSound8, (FnCreateInstance)DSOUND_Create8 },
-    { &DSCF_Vtbl, &CLSID_DirectSoundCapture, (FnCreateInstance)DSOUND_CaptureCreate },
-    { &DSCF_Vtbl, &CLSID_DirectSoundCapture8, (FnCreateInstance)DSOUND_CaptureCreate8 },
-    { &DSCF_Vtbl, &CLSID_DirectSoundFullDuplex, (FnCreateInstance)DSOUND_FullDuplexCreate },
-    { &DSCF_Vtbl, &CLSID_DirectSoundPrivate, (FnCreateInstance)IKsPrivatePropertySetImpl_Create },
-    { NULL, NULL, NULL }
+    { { &DSCF_Vtbl }, &CLSID_DirectSound, (FnCreateInstance)DSOUND_Create },
+    { { &DSCF_Vtbl }, &CLSID_DirectSound8, (FnCreateInstance)DSOUND_Create8 },
+    { { &DSCF_Vtbl }, &CLSID_DirectSoundCapture, (FnCreateInstance)DSOUND_CaptureCreate },
+    { { &DSCF_Vtbl }, &CLSID_DirectSoundCapture8, (FnCreateInstance)DSOUND_CaptureCreate8 },
+    { { &DSCF_Vtbl }, &CLSID_DirectSoundFullDuplex, (FnCreateInstance)DSOUND_FullDuplexCreate },
+    { { &DSCF_Vtbl }, &CLSID_DirectSoundPrivate, (FnCreateInstance)IKsPrivatePropertySetImpl_Create },
+    { { NULL }, NULL, NULL }
 };
 
 /*******************************************************************************
@@ -620,7 +627,7 @@ HRESULT WINAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID *ppv)
 
     while (NULL != DSOUND_CF[i].rclsid) {
         if (IsEqualGUID(rclsid, DSOUND_CF[i].rclsid)) {
-            DSCF_AddRef((IClassFactory*) &DSOUND_CF[i]);
+            DSCF_AddRef(&DSOUND_CF[i].IClassFactory_iface);
             *ppv = &DSOUND_CF[i];
             return S_OK;
         }
@@ -669,6 +676,7 @@ BOOL WINAPI DllMain(HINSTANCE hInstDLL, DWORD fdwReason, LPVOID lpvReserved)
             INIT_GUID(DSOUND_renderer_guids[i], 0xbd6dd71a, 0x3deb, 0x11d1, 0xb1, 0x71, 0x00, 0xc0, 0x4f, 0xc2, 0x00, 0x00 + i);
             INIT_GUID(DSOUND_capture_guids[i],  0xbd6dd71b, 0x3deb, 0x11d1, 0xb1, 0x71, 0x00, 0xc0, 0x4f, 0xc2, 0x00, 0x00 + i);
         }
+        instance = hInstDLL;
         DisableThreadLibraryCalls(hInstDLL);
         /* Increase refcount on dsound by 1 */
         GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, (LPCWSTR)hInstDLL, &hInstDLL);
@@ -681,4 +689,20 @@ BOOL WINAPI DllMain(HINSTANCE hInstDLL, DWORD fdwReason, LPVOID lpvReserved)
         break;
     }
     return TRUE;
+}
+
+/***********************************************************************
+ *		DllRegisterServer (DSOUND.@)
+ */
+HRESULT WINAPI DllRegisterServer(void)
+{
+    return __wine_register_resources( instance, NULL );
+}
+
+/***********************************************************************
+ *		DllUnregisterServer (DSOUND.@)
+ */
+HRESULT WINAPI DllUnregisterServer(void)
+{
+    return __wine_unregister_resources( instance, NULL );
 }

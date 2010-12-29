@@ -127,7 +127,7 @@ static void test_midiIn_device(UINT udev, HWND hwnd)
 
     test_notification(hwnd, "midiInOpen", MIM_OPEN, 0);
 
-    mhdr.dwFlags = 0;
+    memset(&mhdr, 0, sizeof(mhdr));
     mhdr.dwUser = 0x56FA552C;
     mhdr.dwBufferLength = 70000; /* > 64KB! */
     mhdr.lpData = HeapAlloc(GetProcessHeap(), 0 , mhdr.dwBufferLength);
@@ -198,6 +198,12 @@ static void test_midi_mci(HWND hwnd)
     err = mciSendString("sysinfo sequencer quantity", buf, sizeof(buf), hwnd);
     ok(!err, "mci sysinfo sequencer quantity returned %d\n", err);
     if (!err) trace("Found %s MCI sequencer devices\n", buf);
+
+    if (!strcmp(buf, "0")) return;
+
+    err = mciSendString("capability sequencer can record", buf, sizeof(buf), hwnd);
+    ok(!err, "mci sysinfo sequencer quantity returned %d\n", err);
+    if(!err) ok(!strcmp(buf, "false"), "capability can record is %s\n", buf);
 }
 
 
@@ -227,6 +233,11 @@ static void test_midiOut_device(UINT udev, HWND hwnd)
         rc = midiOutOpen(&hm, udev, (DWORD_PTR)hwnd, (DWORD_PTR)MYCBINST, CALLBACK_WINDOW);
     else
         rc = midiOutOpen(&hm, udev, (DWORD_PTR)callback_func, (DWORD_PTR)MYCBINST, CALLBACK_FUNCTION);
+    if (rc == MMSYSERR_NOTSUPPORTED)
+    {
+        skip( "MIDI out not supported\n" );
+        return;
+    }
     ok(!rc, "midiOutOpen(dev=%d) rc=%s\n", udev, mmsys_error(rc));
     if (rc) return;
 
@@ -278,7 +289,7 @@ static void test_midiOut_device(UINT udev, HWND hwnd)
         if (!rc) Sleep(400); /* Hear note */
     }
 
-    mhdr.dwFlags = 0;
+    memset(&mhdr, 0, sizeof(mhdr));
     mhdr.dwUser   = 0x56FA552C;
     mhdr.dwOffset = 0xDEADBEEF;
     mhdr.dwBufferLength = 70000; /* > 64KB! */
@@ -382,6 +393,11 @@ static void test_midiStream(UINT udev, HWND hwnd)
         rc = midiStreamOpen(&hm, &udev, 1, (DWORD_PTR)hwnd, (DWORD_PTR)MYCBINST, CALLBACK_WINDOW);
     else
         rc = midiStreamOpen(&hm, &udev, 1, (DWORD_PTR)callback_func, (DWORD_PTR)MYCBINST, CALLBACK_FUNCTION);
+    if (rc == MMSYSERR_NOTSUPPORTED)
+    {
+        skip( "MIDI stream not supported\n" );
+        return;
+    }
     ok(!rc, "midiStreamOpen(dev=%d) rc=%s\n", udev, mmsys_error(rc));
     if (rc) return;
 
@@ -397,7 +413,7 @@ static void test_midiStream(UINT udev, HWND hwnd)
     ok(!rc, "midiStreamProperty TIMEDIV rc=%s\n", mmsys_error(rc));
     todo_wine ok(24==LOWORD(midiprop.tdiv.dwTimeDiv), "default stream time division %u\n", midiprop.tdiv.dwTimeDiv);
 
-    mhdr.dwFlags = 0;
+    memset(&mhdr, 0, sizeof(mhdr));
     mhdr.dwUser   = 0x56FA552C;
     mhdr.dwOffset = 1234567890;
     mhdr.dwBufferLength = sizeof(strmEvents);

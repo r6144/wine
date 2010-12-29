@@ -75,9 +75,9 @@ UINT VIEW_find_column( MSIVIEW *table, LPCWSTR name, LPCWSTR table_name, UINT *n
                                          NULL, &haystack_table_name );
         if( r != ERROR_SUCCESS )
             return r;
-        x = lstrcmpW( name, col_name );
+        x = strcmpW( name, col_name );
         if( table_name )
-            x |= lstrcmpW( table_name, haystack_table_name );
+            x |= strcmpW( table_name, haystack_table_name );
         msi_free( col_name );
         msi_free( haystack_table_name );
         if( !x )
@@ -382,7 +382,7 @@ UINT MSI_ViewFetch(MSIQUERY *query, MSIRECORD **prec)
     if (r == ERROR_SUCCESS)
     {
         query->row ++;
-        MSI_RecordSetInteger(*prec, 0, (int)query);
+        MSI_RecordSetIntPtr(*prec, 0, (INT_PTR)query);
     }
 
     return r;
@@ -617,7 +617,7 @@ UINT MSI_ViewModify( MSIQUERY *query, MSIMODIFY mode, MSIRECORD *rec )
     if ( !view  || !view->ops->modify)
         return ERROR_FUNCTION_FAILED;
 
-    if ( mode == MSIMODIFY_UPDATE && MSI_RecordGetInteger( rec, 0 ) != (int)query )
+    if ( mode == MSIMODIFY_UPDATE && MSI_RecordGetIntPtr( rec, 0 ) != (INT_PTR)query )
         return ERROR_FUNCTION_FAILED;
 
     r = view->ops->modify( view, mode, rec, query->row );
@@ -900,6 +900,9 @@ UINT MSI_DatabaseGetPrimaryKeys( MSIDATABASE *db,
     struct msi_primary_key_record_info info;
     MSIQUERY *query = NULL;
     UINT r;
+
+    if (!TABLE_Exists( db, table ))
+        return ERROR_INVALID_TABLE;
 
     r = MSI_OpenQuery( db, &query, sql, table );
     if( r != ERROR_SUCCESS )

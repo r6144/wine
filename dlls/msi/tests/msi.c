@@ -29,6 +29,7 @@
 
 #include "wine/test.h"
 
+static BOOL is_wow64;
 static const char msifile[] = "winetest.msi";
 
 static BOOL (WINAPI *pConvertSidToStringSidA)(PSID, LPSTR*);
@@ -244,9 +245,8 @@ static void test_null(void)
     LPBYTE lpData = NULL;
     INSTALLSTATE state;
     REGSAM access = KEY_ALL_ACCESS;
-    BOOL wow64;
 
-    if (pIsWow64Process && pIsWow64Process(GetCurrentProcess(), &wow64) && wow64)
+    if (is_wow64)
         access |= KEY_WOW64_64KEY;
 
     r = pMsiOpenPackageExW(NULL, 0, &hpkg);
@@ -297,6 +297,13 @@ static void test_null(void)
     }
 
     r = RegSetValueA(hkey, NULL, REG_SZ, "test", strlen("test"));
+    if (r == ERROR_ACCESS_DENIED)
+    {
+        skip("Not enough rights to perform tests\n");
+        HeapFree(GetProcessHeap(), 0, lpData);
+        RegCloseKey(hkey);
+        return;
+    }
     ok( r == ERROR_SUCCESS, "wrong error %d\n", r);
 
     r = MsiGetProductInfoA("", "", NULL, NULL);
@@ -566,44 +573,66 @@ static void test_MsiQueryProductState(void)
     LONG res;
     HKEY userkey, localkey, props;
     HKEY prodkey;
-    DWORD data;
+    DWORD data, error;
     REGSAM access = KEY_ALL_ACCESS;
-    BOOL wow64;
 
     create_test_guid(prodcode, prod_squashed);
     get_user_sid(&usersid);
 
-    if (pIsWow64Process && pIsWow64Process(GetCurrentProcess(), &wow64) && wow64)
+    if (is_wow64)
         access |= KEY_WOW64_64KEY;
 
     /* NULL prodcode */
+    SetLastError(0xdeadbeef);
     state = MsiQueryProductStateA(NULL);
+    error = GetLastError();
     ok(state == INSTALLSTATE_INVALIDARG, "Expected INSTALLSTATE_INVALIDARG, got %d\n", state);
+    ok(error == 0xdeadbeef, "expected 0xdeadbeef, got %u\n", error);
 
     /* empty prodcode */
+    SetLastError(0xdeadbeef);
     state = MsiQueryProductStateA("");
+    error = GetLastError();
     ok(state == INSTALLSTATE_INVALIDARG, "Expected INSTALLSTATE_INVALIDARG, got %d\n", state);
+    ok(error == 0xdeadbeef, "expected 0xdeadbeef, got %u\n", error);
 
     /* garbage prodcode */
+    SetLastError(0xdeadbeef);
     state = MsiQueryProductStateA("garbage");
+    error = GetLastError();
     ok(state == INSTALLSTATE_INVALIDARG, "Expected INSTALLSTATE_INVALIDARG, got %d\n", state);
+    ok(error == 0xdeadbeef, "expected 0xdeadbeef, got %u\n", error);
 
     /* guid without brackets */
+    SetLastError(0xdeadbeef);
     state = MsiQueryProductStateA("6700E8CF-95AB-4D9C-BC2C-15840DEA7A5D");
+    error = GetLastError();
     ok(state == INSTALLSTATE_INVALIDARG, "Expected INSTALLSTATE_INVALIDARG, got %d\n", state);
+    ok(error == 0xdeadbeef, "expected 0xdeadbeef, got %u\n", error);
 
     /* guid with brackets */
+    SetLastError(0xdeadbeef);
     state = MsiQueryProductStateA("{6700E8CF-95AB-4D9C-BC2C-15840DEA7A5D}");
+    error = GetLastError();
     ok(state == INSTALLSTATE_UNKNOWN, "Expected INSTALLSTATE_UNKNOWN, got %d\n", state);
+    ok(error == ERROR_SUCCESS || broken(error == ERROR_NO_TOKEN) /* win2k */,
+       "expected ERROR_SUCCESS, got %u\n", error);
 
     /* same length as guid, but random */
+    SetLastError(0xdeadbeef);
     state = MsiQueryProductStateA("A938G02JF-2NF3N93-VN3-2NNF-3KGKALDNF93");
+    error = GetLastError();
     ok(state == INSTALLSTATE_UNKNOWN, "Expected INSTALLSTATE_UNKNOWN, got %d\n", state);
+    ok(error == 0xdeadbeef, "expected 0xdeadbeef, got %u\n", error);
 
     /* MSIINSTALLCONTEXT_USERUNMANAGED */
 
+    SetLastError(0xdeadbeef);
     state = MsiQueryProductStateA(prodcode);
+    error = GetLastError();
     ok(state == INSTALLSTATE_UNKNOWN, "Expected INSTALLSTATE_UNKNOWN, got %d\n", state);
+    ok(error == ERROR_SUCCESS || broken(error == ERROR_NO_TOKEN) /* win2k */,
+       "expected ERROR_SUCCESS, got %u\n", error);
 
     lstrcpyA(keypath, "Software\\Microsoft\\Installer\\Products\\");
     lstrcatA(keypath, prod_squashed);
@@ -612,8 +641,12 @@ static void test_MsiQueryProductState(void)
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* user product key exists */
+    SetLastError(0xdeadbeef);
     state = MsiQueryProductStateA(prodcode);
+    error = GetLastError();
     ok(state == INSTALLSTATE_ADVERTISED, "Expected INSTALLSTATE_ADVERTISED, got %d\n", state);
+    ok(error == ERROR_SUCCESS || broken(error == ERROR_NO_TOKEN) /* win2k */,
+       "expected ERROR_SUCCESS, got %u\n", error);
 
     lstrcpyA(keypath, "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\");
     lstrcatA(keypath, prodcode);
@@ -629,16 +662,24 @@ static void test_MsiQueryProductState(void)
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* local uninstall key exists */
+    SetLastError(0xdeadbeef);
     state = MsiQueryProductStateA(prodcode);
+    error = GetLastError();
     ok(state == INSTALLSTATE_ADVERTISED, "Expected INSTALLSTATE_ADVERTISED, got %d\n", state);
+    ok(error == ERROR_SUCCESS || broken(error == ERROR_NO_TOKEN) /* win2k */,
+       "expected ERROR_SUCCESS, got %u\n", error);
 
     data = 1;
     res = RegSetValueExA(localkey, "WindowsInstaller", 0, REG_DWORD, (const BYTE *)&data, sizeof(DWORD));
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* WindowsInstaller value exists */
+    SetLastError(0xdeadbeef);
     state = MsiQueryProductStateA(prodcode);
+    error = GetLastError();
     ok(state == INSTALLSTATE_ADVERTISED, "Expected INSTALLSTATE_ADVERTISED, got %d\n", state);
+    ok(error == ERROR_SUCCESS || broken(error == ERROR_NO_TOKEN) /* win2k */,
+       "expected ERROR_SUCCESS, got %u\n", error);
 
     RegDeleteValueA(localkey, "WindowsInstaller");
     delete_key(localkey, "", access & KEY_WOW64_64KEY);
@@ -652,37 +693,57 @@ static void test_MsiQueryProductState(void)
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* local product key exists */
+    SetLastError(0xdeadbeef);
     state = MsiQueryProductStateA(prodcode);
+    error = GetLastError();
     ok(state == INSTALLSTATE_ADVERTISED, "Expected INSTALLSTATE_ADVERTISED, got %d\n", state);
+    ok(error == ERROR_SUCCESS || broken(error == ERROR_NO_TOKEN) /* win2k */,
+       "expected ERROR_SUCCESS, got %u\n", error);
 
     res = RegCreateKeyExA(localkey, "InstallProperties", 0, NULL, 0, access, NULL, &props, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* install properties key exists */
+    SetLastError(0xdeadbeef);
     state = MsiQueryProductStateA(prodcode);
+    error = GetLastError();
     ok(state == INSTALLSTATE_ADVERTISED, "Expected INSTALLSTATE_ADVERTISED, got %d\n", state);
+    ok(error == ERROR_SUCCESS || broken(error == ERROR_NO_TOKEN) /* win2k */,
+       "expected ERROR_SUCCESS, got %u\n", error);
 
     data = 1;
     res = RegSetValueExA(props, "WindowsInstaller", 0, REG_DWORD, (const BYTE *)&data, sizeof(DWORD));
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* WindowsInstaller value exists */
+    SetLastError(0xdeadbeef);
     state = MsiQueryProductStateA(prodcode);
+    error = GetLastError();
     ok(state == INSTALLSTATE_DEFAULT, "Expected INSTALLSTATE_DEFAULT, got %d\n", state);
+    ok(error == ERROR_SUCCESS || broken(error == ERROR_NO_TOKEN) /* win2k */,
+       "expected ERROR_SUCCESS, got %u\n", error);
 
     data = 2;
     res = RegSetValueExA(props, "WindowsInstaller", 0, REG_DWORD, (const BYTE *)&data, sizeof(DWORD));
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* WindowsInstaller value is not 1 */
+    SetLastError(0xdeadbeef);
     state = MsiQueryProductStateA(prodcode);
+    error = GetLastError();
     ok(state == INSTALLSTATE_DEFAULT, "Expected INSTALLSTATE_DEFAULT, got %d\n", state);
+    ok(error == ERROR_SUCCESS || broken(error == ERROR_NO_TOKEN) /* win2k */,
+       "expected ERROR_SUCCESS, got %u\n", error);
 
     RegDeleteKeyA(userkey, "");
 
     /* user product key does not exist */
+    SetLastError(0xdeadbeef);
     state = MsiQueryProductStateA(prodcode);
+    error = GetLastError();
     ok(state == INSTALLSTATE_ABSENT, "Expected INSTALLSTATE_ABSENT, got %d\n", state);
+    ok(error == ERROR_SUCCESS || broken(error == ERROR_NO_TOKEN) /* win2k */,
+       "expected ERROR_SUCCESS, got %u\n", error);
 
     RegDeleteValueA(props, "WindowsInstaller");
     delete_key(props, "", access & KEY_WOW64_64KEY);
@@ -854,51 +915,81 @@ static void test_MsiQueryFeatureState(void)
     LPSTR usersid;
     LONG res;
     REGSAM access = KEY_ALL_ACCESS;
-    BOOL wow64;
+    DWORD error;
 
     create_test_guid(prodcode, prod_squashed);
     compose_base85_guid(component, comp_base85, comp_squashed);
     compose_base85_guid(component, comp_base85 + 20, comp_squashed2);
     get_user_sid(&usersid);
 
-    if (pIsWow64Process && pIsWow64Process(GetCurrentProcess(), &wow64) && wow64)
+    if (is_wow64)
         access |= KEY_WOW64_64KEY;
 
     /* NULL prodcode */
+    SetLastError(0xdeadbeef);
     state = MsiQueryFeatureStateA(NULL, "feature");
+    error = GetLastError();
     ok(state == INSTALLSTATE_INVALIDARG, "Expected INSTALLSTATE_INVALIDARG, got %d\n", state);
+    ok(error == 0xdeadbeef, "expected 0xdeadbeef, got %u\n", error);
 
     /* empty prodcode */
+    SetLastError(0xdeadbeef);
     state = MsiQueryFeatureStateA("", "feature");
+    error = GetLastError();
     ok(state == INSTALLSTATE_INVALIDARG, "Expected INSTALLSTATE_INVALIDARG, got %d\n", state);
+    ok(error == 0xdeadbeef, "expected 0xdeadbeef, got %u\n", error);
 
     /* garbage prodcode */
+    SetLastError(0xdeadbeef);
     state = MsiQueryFeatureStateA("garbage", "feature");
+    error = GetLastError();
     ok(state == INSTALLSTATE_INVALIDARG, "Expected INSTALLSTATE_INVALIDARG, got %d\n", state);
+    ok(error == 0xdeadbeef, "expected 0xdeadbeef, got %u\n", error);
 
     /* guid without brackets */
+    SetLastError(0xdeadbeef);
     state = MsiQueryFeatureStateA("6700E8CF-95AB-4D9C-BC2C-15840DEA7A5D", "feature");
+    error = GetLastError();
     ok(state == INSTALLSTATE_INVALIDARG, "Expected INSTALLSTATE_INVALIDARG, got %d\n", state);
+    ok(error == 0xdeadbeef, "expected 0xdeadbeef, got %u\n", error);
 
     /* guid with brackets */
+    SetLastError(0xdeadbeef);
     state = MsiQueryFeatureStateA("{6700E8CF-95AB-4D9C-BC2C-15840DEA7A5D}", "feature");
+    error = GetLastError();
     ok(state == INSTALLSTATE_UNKNOWN, "Expected INSTALLSTATE_UNKNOWN, got %d\n", state);
+    ok(error == ERROR_SUCCESS || broken(error == ERROR_ALREADY_EXISTS) /* win2k */,
+       "expected ERROR_SUCCESS, got %u\n", error);
 
     /* same length as guid, but random */
+    SetLastError(0xdeadbeef);
     state = MsiQueryFeatureStateA("A938G02JF-2NF3N93-VN3-2NNF-3KGKALDNF93", "feature");
+    error = GetLastError();
     ok(state == INSTALLSTATE_INVALIDARG, "Expected INSTALLSTATE_INVALIDARG, got %d\n", state);
+    ok(error == 0xdeadbeef, "expected 0xdeadbeef, got %u\n", error);
 
     /* NULL szFeature */
+    SetLastError(0xdeadbeef);
     state = MsiQueryFeatureStateA(prodcode, NULL);
+    error = GetLastError();
     ok(state == INSTALLSTATE_INVALIDARG, "Expected INSTALLSTATE_INVALIDARG, got %d\n", state);
+    ok(error == 0xdeadbeef, "expected 0xdeadbeef, got %u\n", error);
 
     /* empty szFeature */
+    SetLastError(0xdeadbeef);
     state = MsiQueryFeatureStateA(prodcode, "");
+    error = GetLastError();
     ok(state == INSTALLSTATE_UNKNOWN, "Expected INSTALLSTATE_UNKNOWN, got %d\n", state);
+    ok(error == ERROR_SUCCESS || broken(error == ERROR_NO_TOKEN) /* win2k */,
+       "expected ERROR_SUCCESS, got %u\n", error);
 
     /* feature key does not exist yet */
+    SetLastError(0xdeadbeef);
     state = MsiQueryFeatureStateA(prodcode, "feature");
+    error = GetLastError();
     ok(state == INSTALLSTATE_UNKNOWN, "Expected INSTALLSTATE_UNKNOWN, got %d\n", state);
+    ok(error == ERROR_SUCCESS || broken(error == ERROR_NO_TOKEN) /* win2k */,
+       "expected ERROR_SUCCESS, got %u\n", error);
 
     /* MSIINSTALLCONTEXT_USERUNMANAGED */
 
@@ -909,15 +1000,23 @@ static void test_MsiQueryFeatureState(void)
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* feature key exists */
+    SetLastError(0xdeadbeef);
     state = MsiQueryFeatureStateA(prodcode, "feature");
+    error = GetLastError();
     ok(state == INSTALLSTATE_UNKNOWN, "Expected INSTALLSTATE_UNKNOWN, got %d\n", state);
+    ok(error == ERROR_SUCCESS || broken(error == ERROR_NO_TOKEN) /* win2k */,
+       "expected ERROR_SUCCESS, got %u\n", error);
 
     res = RegSetValueExA(userkey, "feature", 0, REG_SZ, (const BYTE *)"", 2);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* feature value exists */
+    SetLastError(0xdeadbeef);
     state = MsiQueryFeatureStateA(prodcode, "feature");
+    error = GetLastError();
     ok(state == INSTALLSTATE_ADVERTISED, "Expected INSTALLSTATE_ADVERTISED, got %d\n", state);
+    ok(error == ERROR_SUCCESS || broken(error == ERROR_NO_TOKEN) /* win2k */,
+       "expected ERROR_SUCCESS, got %u\n", error);
 
     lstrcpyA(keypath, "Software\\Microsoft\\Windows\\CurrentVersion\\Installer\\UserData\\");
     lstrcatA(keypath, usersid);
@@ -937,32 +1036,52 @@ static void test_MsiQueryFeatureState(void)
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* userdata features key exists */
+    SetLastError(0xdeadbeef);
     state = MsiQueryFeatureStateA(prodcode, "feature");
+    error = GetLastError();
     ok(state == INSTALLSTATE_ADVERTISED, "Expected INSTALLSTATE_ADVERTISED, got %d\n", state);
+    ok(error == ERROR_SUCCESS || broken(error == ERROR_NO_TOKEN) /* win2k */,
+       "expected ERROR_SUCCESS, got %u\n", error);
 
     res = RegSetValueExA(localkey, "feature", 0, REG_SZ, (const BYTE *)"aaaaaaaaaaaaaaaaaaa", 20);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
+    SetLastError(0xdeadbeef);
     state = MsiQueryFeatureStateA(prodcode, "feature");
+    error = GetLastError();
     ok(state == INSTALLSTATE_BADCONFIG, "Expected INSTALLSTATE_BADCONFIG, got %d\n", state);
+    ok(error == ERROR_SUCCESS || broken(error == ERROR_NO_TOKEN) /* win2k */,
+       "expected ERROR_SUCCESS, got %u\n", error);
 
     res = RegSetValueExA(localkey, "feature", 0, REG_SZ, (const BYTE *)"aaaaaaaaaaaaaaaaaaaa", 21);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
+    SetLastError(0xdeadbeef);
     state = MsiQueryFeatureStateA(prodcode, "feature");
+    error = GetLastError();
     ok(state == INSTALLSTATE_ADVERTISED, "Expected INSTALLSTATE_ADVERTISED, got %d\n", state);
+    ok(error == ERROR_SUCCESS || broken(error == ERROR_NO_TOKEN) /* win2k */,
+       "expected ERROR_SUCCESS, got %u\n", error);
 
     res = RegSetValueExA(localkey, "feature", 0, REG_SZ, (const BYTE *)"aaaaaaaaaaaaaaaaaaaaa", 22);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
+    SetLastError(0xdeadbeef);
     state = MsiQueryFeatureStateA(prodcode, "feature");
+    error = GetLastError();
     ok(state == INSTALLSTATE_ADVERTISED, "Expected INSTALLSTATE_ADVERTISED, got %d\n", state);
+    ok(error == ERROR_SUCCESS || broken(error == ERROR_NO_TOKEN) /* win2k */,
+       "expected ERROR_SUCCESS, got %u\n", error);
 
     res = RegSetValueExA(localkey, "feature", 0, REG_SZ, (const BYTE *)comp_base85, 41);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
+    SetLastError(0xdeadbeef);
     state = MsiQueryFeatureStateA(prodcode, "feature");
+    error = GetLastError();
     ok(state == INSTALLSTATE_ADVERTISED, "Expected INSTALLSTATE_ADVERTISED, got %d\n", state);
+    ok(error == ERROR_SUCCESS || broken(error == ERROR_NO_TOKEN) /* win2k */,
+       "expected ERROR_SUCCESS, got %u\n", error);
 
     lstrcpyA(keypath, "Software\\Microsoft\\Windows\\CurrentVersion\\Installer\\UserData\\");
     lstrcatA(keypath, usersid);
@@ -980,55 +1099,87 @@ static void test_MsiQueryFeatureState(void)
     res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, NULL, 0, access, NULL, &compkey2, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
+    SetLastError(0xdeadbeef);
     state = MsiQueryFeatureStateA(prodcode, "feature");
+    error = GetLastError();
     ok(state == INSTALLSTATE_ADVERTISED, "Expected INSTALLSTATE_ADVERTISED, got %d\n", state);
+    ok(error == ERROR_SUCCESS || broken(error == ERROR_NO_TOKEN) /* win2k */,
+       "expected ERROR_SUCCESS, got %u\n", error);
 
     res = RegSetValueExA(compkey, prod_squashed, 0, REG_SZ, (const BYTE *)"", 1);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
+    SetLastError(0xdeadbeef);
     state = MsiQueryFeatureStateA(prodcode, "feature");
+    error = GetLastError();
     ok(state == INSTALLSTATE_ADVERTISED, "Expected INSTALLSTATE_ADVERTISED, got %d\n", state);
+    ok(error == ERROR_SUCCESS || broken(error == ERROR_NO_TOKEN) /* win2k */,
+       "expected ERROR_SUCCESS, got %u\n", error);
 
     res = RegSetValueExA(compkey, prod_squashed, 0, REG_SZ, (const BYTE *)"apple", 6);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
+    SetLastError(0xdeadbeef);
     state = MsiQueryFeatureStateA(prodcode, "feature");
+    error = GetLastError();
     ok(state == INSTALLSTATE_ADVERTISED, "Expected INSTALLSTATE_ADVERTISED, got %d\n", state);
+    ok(error == ERROR_SUCCESS || broken(error == ERROR_NO_TOKEN) /* win2k */,
+       "expected ERROR_SUCCESS, got %u\n", error);
 
     res = RegSetValueExA(compkey2, prod_squashed, 0, REG_SZ, (const BYTE *)"orange", 7);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* INSTALLSTATE_LOCAL */
+    SetLastError(0xdeadbeef);
     state = MsiQueryFeatureStateA(prodcode, "feature");
+    error = GetLastError();
     ok(state == INSTALLSTATE_LOCAL, "Expected INSTALLSTATE_LOCAL, got %d\n", state);
+    ok(error == ERROR_SUCCESS || broken(error == ERROR_NO_TOKEN) /* win2k */,
+       "expected ERROR_SUCCESS, got %u\n", error);
 
     res = RegSetValueExA(compkey, prod_squashed, 0, REG_SZ, (const BYTE *)"01\\", 4);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* INSTALLSTATE_SOURCE */
+    SetLastError(0xdeadbeef);
     state = MsiQueryFeatureStateA(prodcode, "feature");
+    error = GetLastError();
     ok(state == INSTALLSTATE_SOURCE, "Expected INSTALLSTATE_SOURCE, got %d\n", state);
+    ok(error == ERROR_SUCCESS || broken(error == ERROR_NO_TOKEN) /* win2k */,
+       "expected ERROR_SUCCESS, got %u\n", error);
 
     res = RegSetValueExA(compkey, prod_squashed, 0, REG_SZ, (const BYTE *)"01", 3);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* bad INSTALLSTATE_SOURCE */
+    SetLastError(0xdeadbeef);
     state = MsiQueryFeatureStateA(prodcode, "feature");
+    error = GetLastError();
     ok(state == INSTALLSTATE_LOCAL, "Expected INSTALLSTATE_LOCAL, got %d\n", state);
+    ok(error == ERROR_SUCCESS || broken(error == ERROR_NO_TOKEN) /* win2k */,
+       "expected ERROR_SUCCESS, got %u\n", error);
 
     res = RegSetValueExA(compkey, prod_squashed, 0, REG_SZ, (const BYTE *)"01a", 4);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* INSTALLSTATE_SOURCE */
+    SetLastError(0xdeadbeef);
     state = MsiQueryFeatureStateA(prodcode, "feature");
+    error = GetLastError();
     ok(state == INSTALLSTATE_SOURCE, "Expected INSTALLSTATE_SOURCE, got %d\n", state);
+    ok(error == ERROR_SUCCESS || broken(error == ERROR_NO_TOKEN) /* win2k */,
+       "expected ERROR_SUCCESS, got %u\n", error);
 
     res = RegSetValueExA(compkey, prod_squashed, 0, REG_SZ, (const BYTE *)"01", 3);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* bad INSTALLSTATE_SOURCE */
+    SetLastError(0xdeadbeef);
     state = MsiQueryFeatureStateA(prodcode, "feature");
+    error = GetLastError();
     ok(state == INSTALLSTATE_LOCAL, "Expected INSTALLSTATE_LOCAL, got %d\n", state);
+    ok(error == ERROR_SUCCESS || broken(error == ERROR_NO_TOKEN) /* win2k */,
+       "expected ERROR_SUCCESS, got %u\n", error);
 
     RegDeleteValueA(compkey, prod_squashed);
     RegDeleteValueA(compkey2, prod_squashed);
@@ -1267,7 +1418,7 @@ static void test_MsiQueryComponentState(void)
     LONG res;
     UINT r;
     REGSAM access = KEY_ALL_ACCESS;
-    BOOL wow64;
+    DWORD error;
 
     static const INSTALLSTATE MAGIC_ERROR = 0xdeadbeef;
 
@@ -1281,49 +1432,70 @@ static void test_MsiQueryComponentState(void)
     compose_base85_guid(component, comp_base85, comp_squashed);
     get_user_sid(&usersid);
 
-    if (pIsWow64Process && pIsWow64Process(GetCurrentProcess(), &wow64) && wow64)
+    if (is_wow64)
         access |= KEY_WOW64_64KEY;
 
     /* NULL szProductCode */
     state = MAGIC_ERROR;
+    SetLastError(0xdeadbeef);
     r = pMsiQueryComponentStateA(NULL, NULL, MSIINSTALLCONTEXT_MACHINE, component, &state);
+    error = GetLastError();
     ok(r == ERROR_INVALID_PARAMETER, "Expected ERROR_INVALID_PARAMETER, got %d\n", r);
     ok(state == MAGIC_ERROR, "Expected 0xdeadbeef, got %d\n", state);
+    ok(error == 0xdeadbeef, "expected 0xdeadbeef, got %u\n", error);
 
     /* empty szProductCode */
     state = MAGIC_ERROR;
+    SetLastError(0xdeadbeef);
     r = pMsiQueryComponentStateA("", NULL, MSIINSTALLCONTEXT_MACHINE, component, &state);
+    error = GetLastError();
     ok(r == ERROR_INVALID_PARAMETER, "Expected ERROR_INVALID_PARAMETER, got %d\n", r);
     ok(state == MAGIC_ERROR, "Expected 0xdeadbeef, got %d\n", state);
+    ok(error == 0xdeadbeef, "expected 0xdeadbeef, got %u\n", error);
 
     /* random szProductCode */
     state = MAGIC_ERROR;
+    SetLastError(0xdeadbeef);
     r = pMsiQueryComponentStateA("random", NULL, MSIINSTALLCONTEXT_MACHINE, component, &state);
+    error = GetLastError();
     ok(r == ERROR_INVALID_PARAMETER, "Expected ERROR_INVALID_PARAMETER, got %d\n", r);
     ok(state == MAGIC_ERROR, "Expected 0xdeadbeef, got %d\n", state);
+    ok(error == 0xdeadbeef, "expected 0xdeadbeef, got %u\n", error);
 
     /* GUID-length szProductCode */
     state = MAGIC_ERROR;
+    SetLastError(0xdeadbeef);
     r = pMsiQueryComponentStateA("DJANE93KNDNAS-2KN2NR93KMN3LN13=L1N3KDE", NULL, MSIINSTALLCONTEXT_MACHINE, component, &state);
+    error = GetLastError();
     ok(r == ERROR_INVALID_PARAMETER, "Expected ERROR_INVALID_PARAMETER, got %d\n", r);
     ok(state == MAGIC_ERROR, "Expected 0xdeadbeef, got %d\n", state);
+    ok(error == 0xdeadbeef, "expected 0xdeadbeef, got %u\n", error);
 
     /* GUID-length with brackets */
     state = MAGIC_ERROR;
+    SetLastError(0xdeadbeef);
     r = pMsiQueryComponentStateA("{JANE93KNDNAS-2KN2NR93KMN3LN13=L1N3KD}", NULL, MSIINSTALLCONTEXT_MACHINE, component, &state);
+    error = GetLastError();
     ok(r == ERROR_INVALID_PARAMETER, "Expected ERROR_INVALID_PARAMETER, got %d\n", r);
     ok(state == MAGIC_ERROR, "Expected 0xdeadbeef, got %d\n", state);
+    ok(error == 0xdeadbeef, "expected 0xdeadbeef, got %u\n", error);
 
     /* actual GUID */
     state = MAGIC_ERROR;
+    SetLastError(0xdeadbeef);
     r = pMsiQueryComponentStateA(prodcode, NULL, MSIINSTALLCONTEXT_MACHINE, component, &state);
+    error = GetLastError();
     ok(r == ERROR_UNKNOWN_PRODUCT, "Expected ERROR_UNKNOWN_PRODUCT, got %d\n", r);
     ok(state == MAGIC_ERROR, "Expected 0xdeadbeef, got %d\n", state);
+    ok(error == 0xdeadbeef, "expected 0xdeadbeef, got %u\n", error);
 
     state = MAGIC_ERROR;
+    SetLastError(0xdeadbeef);
     r = pMsiQueryComponentStateA(prodcode, NULL, MSIINSTALLCONTEXT_MACHINE, component, &state);
+    error = GetLastError();
     ok(r == ERROR_UNKNOWN_PRODUCT, "Expected ERROR_UNKNOWN_PRODUCT, got %d\n", r);
     ok(state == MAGIC_ERROR, "Expected 0xdeadbeef, got %d\n", state);
+    ok(error == 0xdeadbeef, "expected 0xdeadbeef, got %u\n", error);
 
     lstrcpyA(keypath, "Software\\Classes\\Installer\\Products\\");
     lstrcatA(keypath, prod_squashed);
@@ -1338,9 +1510,12 @@ static void test_MsiQueryComponentState(void)
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     state = MAGIC_ERROR;
+    SetLastError(0xdeadbeef);
     r = pMsiQueryComponentStateA(prodcode, NULL, MSIINSTALLCONTEXT_MACHINE, component, &state);
+    error = GetLastError();
     ok(r == ERROR_UNKNOWN_COMPONENT, "Expected ERROR_UNKNOWN_COMPONENT, got %d\n", r);
     ok(state == INSTALLSTATE_UNKNOWN, "Expected INSTALLSTATE_UNKNOWN, got %d\n", state);
+    ok(error == 0xdeadbeef, "expected 0xdeadbeef, got %u\n", error);
 
     delete_key(prodkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(prodkey);
@@ -1356,17 +1531,22 @@ static void test_MsiQueryComponentState(void)
     /* local system product key exists */
     state = MAGIC_ERROR;
     r = pMsiQueryComponentStateA(prodcode, NULL, MSIINSTALLCONTEXT_MACHINE, component, &state);
+    error = GetLastError();
     ok(r == ERROR_UNKNOWN_PRODUCT, "Expected ERROR_UNKNOWN_PRODUCT, got %d\n", r);
     ok(state == MAGIC_ERROR, "Expected 0xdeadbeef, got %d\n", state);
+    ok(error == 0xdeadbeef, "expected 0xdeadbeef, got %u\n", error);
 
     res = RegSetValueExA(prodkey, "LocalPackage", 0, REG_SZ, (const BYTE *)"msitest.msi", 11);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* LocalPackage value exists */
     state = MAGIC_ERROR;
+    SetLastError(0xdeadbeef);
     r = pMsiQueryComponentStateA(prodcode, NULL, MSIINSTALLCONTEXT_MACHINE, component, &state);
+    error = GetLastError();
     ok(r == ERROR_UNKNOWN_COMPONENT, "Expected ERROR_UNKNOWN_COMPONENT, got %d\n", r);
     ok(state == INSTALLSTATE_UNKNOWN, "Expected INSTALLSTATE_UNKNOWN, got %d\n", state);
+    ok(error == 0xdeadbeef, "expected 0xdeadbeef, got %u\n", error);
 
     lstrcpyA(keypath, "Software\\Microsoft\\Windows\\CurrentVersion\\Installer\\UserData\\S-1-5-18\\Components\\");
     lstrcatA(keypath, comp_squashed);
@@ -1376,70 +1556,94 @@ static void test_MsiQueryComponentState(void)
 
     /* component key exists */
     state = MAGIC_ERROR;
+    SetLastError(0xdeadbeef);
     r = pMsiQueryComponentStateA(prodcode, NULL, MSIINSTALLCONTEXT_MACHINE, component, &state);
+    error = GetLastError();
     ok(r == ERROR_UNKNOWN_COMPONENT, "Expected ERROR_UNKNOWN_COMPONENT, got %d\n", r);
     ok(state == INSTALLSTATE_UNKNOWN, "Expected INSTALLSTATE_UNKNOWN, got %d\n", state);
+    ok(error == 0xdeadbeef, "expected 0xdeadbeef, got %u\n", error);
 
     res = RegSetValueExA(compkey, prod_squashed, 0, REG_SZ, (const BYTE *)"", 0);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* component\product exists */
     state = MAGIC_ERROR;
+    SetLastError(0xdeadbeef);
     r = pMsiQueryComponentStateA(prodcode, NULL, MSIINSTALLCONTEXT_MACHINE, component, &state);
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
+    error = GetLastError();
     ok(state == INSTALLSTATE_NOTUSED || state == INSTALLSTATE_LOCAL,
        "Expected INSTALLSTATE_NOTUSED or INSTALLSTATE_LOCAL, got %d\n", state);
+    ok(error == 0xdeadbeef, "expected 0xdeadbeef, got %u\n", error);
 
     /* NULL component, product exists */
     state = MAGIC_ERROR;
+    SetLastError(0xdeadbeef);
     r = pMsiQueryComponentStateA(prodcode, NULL, MSIINSTALLCONTEXT_MACHINE, NULL, &state);
+    error = GetLastError();
     ok(r == ERROR_INVALID_PARAMETER, "Expected ERROR_INVALID_PARAMETER, got %d\n", r);
     ok(state == MAGIC_ERROR, "Expected state not changed, got %d\n", state);
+    ok(error == 0xdeadbeef, "expected 0xdeadbeef, got %u\n", error);
 
     res = RegSetValueExA(compkey, prod_squashed, 0, REG_SZ, (const BYTE *)"hi", 2);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* INSTALLSTATE_LOCAL */
     state = MAGIC_ERROR;
+    SetLastError(0xdeadbeef);
     r = pMsiQueryComponentStateA(prodcode, NULL, MSIINSTALLCONTEXT_MACHINE, component, &state);
+    error = GetLastError();
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
     ok(state == INSTALLSTATE_LOCAL, "Expected INSTALLSTATE_LOCAL, got %d\n", state);
+    ok(error == 0xdeadbeef, "expected 0xdeadbeef, got %u\n", error);
 
     res = RegSetValueExA(compkey, prod_squashed, 0, REG_SZ, (const BYTE *)"01\\", 4);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* INSTALLSTATE_SOURCE */
     state = MAGIC_ERROR;
+    SetLastError(0xdeadbeef);
     r = pMsiQueryComponentStateA(prodcode, NULL, MSIINSTALLCONTEXT_MACHINE, component, &state);
+    error = GetLastError();
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
     ok(state == INSTALLSTATE_SOURCE, "Expected INSTALLSTATE_SOURCE, got %d\n", state);
+    ok(error == 0xdeadbeef, "expected 0xdeadbeef, got %u\n", error);
 
     res = RegSetValueExA(compkey, prod_squashed, 0, REG_SZ, (const BYTE *)"01", 3);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* bad INSTALLSTATE_SOURCE */
     state = MAGIC_ERROR;
+    SetLastError(0xdeadbeef);
     r = pMsiQueryComponentStateA(prodcode, NULL, MSIINSTALLCONTEXT_MACHINE, component, &state);
+    error = GetLastError();
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
     ok(state == INSTALLSTATE_LOCAL, "Expected INSTALLSTATE_LOCAL, got %d\n", state);
+    ok(error == 0xdeadbeef, "expected 0xdeadbeef, got %u\n", error);
 
     res = RegSetValueExA(compkey, prod_squashed, 0, REG_SZ, (const BYTE *)"01a", 4);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* INSTALLSTATE_SOURCE */
     state = MAGIC_ERROR;
+    SetLastError(0xdeadbeef);
     r = pMsiQueryComponentStateA(prodcode, NULL, MSIINSTALLCONTEXT_MACHINE, component, &state);
+    error = GetLastError();
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
     ok(state == INSTALLSTATE_SOURCE, "Expected INSTALLSTATE_SOURCE, got %d\n", state);
+    ok(error == 0xdeadbeef, "expected 0xdeadbeef, got %u\n", error);
 
     res = RegSetValueExA(compkey, prod_squashed, 0, REG_SZ, (const BYTE *)"01", 3);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     /* bad INSTALLSTATE_SOURCE */
     state = MAGIC_ERROR;
+    SetLastError(0xdeadbeef);
     r = pMsiQueryComponentStateA(prodcode, NULL, MSIINSTALLCONTEXT_MACHINE, component, &state);
+    error = GetLastError();
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
     ok(state == INSTALLSTATE_LOCAL, "Expected INSTALLSTATE_LOCAL, got %d\n", state);
+    ok(error == 0xdeadbeef, "expected 0xdeadbeef, got %u\n", error);
 
     RegDeleteValueA(prodkey, "LocalPackage");
     delete_key(prodkey, "", access & KEY_WOW64_64KEY);
@@ -1598,14 +1802,13 @@ static void test_MsiGetComponentPath(void)
     LPSTR usersid;
     DWORD size, val;
     REGSAM access = KEY_ALL_ACCESS;
-    BOOL wow64;
     LONG res;
 
     create_test_guid(prodcode, prod_squashed);
     compose_base85_guid(component, comp_base85, comp_squashed);
     get_user_sid(&usersid);
 
-    if (pIsWow64Process && pIsWow64Process(GetCurrentProcess(), &wow64) && wow64)
+    if (is_wow64)
         access |= KEY_WOW64_64KEY;
 
     /* NULL szProduct */
@@ -2128,14 +2331,13 @@ static void test_MsiGetProductCode(void)
     LONG res;
     UINT r;
     REGSAM access = KEY_ALL_ACCESS;
-    BOOL wow64;
 
     create_test_guid(prodcode, prod_squashed);
     create_test_guid(prodcode2, prod2_squashed);
     compose_base85_guid(component, comp_base85, comp_squashed);
     get_user_sid(&usersid);
 
-    if (pIsWow64Process && pIsWow64Process(GetCurrentProcess(), &wow64) && wow64)
+    if (is_wow64)
         access |= KEY_WOW64_64KEY;
 
     /* szComponent is NULL */
@@ -2396,14 +2598,13 @@ static void test_MsiEnumClients(void)
     LONG res;
     UINT r;
     REGSAM access = KEY_ALL_ACCESS;
-    BOOL wow64;
 
     create_test_guid(prodcode, prod_squashed);
     create_test_guid(prodcode2, prod2_squashed);
     compose_base85_guid(component, comp_base85, comp_squashed);
     get_user_sid(&usersid);
 
-    if (pIsWow64Process && pIsWow64Process(GetCurrentProcess(), &wow64) && wow64)
+    if (is_wow64)
         access |= KEY_WOW64_64KEY;
 
     /* NULL szComponent */
@@ -2847,13 +3048,12 @@ static void test_MsiGetProductInfo(void)
     LPSTR usersid;
     DWORD sz, val = 42;
     REGSAM access = KEY_ALL_ACCESS;
-    BOOL wow64;
 
     create_test_guid(prodcode, prod_squashed);
     create_test_guid(packcode, pack_squashed);
     get_user_sid(&usersid);
 
-    if (pIsWow64Process && pIsWow64Process(GetCurrentProcess(), &wow64) && wow64)
+    if (is_wow64)
         access |= KEY_WOW64_64KEY;
 
     /* NULL szProduct */
@@ -4134,7 +4334,6 @@ static void test_MsiGetProductInfoEx(void)
     LPSTR usersid;
     DWORD sz;
     REGSAM access = KEY_ALL_ACCESS;
-    BOOL wow64;
 
     if (!pMsiGetProductInfoExA)
     {
@@ -4146,7 +4345,7 @@ static void test_MsiGetProductInfoEx(void)
     create_test_guid(packcode, pack_squashed);
     get_user_sid(&usersid);
 
-    if (pIsWow64Process && pIsWow64Process(GetCurrentProcess(), &wow64) && wow64)
+    if (is_wow64)
         access |= KEY_WOW64_64KEY;
 
     /* NULL szProductCode */
@@ -4793,7 +4992,7 @@ static void test_MsiGetProductInfoEx(void)
     lstrcpyA(keypath, "Software\\Microsoft\\Installer\\Products\\");
     lstrcatA(keypath, prod_squashed);
 
-    res = RegCreateKeyA(HKEY_CURRENT_USER, keypath, &prodkey);
+    res = RegCreateKeyExA(HKEY_CURRENT_USER, keypath, 0, NULL, 0, access, NULL, &prodkey, NULL);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     sz = MAX_PATH;
@@ -5184,7 +5383,7 @@ static void test_MsiGetProductInfoEx(void)
     RegDeleteValueA(prodkey, "HelpTelephone");
     RegDeleteValueA(prodkey, "HelpLink");
     RegDeleteValueA(prodkey, "LocalPackage");
-    RegDeleteKeyA(prodkey, "");
+    delete_key(prodkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(prodkey);
 
     /* MSIINSTALLCONTEXT_USERMANAGED */
@@ -5597,9 +5796,9 @@ static void test_MsiGetProductInfoEx(void)
     RegDeleteValueA(propkey, "HelpTelephone");
     RegDeleteValueA(propkey, "HelpLink");
     RegDeleteValueA(propkey, "ManagedLocalPackage");
-    RegDeleteKeyA(propkey, "");
+    delete_key(propkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(propkey);
-    RegDeleteKeyA(localkey, "");
+    delete_key(localkey, "", access & KEY_WOW64_64KEY);
     RegCloseKey(localkey);
 
     lstrcpyA(keypath, "Software\\Microsoft\\Windows\\CurrentVersion\\Installer\\Managed\\");
@@ -6888,12 +7087,11 @@ static void test_MsiGetUserInfo(void)
     LPSTR usersid;
     LONG res;
     REGSAM access = KEY_ALL_ACCESS;
-    BOOL wow64;
 
     create_test_guid(prodcode, prod_squashed);
     get_user_sid(&usersid);
 
-    if (pIsWow64Process && pIsWow64Process(GetCurrentProcess(), &wow64) && wow64)
+    if (is_wow64)
         access |= KEY_WOW64_64KEY;
 
     /* NULL szProduct */
@@ -7473,7 +7671,6 @@ static void test_MsiOpenProduct(void)
     LONG res;
     UINT r;
     REGSAM access = KEY_ALL_ACCESS;
-    BOOL wow64;
 
     GetCurrentDirectoryA(MAX_PATH, path);
     lstrcatA(path, "\\");
@@ -7481,7 +7678,7 @@ static void test_MsiOpenProduct(void)
     create_test_guid(prodcode, prod_squashed);
     get_user_sid(&usersid);
 
-    if (pIsWow64Process && pIsWow64Process(GetCurrentProcess(), &wow64) && wow64)
+    if (is_wow64)
         access |= KEY_WOW64_64KEY;
 
     hdb = create_package_db(prodcode);
@@ -7749,6 +7946,11 @@ static void test_MsiOpenProduct(void)
     /* LocalPackage has just the package name */
     hprod = 0xdeadbeef;
     r = MsiOpenProductA(prodcode, &hprod);
+    if (r == ERROR_INSTALL_PACKAGE_REJECTED)
+    {
+        skip("Not enough rights to perform tests\n");
+        goto error;
+    }
     ok(r == ERROR_INSTALL_PACKAGE_OPEN_FAILED || r == ERROR_SUCCESS,
        "Expected ERROR_INSTALL_PACKAGE_OPEN_FAILED or ERROR_SUCCESS, got %d\n", r);
     if (r == ERROR_SUCCESS)
@@ -7771,6 +7973,7 @@ static void test_MsiOpenProduct(void)
        "Expected ERROR_UNKNOWN_PRODUCT, got %d\n", r);
     ok(hprod == 0xdeadbeef, "Expected hprod to be unchanged\n");
 
+error:
     RegDeleteValueA(props, "LocalPackage");
     delete_key(props, "", access & KEY_WOW64_64KEY);
     RegCloseKey(props);
@@ -7795,12 +7998,11 @@ static void test_MsiEnumPatchesEx_usermanaged(LPCSTR usersid, LPCSTR expectedsid
     LONG res;
     UINT r;
     REGSAM access = KEY_ALL_ACCESS;
-    BOOL wow64;
 
     create_test_guid(prodcode, prod_squashed);
     create_test_guid(patch, patch_squashed);
 
-    if (pIsWow64Process && pIsWow64Process(GetCurrentProcess(), &wow64) && wow64)
+    if (is_wow64)
         access |= KEY_WOW64_64KEY;
 
     /* MSIPATCHSTATE_APPLIED */
@@ -8399,12 +8601,11 @@ static void test_MsiEnumPatchesEx_userunmanaged(LPCSTR usersid, LPCSTR expecteds
     LONG res;
     UINT r;
     REGSAM access = KEY_ALL_ACCESS;
-    BOOL wow64;
 
     create_test_guid(prodcode, prod_squashed);
     create_test_guid(patch, patch_squashed);
 
-    if (pIsWow64Process && pIsWow64Process(GetCurrentProcess(), &wow64) && wow64)
+    if (is_wow64)
         access |= KEY_WOW64_64KEY;
 
     /* MSIPATCHSTATE_APPLIED */
@@ -8863,12 +9064,11 @@ static void test_MsiEnumPatchesEx_machine(void)
     LONG res;
     UINT r;
     REGSAM access = KEY_ALL_ACCESS;
-    BOOL wow64;
 
     create_test_guid(prodcode, prod_squashed);
     create_test_guid(patch, patch_squashed);
 
-    if (pIsWow64Process && pIsWow64Process(GetCurrentProcess(), &wow64) && wow64)
+    if (is_wow64)
         access |= KEY_WOW64_64KEY;
 
     /* MSIPATCHSTATE_APPLIED */
@@ -9568,13 +9768,12 @@ static void test_MsiEnumPatches(void)
     LONG res;
     UINT r;
     REGSAM access = KEY_ALL_ACCESS;
-    BOOL wow64;
 
     create_test_guid(prodcode, prod_squashed);
     create_test_guid(patchcode, patch_squashed);
     get_user_sid(&usersid);
 
-    if (pIsWow64Process && pIsWow64Process(GetCurrentProcess(), &wow64) && wow64)
+    if (is_wow64)
         access |= KEY_WOW64_64KEY;
 
     /* NULL szProduct */
@@ -10269,7 +10468,6 @@ static void test_MsiGetPatchInfoEx(void)
     LONG res;
     UINT r;
     REGSAM access = KEY_ALL_ACCESS;
-    BOOL wow64;
 
     if (!pMsiGetPatchInfoExA)
     {
@@ -10281,7 +10479,7 @@ static void test_MsiGetPatchInfoEx(void)
     create_test_guid(patchcode, patch_squashed);
     get_user_sid(&usersid);
 
-    if (pIsWow64Process && pIsWow64Process(GetCurrentProcess(), &wow64) && wow64)
+    if (is_wow64)
         access |= KEY_WOW64_64KEY;
 
     /* NULL szPatchCode */
@@ -11292,13 +11490,12 @@ static void test_MsiGetPatchInfo(void)
     DWORD size;
     LONG res;
     REGSAM access = KEY_ALL_ACCESS;
-    BOOL wow64;
 
     create_test_guid(patch_code, patch_squashed);
     create_test_guid(prod_code, prod_squashed);
     MultiByteToWideChar(CP_ACP, 0, patch_code, -1, patch_codeW, MAX_PATH);
 
-    if (pIsWow64Process && pIsWow64Process(GetCurrentProcess(), &wow64) && wow64)
+    if (is_wow64)
         access |= KEY_WOW64_64KEY;
 
     r = MsiGetPatchInfoA(NULL, NULL, NULL, NULL);
@@ -11479,14 +11676,13 @@ static void test_MsiEnumProducts(void)
     char *usersid;
     HKEY key1, key2, key3;
     REGSAM access = KEY_ALL_ACCESS;
-    BOOL wow64;
 
     create_test_guid(product1, product_squashed1);
     create_test_guid(product2, product_squashed2);
     create_test_guid(product3, product_squashed3);
     get_user_sid(&usersid);
 
-    if (pIsWow64Process && pIsWow64Process(GetCurrentProcess(), &wow64) && wow64)
+    if (is_wow64)
         access |= KEY_WOW64_64KEY;
 
     strcpy(keypath1, "Software\\Classes\\Installer\\Products\\");
@@ -11555,6 +11751,9 @@ static void test_MsiEnumProducts(void)
 START_TEST(msi)
 {
     init_functionpointers();
+
+    if (pIsWow64Process)
+        pIsWow64Process(GetCurrentProcess(), &is_wow64);
 
     test_usefeature();
     test_null();

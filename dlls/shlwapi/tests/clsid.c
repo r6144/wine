@@ -40,7 +40,7 @@ static BOOL (WINAPI *pSHLWAPI_269)(LPCSTR, CLSID *) = 0;
 static DWORD (WINAPI *pSHLWAPI_23)(REFGUID, LPSTR, INT) = 0;
 
 /* GUIDs to test */
-const GUID * TEST_guids[] = {
+static const GUID * TEST_guids[] = {
   &CLSID_ShellDesktop,
   &CLSID_ShellLink,
   &CATID_BrowsableShellExt,
@@ -185,6 +185,13 @@ static void test_CLSIDFromProgIDWrap(void)
 START_TEST(clsid)
 {
   hShlwapi = GetModuleHandleA("shlwapi.dll");
+
+  /* SHCreateStreamOnFileEx was introduced in shlwapi v6.0 */
+  if(!GetProcAddress(hShlwapi, "SHCreateStreamOnFileEx")){
+      win_skip("Too old shlwapi version\n");
+      return;
+  }
+
   pSHLWAPI_269 = (void*)GetProcAddress(hShlwapi, (LPSTR)269);
   pSHLWAPI_23 = (void*)GetProcAddress(hShlwapi, (LPSTR)23);
 

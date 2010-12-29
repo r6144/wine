@@ -166,7 +166,7 @@ STRING     \"[^\n"]+\"
 <INITIAL,NOPROCESS>info|inf|in		{ BEGIN(INFO_CMD); return tINFO; }
 <INITIAL>up				{ BEGIN(NOCMD); return tUP; }
 <INITIAL>down|dow|do			{ BEGIN(NOCMD); return tDOWN; }
-<INITIAL>frame|fram|fra|fr		{ BEGIN(NOCMD); return tFRAME; }
+<INITIAL,INFO_CMD>frame|fram|fra|fr	{ BEGIN(NOCMD); return tFRAME; }
 <INITIAL>list|lis|li|l			{ BEGIN(PATH_ACCEPTED); return tLIST; }
 <INITIAL>enable|enabl|enab|ena		{ BEGIN(BD_CMD); return tENABLE;}
 <INITIAL>disable|disabl|disab|disa|dis  { BEGIN(BD_CMD); return tDISABLE; }
@@ -203,6 +203,7 @@ STRING     \"[^\n"]+\"
 <INITIAL,INFO_CMD,BD_CMD>break|brea|bre|br|b	{ BEGIN(NOCMD); return tBREAK; }
 <INITIAL,INFO_CMD,BD_CMD>hbreak|hbrea|hbre|hbr|hb { BEGIN(NOCMD); return tHBREAK; }
 <INITIAL>watch|watc|wat			{ BEGIN(NOCMD); return tWATCH; }
+<INITIAL>rwatch|rwatc|rwat		{ BEGIN(NOCMD); return tRWATCH; }
 <INITIAL>whatis|whati|what		{ BEGIN(NOCMD); return tWHATIS; }
 <INITIAL,NOPROCESS>run|ru|r     	{ BEGIN(ASTRING_EXPECTED); return tRUN;}
 <INITIAL>detach|detac|deta|det   	{ BEGIN(NOCMD); return tDETACH; }

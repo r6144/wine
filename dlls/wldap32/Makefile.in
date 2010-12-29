@@ -1,7 +1,3 @@
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = wldap32.dll
 IMPORTLIB = wldap32
 IMPORTS   = user32
@@ -45,6 +41,7 @@ RC_SRCS = \
 	wldap32_Pt.rc \
 	wldap32_Ro.rc \
 	wldap32_Ru.rc \
+	wldap32_Sr.rc \
 	wldap32_Sv.rc \
 	wldap32_Tr.rc \
 	wldap32_Uk.rc

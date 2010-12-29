@@ -1,7 +1,3 @@
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = msimtf.dll
 IMPORTS   = uuid imm32
 
@@ -9,6 +5,6 @@ C_SRCS = \
 	activeimmapp.c \
 	main.c
 
-RC_SRCS   = rsrc.rc
+IDL_R_SRCS = msimtf.idl
 
 @MAKE_DLL_RULES@

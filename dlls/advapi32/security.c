@@ -2069,6 +2069,11 @@ LookupAccountSidA(
         } else
             *domainSize = domainSizeW + 1;
     }
+    else
+    {
+        *accountSize = accountSizeW + 1;
+        *domainSize = domainSizeW + 1;
+    }
 
     HeapFree( GetProcessHeap(), 0, systemW );
     HeapFree( GetProcessHeap(), 0, accountW );
@@ -2225,8 +2230,11 @@ LookupAccountSidW(
             if (domain)
                 lstrcpyW(domain, dm);
         }
-        if (((*accountSize != 0) && (*accountSize < ac_len)) ||
-            ((*domainSize != 0) && (*domainSize < dm_len))) {
+        if ((*accountSize && *accountSize < ac_len) ||
+            (!account && !*accountSize && ac_len)   ||
+            (*domainSize && *domainSize < dm_len)   ||
+            (!domain && !*domainSize && dm_len))
+        {
             SetLastError(ERROR_INSUFFICIENT_BUFFER);
             status = FALSE;
         }
@@ -2238,9 +2246,10 @@ LookupAccountSidW(
             *accountSize = ac_len;
         else
             *accountSize = ac_len + 1;
-        *name_use = use;
+
         HeapFree(GetProcessHeap(), 0, account_name);
         HeapFree(GetProcessHeap(), 0, computer_name);
+        if (status) *name_use = use;
         return status;
     }
 
@@ -2620,9 +2629,8 @@ static BOOL lookup_user_account_name(PSID Sid, PDWORD cbSid, LPWSTR ReferencedDo
     HANDLE token;
     BOOL ret;
     PSID pSid;
-    static const WCHAR dm[] = {'D','O','M','A','I','N',0};
+    WCHAR domainName[MAX_COMPUTERNAME_LENGTH + 1];
     DWORD nameLen;
-    LPCWSTR domainName;
 
     if (!OpenThreadToken(GetCurrentThread(), TOKEN_READ, TRUE, &token))
     {
@@ -2646,9 +2654,12 @@ static BOOL lookup_user_account_name(PSID Sid, PDWORD cbSid, LPWSTR ReferencedDo
     }
     *cbSid = GetLengthSid(pSid);
 
-    domainName = dm;
-    nameLen = strlenW(domainName);
-
+    nameLen = MAX_COMPUTERNAME_LENGTH + 1;
+    if (!GetComputerNameW(domainName, &nameLen))
+    {
+        domainName[0] = 0;
+        nameLen = 0;
+    }
     if (*cchReferencedDomainName <= nameLen || !ret)
     {
         SetLastError(ERROR_INSUFFICIENT_BUFFER);
@@ -2674,9 +2685,8 @@ static BOOL lookup_computer_account_name(PSID Sid, PDWORD cbSid, LPWSTR Referenc
 {
     MAX_SID local;
     BOOL ret;
-    static const WCHAR dm[] = {'D','O','M','A','I','N',0};
+    WCHAR domainName[MAX_COMPUTERNAME_LENGTH + 1];
     DWORD nameLen;
-    LPCWSTR domainName;
 
     if ((ret = ADVAPI_GetComputerSid(&local)))
     {
@@ -2690,9 +2700,12 @@ static BOOL lookup_computer_account_name(PSID Sid, PDWORD cbSid, LPWSTR Referenc
         *cbSid = GetLengthSid(&local);
     }
 
-    domainName = dm;
-    nameLen = strlenW(domainName);
-
+    nameLen = MAX_COMPUTERNAME_LENGTH + 1;
+    if (!GetComputerNameW(domainName, &nameLen))
+    {
+        domainName[0] = 0;
+        nameLen = 0;
+    }
     if (*cchReferencedDomainName <= nameLen || !ret)
     {
         SetLastError(ERROR_INSUFFICIENT_BUFFER);
@@ -2735,7 +2748,7 @@ static void split_domain_account( const LSA_UNICODE_STRING *str, LSA_UNICODE_STR
     }
 }
 
-static BOOL match_domain( ULONG idx, LSA_UNICODE_STRING *domain )
+static BOOL match_domain( ULONG idx, const LSA_UNICODE_STRING *domain )
 {
     ULONG len = strlenW( ACCOUNT_SIDS[idx].domain );
 
@@ -2745,7 +2758,7 @@ static BOOL match_domain( ULONG idx, LSA_UNICODE_STRING *domain )
     return FALSE;
 }
 
-static BOOL match_account( ULONG idx, LSA_UNICODE_STRING *account )
+static BOOL match_account( ULONG idx, const LSA_UNICODE_STRING *account )
 {
     ULONG len = strlenW( ACCOUNT_SIDS[idx].account );
 
@@ -2764,7 +2777,7 @@ static BOOL match_account( ULONG idx, LSA_UNICODE_STRING *account )
 /*
  * Helper function for LookupAccountNameW
  */
-BOOL lookup_local_wellknown_name( LSA_UNICODE_STRING *account_and_domain,
+BOOL lookup_local_wellknown_name( const LSA_UNICODE_STRING *account_and_domain,
                                   PSID Sid, LPDWORD cbSid,
                                   LPWSTR ReferencedDomainName,
                                   LPDWORD cchReferencedDomainName,
@@ -2827,7 +2840,7 @@ BOOL lookup_local_wellknown_name( LSA_UNICODE_STRING *account_and_domain,
     return ret;
 }
 
-BOOL lookup_local_user_name( LSA_UNICODE_STRING *account_and_domain,
+BOOL lookup_local_user_name( const LSA_UNICODE_STRING *account_and_domain,
                              PSID Sid, LPDWORD cbSid,
                              LPWSTR ReferencedDomainName,
                              LPDWORD cchReferencedDomainName,
@@ -2889,11 +2902,12 @@ BOOL WINAPI LookupAccountNameW( LPCWSTR lpSystemName, LPCWSTR lpAccountName, PSI
     BOOL ret, handled;
     LSA_UNICODE_STRING account;
 
-    FIXME("%s %s %p %p %p %p %p - stub\n", debugstr_w(lpSystemName), debugstr_w(lpAccountName),
+    TRACE("%s %s %p %p %p %p %p\n", debugstr_w(lpSystemName), debugstr_w(lpAccountName),
           Sid, cbSid, ReferencedDomainName, cchReferencedDomainName, peUse);
 
     if (!ADVAPI_IsLocalComputer( lpSystemName ))
     {
+        FIXME("remote computer not supported\n");
         SetLastError( RPC_S_SERVER_UNAVAILABLE );
         return FALSE;
     }
@@ -5272,15 +5286,24 @@ DWORD WINAPI GetNamedSecurityInfoW( LPWSTR name, SE_OBJECT_TYPE type,
     PACL* sacl, PSECURITY_DESCRIPTOR* descriptor )
 {
     DWORD needed, offset;
-    SECURITY_DESCRIPTOR_RELATIVE *relative;
+    SECURITY_DESCRIPTOR_RELATIVE *relative = NULL;
     BYTE *buffer;
 
     TRACE( "%s %d %d %p %p %p %p %p\n", debugstr_w(name), type, info, owner,
            group, dacl, sacl, descriptor );
 
-    if (!name || !descriptor) return ERROR_INVALID_PARAMETER;
+    /* A NULL descriptor is allowed if any one of the other pointers is not NULL */
+    if (!name || !(owner||group||dacl||sacl||descriptor) ) return ERROR_INVALID_PARAMETER;
 
-    needed = sizeof(SECURITY_DESCRIPTOR_RELATIVE);
+    /* If no descriptor, we have to check that there's a pointer for the requested information */
+    if( !descriptor && (
+        ((info & OWNER_SECURITY_INFORMATION) && !owner)
+    ||  ((info & GROUP_SECURITY_INFORMATION) && !group)
+    ||  ((info & DACL_SECURITY_INFORMATION)  && !dacl)
+    ||  ((info & SACL_SECURITY_INFORMATION)  && !sacl)  ))
+        return ERROR_INVALID_PARAMETER;
+
+    needed = !descriptor ? 0 : sizeof(SECURITY_DESCRIPTOR_RELATIVE);
     if (info & OWNER_SECURITY_INFORMATION)
         needed += sizeof(sidWorld);
     if (info & GROUP_SECURITY_INFORMATION)
@@ -5290,25 +5313,36 @@ DWORD WINAPI GetNamedSecurityInfoW( LPWSTR name, SE_OBJECT_TYPE type,
     if (info & SACL_SECURITY_INFORMATION)
         needed += WINE_SIZE_OF_WORLD_ACCESS_ACL;
 
-    /* must be freed by caller */
-    *descriptor = HeapAlloc( GetProcessHeap(), 0, needed );
-    if (!*descriptor) return ERROR_NOT_ENOUGH_MEMORY;
-
-    if (!InitializeSecurityDescriptor( *descriptor, SECURITY_DESCRIPTOR_REVISION ))
+    if(descriptor)
     {
-        HeapFree( GetProcessHeap(), 0, *descriptor );
-        return ERROR_INVALID_SECURITY_DESCR;
-    }
+        /* must be freed by caller */
+        *descriptor = HeapAlloc( GetProcessHeap(), 0, needed );
+        if (!*descriptor) return ERROR_NOT_ENOUGH_MEMORY;
 
-    relative = *descriptor;
-    relative->Control |= SE_SELF_RELATIVE;
-    buffer = (BYTE *)relative;
-    offset = sizeof(SECURITY_DESCRIPTOR_RELATIVE);
+        if (!InitializeSecurityDescriptor( *descriptor, SECURITY_DESCRIPTOR_REVISION ))
+        {
+            HeapFree( GetProcessHeap(), 0, *descriptor );
+            return ERROR_INVALID_SECURITY_DESCR;
+        }
+
+        relative = *descriptor;
+        relative->Control |= SE_SELF_RELATIVE;
+
+        buffer = (BYTE *)relative;
+        offset = sizeof(SECURITY_DESCRIPTOR_RELATIVE);
+    }
+    else
+    {
+        buffer = HeapAlloc( GetProcessHeap(), 0, needed );
+        if (!buffer) return ERROR_NOT_ENOUGH_MEMORY;
+        offset = 0;
+    }
 
     if (info & OWNER_SECURITY_INFORMATION)
     {
         memcpy( buffer + offset, &sidWorld, sizeof(sidWorld) );
-        relative->Owner = offset;
+        if(relative)
+            relative->Owner = offset;
         if (owner)
             *owner = buffer + offset;
         offset += sizeof(sidWorld);
@@ -5316,28 +5350,36 @@ DWORD WINAPI GetNamedSecurityInfoW( LPWSTR name, SE_OBJECT_TYPE type,
     if (info & GROUP_SECURITY_INFORMATION)
     {
         memcpy( buffer + offset, &sidWorld, sizeof(sidWorld) );
-        relative->Group = offset;
+        if(relative)
+            relative->Group = offset;
         if (group)
             *group = buffer + offset;
         offset += sizeof(sidWorld);
     }
     if (info & DACL_SECURITY_INFORMATION)
     {
-        relative->Control |= SE_DACL_PRESENT;
         GetWorldAccessACL( (PACL)(buffer + offset) );
-        relative->Dacl = offset;
+        if(relative)
+        {
+            relative->Control |= SE_DACL_PRESENT;
+            relative->Dacl = offset;
+        }
         if (dacl)
             *dacl = (PACL)(buffer + offset);
         offset += WINE_SIZE_OF_WORLD_ACCESS_ACL;
     }
     if (info & SACL_SECURITY_INFORMATION)
     {
-        relative->Control |= SE_SACL_PRESENT;
         GetWorldAccessACL( (PACL)(buffer + offset) );
-        relative->Sacl = offset;
+        if(relative)
+        {
+            relative->Control |= SE_SACL_PRESENT;
+            relative->Sacl = offset;
+        }
         if (sacl)
             *sacl = (PACL)(buffer + offset);
     }
+
     return ERROR_SUCCESS;
 }
 

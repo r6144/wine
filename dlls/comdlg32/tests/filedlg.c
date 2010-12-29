@@ -304,7 +304,7 @@ static void test_create_view_template(void)
 }
 
 /* test cases for resizing of the file dialog */
-struct {
+static const struct {
     DWORD flags;
     int resize_folderchange;/* change in CDN_FOLDERCHANGE handler */
     int resize_timer1;      /* change in first WM_TIMER handler */
@@ -985,6 +985,102 @@ static void test_resizable2(void)
 #undef ISSIZABLE
 }
 
+static void test_mru(void)
+{
+    ok_wndproc_testcase testcase = {0};
+    OPENFILENAME ofn = {sizeof(OPENFILENAME)};
+    const char *test_dir_name = "C:\\mru_test";
+    const char *test_file_name = "test.txt";
+    const char *test_full_path = "C:\\mru_test\\test.txt";
+    char filename_buf[MAX_PATH];
+    DWORD ret;
+
+    ofn.lpstrFile = filename_buf;
+    ofn.nMaxFile = sizeof(filename_buf);
+    ofn.lpTemplateName = "template1";
+    ofn.hInstance = GetModuleHandle(NULL);
+    ofn.Flags =  OFN_ENABLEHOOK | OFN_EXPLORER | OFN_ENABLETEMPLATE | OFN_NOCHANGEDIR;
+    ofn.lCustData = (LPARAM)&testcase;
+    ofn.lpfnHook = (LPOFNHOOKPROC)test_ok_wndproc;
+
+    SetLastError(0xdeadbeef);
+    ret = CreateDirectoryA(test_dir_name, NULL);
+    ok(ret == TRUE, "CreateDirectoryA should have succeeded: %d\n", GetLastError());
+
+    /* "teach" comdlg32 about this directory */
+    strcpy(filename_buf, test_full_path);
+    SetLastError(0xdeadbeef);
+    ret = GetOpenFileNameA(&ofn);
+    ok(ret, "GetOpenFileNameA should have succeeded: %d\n", GetLastError());
+    ret = CommDlgExtendedError();
+    ok(!ret, "CommDlgExtendedError returned %x\n", ret);
+    ok(testcase.actclose, "Open File dialog should have closed.\n");
+    ok(!strcmp(ofn.lpstrFile, test_full_path), "Expected to get %s, got %s\n", test_full_path, ofn.lpstrFile);
+
+    /* get a filename without a full path. it should return the file in
+     * test_dir_name, not in the CWD */
+    strcpy(filename_buf, test_file_name);
+    SetLastError(0xdeadbeef);
+    ret = GetOpenFileNameA(&ofn);
+    ok(ret, "GetOpenFileNameA should have succeeded: %d\n", GetLastError());
+    ret = CommDlgExtendedError();
+    ok(!ret, "CommDlgExtendedError returned %x\n", ret);
+    ok(testcase.actclose, "Open File dialog should have closed.\n");
+    if(strcmp(ofn.lpstrFile, test_full_path) != 0)
+        win_skip("Platform doesn't save MRU data\n");
+
+    SetLastError(0xdeadbeef);
+    ret = RemoveDirectoryA(test_dir_name);
+    ok(ret == TRUE, "RemoveDirectoryA should have succeeded: %d\n", GetLastError());
+}
+
+static UINT_PTR WINAPI test_extension_wndproc(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+    HWND parent = GetParent( dlg);
+    if( msg == WM_NOTIFY) {
+        SetTimer( dlg, 0, 100, 0);
+        PostMessage( parent, WM_COMMAND, IDOK, 0);
+    }
+    if( msg == WM_TIMER) {
+        /* the dialog did not close automatically */
+        KillTimer( dlg, 0);
+        PostMessage( parent, WM_COMMAND, IDCANCEL, 0);
+    }
+    return FALSE;
+}
+
+static void test_extension(void)
+{
+    OPENFILENAME ofn = { sizeof(OPENFILENAME)};
+    char filename[1024] = {0};
+    char curdir[MAX_PATH];
+    char *filename_ptr;
+    const char *test_file_name = "deadbeef";
+    DWORD ret;
+
+    ok(GetCurrentDirectoryA(sizeof(curdir), curdir) != 0, "Failed to get current dir err %d\n", GetLastError());
+
+    /* Ignore .* extension */
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = NULL;
+    ofn.lpstrFile = filename;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.Flags = OFN_EXPLORER | OFN_ENABLEHOOK;
+    ofn.lpstrDefExt = NULL;
+    ofn.lpstrInitialDir = curdir;
+    ofn.lpfnHook = test_extension_wndproc;
+    ofn.nFileExtension = 0;
+    ofn.lpstrFilter = "All Files (*.*)\0*.*\0";
+    strcpy(filename, test_file_name);
+
+    ret = GetSaveFileNameA(&ofn);
+    filename_ptr = ofn.lpstrFile + strlen( ofn.lpstrFile ) - strlen( test_file_name );
+    ok(1 == ret, "expected 1, got %d\n", ret);
+    ok(strlen(ofn.lpstrFile) >= strlen(test_file_name), "Filename %s is too short\n", ofn.lpstrFile );
+    ok( strcmp(filename_ptr, test_file_name) == 0,
+        "Filename is %s, expected %s\n", filename_ptr, test_file_name );
+}
+
 START_TEST(filedlg)
 {
     test_DialogCancel();
@@ -994,5 +1090,7 @@ START_TEST(filedlg)
     test_resize();
     test_ok();
     test_getfolderpath();
+    test_mru();
     if( resizesupported) test_resizable2();
+    test_extension();
 }

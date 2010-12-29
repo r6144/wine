@@ -26,7 +26,7 @@
 
 #include "dbghelp_private.h"
 
-#ifdef __MACH__
+#ifdef HAVE_MACH_O_LOADER_H
 
 #include <assert.h>
 #include <stdarg.h>
@@ -903,7 +903,7 @@ BOOL macho_load_debug_info(struct module* module, struct macho_file_map* fmap)
  *
  * Gathers some more information for a Mach-O module from a given file
  */
-BOOL macho_fetch_file_info(const WCHAR* name, DWORD* base,
+BOOL macho_fetch_file_info(const WCHAR* name, DWORD_PTR* base,
                            DWORD* size, DWORD* checksum)
 {
     struct macho_file_map fmap;
@@ -1409,14 +1409,14 @@ struct module*  macho_load_module(struct process* pcs, const WCHAR* name, unsign
     return ml.macho_info.module;
 }
 
-#else   /* !__MACH__ */
+#else  /* HAVE_MACH_O_LOADER_H */
 
 BOOL    macho_synchronize_module_list(struct process* pcs)
 {
     return FALSE;
 }
 
-BOOL macho_fetch_file_info(const WCHAR* name, DWORD* base,
+BOOL macho_fetch_file_info(const WCHAR* name, DWORD_PTR* base,
                            DWORD* size, DWORD* checksum)
 {
     return FALSE;
@@ -1441,4 +1441,4 @@ BOOL macho_load_debug_info(struct module* module, struct macho_file_map* fmap)
 {
     return FALSE;
 }
-#endif  /* __MACH__ */
+#endif  /* HAVE_MACH_O_LOADER_H */

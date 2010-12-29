@@ -24,8 +24,10 @@ STRINGTABLE
 {
     IDS_TO_PRIMITIVE        "Error converting object to primitive type"
     IDS_INVALID_CALL_ARG    "Invalid procedure call or argument"
+    IDS_SUBSCRIPT_OUT_OF_RANGE "Subscript out of range"
     IDS_CREATE_OBJ_ERROR    "Automation server can't create object"
     IDS_NO_PROPERTY         "Object doesn't support this property or method"
+    IDS_UNSUPPORTED_ACTION  "Object doesn't support this action"
     IDS_ARG_NOT_OPT         "Argument not optional"
     IDS_SYNTAX_ERROR        "Syntax error"
     IDS_SEMICOLON           "Expected ';'"
@@ -39,6 +41,7 @@ STRINGTABLE
     IDS_ILLEGAL_ASSIGN      "Illegal assignment"
     IDS_UNDEFINED           "'|' is undefined"
     IDS_NOT_BOOL            "Boolean object expected"
+    IDS_NOT_VBARRAY         "VBArray object expected"
     IDS_JSCRIPT_EXPECTED    "JScript object expected"
     IDS_REGEXP_SYNTAX_ERROR "Syntax error in regular expression"
     IDS_URI_INVALID_CHAR    "URI to be encoded contains invalid characters"

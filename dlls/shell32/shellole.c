@@ -26,6 +26,7 @@
 #include <string.h>
 
 #define COBJMACROS
+#define NONAMELESSUNION
 
 #include "windef.h"
 #include "winbase.h"
@@ -77,6 +78,8 @@ static const struct {
 	{&CLSID_ShellLink,	IShellLink_Constructor},
 	{&CLSID_UnixDosFolder,  UnixDosFolder_Constructor},
 	{&CLSID_UnixFolder,     UnixFolder_Constructor},
+	{&CLSID_ExplorerBrowser,ExplorerBrowser_Constructor},
+	{&CLSID_KnownFolderManager, KnownFolderManager_Constructor},
 	{NULL, NULL}
 };
 
@@ -355,13 +358,18 @@ HRESULT WINAPI SHGetDesktopFolder(IShellFolder **psf)
 
 typedef struct
 {
-    const IClassFactoryVtbl    *lpVtbl;
+    IClassFactory               IClassFactory_iface;
     LONG                        ref;
     CLSID			*rclsid;
     LPFNCREATEINSTANCE		lpfnCI;
     const IID *			riidInst;
     LONG *			pcRefDll; /* pointer to refcounter in external dll (ugrrr...) */
 } IDefClFImpl;
+
+static inline IDefClFImpl *impl_from_IClassFactory(IClassFactory *iface)
+{
+	return CONTAINING_RECORD(iface, IDefClFImpl, IClassFactory_iface);
+}
 
 static const IClassFactoryVtbl dclfvt;
 
@@ -375,7 +383,7 @@ static IClassFactory * IDefClF_fnConstructor(LPFNCREATEINSTANCE lpfnCI, PLONG pc
 
 	lpclf = HeapAlloc(GetProcessHeap(),0,sizeof(IDefClFImpl));
 	lpclf->ref = 1;
-	lpclf->lpVtbl = &dclfvt;
+	lpclf->IClassFactory_iface.lpVtbl = &dclfvt;
 	lpclf->lpfnCI = lpfnCI;
 	lpclf->pcRefDll = pcRefDll;
 
@@ -391,7 +399,7 @@ static IClassFactory * IDefClF_fnConstructor(LPFNCREATEINSTANCE lpfnCI, PLONG pc
 static HRESULT WINAPI IDefClF_fnQueryInterface(
   LPCLASSFACTORY iface, REFIID riid, LPVOID *ppvObj)
 {
-	IDefClFImpl *This = (IDefClFImpl *)iface;
+	IDefClFImpl *This = impl_from_IClassFactory(iface);
 
 	TRACE("(%p)->(%s)\n",This,shdebugstr_guid(riid));
 
@@ -411,7 +419,7 @@ static HRESULT WINAPI IDefClF_fnQueryInterface(
  */
 static ULONG WINAPI IDefClF_fnAddRef(LPCLASSFACTORY iface)
 {
-	IDefClFImpl *This = (IDefClFImpl *)iface;
+	IDefClFImpl *This = impl_from_IClassFactory(iface);
 	ULONG refCount = InterlockedIncrement(&This->ref);
 
 	TRACE("(%p)->(count=%u)\n", This, refCount - 1);
@@ -423,9 +431,9 @@ static ULONG WINAPI IDefClF_fnAddRef(LPCLASSFACTORY iface)
  */
 static ULONG WINAPI IDefClF_fnRelease(LPCLASSFACTORY iface)
 {
-	IDefClFImpl *This = (IDefClFImpl *)iface;
+	IDefClFImpl *This = impl_from_IClassFactory(iface);
 	ULONG refCount = InterlockedDecrement(&This->ref);
-	
+
 	TRACE("(%p)->(count=%u)\n", This, refCount + 1);
 
 	if (!refCount)
@@ -444,7 +452,7 @@ static ULONG WINAPI IDefClF_fnRelease(LPCLASSFACTORY iface)
 static HRESULT WINAPI IDefClF_fnCreateInstance(
   LPCLASSFACTORY iface, LPUNKNOWN pUnkOuter, REFIID riid, LPVOID *ppvObject)
 {
-	IDefClFImpl *This = (IDefClFImpl *)iface;
+	IDefClFImpl *This = impl_from_IClassFactory(iface);
 
 	TRACE("%p->(%p,%s,%p)\n",This,pUnkOuter,shdebugstr_guid(riid),ppvObject);
 
@@ -465,7 +473,7 @@ static HRESULT WINAPI IDefClF_fnCreateInstance(
  */
 static HRESULT WINAPI IDefClF_fnLockServer(LPCLASSFACTORY iface, BOOL fLock)
 {
-	IDefClFImpl *This = (IDefClFImpl *)iface;
+	IDefClFImpl *This = impl_from_IClassFactory(iface);
 	TRACE("%p->(0x%x), not implemented\n",This, fLock);
 	return E_NOTIMPL;
 }
@@ -654,4 +662,132 @@ UINT WINAPI DragQueryFileW(
 end:
 	GlobalUnlock(hDrop);
 	return i;
+}
+
+/*************************************************************************
+ *  SHPropStgCreate             [SHELL32.685]
+ */
+HRESULT WINAPI SHPropStgCreate(IPropertySetStorage *psstg, REFFMTID fmtid,
+        const CLSID *pclsid, DWORD grfFlags, DWORD grfMode,
+        DWORD dwDisposition, IPropertyStorage **ppstg, UINT *puCodePage)
+{
+    PROPSPEC prop;
+    PROPVARIANT ret;
+    HRESULT hres;
+
+    TRACE("%p %s %s %x %x %x %p %p\n", psstg, debugstr_guid(fmtid), debugstr_guid(pclsid),
+            grfFlags, grfMode, dwDisposition, ppstg, puCodePage);
+
+    hres = IPropertySetStorage_Open(psstg, fmtid, grfMode, ppstg);
+
+    switch(dwDisposition) {
+    case CREATE_ALWAYS:
+        if(SUCCEEDED(hres)) {
+            IPropertyStorage_Release(*ppstg);
+            hres = IPropertySetStorage_Delete(psstg, fmtid);
+            if(FAILED(hres))
+                return hres;
+            hres = E_FAIL;
+        }
+
+    case OPEN_ALWAYS:
+    case CREATE_NEW:
+        if(FAILED(hres))
+            hres = IPropertySetStorage_Create(psstg, fmtid, pclsid,
+                    grfFlags, grfMode, ppstg);
+
+    case OPEN_EXISTING:
+        if(FAILED(hres))
+            return hres;
+
+        if(puCodePage) {
+            prop.ulKind = PRSPEC_PROPID;
+            prop.u.propid = PID_CODEPAGE;
+            hres = IPropertyStorage_ReadMultiple(*ppstg, 1, &prop, &ret);
+            if(FAILED(hres) || ret.vt!=VT_I2)
+                *puCodePage = 0;
+            else
+                *puCodePage = ret.u.iVal;
+        }
+    }
+
+    return S_OK;
+}
+
+/*************************************************************************
+ *  SHPropStgReadMultiple       [SHELL32.688]
+ */
+HRESULT WINAPI SHPropStgReadMultiple(IPropertyStorage *pps, UINT uCodePage,
+        ULONG cpspec, const PROPSPEC *rgpspec, PROPVARIANT *rgvar)
+{
+    STATPROPSETSTG stat;
+    HRESULT hres;
+
+    FIXME("%p %u %u %p %p\n", pps, uCodePage, cpspec, rgpspec, rgvar);
+
+    memset(rgvar, 0, cpspec*sizeof(PROPVARIANT));
+    hres = IPropertyStorage_ReadMultiple(pps, cpspec, rgpspec, rgvar);
+    if(FAILED(hres))
+        return hres;
+
+    if(!uCodePage) {
+        PROPSPEC prop;
+        PROPVARIANT ret;
+
+        prop.ulKind = PRSPEC_PROPID;
+        prop.u.propid = PID_CODEPAGE;
+        hres = IPropertyStorage_ReadMultiple(pps, 1, &prop, &ret);
+        if(FAILED(hres) || ret.vt!=VT_I2)
+            return S_OK;
+
+        uCodePage = ret.u.iVal;
+    }
+
+    hres = IPropertyStorage_Stat(pps, &stat);
+    if(FAILED(hres))
+        return S_OK;
+
+    /* TODO: do something with codepage and stat */
+    return S_OK;
+}
+
+/*************************************************************************
+ *  SHPropStgWriteMultiple      [SHELL32.689]
+ */
+HRESULT WINAPI SHPropStgWriteMultiple(IPropertyStorage *pps, UINT *uCodePage,
+        ULONG cpspec, const PROPSPEC *rgpspec, PROPVARIANT *rgvar, PROPID propidNameFirst)
+{
+    STATPROPSETSTG stat;
+    UINT codepage;
+    HRESULT hres;
+
+    FIXME("%p %p %u %p %p %d\n", pps, uCodePage, cpspec, rgpspec, rgvar, propidNameFirst);
+
+    hres = IPropertyStorage_Stat(pps, &stat);
+    if(FAILED(hres))
+        return hres;
+
+    if(uCodePage && *uCodePage)
+        codepage = *uCodePage;
+    else {
+        PROPSPEC prop;
+        PROPVARIANT ret;
+
+        prop.ulKind = PRSPEC_PROPID;
+        prop.u.propid = PID_CODEPAGE;
+        hres = IPropertyStorage_ReadMultiple(pps, 1, &prop, &ret);
+        if(FAILED(hres))
+            return hres;
+        if(ret.vt!=VT_I2 || !ret.u.iVal)
+            return E_FAIL;
+
+        codepage = ret.u.iVal;
+        if(uCodePage)
+            *uCodePage = codepage;
+    }
+
+    /* TODO: do something with codepage and stat */
+
+    hres = IPropertyStorage_WriteMultiple(pps, cpspec, rgpspec, rgvar, propidNameFirst);
+    return hres;
 }

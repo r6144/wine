@@ -1,8 +1,4 @@
 EXTRADEFS = -D_SPOOL32_
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = winspool.drv
 IMPORTLIB = winspool
 IMPORTS   = user32 gdi32 advapi32
@@ -21,6 +17,7 @@ RC_SRCS = \
 	Es.rc \
 	Fi.rc \
 	Fr.rc \
+	He.rc \
 	Hu.rc \
 	It.rc \
 	Ja.rc \
@@ -33,6 +30,7 @@ RC_SRCS = \
 	Ro.rc \
 	Ru.rc \
 	Si.rc \
+	Sr.rc \
 	Sv.rc \
 	Tr.rc \
 	Uk.rc \

@@ -1760,6 +1760,7 @@ typedef enum wined3d_gl_extension
     ARB_SYNC,
     ARB_TEXTURE_BORDER_CLAMP,
     ARB_TEXTURE_COMPRESSION,
+    ARB_TEXTURE_COMPRESSION_RGTC,
     ARB_TEXTURE_CUBE_MAP,
     ARB_TEXTURE_ENV_ADD,
     ARB_TEXTURE_ENV_COMBINE,
@@ -1786,6 +1787,7 @@ typedef enum wined3d_gl_extension
     EXT_BLEND_FUNC_SEPARATE,
     EXT_BLEND_MINMAX,
     EXT_DRAW_BUFFERS2,
+    EXT_DEPTH_BOUNDS_TEST,
     EXT_FOG_COORD,
     EXT_FRAMEBUFFER_BLIT,
     EXT_FRAMEBUFFER_MULTISAMPLE,
@@ -2451,6 +2453,15 @@ typedef GLvoid (WINE_GLAPI *PGLFNGETSYNCIVPROC)(GLsync sync, GLenum pname, GLsiz
 #define GL_CLAMP_TO_BORDER_ARB                              0x812d
 #endif
 
+/* GL_ARB_texture_compression_rgtc */
+#ifndef GL_ARB_texture_compression_rgtc
+#define GL_ARB_texture_compression_rgtc 1
+#define GL_COMPRESSED_RED_RGTC1                             0x8dbb
+#define GL_COMPRESSED_SIGNED_RED_RGTC1                      0x8dbc
+#define GL_COMPRESSED_RED_GREEN_RGTC2                       0x8dbd
+#define GL_COMPRESSED_SIGNED_RED_GREEN_RGTC2                0x8dbe
+#endif
+
 /* GL_ARB_texture_cube_map */
 #ifndef GL_ARB_texture_cube_map
 #define GL_ARB_texture_cube_map 1
@@ -2971,6 +2982,14 @@ typedef void (WINE_GLAPI *PGLFNBLENDEQUATIONSEPARATEEXTPROC)(GLenum modeRGB, GLe
 #endif
 typedef void (WINE_GLAPI *PGLFNBLENDFUNCSEPARATEEXTPROC)(GLenum sfactorRGB, GLenum dfactorRGB,
         GLenum sfactorAlpha, GLenum dfactorAlpha);
+
+/* GL_EXT_depth_bounds_test */
+#ifndef GL_EXT_depth_bounds_test
+#define GL_EXT_depth_bounds_test 1
+#define GL_DEPTH_BOUNDS_TEST_EXT                            0x8890
+#define GL_DEPTH_BOUNDS_EXT                                 0x8891
+#endif
+typedef void (WINE_GLAPI *PGLFNDEPTHBOUNDSEXTPROC)(GLclampd zmin, GLclampd zmax);
 
 /* GL_EXT_draw_buffers2 */
 typedef GLvoid (WINE_GLAPI *PGLFNCOLORMASKINDEXEDEXTPROC)(GLuint buffer_idx, GLboolean r, GLboolean g,
@@ -4211,6 +4230,9 @@ typedef BOOL (WINAPI *WINED3D_PFNWGLSETPIXELFORMATWINE)(HDC hdc, int iPixelForma
     /* GL_EXT_blend_func_separate */ \
     USE_GL_FUNC(PGLFNBLENDEQUATIONSEPARATEEXTPROC, \
             glBlendEquationSeparateEXT,                 EXT_BLEND_EQUATION_SEPARATE,    NULL) \
+    /* GL_EXT_depth_bounds_test */ \
+    USE_GL_FUNC(PGLFNDEPTHBOUNDSEXTPROC, \
+            glDepthBoundsEXT,                           EXT_DEPTH_BOUNDS_TEST,          NULL) \
     /* GL_EXT_draw_buffers2 */ \
     USE_GL_FUNC(PGLFNCOLORMASKINDEXEDEXTPROC, \
             glColorMaskIndexedEXT,                      EXT_DRAW_BUFFERS2,              NULL) \

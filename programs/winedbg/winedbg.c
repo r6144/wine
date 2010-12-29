@@ -603,6 +603,12 @@ void dbg_start_interactive(HANDLE hFile)
     dbg_save_internal_vars();
 }
 
+static LONG CALLBACK top_filter( EXCEPTION_POINTERS *ptr )
+{
+    dbg_printf( "winedbg: Internal crash at %p\n", ptr->ExceptionRecord->ExceptionAddress );
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+
 struct backend_cpu* be_cpu;
 #ifdef __i386__
 extern struct backend_cpu be_i386;
@@ -612,6 +618,10 @@ extern struct backend_cpu be_ppc;
 extern struct backend_cpu be_alpha;
 #elif defined(__x86_64__)
 extern struct backend_cpu be_x86_64;
+#elif defined(__sparc__)
+extern struct backend_cpu be_sparc;
+#elif defined(__arm__)
+extern struct backend_cpu be_arm;
 #else
 # error CPU unknown
 #endif
@@ -630,11 +640,17 @@ int main(int argc, char** argv)
     be_cpu = &be_alpha;
 #elif defined(__x86_64__)
     be_cpu = &be_x86_64;
+#elif defined(__sparc__)
+    be_cpu = &be_sparc;
+#elif defined(__arm__)
+    be_cpu = &be_arm;
 #else
 # error CPU unknown
 #endif
     /* Initialize the output */
     dbg_houtput = GetStdHandle(STD_OUTPUT_HANDLE);
+
+    SetUnhandledExceptionFilter( top_filter );
 
     /* Initialize internal vars */
     if (!dbg_load_internal_vars()) return -1;

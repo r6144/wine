@@ -75,6 +75,22 @@ static IDirect3DDevice9 *create_device(IDirect3D9 *d3d9, HWND device_window, HWN
     return NULL;
 }
 
+static HRESULT reset_device(IDirect3DDevice9 *device, HWND device_window, BOOL windowed)
+{
+    D3DPRESENT_PARAMETERS present_parameters = {0};
+
+    present_parameters.Windowed = windowed;
+    present_parameters.hDeviceWindow = device_window;
+    present_parameters.SwapEffect = D3DSWAPEFFECT_DISCARD;
+    present_parameters.BackBufferWidth = 640;
+    present_parameters.BackBufferHeight = 480;
+    present_parameters.BackBufferFormat = D3DFMT_A8R8G8B8;
+    present_parameters.EnableAutoDepthStencil = TRUE;
+    present_parameters.AutoDepthStencilFormat = D3DFMT_D24S8;
+
+    return IDirect3DDevice9_Reset(device, &present_parameters);
+}
+
 #define CHECK_CALL(r,c,d,rc) \
     if (SUCCEEDED(r)) {\
         int tmp1 = get_refcount( (IUnknown *)d ); \
@@ -2012,7 +2028,8 @@ static void test_set_stream_source(void)
     {
         hr = IDirect3D9_CreateDevice( d3d9, D3DADAPTER_DEFAULT, D3DDEVTYPE_REF, hwnd,
                                       D3DCREATE_HARDWARE_VERTEXPROCESSING, &present_parameters, &device );
-        ok(hr == D3D_OK || hr == D3DERR_NOTAVAILABLE, "IDirect3D9_CreateDevice failed with %08x\n", hr);
+        ok(hr == D3D_OK || hr == D3DERR_NOTAVAILABLE || hr == D3DERR_INVALIDCALL,
+           "IDirect3D9_CreateDevice failed with %08x\n", hr);
         if(!device)
         {
             skip("Failed to create a d3d device\n");
@@ -2069,7 +2086,7 @@ struct formats {
     BOOL shouldPass;
 };
 
-struct formats r5g6b5_format_list[] =
+static const struct formats r5g6b5_format_list[] =
 {
     { D3DFMT_R5G6B5, D3DFMT_R5G6B5, TRUE },
     { D3DFMT_R5G6B5, D3DFMT_X1R5G5B5, FALSE },
@@ -2079,7 +2096,7 @@ struct formats r5g6b5_format_list[] =
     { 0, 0, 0}
 };
 
-struct formats x1r5g5b5_format_list[] =
+static const struct formats x1r5g5b5_format_list[] =
 {
     { D3DFMT_X1R5G5B5, D3DFMT_R5G6B5, FALSE },
     { D3DFMT_X1R5G5B5, D3DFMT_X1R5G5B5, TRUE },
@@ -2096,7 +2113,7 @@ struct formats x1r5g5b5_format_list[] =
     { 0, 0, 0}
 };
 
-struct formats x8r8g8b8_format_list[] =
+static const struct formats x8r8g8b8_format_list[] =
 {
     { D3DFMT_X8R8G8B8, D3DFMT_R5G6B5, FALSE },
     { D3DFMT_X8R8G8B8, D3DFMT_X1R5G5B5, FALSE },
@@ -2347,11 +2364,21 @@ fail:
 }
 
 static HWND filter_messages;
-struct
+
+enum message_window
 {
-    HWND window;
+    DEVICE_WINDOW,
+    FOCUS_WINDOW,
+};
+
+struct message
+{
     UINT message;
-} expect_message;
+    enum message_window window;
+};
+
+static const struct message *expect_messages;
+static HWND device_window, focus_window;
 
 struct wndproc_thread_param
 {
@@ -2368,7 +2395,27 @@ static LRESULT CALLBACK test_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM
             todo_wine ok( 0, "Received unexpected message %#x for window %p.\n", message, hwnd);
     }
 
-    if (expect_message.window == hwnd && expect_message.message == message) expect_message.message = 0;
+    if (expect_messages)
+    {
+        HWND w;
+
+        switch (expect_messages->window)
+        {
+            case DEVICE_WINDOW:
+                w = device_window;
+                break;
+
+            case FOCUS_WINDOW:
+                w = focus_window;
+                break;
+
+            default:
+                w = NULL;
+                break;
+        };
+
+        if (hwnd == w && expect_messages->message == message) ++expect_messages;
+    }
 
     return DefWindowProcA(hwnd, message, wparam, lparam);
 }
@@ -2407,7 +2454,6 @@ static DWORD WINAPI wndproc_thread(void *param)
 static void test_wndproc(void)
 {
     struct wndproc_thread_param thread_params;
-    HWND device_window, focus_window, tmp;
     IDirect3DDevice9 *device;
     WNDCLASSA wc = {0};
     IDirect3D9 *d3d9;
@@ -2415,6 +2461,15 @@ static void test_wndproc(void)
     LONG_PTR proc;
     ULONG ref;
     DWORD res, tid;
+    HWND tmp;
+
+    static const struct message messages[] =
+    {
+        {WM_WINDOWPOSCHANGING,  FOCUS_WINDOW},
+        {WM_ACTIVATE,           FOCUS_WINDOW},
+        {WM_SETFOCUS,           FOCUS_WINDOW},
+        {0,                     0},
+    };
 
     if (!(d3d9 = pDirect3DCreate9(D3D_SDK_VERSION)))
     {
@@ -2457,10 +2512,9 @@ static void test_wndproc(void)
     ok(tmp == thread_params.dummy_window, "Expected foreground window %p, got %p.\n",
             thread_params.dummy_window, tmp);
 
-    expect_message.window = focus_window;
-    expect_message.message = WM_SETFOCUS;
-
     flush_events();
+
+    expect_messages = messages;
 
     device = create_device(d3d9, device_window, focus_window, FALSE);
     if (!device)
@@ -2469,8 +2523,10 @@ static void test_wndproc(void)
         goto done;
     }
 
-    ok(!expect_message.message, "Expected message %#x for window %p, but didn't receive it.\n",
-            expect_message.message, expect_message.window);
+    ok(!expect_messages->message, "Expected message %#x for window %#x, but didn't receive it.\n",
+            expect_messages->message, expect_messages->window);
+    expect_messages = NULL;
+
     if (0) /* Disabled until we can make this work in a reliable way on Wine. */
     {
         tmp = GetFocus();
@@ -2544,14 +2600,15 @@ done:
 static void test_wndproc_windowed(void)
 {
     struct wndproc_thread_param thread_params;
-    HWND device_window, focus_window, tmp;
     IDirect3DDevice9 *device;
     WNDCLASSA wc = {0};
     IDirect3D9 *d3d9;
     HANDLE thread;
     LONG_PTR proc;
+    HRESULT hr;
     ULONG ref;
     DWORD res, tid;
+    HWND tmp;
 
     if (!(d3d9 = pDirect3DCreate9(D3D_SDK_VERSION)))
     {
@@ -2617,6 +2674,32 @@ static void test_wndproc_windowed(void)
     ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#lx, got %#lx.\n",
             (LONG_PTR)test_proc, proc);
 
+    filter_messages = NULL;
+
+    hr = reset_device(device, device_window, FALSE);
+    ok(SUCCEEDED(hr), "Failed to reset device, hr %#x.\n", hr);
+
+    proc = GetWindowLongPtrA(device_window, GWLP_WNDPROC);
+    ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#lx, got %#lx.\n",
+            (LONG_PTR)test_proc, proc);
+
+    proc = GetWindowLongPtrA(focus_window, GWLP_WNDPROC);
+    ok(proc != (LONG_PTR)test_proc, "Expected wndproc %#lx, got %#lx.\n",
+            (LONG_PTR)test_proc, proc);
+
+    hr = reset_device(device, device_window, TRUE);
+    ok(SUCCEEDED(hr), "Failed to reset device, hr %#x.\n", hr);
+
+    proc = GetWindowLongPtrA(device_window, GWLP_WNDPROC);
+    ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#lx, got %#lx.\n",
+            (LONG_PTR)test_proc, proc);
+
+    proc = GetWindowLongPtrA(focus_window, GWLP_WNDPROC);
+    ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#lx, got %#lx.\n",
+            (LONG_PTR)test_proc, proc);
+
+    filter_messages = focus_window;
+
     ref = IDirect3DDevice9_Release(device);
     ok(ref == 0, "The device was not properly freed: refcount %u.\n", ref);
 
@@ -2629,6 +2712,32 @@ static void test_wndproc_windowed(void)
         goto done;
     }
 
+    filter_messages = NULL;
+
+    hr = reset_device(device, focus_window, FALSE);
+    ok(SUCCEEDED(hr), "Failed to reset device, hr %#x.\n", hr);
+
+    proc = GetWindowLongPtrA(device_window, GWLP_WNDPROC);
+    ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#lx, got %#lx.\n",
+            (LONG_PTR)test_proc, proc);
+
+    proc = GetWindowLongPtrA(focus_window, GWLP_WNDPROC);
+    ok(proc != (LONG_PTR)test_proc, "Expected wndproc %#lx, got %#lx.\n",
+            (LONG_PTR)test_proc, proc);
+
+    hr = reset_device(device, focus_window, TRUE);
+    ok(SUCCEEDED(hr), "Failed to reset device, hr %#x.\n", hr);
+
+    proc = GetWindowLongPtrA(device_window, GWLP_WNDPROC);
+    ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#lx, got %#lx.\n",
+            (LONG_PTR)test_proc, proc);
+
+    proc = GetWindowLongPtrA(focus_window, GWLP_WNDPROC);
+    ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#lx, got %#lx.\n",
+            (LONG_PTR)test_proc, proc);
+
+    filter_messages = device_window;
+
     ref = IDirect3DDevice9_Release(device);
     ok(ref == 0, "The device was not properly freed: refcount %u.\n", ref);
 
@@ -2638,6 +2747,32 @@ static void test_wndproc_windowed(void)
         skip("Failed to create a D3D device, skipping tests.\n");
         goto done;
     }
+
+    filter_messages = NULL;
+
+    hr = reset_device(device, device_window, FALSE);
+    ok(SUCCEEDED(hr), "Failed to reset device, hr %#x.\n", hr);
+
+    proc = GetWindowLongPtrA(device_window, GWLP_WNDPROC);
+    ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#lx, got %#lx.\n",
+            (LONG_PTR)test_proc, proc);
+
+    proc = GetWindowLongPtrA(focus_window, GWLP_WNDPROC);
+    ok(proc != (LONG_PTR)test_proc, "Expected wndproc %#lx, got %#lx.\n",
+            (LONG_PTR)test_proc, proc);
+
+    hr = reset_device(device, device_window, TRUE);
+    ok(SUCCEEDED(hr), "Failed to reset device, hr %#x.\n", hr);
+
+    proc = GetWindowLongPtrA(device_window, GWLP_WNDPROC);
+    ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#lx, got %#lx.\n",
+            (LONG_PTR)test_proc, proc);
+
+    proc = GetWindowLongPtrA(focus_window, GWLP_WNDPROC);
+    ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#lx, got %#lx.\n",
+            (LONG_PTR)test_proc, proc);
+
+    filter_messages = device_window;
 
     ref = IDirect3DDevice9_Release(device);
     ok(ref == 0, "The device was not properly freed: refcount %u.\n", ref);
@@ -2676,6 +2811,7 @@ static inline WORD get_fpu_cw(void)
 
 static void test_fpu_setup(void)
 {
+#if defined(__GNUC__) && (defined(__i386__) || defined(__x86_64__))
     D3DPRESENT_PARAMETERS present_parameters;
     IDirect3DDevice9 *device;
     HWND window = NULL;
@@ -2733,6 +2869,7 @@ static void test_fpu_setup(void)
 done:
     if (window) DestroyWindow(window);
     if (d3d9) IDirect3D9_Release(d3d9);
+#endif
 }
 
 START_TEST(device)
@@ -2756,9 +2893,7 @@ START_TEST(device)
         }
         IDirect3D9_Release(d3d9);
 
-#if defined(__GNUC__) && (defined(__i386__) || defined(__x86_64__))
         test_fpu_setup();
-#endif
         test_multi_device();
         test_display_formats();
         test_display_modes();

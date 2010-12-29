@@ -29,6 +29,12 @@
 #include "winuser.h"
 #include "winerror.h"
 
+static DWORD (WINAPI *pSetLayout)(HDC hdc, DWORD layout);
+static DWORD (WINAPI *pGetLayout)(HDC hdc);
+static INT (WINAPI *pGetRandomRgn)(HDC hDC, HRGN hRgn, INT iCode);
+static BOOL (WINAPI *pGetTransform)(HDC, DWORD, XFORM *);
+static DWORD (WINAPI *pSetVirtualResolution)(HDC, DWORD, DWORD, DWORD, DWORD);
+
 #define rough_match(got, expected) (abs( MulDiv( (got) - (expected), 1000, (expected) )) <= 5)
 
 #define expect_LPtoDP(_hdc, _x, _y) \
@@ -221,12 +227,12 @@ static void test_dc_layout(void)
 {
     INT ret, size_cx, size_cy, res_x, res_y, dpi_x, dpi_y;
     SIZE size;
-    DWORD (WINAPI *pSetLayout)(HDC hdc, DWORD layout);
-    DWORD (WINAPI *pGetLayout)(HDC hdc);
+    POINT pt;
+    HBITMAP bitmap;
+    RECT rc, ret_rc;
     HDC hdc;
+    HRGN hrgn;
 
-    pGetLayout = (void *)GetProcAddress(GetModuleHandleA("gdi32.dll"), "GetLayout");
-    pSetLayout = (void *)GetProcAddress(GetModuleHandleA("gdi32.dll"), "SetLayout");
     if (!pGetLayout || !pSetLayout)
     {
         win_skip( "Don't have SetLayout\n" );
@@ -234,6 +240,8 @@ static void test_dc_layout(void)
     }
 
     hdc = CreateCompatibleDC(0);
+    bitmap = CreateCompatibleBitmap( hdc, 100, 100 );
+    SelectObject( hdc, bitmap );
 
     size_cx = GetDeviceCaps(hdc, HORZSIZE);
     size_cy = GetDeviceCaps(hdc, VERTSIZE);
@@ -262,7 +270,82 @@ static void test_dc_layout(void)
     expect_viewport_ext(hdc, 1, 1);
     expect_window_ext(hdc, 1, 1);
     expect_world_transform(hdc, 1.0, 1.0);
-    expect_LPtoDP(hdc, -1000, 1000);
+    expect_LPtoDP(hdc, -1000 + 99, 1000);
+    GetViewportOrgEx( hdc, &pt );
+    ok( pt.x == 0 && pt.y == 0, "wrong origin %d,%d\n", pt.x, pt.y );
+    GetWindowOrgEx( hdc, &pt );
+    ok( pt.x == 0 && pt.y == 0, "wrong origin %d,%d\n", pt.x, pt.y );
+    GetDCOrgEx( hdc, &pt );
+    ok( pt.x == 0 && pt.y == 0, "wrong origin %d,%d\n", pt.x, pt.y );
+    if (pGetTransform)
+    {
+        XFORM xform;
+        BOOL ret = pGetTransform( hdc, 0x204, &xform ); /* World -> Device */
+        ok( ret, "got %d\n", ret );
+        ok( xform.eM11 == -1.0, "got %f\n", xform.eM11 );
+        ok( xform.eM12 == 0.0, "got %f\n", xform.eM12 );
+        ok( xform.eM21 == 0.0, "got %f\n", xform.eM21 );
+        ok( xform.eM22 == 1.0, "got %f\n", xform.eM22 );
+        ok( xform.eDx == 99.0, "got %f\n", xform.eDx );
+        ok( xform.eDy == 0.0, "got %f\n", xform.eDy );
+    }
+
+    SetRect( &rc, 10, 10, 20, 20 );
+    IntersectClipRect( hdc, 10, 10, 20, 20 );
+    hrgn = CreateRectRgn( 0, 0, 0, 0 );
+    GetClipRgn( hdc, hrgn );
+    GetRgnBox( hrgn, &ret_rc );
+    ok( EqualRect( &rc, &ret_rc ), "wrong clip box %d,%d - %d,%d\n",
+        ret_rc.left, ret_rc.top, ret_rc.right, ret_rc.bottom );
+    pSetLayout( hdc, LAYOUT_LTR );
+    SetRect( &rc, 80, 10, 90, 20 );
+    GetClipRgn( hdc, hrgn );
+    GetRgnBox( hrgn, &ret_rc );
+    ok( EqualRect( &rc, &ret_rc ), "wrong clip box %d,%d - %d,%d\n",
+        ret_rc.left, ret_rc.top, ret_rc.right, ret_rc.bottom );
+    GetClipBox( hdc, &ret_rc );
+    ok( EqualRect( &rc, &ret_rc ), "wrong clip box %d,%d - %d,%d\n",
+        ret_rc.left, ret_rc.top, ret_rc.right, ret_rc.bottom );
+    IntersectClipRect( hdc, 80, 10, 85, 20 );
+    pSetLayout( hdc, LAYOUT_RTL );
+    SetRect( &rc, 15, 10, 20, 20 );
+    GetClipRgn( hdc, hrgn );
+    GetRgnBox( hrgn, &ret_rc );
+    ok( EqualRect( &rc, &ret_rc ), "wrong clip box %d,%d - %d,%d\n",
+        ret_rc.left, ret_rc.top, ret_rc.right, ret_rc.bottom );
+    GetClipBox( hdc, &ret_rc );
+    ok( EqualRect( &rc, &ret_rc ), "wrong clip box %d,%d - %d,%d\n",
+        ret_rc.left, ret_rc.top, ret_rc.right, ret_rc.bottom );
+    SetRectRgn( hrgn, 60, 10, 80, 20 );
+    pSetLayout( hdc, LAYOUT_LTR );
+    ExtSelectClipRgn( hdc, hrgn, RGN_OR );
+    pSetLayout( hdc, LAYOUT_RTL );
+    SetRect( &rc, 15, 10, 40, 20 );
+    GetClipRgn( hdc, hrgn );
+    GetRgnBox( hrgn, &ret_rc );
+    ok( EqualRect( &rc, &ret_rc ), "wrong clip box %d,%d - %d,%d\n",
+        ret_rc.left, ret_rc.top, ret_rc.right, ret_rc.bottom );
+    GetClipBox( hdc, &ret_rc );
+    ok( EqualRect( &rc, &ret_rc ), "wrong clip box %d,%d - %d,%d\n",
+        ret_rc.left, ret_rc.top, ret_rc.right, ret_rc.bottom );
+
+    /* OffsetClipRgn mirrors too */
+    OffsetClipRgn( hdc, 5, 5 );
+    OffsetRect( &rc, 5, 5 );
+    GetClipRgn( hdc, hrgn );
+    GetRgnBox( hrgn, &ret_rc );
+    ok( EqualRect( &rc, &ret_rc ), "wrong clip box %d,%d - %d,%d\n",
+        ret_rc.left, ret_rc.top, ret_rc.right, ret_rc.bottom );
+
+    /* GetRandomRgn returns the raw region */
+    if (pGetRandomRgn)
+    {
+        SetRect( &rc, 55, 15, 80, 25 );
+        pGetRandomRgn( hdc, hrgn, 1 );
+        GetRgnBox( hrgn, &ret_rc );
+        ok( EqualRect( &rc, &ret_rc ), "wrong clip box %d,%d - %d,%d\n",
+            ret_rc.left, ret_rc.top, ret_rc.right, ret_rc.bottom );
+    }
 
     SetMapMode(hdc, MM_LOMETRIC);
     ret = GetMapMode( hdc );
@@ -277,7 +360,7 @@ static void test_dc_layout(void)
         rough_match( size.cy, MulDiv( res_y, 254, dpi_y )),  /* Vista uses a more precise method */
         "expected cy %d or %d, got %d\n", size_cy * 10, MulDiv( res_y, 254, dpi_y ), size.cy );
     expect_world_transform(hdc, 1.0, 1.0);
-    expect_LPtoDP(hdc, -MulDiv(1000 / 10, res_x, size_cx), -MulDiv(1000 / 10, res_y, size_cy));
+    expect_LPtoDP(hdc, -MulDiv(1000 / 10, res_x, size_cx) + 99, -MulDiv(1000 / 10, res_y, size_cy));
 
     SetMapMode(hdc, MM_TEXT);
     ret = GetMapMode( hdc );
@@ -290,6 +373,7 @@ static void test_dc_layout(void)
     ok(ret == MM_TEXT, "expected MM_TEXT, got %d\n", ret);
 
     DeleteDC(hdc);
+    DeleteObject( bitmap );
 }
 
 static void test_modify_world_transform(void)
@@ -421,13 +505,10 @@ static void test_setvirtualresolution(void)
 {
     HDC hdc = CreateICA("DISPLAY", NULL, NULL, NULL);
     DWORD r;
-    DWORD (WINAPI *pSetVirtualResolution)(HDC, DWORD, DWORD, DWORD, DWORD);
     INT horz_res = GetDeviceCaps(hdc, HORZRES);
     INT horz_size = GetDeviceCaps(hdc, HORZSIZE);
     INT log_pixels_x = GetDeviceCaps(hdc, LOGPIXELSX);
     SIZE orig_lometric_vp, orig_lometric_wnd;
-
-    pSetVirtualResolution = (void *)GetProcAddress(GetModuleHandleA("gdi32.dll"), "SetVirtualResolution");
 
     if(!pSetVirtualResolution)
     {
@@ -533,12 +614,9 @@ static inline void xform_near_match(int line, XFORM *got, XFORM *expect)
 static void test_gettransform(void)
 {
     HDC hdc = CreateICA("DISPLAY", NULL, NULL, NULL);
-    BOOL (WINAPI *pGetTransform)(HDC, DWORD, XFORM *);
     XFORM xform, expect;
     BOOL r;
     SIZE lometric_vp, lometric_wnd;
-
-    pGetTransform = (void *)GetProcAddress(GetModuleHandleA("gdi32.dll"), "GetTransform");
 
     if(!pGetTransform)
     {
@@ -635,6 +713,13 @@ static void test_gettransform(void)
 
 START_TEST(mapping)
 {
+    HMODULE mod = GetModuleHandleA("gdi32.dll");
+    pGetLayout = (void *)GetProcAddress( mod, "GetLayout" );
+    pSetLayout = (void *)GetProcAddress( mod, "SetLayout" );
+    pGetRandomRgn = (void *)GetProcAddress( mod, "GetRandomRgn" );
+    pGetTransform = (void *)GetProcAddress( mod, "GetTransform" );
+    pSetVirtualResolution = (void *)GetProcAddress( mod, "SetVirtualResolution" );
+
     test_modify_world_transform();
     test_world_transform();
     test_dc_layout();

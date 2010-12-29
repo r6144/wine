@@ -340,7 +340,8 @@ static void HTMLOptionElement_destructor(HTMLDOMNode *iface)
 
 static const NodeImplVtbl HTMLOptionElementImplVtbl = {
     HTMLOptionElement_QI,
-    HTMLOptionElement_destructor
+    HTMLOptionElement_destructor,
+    HTMLElement_clone
 };
 
 static const tid_t HTMLOptionElement_iface_tids[] = {
@@ -355,21 +356,29 @@ static dispex_static_data_t HTMLOptionElement_dispex = {
     HTMLOptionElement_iface_tids
 };
 
-HTMLElement *HTMLOptionElement_Create(HTMLDocumentNode *doc, nsIDOMHTMLElement *nselem)
+HRESULT HTMLOptionElement_Create(HTMLDocumentNode *doc, nsIDOMHTMLElement *nselem, HTMLElement **elem)
 {
-    HTMLOptionElement *ret = heap_alloc_zero(sizeof(HTMLOptionElement));
+    HTMLOptionElement *ret;
     nsresult nsres;
+
+    ret = heap_alloc_zero(sizeof(HTMLOptionElement));
+    if(!ret)
+        return E_OUTOFMEMORY;
 
     ret->lpHTMLOptionElementVtbl = &HTMLOptionElementVtbl;
     ret->element.node.vtbl = &HTMLOptionElementImplVtbl;
 
+    nsres = nsIDOMHTMLElement_QueryInterface(nselem, &IID_nsIDOMHTMLOptionElement, (void**)&ret->nsoption);
+    if(NS_FAILED(nsres)) {
+        ERR("Could not get nsIDOMHTMLOptionElement interface: %08x\n", nsres);
+        heap_free(ret);
+        return E_FAIL;
+    }
+
     HTMLElement_Init(&ret->element, doc, nselem, &HTMLOptionElement_dispex);
 
-    nsres = nsIDOMHTMLElement_QueryInterface(nselem, &IID_nsIDOMHTMLOptionElement, (void**)&ret->nsoption);
-    if(NS_FAILED(nsres))
-        ERR("Could not get nsIDOMHTMLOptionElement interface: %08x\n", nsres);
-
-    return &ret->element;
+    *elem = &ret->element;
+    return S_OK;
 }
 
 #define HTMLOPTFACTORY_THIS(iface) DEFINE_THIS(HTMLOptionElementFactory, HTMLOptionElementFactory, iface)
@@ -465,6 +474,7 @@ static HRESULT WINAPI HTMLOptionElementFactory_create(IHTMLOptionElementFactory 
 {
     HTMLOptionElementFactory *This = HTMLOPTFACTORY_THIS(iface);
     nsIDOMHTMLElement *nselem;
+    HTMLDOMNode *node;
     HRESULT hres;
 
     static const PRUnichar optionW[] = {'O','P','T','I','O','N',0};
@@ -483,9 +493,13 @@ static HRESULT WINAPI HTMLOptionElementFactory_create(IHTMLOptionElementFactory 
     if(FAILED(hres))
         return hres;
 
-    hres = IHTMLDOMNode_QueryInterface(HTMLDOMNODE(get_node(This->window->doc, (nsIDOMNode*)nselem, TRUE)),
-            &IID_IHTMLOptionElement, (void**)optelem);
+    hres = get_node(This->window->doc, (nsIDOMNode*)nselem, TRUE, &node);
     nsIDOMHTMLElement_Release(nselem);
+    if(FAILED(hres))
+        return hres;
+
+    hres = IHTMLDOMNode_QueryInterface(HTMLDOMNODE(node),
+            &IID_IHTMLOptionElement, (void**)optelem);
 
     if(V_VT(&text) == VT_BSTR)
         IHTMLOptionElement_put_text(*optelem, V_BSTR(&text));

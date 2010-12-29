@@ -127,38 +127,20 @@ struct epoll_event
   epoll_data_t data;
 };
 
-#define SYSCALL_RET(ret) do { \
-        if (ret < 0) { errno = -ret; ret = -1; } \
-        return ret; \
-    } while(0)
-
 static inline int epoll_create( int size )
 {
-    int ret;
-    __asm__( "pushl %%ebx; movl %2,%%ebx; int $0x80; popl %%ebx"
-             : "=a" (ret) : "0" (254 /*NR_epoll_create*/), "r" (size) );
-    SYSCALL_RET(ret);
+    return syscall( 254 /*NR_epoll_create*/, size );
 }
 
 static inline int epoll_ctl( int epfd, int op, int fd, const struct epoll_event *event )
 {
-    int ret;
-    __asm__( "pushl %%ebx; movl %2,%%ebx; int $0x80; popl %%ebx"
-             : "=a" (ret)
-             : "0" (255 /*NR_epoll_ctl*/), "r" (epfd), "c" (op), "d" (fd), "S" (event), "m" (*event) );
-    SYSCALL_RET(ret);
+    return syscall( 255 /*NR_epoll_ctl*/, epfd, op, fd, event );
 }
 
 static inline int epoll_wait( int epfd, struct epoll_event *events, int maxevents, int timeout )
 {
-    int ret;
-    __asm__( "pushl %%ebx; movl %2,%%ebx; int $0x80; popl %%ebx"
-             : "=a" (ret)
-             : "0" (256 /*NR_epoll_wait*/), "r" (epfd), "c" (events), "d" (maxevents), "S" (timeout)
-             : "memory" );
-    SYSCALL_RET(ret);
+    return syscall( 256 /*NR_epoll_wait*/, epfd, events, maxevents, timeout );
 }
-#undef SYSCALL_RET
 
 #endif /* linux && __i386__ && HAVE_STDINT_H */
 
@@ -197,6 +179,7 @@ struct fd
     char                *unix_name;   /* unix file name */
     int                  unix_fd;     /* unix file descriptor */
     unsigned int         no_fd_status;/* status to return when unix_fd is -1 */
+    unsigned int         cacheable :1;/* can the fd be cached on the client side? */
     unsigned int         signaled :1; /* is the fd signaled? */
     unsigned int         fs_locks :1; /* can we use filesystem locks for this fd? */
     int                  poll_index;  /* index of fd in poll array */
@@ -1546,6 +1529,7 @@ static struct fd *alloc_fd_object(void)
     fd->sharing    = 0;
     fd->unix_fd    = -1;
     fd->unix_name  = NULL;
+    fd->cacheable  = 0;
     fd->signaled   = 1;
     fd->fs_locks   = 1;
     fd->poll_index = -1;
@@ -1580,6 +1564,7 @@ struct fd *alloc_pseudo_fd( const struct fd_ops *fd_user_ops, struct object *use
     fd->sharing    = 0;
     fd->unix_name  = NULL;
     fd->unix_fd    = -1;
+    fd->cacheable  = 0;
     fd->signaled   = 0;
     fd->fs_locks   = 0;
     fd->poll_index = -1;
@@ -1596,31 +1581,20 @@ struct fd *alloc_pseudo_fd( const struct fd_ops *fd_user_ops, struct object *use
 /* duplicate an fd object for a different user */
 struct fd *dup_fd_object( struct fd *orig, unsigned int access, unsigned int sharing, unsigned int options )
 {
-    struct fd *fd = alloc_object( &fd_ops );
+    struct fd *fd = alloc_fd_object();
 
     if (!fd) return NULL;
 
-    fd->fd_ops     = NULL;
-    fd->user       = NULL;
-    fd->inode      = NULL;
-    fd->closed     = NULL;
     fd->access     = access;
     fd->options    = options;
     fd->sharing    = sharing;
-    fd->unix_fd    = -1;
-    fd->signaled   = 0;
-    fd->fs_locks   = 0;
-    fd->poll_index = -1;
-    fd->read_q     = NULL;
-    fd->write_q    = NULL;
-    fd->wait_q     = NULL;
-    fd->completion = NULL;
-    list_init( &fd->inode_entry );
-    list_init( &fd->locks );
+    fd->cacheable  = orig->cacheable;
 
-    if (!(fd->unix_name = mem_alloc( strlen(orig->unix_name) + 1 ))) goto failed;
-    strcpy( fd->unix_name, orig->unix_name );
-    if ((fd->poll_index = add_poll_user( fd )) == -1) goto failed;
+    if (orig->unix_name)
+    {
+        if (!(fd->unix_name = mem_alloc( strlen(orig->unix_name) + 1 ))) goto failed;
+        strcpy( fd->unix_name, orig->unix_name );
+    }
 
     if (orig->inode)
     {
@@ -1823,6 +1797,7 @@ struct fd *open_fd( struct fd *root, const char *name, int flags, mode_t *mode, 
         }
         fd->inode = inode;
         fd->closed = closed_fd;
+        fd->cacheable = !inode->device->removable;
         list_add_head( &inode->open, &fd->inode_entry );
 
         /* check directory options */
@@ -1869,6 +1844,7 @@ struct fd *open_fd( struct fd *root, const char *name, int flags, mode_t *mode, 
             goto error;
         }
         free( closed_fd );
+        fd->cacheable = 1;
     }
     return fd;
 
@@ -1920,6 +1896,12 @@ int get_unix_fd( struct fd *fd )
 int is_same_file_fd( struct fd *fd1, struct fd *fd2 )
 {
     return fd1->inode == fd2->inode;
+}
+
+/* allow the fd to be cached (can't be reset once set) */
+void allow_fd_caching( struct fd *fd )
+{
+    fd->cacheable = 1;
 }
 
 /* check if fd is on a removable device */
@@ -2254,6 +2236,7 @@ DECL_HANDLER(get_handle_unix_name)
             if (name_len <= get_reply_max_size()) set_reply_data( fd->unix_name, name_len );
             else set_error( STATUS_BUFFER_OVERFLOW );
         }
+        else set_error( STATUS_OBJECT_TYPE_MISMATCH );
         release_object( fd );
     }
 }
@@ -2269,7 +2252,7 @@ DECL_HANDLER(get_handle_fd)
         if (unix_fd != -1)
         {
             reply->type = fd->fd_ops->get_fd_type( fd );
-            reply->removable = is_fd_removable(fd);
+            reply->cacheable = fd->cacheable;
             reply->options = fd->options;
             reply->access = get_handle_access( current->process, req->handle );
             send_client_fd( current->process, unix_fd, req->handle );

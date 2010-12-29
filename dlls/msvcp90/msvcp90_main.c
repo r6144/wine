@@ -28,7 +28,9 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(msvcp90);
 
-void init_cxx_funcs(void)
+void* (__cdecl *MSVCRT_operator_new)(size_t);
+void (__cdecl *MSVCRT_operator_delete)(void*);
+static void init_cxx_funcs(void)
 {
     HMODULE hmod = GetModuleHandleA("msvcrt.dll");
 
@@ -54,6 +56,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
             return FALSE;    /* prefer native version */
         case DLL_PROCESS_ATTACH:
             init_cxx_funcs();
+            set_exception_vtable();
             break;
         case DLL_PROCESS_DETACH:
             break;

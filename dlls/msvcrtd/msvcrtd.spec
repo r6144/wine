@@ -1,58 +1,85 @@
 # msvcrtd.dll - MS VC++ Run Time Library
 
 @ cdecl $I10_OUTPUT() msvcrt.$I10_OUTPUT
-@ cdecl -i386 ??0__non_rtti_object@@QAE@ABV0@@Z(ptr) msvcrt.??0__non_rtti_object@@QAE@ABV0@@Z
-@ cdecl -i386 ??0__non_rtti_object@@QAE@PBD@Z(ptr) msvcrt.??0__non_rtti_object@@QAE@PBD@Z
-@ cdecl -i386 ??0bad_cast@@QAE@ABQBD@Z(ptr) msvcrt.??0bad_cast@@QAE@ABQBD@Z
-@ cdecl -i386 ??0bad_cast@@QAE@ABV0@@Z(ptr) msvcrt.??0bad_cast@@QAE@ABV0@@Z
-@ cdecl -i386 ??0bad_typeid@@QAE@ABV0@@Z(ptr) msvcrt.??0bad_typeid@@QAE@ABV0@@Z
-@ cdecl -i386 ??0bad_typeid@@QAE@PBD@Z(ptr) msvcrt.??0bad_typeid@@QAE@PBD@Z
-@ cdecl -i386 ??0exception@@QAE@ABQBD@Z(ptr) msvcrt.??0exception@@QAE@ABQBD@Z
-@ cdecl -i386 ??0exception@@QAE@ABV0@@Z(ptr) msvcrt.??0exception@@QAE@ABV0@@Z
-@ cdecl -i386 ??0exception@@QAE@XZ() msvcrt.??0exception@@QAE@XZ
-@ cdecl -i386 ??1__non_rtti_object@@UAE@XZ() msvcrt.??1__non_rtti_object@@UAE@XZ
-@ cdecl -i386 ??1bad_cast@@UAE@XZ() msvcrt.??1bad_cast@@UAE@XZ
-@ cdecl -i386 ??1bad_typeid@@UAE@XZ() msvcrt.??1bad_typeid@@UAE@XZ
-@ cdecl -i386 ??1exception@@UAE@XZ() msvcrt.??1exception@@UAE@XZ
-@ cdecl -i386 ??1type_info@@UAE@XZ() msvcrt.??1type_info@@UAE@XZ
+@ thiscall -arch=win32 ??0__non_rtti_object@@QAE@ABV0@@Z(ptr ptr) msvcrt.??0__non_rtti_object@@QAE@ABV0@@Z
+@ cdecl -arch=win64 ??0__non_rtti_object@@QEAA@AEBV0@@Z(ptr ptr) msvcrt.??0__non_rtti_object@@QEAA@AEBV0@@Z
+@ thiscall -arch=win32 ??0__non_rtti_object@@QAE@PBD@Z(ptr ptr) msvcrt.??0__non_rtti_object@@QAE@PBD@Z
+@ cdecl -arch=win64 ??0__non_rtti_object@@QEAA@PEBD@Z(ptr ptr) msvcrt.??0__non_rtti_object@@QEAA@PEBD@Z
+@ thiscall -arch=win32 ??0bad_cast@@QAE@ABQBD@Z(ptr ptr) msvcrt.??0bad_cast@@QAE@ABQBD@Z
+@ cdecl -arch=win64 ??0bad_cast@@AEAA@PEBQEBD@Z(ptr ptr) msvcrt.??0bad_cast@@AEAA@PEBQEBD@Z
+@ thiscall -arch=win32 ??0bad_cast@@QAE@ABV0@@Z(ptr ptr) msvcrt.??0bad_cast@@QAE@ABV0@@Z
+@ cdecl -arch=win64 ??0bad_cast@@QEAA@AEBQEBD@Z(ptr ptr) msvcrt.??0bad_cast@@QEAA@AEBQEBD@Z
+@ thiscall -arch=win32 ??0bad_typeid@@QAE@ABV0@@Z(ptr ptr) msvcrt.??0bad_typeid@@QAE@ABV0@@Z
+@ cdecl -arch=win64 ??0bad_typeid@@QEAA@AEBV0@@Z(ptr ptr) msvcrt.??0bad_typeid@@QEAA@AEBV0@@Z
+@ thiscall -arch=win32 ??0bad_typeid@@QAE@PBD@Z(ptr str) msvcrt.??0bad_typeid@@QAE@PBD@Z
+@ cdecl -arch=win64 ??0bad_typeid@@QEAA@PEBD@Z(ptr str) msvcrt.??0bad_typeid@@QEAA@PEBD@Z
+@ thiscall -arch=win32 ??0exception@@QAE@ABQBD@Z(ptr ptr) msvcrt.??0exception@@QAE@ABQBD@Z
+@ cdecl -arch=win64 ??0exception@@QEAA@AEBQEBD@Z(ptr ptr) msvcrt.??0exception@@QEAA@AEBQEBD@Z
+@ thiscall -arch=win32 ??0exception@@QAE@ABV0@@Z(ptr ptr) msvcrt.??0exception@@QAE@ABV0@@Z
+@ cdecl -arch=win64 ??0exception@@QEAA@AEBV0@@Z(ptr ptr) msvcrt.??0exception@@QEAA@AEBV0@@Z
+@ thiscall -arch=win32 ??0exception@@QAE@XZ(ptr) msvcrt.??0exception@@QAE@XZ
+@ cdecl -arch=win64 ??0exception@@QEAA@XZ(ptr) msvcrt.??0exception@@QEAA@XZ
+@ thiscall -arch=win32 ??1__non_rtti_object@@UAE@XZ(ptr) msvcrt.??1__non_rtti_object@@UAE@XZ
+@ cdecl -arch=win64 ??1__non_rtti_object@@UEAA@XZ(ptr) msvcrt.??1__non_rtti_object@@UEAA@XZ
+@ thiscall -arch=win32 ??1bad_cast@@UAE@XZ(ptr) msvcrt.??1bad_cast@@UAE@XZ
+@ cdecl -arch=win64 ??1bad_cast@@UEAA@XZ(ptr) msvcrt.??1bad_cast@@UEAA@XZ
+@ thiscall -arch=win32 ??1bad_typeid@@UAE@XZ(ptr) msvcrt.??1bad_typeid@@UAE@XZ
+@ cdecl -arch=win64 ??1bad_typeid@@UEAA@XZ(ptr) msvcrt.??1bad_typeid@@UEAA@XZ
+@ thiscall -arch=win32 ??1exception@@UAE@XZ(ptr) msvcrt.??1exception@@UAE@XZ
+@ cdecl -arch=win64 ??1exception@@UEAA@XZ(ptr) msvcrt.??1exception@@UEAA@XZ
+@ thiscall -arch=win32 ??1type_info@@UAE@XZ(ptr) msvcrt.??1type_info@@UAE@XZ
+@ cdecl -arch=win64 ??1type_info@@UEAA@XZ(ptr) msvcrt.??1type_info@@UEAA@XZ
 @ cdecl -arch=win32 ??2@YAPAXI@Z(long) msvcrt.??2@YAPAXI@Z
 @ cdecl -arch=win64 ??2@YAPEAX_K@Z(long) msvcrt.??2@YAPEAX_K@Z
 @ cdecl -arch=win32 ??2@YAPAXIHPBDH@Z(long long str long) MSVCRTD_operator_new_dbg
 @ cdecl -arch=win64 ??2@YAPEAX_KHPEBDH@Z(long long str long) MSVCRTD_operator_new_dbg
 @ cdecl -arch=win32 ??3@YAXPAX@Z(ptr) msvcrt.??3@YAXPAX@Z
 @ cdecl -arch=win64 ??3@YAXPEAX@Z(ptr) msvcrt.??3@YAXPEAX@Z
-@ cdecl -i386 ??4__non_rtti_object@@QAEAAV0@ABV0@@Z(ptr) msvcrt.??4__non_rtti_object@@QAEAAV0@ABV0@@Z
-@ cdecl -i386 ??4bad_cast@@QAEAAV0@ABV0@@Z(ptr) msvcrt.??4bad_cast@@QAEAAV0@ABV0@@Z
-@ cdecl -i386 ??4bad_typeid@@QAEAAV0@ABV0@@Z(ptr) msvcrt.??4bad_typeid@@QAEAAV0@ABV0@@Z
-@ cdecl -i386 ??4exception@@QAEAAV0@ABV0@@Z(ptr) msvcrt.??4exception@@QAEAAV0@ABV0@@Z
-@ cdecl -i386 ??8type_info@@QBEHABV0@@Z(ptr) msvcrt.??8type_info@@QBEHABV0@@Z
-@ cdecl -i386 ??9type_info@@QBEHABV0@@Z(ptr) msvcrt.??9type_info@@QBEHABV0@@Z
-@ extern -i386 ??_7__non_rtti_object@@6B@ msvcrt.??_7__non_rtti_object@@6B@
-@ extern -i386 ??_7bad_cast@@6B@ msvcrt.??_7bad_cast@@6B@
-@ extern -i386 ??_7bad_typeid@@6B@ msvcrt.??_7bad_typeid@@6B@
-@ extern -i386 ??_7exception@@6B@ msvcrt.??_7exception@@6B@
-@ cdecl -i386 ??_E__non_rtti_object@@UAEPAXI@Z(long) msvcrt.??_E__non_rtti_object@@UAEPAXI@Z
-@ cdecl -i386 ??_Ebad_cast@@UAEPAXI@Z(long) msvcrt.??_Ebad_cast@@UAEPAXI@Z
-@ cdecl -i386 ??_Ebad_typeid@@UAEPAXI@Z(long) msvcrt.??_Ebad_typeid@@UAEPAXI@Z
-@ cdecl -i386 ??_Eexception@@UAEPAXI@Z(long) msvcrt.??_Eexception@@UAEPAXI@Z
-@ cdecl -i386 ??_G__non_rtti_object@@UAEPAXI@Z(long) msvcrt.??_G__non_rtti_object@@UAEPAXI@Z
-@ cdecl -i386 ??_Gbad_cast@@UAEPAXI@Z(long) msvcrt.??_Gbad_cast@@UAEPAXI@Z
-@ cdecl -i386 ??_Gbad_typeid@@UAEPAXI@Z(long) msvcrt.??_Gbad_typeid@@UAEPAXI@Z
-@ cdecl -i386 ??_Gexception@@UAEPAXI@Z(long) msvcrt.??_Gexception@@UAEPAXI@Z
-@ cdecl ?_query_new_handler@@YAP6AHI@ZXZ() msvcrt.?_query_new_handler@@YAP6AHI@ZXZ
+@ thiscall -arch=win32 ??4__non_rtti_object@@QAEAAV0@ABV0@@Z(ptr ptr) msvcrt.??4__non_rtti_object@@QAEAAV0@ABV0@@Z
+@ cdecl -arch=win64 ??4__non_rtti_object@@QEAAAEAV0@AEBV0@@Z(ptr ptr) msvcrt.??4__non_rtti_object@@QEAAAEAV0@AEBV0@@Z
+@ thiscall -arch=win32 ??4bad_cast@@QAEAAV0@ABV0@@Z(ptr ptr) msvcrt.??4bad_cast@@QAEAAV0@ABV0@@Z
+@ cdecl -arch=win64 ??4bad_cast@@QEAAAEAV0@AEBV0@@Z(ptr ptr) msvcrt.??4bad_cast@@QEAAAEAV0@AEBV0@@Z
+@ thiscall -arch=win32 ??4bad_typeid@@QAEAAV0@ABV0@@Z(ptr ptr) msvcrt.??4bad_typeid@@QAEAAV0@ABV0@@Z
+@ cdecl -arch=win64 ??4bad_typeid@@QEAAAEAV0@AEBV0@@Z(ptr ptr) msvcrt.??4bad_typeid@@QEAAAEAV0@AEBV0@@Z
+@ thiscall -arch=win32 ??4exception@@QAEAAV0@ABV0@@Z(ptr ptr) msvcrt.??4exception@@QAEAAV0@ABV0@@Z
+@ cdecl -arch=win64 ??4exception@@QEAAAEAV0@AEBV0@@Z(ptr ptr) msvcrt.??4exception@@QEAAAEAV0@AEBV0@@Z
+@ thiscall -arch=win32 ??8type_info@@QBEHABV0@@Z(ptr ptr) msvcrt.??8type_info@@QBEHABV0@@Z
+@ cdecl -arch=win64 ??8type_info@@QEBAHAEBV0@@Z(ptr ptr) msvcrt.??8type_info@@QEBAHAEBV0@@Z
+@ thiscall -arch=win32 ??9type_info@@QBEHABV0@@Z(ptr ptr) msvcrt.??9type_info@@QBEHABV0@@Z
+@ cdecl -arch=win64 ??9type_info@@QEBAHAEBV0@@Z(ptr ptr) msvcrt.??9type_info@@QEBAHAEBV0@@Z
+@ extern ??_7__non_rtti_object@@6B@ msvcrt.??_7__non_rtti_object@@6B@
+@ extern ??_7bad_cast@@6B@ msvcrt.??_7bad_cast@@6B@
+@ extern ??_7bad_typeid@@6B@ msvcrt.??_7bad_typeid@@6B@
+@ extern ??_7exception@@6B@ msvcrt.??_7exception@@6B@
+@ thiscall -arch=win32 ??_E__non_rtti_object@@UAEPAXI@Z(ptr long) msvcrt.??_E__non_rtti_object@@UAEPAXI@Z
+@ thiscall -arch=win32 ??_Ebad_cast@@UAEPAXI@Z(ptr long) msvcrt.??_Ebad_cast@@UAEPAXI@Z
+@ thiscall -arch=win32 ??_Ebad_typeid@@UAEPAXI@Z(ptr long) msvcrt.??_Ebad_typeid@@UAEPAXI@Z
+@ thiscall -arch=win32 ??_Eexception@@UAEPAXI@Z(ptr long) msvcrt.??_Eexception@@UAEPAXI@Z
+@ thiscall -arch=win32 ??_G__non_rtti_object@@UAEPAXI@Z(ptr long) msvcrt.??_G__non_rtti_object@@UAEPAXI@Z
+@ thiscall -arch=win32 ??_Gbad_cast@@UAEPAXI@Z(ptr long) msvcrt.??_Gbad_cast@@UAEPAXI@Z
+@ thiscall -arch=win32 ??_Gbad_typeid@@UAEPAXI@Z(ptr long) msvcrt.??_Gbad_typeid@@UAEPAXI@Z
+@ thiscall -arch=win32 ??_Gexception@@UAEPAXI@Z(ptr long) msvcrt.??_Gexception@@UAEPAXI@Z
+@ cdecl -arch=win32 ?_query_new_handler@@YAP6AHI@ZXZ() msvcrt.?_query_new_handler@@YAP6AHI@ZXZ
+@ cdecl -arch=win64 ?_query_new_handler@@YAP6AH_K@ZXZ() msvcrt.?_query_new_handler@@YAP6AH_K@ZXZ
 @ cdecl ?_query_new_mode@@YAHXZ() msvcrt.?_query_new_mode@@YAHXZ
-@ cdecl ?_set_new_handler@@YAP6AHI@ZP6AHI@Z@Z(ptr) msvcrt.?_set_new_handler@@YAP6AHI@ZP6AHI@Z@Z
+@ cdecl -arch=win32 ?_set_new_handler@@YAP6AHI@ZP6AHI@Z@Z(ptr) msvcrt.?_set_new_handler@@YAP6AHI@ZP6AHI@Z@Z
+@ cdecl -arch=win64 ?_set_new_handler@@YAP6AH_K@ZP6AH0@Z@Z(ptr) msvcrt.?_set_new_handler@@YAP6AH_K@ZP6AH0@Z@Z
 @ cdecl ?_set_new_mode@@YAHH@Z(long) msvcrt.?_set_new_mode@@YAHH@Z
-@ cdecl ?_set_se_translator@@YAP6AXIPAU_EXCEPTION_POINTERS@@@ZP6AXI0@Z@Z(ptr) msvcrt.?_set_se_translator@@YAP6AXIPAU_EXCEPTION_POINTERS@@@ZP6AXI0@Z@Z
-@ cdecl -i386 ?before@type_info@@QBEHABV1@@Z(ptr) msvcrt.?before@type_info@@QBEHABV1@@Z
-@ cdecl -i386 ?name@type_info@@QBEPBDXZ() msvcrt.?name@type_info@@QBEPBDXZ
-@ cdecl -i386 ?raw_name@type_info@@QBEPBDXZ() msvcrt.?raw_name@type_info@@QBEPBDXZ
+@ cdecl -arch=win32 ?_set_se_translator@@YAP6AXIPAU_EXCEPTION_POINTERS@@@ZP6AXI0@Z@Z(ptr) msvcrt.?_set_se_translator@@YAP6AXIPAU_EXCEPTION_POINTERS@@@ZP6AXI0@Z@Z
+@ cdecl -arch=win64 ?_set_se_translator@@YAP6AXIPEAU_EXCEPTION_POINTERS@@@ZP6AXI0@Z@Z(ptr) msvcrt.?_set_se_translator@@YAP6AXIPEAU_EXCEPTION_POINTERS@@@ZP6AXI0@Z@Z
+@ thiscall -arch=win32 ?before@type_info@@QBEHABV1@@Z(ptr ptr) msvcrt.?before@type_info@@QBEHABV1@@Z
+@ cdecl -arch=win64 ?before@type_info@@QEBAHAEBV1@@Z(ptr ptr) msvcrt.?before@type_info@@QEBAHAEBV1@@Z
+@ thiscall -arch=win32 ?name@type_info@@QBEPBDXZ(ptr) msvcrt.?name@type_info@@QBEPBDXZ
+@ cdecl -arch=win64 ?name@type_info@@QEBAPEBDXZ(ptr) msvcrt.?name@type_info@@QEBAPEBDXZ
+@ thiscall -arch=win32 ?raw_name@type_info@@QBEPBDXZ(ptr) msvcrt.?raw_name@type_info@@QBEPBDXZ
+@ cdecl -arch=win64 ?raw_name@type_info@@QEBAPEBDXZ(ptr) msvcrt.?raw_name@type_info@@QEBAPEBDXZ
 @ cdecl ?set_new_handler@@YAP6AXXZP6AXXZ@Z(ptr) msvcrt.?set_new_handler@@YAP6AXXZP6AXXZ@Z
 @ cdecl ?set_terminate@@YAP6AXXZP6AXXZ@Z(ptr) msvcrt.?set_terminate@@YAP6AXXZP6AXXZ@Z
 @ cdecl ?set_unexpected@@YAP6AXXZP6AXXZ@Z(ptr) msvcrt.?set_unexpected@@YAP6AXXZP6AXXZ@Z
 @ cdecl ?terminate@@YAXXZ() msvcrt.?terminate@@YAXXZ
 @ cdecl ?unexpected@@YAXXZ() msvcrt.?unexpected@@YAXXZ
-@ cdecl -i386 ?what@exception@@UBEPBDXZ() msvcrt.?what@exception@@UBEPBDXZ
+@ thiscall -arch=win32 ?what@exception@@UBEPBDXZ(ptr) msvcrt.?what@exception@@UBEPBDXZ
+@ cdecl -arch=win64 ?what@exception@@UEBAPEBDXZ(ptr) msvcrt.?what@exception@@UEBAPEBDXZ
 @ cdecl -arch=i386 _CIacos() msvcrt._CIacos
 @ cdecl -arch=i386 _CIasin() msvcrt._CIasin
 @ cdecl -arch=i386 _CIatan() msvcrt._CIatan
@@ -304,8 +331,8 @@
 @ cdecl _heapused(ptr ptr) msvcrt._heapused
 @ cdecl _heapwalk(ptr) msvcrt._heapwalk
 @ cdecl _hypot(double double) msvcrt._hypot
-@ cdecl _i64toa(long long ptr long) ntdll._i64toa
-@ cdecl _i64tow(long long ptr long) ntdll._i64tow
+@ cdecl _i64toa(int64 ptr long) ntdll._i64toa
+@ cdecl _i64tow(int64 ptr long) ntdll._i64tow
 @ cdecl _initterm(ptr ptr) msvcrt._initterm
 @ cdecl -i386 _inp(long) msvcrt._inp
 @ cdecl -i386 _inpd(long) msvcrt._inpd
@@ -360,7 +387,7 @@
 @ cdecl _lrotr(long long) msvcrt._lrotr
 @ cdecl _lsearch(ptr ptr long long ptr) msvcrt._lsearch
 @ cdecl _lseek(long long long) msvcrt._lseek
-@ cdecl -ret64 _lseeki64(long long long long) msvcrt._lseeki64
+@ cdecl -ret64 _lseeki64(long int64 long) msvcrt._lseeki64
 @ cdecl _ltoa(long ptr long) ntdll._ltoa
 @ cdecl _ltow(long ptr long) ntdll._ltow
 @ cdecl _makepath(str str str str str) msvcrt._makepath
@@ -509,8 +536,8 @@
 @ cdecl _toupper(long) msvcrt._toupper
 @ extern _tzname msvcrt._tzname
 @ cdecl _tzset() msvcrt._tzset
-@ cdecl _ui64toa(long long ptr long) ntdll._ui64toa
-@ cdecl _ui64tow(long long ptr long) ntdll._ui64tow
+@ cdecl _ui64toa(int64 ptr long) ntdll._ui64toa
+@ cdecl _ui64tow(int64 ptr long) ntdll._ui64tow
 @ cdecl _ultoa(long ptr long) ntdll._ultoa
 @ cdecl _ultow(long ptr long) ntdll._ultow
 @ cdecl _umask(long) msvcrt._umask
@@ -595,7 +622,7 @@
 @ cdecl _wtempnam(wstr wstr) msvcrt._wtempnam
 @ cdecl _wtmpnam(ptr) msvcrt._wtmpnam
 @ cdecl _wtoi(wstr) ntdll._wtoi
-@ cdecl _wtoi64(wstr) ntdll._wtoi64
+@ cdecl -ret64 _wtoi64(wstr) ntdll._wtoi64
 @ cdecl _wtol(wstr) ntdll._wtol
 @ cdecl _wunlink(wstr) msvcrt._wunlink
 @ cdecl _wutime(wstr ptr) msvcrt._wutime

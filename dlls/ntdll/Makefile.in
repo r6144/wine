@@ -1,10 +1,7 @@
 EXTRADEFS = -D_NTSYSTEM_
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = ntdll.dll
 IMPORTLIB = ntdll
+IMPORTS   = winecrt0
 EXTRALIBS = @IOKITLIB@ @LIBPTHREAD@
 EXTRADLLFLAGS = -nodefaultlibs -Wl,--image-base,0x7bc00000
 
@@ -40,6 +37,7 @@ C_SRCS = \
 	sec.c \
 	serial.c \
 	server.c \
+	signal_arm.c \
 	signal_i386.c \
 	signal_powerpc.c \
 	signal_sparc.c \

@@ -1,7 +1,3 @@
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = dbghelp.dll
 IMPORTLIB = dbghelp
 EXTRADEFS = -D_IMAGEHLP_SOURCE_
@@ -10,8 +6,10 @@ DELAYIMPORTS = version
 
 C_SRCS = \
 	coff.c \
+	cpu_arm.c \
 	cpu_i386.c \
 	cpu_ppc.c \
+	cpu_sparc.c \
 	cpu_x86_64.c \
 	crc32.c \
 	dbghelp.c \

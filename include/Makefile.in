@@ -1,9 +1,3 @@
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ..
-SRCDIR    = @srcdir@
-VPATH	  = @srcdir@
-MODULE	  = none
-
 PRIVATE_IDL_H_SRCS = \
 	wine/wined3d.idl \
 	wine/winedxgi.idl
@@ -15,6 +9,7 @@ PUBLIC_IDL_H_SRCS = \
 	amstream.idl \
 	amvideo.idl \
 	asptlb.idl \
+	atliface.idl \
 	audioclient.idl \
 	audiopolicy.idl \
 	austream.idl \
@@ -23,9 +18,13 @@ PUBLIC_IDL_H_SRCS = \
 	comcat.idl \
 	commoncontrols.idl \
 	control.idl \
+	cor.idl \
 	ctfutb.idl \
 	ctxtcall.idl \
 	d3d10.idl \
+	d3d10_1.idl \
+	d3d11.idl \
+	d3dcommon.idl \
 	ddstream.idl \
 	devicetopology.idl \
 	dimm.idl \
@@ -46,6 +45,7 @@ PUBLIC_IDL_H_SRCS = \
 	imnxport.idl \
 	indexsrv.idl \
 	mediaobj.idl \
+	metahost.idl \
 	mimeinfo.idl \
 	mimeole.idl \
 	mlang.idl \
@@ -60,6 +60,7 @@ PUBLIC_IDL_H_SRCS = \
 	mstask.idl \
 	msxml.idl \
 	msxml2.idl \
+	msxml6.idl \
 	netcon.idl \
 	netfw.idl \
 	oaidl.idl \
@@ -97,10 +98,9 @@ PUBLIC_IDL_H_SRCS = \
 	wincodec.idl \
 	wine/itss.idl \
 	wine/svcctl.idl \
+	winsxs.idl \
 	wtypes.idl \
 	wuapi.idl \
-	xmldom.idl \
-	xmldso.idl \
 	xmllite.idl
 
 IDL_TLB_SRCS = \
@@ -142,7 +142,6 @@ SRCDIR_INCLUDES = \
 	commctrl.rh \
 	commdlg.h \
 	compobj.h \
-	cor.h \
 	corerror.h \
 	corhdr.h \
 	cpl.h \
@@ -152,9 +151,11 @@ SRCDIR_INCLUDES = \
 	custcntl.h \
 	cvconst.h \
 	d3d.h \
+	d3d10_1shader.h \
 	d3d10effect.h \
 	d3d10misc.h \
 	d3d10shader.h \
+	d3d11shader.h \
 	d3d8.h \
 	d3d8caps.h \
 	d3d8types.h \
@@ -162,10 +163,12 @@ SRCDIR_INCLUDES = \
 	d3d9caps.h \
 	d3d9types.h \
 	d3dcaps.h \
+	d3dcompiler.h \
 	d3dhal.h \
 	d3drm.h \
 	d3drmdef.h \
 	d3drmobj.h \
+	d3drmwin.h \
 	d3dtypes.h \
 	d3dvec.inl \
 	d3dx9.h \
@@ -250,6 +253,7 @@ SRCDIR_INCLUDES = \
 	errorrep.h \
 	errors.h \
 	evcode.h \
+	evntprov.h \
 	evntrace.h \
 	excpt.h \
 	exdispid.h \
@@ -275,9 +279,11 @@ SRCDIR_INCLUDES = \
 	icm.h \
 	icmpapi.h \
 	idispids.h \
+	ifdef.h \
 	imagehlp.h \
 	imm.h \
 	in6addr.h \
+	inaddr.h \
 	initguid.h \
 	intshcut.h \
 	ipexport.h \
@@ -286,6 +292,7 @@ SRCDIR_INCLUDES = \
 	iprtrmib.h \
 	iptypes.h \
 	isguids.h \
+	knownfolders.h \
 	ks.h \
 	ksguid.h \
 	ksmedia.h \
@@ -323,6 +330,7 @@ SRCDIR_INCLUDES = \
 	mmreg.h \
 	mmsystem.h \
 	mprapi.h \
+	mprerror.h \
 	msacm.h \
 	msacmdlg.h \
 	msacmdrv.h \
@@ -375,6 +383,7 @@ SRCDIR_INCLUDES = \
 	msvcrt/wctype.h \
 	mswsock.h \
 	msxml2did.h \
+	msxml6did.h \
 	msxmldid.h \
 	nb30.h \
 	ndrtypes.h \
@@ -419,6 +428,7 @@ SRCDIR_INCLUDES = \
 	raserror.h \
 	reason.h \
 	regstr.h \
+	restartmanager.h \
 	richedit.h \
 	rmxfguid.h \
 	row.idl \
@@ -462,6 +472,7 @@ SRCDIR_INCLUDES = \
 	sspi.h \
 	sti.h \
 	storage.h \
+	strsafe.h \
 	svrapi.h \
 	t2embapi.h \
 	tapi.h \
@@ -480,6 +491,7 @@ SRCDIR_INCLUDES = \
 	vfw.h \
 	vfwmsgs.h \
 	vmrender.idl \
+	werapi.h \
 	wfext.h \
 	wia.h \
 	winbase.h \
@@ -535,7 +547,10 @@ SRCDIR_INCLUDES = \
 	wtsapi32.h \
 	xcmc.h \
 	xinput.h \
+	xmldom.h \
+	xmldom.idl \
 	xmldomdid.h \
+	xmldso.idl \
 	xmldsodid.h \
 	zmouse.h
 
@@ -558,9 +573,9 @@ all: $(IDL_H_SRCS:.idl=.h) $(IDL_TLB_SRCS:.idl=.tlb)
 
 install install-dev:: $(OBJDIR_INCLUDES) $(INSTALLDIRS)
 	for f in $(SRCDIR_INCLUDES); do case $$f in \
-	  wine/*)   $(INSTALL_DATA) $(SRCDIR)/$$f $(DESTDIR)$(includedir)/`expr $$f : 'wine/\(.*\)'` ;; \
-	  msvcrt/*) $(INSTALL_DATA) $(SRCDIR)/$$f $(DESTDIR)$(includedir)/$$f ;; \
-	  *)        $(INSTALL_DATA) $(SRCDIR)/$$f $(DESTDIR)$(includedir)/windows/$$f ;; \
+	  wine/*)   $(INSTALL_DATA) $(srcdir)/$$f $(DESTDIR)$(includedir)/`expr $$f : 'wine/\(.*\)'` ;; \
+	  msvcrt/*) $(INSTALL_DATA) $(srcdir)/$$f $(DESTDIR)$(includedir)/$$f ;; \
+	  *)        $(INSTALL_DATA) $(srcdir)/$$f $(DESTDIR)$(includedir)/windows/$$f ;; \
 	esac; done
 	for f in $(OBJDIR_INCLUDES); do case $$f in \
 	  wine/*)   $(INSTALL_DATA) $$f $(DESTDIR)$(includedir)/`expr $$f : 'wine/\(.*\)'` ;; \

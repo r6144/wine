@@ -1,8 +1,4 @@
 EXTRADEFS = -DWINE_NO_UNICODE_MACROS
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = wineconsole.exe
 APPMODE   = -mwindows
 IMPORTS   = advapi32
@@ -23,6 +19,7 @@ RC_SRCS = \
 	wineconsole_Eo.rc \
 	wineconsole_Es.rc \
 	wineconsole_Fr.rc \
+	wineconsole_He.rc \
 	wineconsole_Hu.rc \
 	wineconsole_It.rc \
 	wineconsole_Ko.rc \
@@ -38,5 +35,7 @@ RC_SRCS = \
 	wineconsole_Tr.rc \
 	wineconsole_Uk.rc \
 	wineconsole_Zh.rc
+
+MANPAGE = wineconsole.man
 
 @MAKE_PROG_RULES@

@@ -98,6 +98,7 @@ static struct graphics_driver *create_driver( HMODULE module )
         GET_FUNC(EndPage);
         GET_FUNC(EndPath);
         GET_FUNC(EnumDeviceFonts);
+        GET_FUNC(EnumICMProfiles);
         GET_FUNC(ExcludeClipRect);
         GET_FUNC(ExtDeviceMode);
         GET_FUNC(ExtEscape);
@@ -111,7 +112,6 @@ static struct graphics_driver *create_driver( HMODULE module )
         GET_FUNC(GdiComment);
         GET_FUNC(GetBitmapBits);
         GET_FUNC(GetCharWidth);
-        GET_FUNC(GetDCOrgEx);
         GET_FUNC(GetDIBColorTable);
         GET_FUNC(GetDIBits);
         GET_FUNC(GetDeviceCaps);

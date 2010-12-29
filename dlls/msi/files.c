@@ -66,15 +66,23 @@ static void schedule_install_files(MSIPACKAGE *package)
 
     LIST_FOR_EACH_ENTRY(file, &package->files, MSIFILE, entry)
     {
-        if (file->Component->ActionRequest != INSTALLSTATE_LOCAL || !file->Component->Enabled)
+        MSICOMPONENT *comp = file->Component;
+
+        if (comp->ActionRequest != INSTALLSTATE_LOCAL || !comp->Enabled)
         {
             TRACE("File %s is not scheduled for install\n", debugstr_w(file->File));
+            file->state = msifs_skipped;
+            continue;
+        }
+        comp->Action = INSTALLSTATE_LOCAL;
+        ui_progress( package, 2, file->FileSize, 0, 0 );
 
-            ui_progress(package,2,file->FileSize,0,0);
+        if (file->state == msifs_overwrite &&
+            (comp->Attributes & msidbComponentAttributesNeverOverwrite))
+        {
+            TRACE("not overwriting %s\n", debugstr_w(file->TargetPath));
             file->state = msifs_skipped;
         }
-        else
-            file->Component->Action = INSTALLSTATE_LOCAL;
     }
 }
 
@@ -186,8 +194,10 @@ static BOOL installfiles_cb(MSIPACKAGE *package, LPCWSTR file, DWORD action,
             return FALSE;
 
         msi_file_update_ui(package, f, szInstallFiles);
-        msi_create_directory(package, f->Component->Directory);
-
+        if (!f->Component->assembly || f->Component->assembly->application)
+        {
+            msi_create_directory(package, f->Component->Directory);
+        }
         *path = strdupW(f->TargetPath);
         *attrs = f->Attributes;
     }
@@ -210,6 +220,7 @@ static BOOL installfiles_cb(MSIPACKAGE *package, LPCWSTR file, DWORD action,
 UINT ACTION_InstallFiles(MSIPACKAGE *package)
 {
     MSIMEDIAINFO *mi;
+    MSICOMPONENT *comp;
     UINT rc = ERROR_SUCCESS;
     MSIFILE *file;
 
@@ -234,7 +245,7 @@ UINT ACTION_InstallFiles(MSIPACKAGE *package)
             if (rc != ERROR_SUCCESS)
             {
                 ERR("Failed to ready media for %s\n", debugstr_w(file->File));
-                break;
+                goto done;
             }
 
             data.mi = mi;
@@ -247,7 +258,7 @@ UINT ACTION_InstallFiles(MSIPACKAGE *package)
             {
                 ERR("Failed to extract cabinet: %s\n", debugstr_w(mi->cabinet));
                 rc = ERROR_INSTALL_FAILURE;
-                break;
+                goto done;
             }
         }
 
@@ -255,12 +266,13 @@ UINT ACTION_InstallFiles(MSIPACKAGE *package)
         {
             LPWSTR source = resolve_file_source(package, file);
 
-            TRACE("file paths %s to %s\n", debugstr_w(source),
-                  debugstr_w(file->TargetPath));
+            TRACE("copying %s to %s\n", debugstr_w(source), debugstr_w(file->TargetPath));
 
             msi_file_update_ui(package, file, szInstallFiles);
-            msi_create_directory(package, file->Component->Directory);
-
+            if (!file->Component->assembly || file->Component->assembly->application)
+            {
+                msi_create_directory(package, file->Component->Directory);
+            }
             rc = copy_install_file(package, file, source);
             if (rc != ERROR_SUCCESS)
             {
@@ -268,19 +280,33 @@ UINT ACTION_InstallFiles(MSIPACKAGE *package)
                     debugstr_w(file->TargetPath), rc);
                 rc = ERROR_INSTALL_FAILURE;
                 msi_free(source);
-                break;
+                goto done;
             }
-
             msi_free(source);
         }
         else if (file->state != msifs_installed)
         {
             ERR("compressed file wasn't installed (%s)\n", debugstr_w(file->TargetPath));
             rc = ERROR_INSTALL_FAILURE;
-            break;
+            goto done;
+        }
+    }
+    LIST_FOR_EACH_ENTRY( comp, &package->components, MSICOMPONENT, entry )
+    {
+        if (comp->ActionRequest == INSTALLSTATE_LOCAL && comp->Enabled &&
+            comp->assembly && !comp->assembly->installed)
+        {
+            rc = install_assembly( package, comp );
+            if (rc != ERROR_SUCCESS)
+            {
+                ERR("Failed to install assembly\n");
+                rc = ERROR_INSTALL_FAILURE;
+                break;
+            }
         }
     }
 
+done:
     msi_free_media_info(mi);
     return rc;
 }
@@ -406,7 +432,7 @@ static BOOL add_wildcard(FILE_LIST *files, LPWSTR source, LPWSTR dest)
 
     LIST_FOR_EACH_ENTRY(file, &files->entry, FILE_LIST, entry)
     {
-        if (lstrcmpW(source, file->source) < 0)
+        if (strcmpW( source, file->source ) < 0)
         {
             list_add_before(&file->entry, &new->entry);
             return TRUE;
@@ -900,12 +926,6 @@ static UINT ITERATE_RemoveFiles(MSIRECORD *row, LPVOID param)
     install_mode = MSI_RecordGetInteger(row, 5);
 
     comp = get_loaded_component(package, component);
-    if (!comp)
-    {
-        ERR("Invalid component: %s\n", debugstr_w(component));
-        return ERROR_FUNCTION_FAILED;
-    }
-
     if (!comp->Enabled)
     {
         TRACE("component is disabled\n");
@@ -916,6 +936,12 @@ static UINT ITERATE_RemoveFiles(MSIRECORD *row, LPVOID param)
     {
         TRACE("Skipping removal due to missing conditions\n");
         comp->Action = comp->Installed;
+        return ERROR_SUCCESS;
+    }
+
+    if (comp->Attributes & msidbComponentAttributesPermanent)
+    {
+        TRACE("permanent component, not removing file\n");
         return ERROR_SUCCESS;
     }
 
@@ -999,6 +1025,12 @@ UINT ACTION_RemoveFiles( MSIPACKAGE *package )
         if (!file->Component->Enabled)
         {
             TRACE("component is disabled\n");
+            continue;
+        }
+
+        if (file->Component->Attributes & msidbComponentAttributesPermanent)
+        {
+            TRACE("permanent component, not removing file\n");
             continue;
         }
 

@@ -122,14 +122,6 @@ Display a usage message and exit.
 Specify the size of the module local heap in bytes (only valid for
 Win16 modules); default is no local heap.
 .TP
-.BI \-i,\ --ignore= [-]symbol[,[-]symbol]
-Specify a list of symbols that should be ignored when resolving
-undefined symbols against the imported libraries. This forces these
-symbols to be resolved from the Unix C library (or from another Unix
-library linked with the application). If a symbol is prefixed by '-'
-it is removed from the list instead of being added; a stand-alone '-'
-clears the whole list.
-.TP
 .BI \-I\  directory
 Ignored for compatibility with the C compiler.
 .TP
@@ -211,7 +203,10 @@ for a command line executable,
 for a graphical executable,
 .br
 .B native
-for a native-mode dll.
+for a native-mode dll,
+.br
+.B wince
+for a ce dll.
 .br
 The entry point of a command line executable is a normal C \fBmain\fR
 function. A \fBwmain\fR function can be used instead if you need the
@@ -333,6 +328,11 @@ for a Win16 or Win32 function using the C calling convention
 .B varargs
 for a Win16 or Win32 function using the C calling convention with a
 variable number of arguments
+.TP
+.B thiscall
+for a Win32 function using the
+.I thiscall
+calling convention (first parameter in %ecx register on i386)
 .RE
 .PP
 .I args
@@ -346,10 +346,19 @@ should be one or several of:
 (16-bit signed word)
 .TP
 .B long
-(32-bit value)
+(pointer-sized integer value)
+.TP
+.B int64
+(64-bit integer value)
+.TP
+.B int128
+(128-bit integer value)
+.TP
+.B float
+(32-bit floating point value)
 .TP
 .B double
-(64-bit value)
+(64-bit floating point value)
 .TP
 .B ptr
 (linear pointer)
@@ -366,8 +375,8 @@ should be one or several of:
 .B segstr
 (segmented pointer to a null-terminated ASCII string).
 .HP
-.RB Only\  ptr ,\  str ,\  wstr ,\  long\  and\  double
-are valid for Win32 functions.
+Note: The 16-bit and segmented pointer types are only valid for Win16
+functions.
 .RE
 .PP
 .I handler

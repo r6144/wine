@@ -1,0 +1,8 @@
+TESTDLL   = mscoree.dll
+IMPORTS   = shlwapi
+
+C_SRCS = \
+	metahost.c \
+	mscoree.c
+
+@MAKE_TEST_RULES@

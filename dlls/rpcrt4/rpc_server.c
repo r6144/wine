@@ -104,6 +104,8 @@ static BOOL std_listen;
 static LONG manual_listen_count;
 /* total listeners including auto listeners */
 static LONG listen_count;
+/* event set once all listening is finished */
+static HANDLE listen_done_event;
 
 static UUID uuid_nil;
 
@@ -503,29 +505,22 @@ static void RPCRT4_process_packet(RpcConnection* conn, RpcPktHdr* hdr,
                                   RPC_MESSAGE* msg, unsigned char *auth_data,
                                   ULONG auth_length)
 {
-  RPC_STATUS status;
-
   msg->Handle = (RPC_BINDING_HANDLE)conn->server_binding;
 
   switch (hdr->common.ptype) {
     case PKT_BIND:
       TRACE("got bind packet\n");
-
-      status = process_bind_packet(conn, &hdr->bind, msg, auth_data,
-                                   auth_length);
+      process_bind_packet(conn, &hdr->bind, msg, auth_data, auth_length);
       break;
 
     case PKT_REQUEST:
       TRACE("got request packet\n");
-
-      status = process_request_packet(conn, &hdr->request, msg);
+      process_request_packet(conn, &hdr->request, msg);
       break;
 
     case PKT_AUTH3:
       TRACE("got auth3 packet\n");
-
-      status = process_auth3_packet(conn, &hdr->common, msg, auth_data,
-                                    auth_length);
+      process_auth3_packet(conn, &hdr->common, msg, auth_data, auth_length);
       break;
     default:
       FIXME("unhandled packet type %u\n", hdr->common.ptype);
@@ -779,6 +774,10 @@ static void RPCRT4_stop_listen(BOOL auto_listen)
       LIST_FOR_EACH_ENTRY(cps, &protseqs, RpcServerProtseq, entry)
         RPCRT4_sync_with_server_thread(cps);
 
+      EnterCriticalSection(&listen_cs);
+      if (listen_done_event) SetEvent( listen_done_event );
+      listen_done_event = 0;
+      LeaveCriticalSection(&listen_cs);
       return;
     }
     assert(listen_count >= 0);
@@ -1476,6 +1475,8 @@ RPC_STATUS WINAPI RpcServerListen( UINT MinimumCallThreads, UINT MaxCalls, UINT 
  */
 RPC_STATUS WINAPI RpcMgmtWaitServerListen( void )
 {
+  HANDLE event;
+
   TRACE("()\n");
 
   EnterCriticalSection(&listen_cs);
@@ -1484,11 +1485,20 @@ RPC_STATUS WINAPI RpcMgmtWaitServerListen( void )
     LeaveCriticalSection(&listen_cs);
     return RPC_S_NOT_LISTENING;
   }
-  
+  if (listen_done_event) {
+    LeaveCriticalSection(&listen_cs);
+    return RPC_S_ALREADY_LISTENING;
+  }
+  event = CreateEventW( NULL, TRUE, FALSE, NULL );
+  listen_done_event = event;
+
   LeaveCriticalSection(&listen_cs);
 
-  FIXME("not waiting for server calls to finish\n");
+  TRACE( "waiting for server calls to finish\n" );
+  WaitForSingleObject( event, INFINITE );
+  TRACE( "done waiting\n" );
 
+  CloseHandle( event );
   return RPC_S_OK;
 }
 
@@ -1609,6 +1619,15 @@ RPC_STATUS WINAPI RpcMgmtIsServerListening(RPC_BINDING_HANDLE Binding)
 {
   FIXME("(%p): stub\n", Binding);
   return RPC_S_INVALID_BINDING;
+}
+
+/***********************************************************************
+ *             RpcMgmtSetAuthorizationFn (RPCRT4.@)
+ */
+RPC_STATUS WINAPI RpcMgmtSetAuthorizationFn(RPC_MGMT_AUTHORIZATION_FN fn)
+{
+  FIXME("(%p): stub\n", fn);
+  return RPC_S_OK;
 }
 
 /***********************************************************************

@@ -23,14 +23,32 @@ import "oaidl.idl";
 import "ocidl.idl";
 import "shobjidl.idl";
 
+#ifndef __WIDL__
+#define threading(model)
+#define progid(str)
+#define vi_progid(str)
+#endif
+
 [
-  uuid(1DE6CE3D-EA69-4671-941F-26F789F39C5B),
+  uuid(4F48A59C-942D-4F3C-83C9-4EFFE84E4959),
   version(1.0),
   helpstring("gameux public 1.0 Type Library")
 ]
 library gameuxLib
 {
     importlib("stdole2.tlb");
+
+    cpp_quote("#define ID_GDF_XML __GDF_XML")
+    cpp_quote("#define ID_GDF_THUMBNAIL __GDF_THUMBNAIL")
+    cpp_quote("#define ID_ICON_ICO __ICON_ICO")
+
+    cpp_quote("#if defined(__GNUC__)")
+    cpp_quote("#define ID_GDF_XML_STR (const WCHAR[]){'_','_','G','D','F','_','X','M','L',0}")
+    cpp_quote("#define ID_GDF_THUMBNAIL_STR (const WCHAR[]){'_','_','G','D','F','_','T','H','U','M','B','N','A','I','L',0}")
+    cpp_quote("#elif defined(_MSC_VER)")
+    cpp_quote("#define ID_GDF_XML_STR L\"__GDF_XML\"")
+    cpp_quote("#define ID_GDF_THUMBNAIL_STR L\"__GDF_THUMBNAIL\"")
+    cpp_quote("#endif")
 
     typedef enum
     {
@@ -158,6 +176,10 @@ library gameuxLib
     }
 
     [
+      helpstring("GameExplorer Class"),
+      threading(both),
+      progid("gameux.GameExplorer.1"),
+      vi_progid("gameux.GameExplorer"),
       uuid(9A5EA990-3034-4D6F-9128-01F3C61022BC)
     ]
     coclass GameExplorer
@@ -166,6 +188,10 @@ library gameuxLib
     };
 
     [
+      helpstring("GameStatistics Class"),
+      threading(apartment),
+      progid("gameux.GameStatistics.1"),
+      vi_progid("gameux.GameStatistics"),
       uuid(DBC85A2C-C0DC-4961-B6E2-D28B62C11AD4)
     ]
     coclass GameStatistics

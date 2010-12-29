@@ -20,7 +20,7 @@ use strict;
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
 #
 
-my $version="0.7.4";
+my $version="0.7.5";
 
 use Cwd;
 use File::Basename;
@@ -224,10 +224,6 @@ my $T_LIBRARY_PATH=15;
 # The list of Unix libraries to link with
 my $T_LIBRARIES=16;
 
-##
-# The list of dependencies between targets
-my $T_DEPENDS=17;
-
 
 # The following constants define the recognized types of target
 
@@ -278,7 +274,6 @@ sub target_init($)
   my $target=$_[0];
 
   @$target[$T_TYPE]=$TT_SETTINGS;
-  # leaving $T_INIT undefined
   @$target[$T_FLAGS]=$opt_flags;
   @$target[$T_SOURCES_C]=[];
   @$target[$T_SOURCES_CXX]=[];
@@ -629,6 +624,13 @@ sub source_scan_project_file($$$)
                     } elsif (/^GX$/) {
                         # Enable Exception Handling
                         $prj_target_cflags.="-fexceptions ";
+                    } elsif (/^Gd$/) {
+                        # use cdecl calling convention (default)
+                    } elsif (/^Gr$/) {
+                        # use fastcall calling convention
+                    } elsif (/^Gz$/) {
+                        # use stdcall calling convention
+                        $prj_target_cflags.="-mrtd ";
                     } elsif (/^Z[d7iI]$/) {
                         # Debug Info
                         $prj_target_cflags.="-g ";
@@ -691,19 +693,19 @@ sub source_scan_project_file($$$)
                         # this option is always present and is already specified in the suffix rules
                     } elsif (/^GB$/) {
                         # Blend Optimization
-                        $prj_target_cflags.="-march=pentiumpro -D_M_IX86=500 ";
+                        $prj_target_cflags.="-D_M_IX86=500 ";
                     } elsif (/^G6$/) {
                         # Pentium Pro Optimization
-                        $prj_target_cflags.="-march=pentiumpro -D_M_IX86=600 ";
+                        $prj_target_cflags.="-D_M_IX86=600 ";
                     } elsif (/^G5$/) {
                         # Pentium Optimization
-                        $prj_target_cflags.="-march=pentium -D_M_IX86=500 ";
+                        $prj_target_cflags.="-D_M_IX86=500 ";
                     } elsif (/^G3$/) {
                         # 80386 Optimization
-                        $prj_target_cflags.="-march=i386 -D_M_IX86=300 ";
+                        $prj_target_cflags.="-D_M_IX86=300 ";
                     } elsif (/^G4$/) {
                         # 80486 Optimization
-                        $prj_target_cflags.="-march=i486 -D_M_IX86=400 ";
+                        $prj_target_cflags.="-D_M_IX86=400 ";
                     } elsif (/^Yc/) {
                         # Create Precompiled Header
                     } elsif (/^Yu/) {
@@ -1010,7 +1012,7 @@ sub source_scan_project_file($$$)
         push @local_depends,"$prj_name.so";
         push @local_dlls,$prj_name;
         my $canon=canonize($prj_name);
-        push @{@$target[$T_LDFLAGS]},("-shared","\$(${canon}_MODULE:%=%.spec)");
+        push @{@$target[$T_LDFLAGS]},("-shared","\$(${canon}_MODULE:.dll=.spec)");
     }
 
     @$target[$T_NAME]=$prj_name;
@@ -1186,6 +1188,7 @@ sub source_scan_workspace_file($)
             if (/^Project(.*)=\s*"(.*)",\s*"(.*)",\s*"(.*)"/) {
                 $prj_name=$2;
                 $prj_path=$3;
+                if ($prj_path eq "Solution Items") { next; }
                 @components=split /[\/\\]+/, $3;
                 $prj_path=search_from($path, \@components);
                 print "Name: $prj_name\nPath: $prj_path\n";
@@ -1504,7 +1507,7 @@ sub source_scan_directory($$$$)
       push @local_depends,"$target_name.so";
       push @local_dlls,$target_name;
       my $canon=canonize($target_name);
-      push @{@$target[$T_LDFLAGS]},("-shared","\$(${canon}_MODULE:%=%.spec)");
+      push @{@$target[$T_LDFLAGS]},("-shared","\$(${canon}_MODULE:.dll=.spec)");
     } else {
       @$target[$T_TYPE]=$opt_target_type;
       push @exe_list,$target;
@@ -1736,12 +1739,12 @@ sub fix_file_and_directory_names($)
           next if ($new_name !~ /(^makefile|\.(c|cpp|h|rc))$/i);
 
           # Only all lowercase extensions are supported (because of
-          # rules like '.c.o:'.
+          # rules like '.c.o:').
           $new_name =~ s/\.C$/.c/;
           $new_name =~ s/\.cpp$/.cpp/i;
           $warn=1 if ($new_name =~ s/\.cxx$/.cpp/i);
           $new_name =~ s/\.rc$/.rc/i;
-          # And this last one is to avoid confusion then running make
+          # And this last one is to avoid confusion when running make
           $warn=1 if ($new_name =~ s/^makefile$/makefile.win/i);
       }
 
@@ -1752,7 +1755,7 @@ sub fix_file_and_directory_names($)
           $new_name=lc $new_name;
       }
 
-      # autoconf and make don't support these characters well
+      # make doesn't support these characters well
       $new_name =~ s/[ \$]/_/g;
 
       # And finally, perform the renaming
@@ -1795,6 +1798,7 @@ sub search_from($$)
   my $path=$_[1];
   my $real_path="";
 
+  $dirname =~ s/(\.\/)+//;
   if ($dirname eq "" or $dirname eq "." or $dirname eq "./") {
     $dirname=cwd;
   } elsif ($dirname !~ m+^/+) {
@@ -1813,7 +1817,11 @@ sub search_from($$)
       $real_path.="./";
     } elsif ($component eq "..") {
       # Go up one level
-      $dirname=dirname($dirname) . "/";
+      if ($dirname =~ /\.\.\/$/) {
+        $dirname.="../";
+      } else {
+        $dirname=dirname($dirname) . "/";
+      }
       $real_path.="../";
     } else {
       # The file/directory may have been renamed before. Also try to
@@ -1864,7 +1872,7 @@ sub get_real_include_name($$$$$)
   my $project=$_[3];
   my $target=$_[4];
 
-  if ($filename =~ /^([a-zA-Z]:)?[\/]/ or $filename =~ /^[a-zA-Z]:[\/]?/) {
+  if ($filename =~ /^([a-zA-Z]:)?[\/\\]/ or $filename =~ /^[a-zA-Z]:[\/\\]?/) {
     # This is not a relative path, we cannot make any check
     my $warning="path:$filename";
     if (!defined $warnings{$warning}) {
@@ -1972,8 +1980,6 @@ sub fix_file($$$)
   }
 
   print "  $filename\n";
-  #FIXME:assuming that because there is a .bak file, this is what we want is
-  #probably flawed. Or is it???
   if (! -e "$filename.bak") {
     if (!copy("$filename","$filename.bak")) {
       print STDERR "error: unable to make a backup of $filename:\n";
@@ -2474,7 +2480,11 @@ sub generate_project_files($)
       my $canon=canonize("@$target[$T_NAME]");
       $canon =~ s/_so$//;
 
-      print FILEO "\$(${canon}_MODULE).so: \$(${canon}_OBJS)\n";
+      if (@$target[$T_TYPE] == $TT_DLL) {
+        print FILEO "\$(${canon}_MODULE).so: \$(${canon}_OBJS) \$(${canon}_MODULE:.dll=.spec)\n";
+      } else {
+        print FILEO "\$(${canon}_MODULE).so: \$(${canon}_OBJS)\n";
+      }
       if (@{@$target[$T_SOURCES_CXX]} > 0 or @{@$project_settings[$T_SOURCES_CXX]} > 0) {
         print FILEO "\t\$(CXX)";
       } else {

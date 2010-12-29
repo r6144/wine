@@ -29,7 +29,6 @@
 #include <OpenAL/alc.h>
 #endif
 
-#define CINTERFACE
 #define COBJMACROS
 #include "windef.h"
 #include "winbase.h"
@@ -38,6 +37,7 @@
 
 #include "ole2.h"
 #include "olectl.h"
+#include "rpcproxy.h"
 #include "propsys.h"
 #include "initguid.h"
 #include "propkeydef.h"
@@ -315,6 +315,8 @@ static void load_libopenal(void)
 
 #endif /*HAVE_OPENAL*/
 
+static HINSTANCE instance;
+
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 {
     TRACE("(0x%p, %d, %p)\n", hinstDLL, fdwReason, lpvReserved);
@@ -322,6 +324,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
     switch (fdwReason)
     {
         case DLL_PROCESS_ATTACH:
+            instance = hinstDLL;
             DisableThreadLibraryCalls(hinstDLL);
 #ifdef HAVE_OPENAL
             load_libopenal();
@@ -343,15 +346,20 @@ HRESULT WINAPI DllCanUnloadNow(void)
 typedef HRESULT (*FnCreateInstance)(REFIID riid, LPVOID *ppobj);
 
 typedef struct {
-    const IClassFactoryVtbl *lpVtbl;
+    IClassFactory IClassFactory_iface;
     REFCLSID rclsid;
     FnCreateInstance pfnCreateInstance;
 } IClassFactoryImpl;
 
+static inline IClassFactoryImpl *impl_from_IClassFactory(IClassFactory *iface)
+{
+    return CONTAINING_RECORD(iface, IClassFactoryImpl, IClassFactory_iface);
+}
+
 static HRESULT WINAPI
 MMCF_QueryInterface(LPCLASSFACTORY iface, REFIID riid, LPVOID *ppobj)
 {
-    IClassFactoryImpl *This = (IClassFactoryImpl *)iface;
+    IClassFactoryImpl *This = impl_from_IClassFactory(iface);
     TRACE("(%p, %s, %p)\n", This, debugstr_guid(riid), ppobj);
     if (ppobj == NULL)
         return E_POINTER;
@@ -383,7 +391,7 @@ static HRESULT WINAPI MMCF_CreateInstance(
     REFIID riid,
     LPVOID *ppobj)
 {
-    IClassFactoryImpl *This = (IClassFactoryImpl *)iface;
+    IClassFactoryImpl *This = impl_from_IClassFactory(iface);
     TRACE("(%p, %p, %s, %p)\n", This, pOuter, debugstr_guid(riid), ppobj);
 
     if (pOuter)
@@ -399,7 +407,7 @@ static HRESULT WINAPI MMCF_CreateInstance(
 
 static HRESULT WINAPI MMCF_LockServer(LPCLASSFACTORY iface, BOOL dolock)
 {
-    IClassFactoryImpl *This = (IClassFactoryImpl *)iface;
+    IClassFactoryImpl *This = impl_from_IClassFactory(iface);
     FIXME("(%p, %d) stub!\n", This, dolock);
     return S_OK;
 }
@@ -413,7 +421,7 @@ static const IClassFactoryVtbl MMCF_Vtbl = {
 };
 
 static IClassFactoryImpl MMDEVAPI_CF[] = {
-    { &MMCF_Vtbl, &CLSID_MMDeviceEnumerator, (FnCreateInstance)MMDevEnum_Create }
+    { { &MMCF_Vtbl }, &CLSID_MMDeviceEnumerator, (FnCreateInstance)MMDevEnum_Create }
 };
 
 HRESULT WINAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID *ppv)
@@ -437,7 +445,7 @@ HRESULT WINAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID *ppv)
     for (i = 0; i < sizeof(MMDEVAPI_CF)/sizeof(MMDEVAPI_CF[0]); ++i)
     {
         if (IsEqualGUID(rclsid, MMDEVAPI_CF[i].rclsid)) {
-            IUnknown_AddRef((IClassFactory*) &MMDEVAPI_CF[i]);
+            IUnknown_AddRef(&MMDEVAPI_CF[i].IClassFactory_iface);
             *ppv = &MMDEVAPI_CF[i];
             return S_OK;
         }
@@ -447,4 +455,20 @@ HRESULT WINAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID *ppv)
     WARN("(%s, %s, %p): no class found.\n", debugstr_guid(rclsid),
          debugstr_guid(riid), ppv);
     return CLASS_E_CLASSNOTAVAILABLE;
+}
+
+/***********************************************************************
+ *		DllRegisterServer (MMDEVAPI.@)
+ */
+HRESULT WINAPI DllRegisterServer(void)
+{
+    return __wine_register_resources( instance, NULL );
+}
+
+/***********************************************************************
+ *		DllUnregisterServer (MMDEVAPI.@)
+ */
+HRESULT WINAPI DllUnregisterServer(void)
+{
+    return __wine_unregister_resources( instance, NULL );
 }

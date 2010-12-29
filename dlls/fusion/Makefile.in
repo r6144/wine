@@ -1,7 +1,3 @@
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = fusion.dll
 IMPORTS   = advapi32 dbghelp shlwapi version user32
 
@@ -12,5 +8,7 @@ C_SRCS = \
 	assembly.c \
 	fusion.c \
 	fusion_main.c
+
+RC_SRCS = version.rc
 
 @MAKE_DLL_RULES@

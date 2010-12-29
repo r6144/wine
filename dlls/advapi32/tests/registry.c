@@ -462,7 +462,7 @@ static void test_enum_value(void)
     res = RegEnumValueA( test_key, 0, value, &val_count, NULL, &type, (LPBYTE)data, &data_count );
     ok( res == ERROR_MORE_DATA, "expected ERROR_MORE_DATA, got %d\n", res );
     ok( val_count == 2, "val_count set to %d\n", val_count );
-    ok( data_count == 7, "data_count set to %d instead of 7\n", data_count );
+    ok( data_count == 7 || broken( data_count == 8 ), "data_count set to %d instead of 7\n", data_count );
     ok( type == REG_SZ, "type %d is not REG_SZ\n", type );
     ok( !strcmp( value, "xxxxxxxxxx" ), "value set to '%s'\n", value );
     ok( !strcmp( data, "xxxxxxxxxx" ), "data set to '%s'\n", data );
@@ -477,12 +477,12 @@ static void test_enum_value(void)
     ok( res == ERROR_MORE_DATA, "expected ERROR_MORE_DATA, got %d\n", res );
     /* Win9x returns 2 as specified by MSDN but NT returns 3... */
     ok( val_count == 2 || val_count == 3, "val_count set to %d\n", val_count );
-    ok( data_count == 7, "data_count set to %d instead of 7\n", data_count );
+    ok( data_count == 7 || broken( data_count == 8 ), "data_count set to %d instead of 7\n", data_count );
     ok( type == REG_SZ, "type %d is not REG_SZ\n", type );
     /* v5.1.2600.0 (XP Home and Professional) does not touch value or data in this case */
     ok( !strcmp( value, "Te" ) || !strcmp( value, "xxxxxxxxxx" ), 
         "value set to '%s' instead of 'Te' or 'xxxxxxxxxx'\n", value );
-    ok( !strcmp( data, "foobar" ) || !strcmp( data, "xxxxxxx" ), 
+    ok( !strcmp( data, "foobar" ) || !strcmp( data, "xxxxxxx" ) || broken( !strcmp( data, "xxxxxxxx" ) && data_count == 8 ),
         "data set to '%s' instead of 'foobar' or 'xxxxxxx'\n", data );
 
     /* overflow empty name */
@@ -494,11 +494,11 @@ static void test_enum_value(void)
     res = RegEnumValueA( test_key, 0, value, &val_count, NULL, &type, (LPBYTE)data, &data_count );
     ok( res == ERROR_MORE_DATA, "expected ERROR_MORE_DATA, got %d\n", res );
     ok( val_count == 0, "val_count set to %d\n", val_count );
-    ok( data_count == 7, "data_count set to %d instead of 7\n", data_count );
+    ok( data_count == 7 || broken( data_count == 8 ), "data_count set to %d instead of 7\n", data_count );
     ok( type == REG_SZ, "type %d is not REG_SZ\n", type );
     ok( !strcmp( value, "xxxxxxxxxx" ), "value set to '%s'\n", value );
     /* v5.1.2600.0 (XP Home and Professional) does not touch data in this case */
-    ok( !strcmp( data, "foobar" ) || !strcmp( data, "xxxxxxx" ), 
+    ok( !strcmp( data, "foobar" ) || !strcmp( data, "xxxxxxx" ) || broken( !strcmp( data, "xxxxxxxx" ) && data_count == 8 ),
         "data set to '%s' instead of 'foobar' or 'xxxxxxx'\n", data );
 
     /* overflow data */
@@ -1912,6 +1912,144 @@ static void test_redirection(void)
     RegCloseKey( root64 );
 }
 
+static void test_classesroot(void)
+{
+    HKEY hkey, hklm, hkcr;
+    DWORD size = 8;
+    DWORD type = REG_SZ;
+    static CHAR buffer[8];
+    LONG res;
+
+    /* create a key in the user's classes */
+    if (!RegOpenKeyA( HKEY_CURRENT_USER, "Software\\Classes\\WineTestCls", &hkey ))
+    {
+        delete_key( hkey );
+        RegCloseKey( hkey );
+    }
+    if (RegCreateKeyExA( HKEY_CURRENT_USER, "Software\\Classes\\WineTestCls", 0, NULL, 0,
+                         KEY_QUERY_VALUE|KEY_SET_VALUE, NULL, &hkey, NULL )) return;
+
+    /* try to open that key in hkcr */
+    res = RegOpenKeyExA( HKEY_CLASSES_ROOT, "WineTestCls", 0,
+                         KEY_QUERY_VALUE|KEY_SET_VALUE, &hkcr );
+    todo_wine ok(res == ERROR_SUCCESS ||
+                 broken(res == ERROR_FILE_NOT_FOUND /* Win9x */),
+                 "test key not found in hkcr: %d\n", res);
+    if (res)
+    {
+        trace( "HKCR key merging not supported\n" );
+        delete_key( hkey );
+        RegCloseKey( hkey );
+        return;
+    }
+
+    /* set a value in user's classes */
+    res = RegSetValueExA(hkey, "val1", 0, REG_SZ, (const BYTE *)"user", sizeof("user"));
+    ok(res == ERROR_SUCCESS, "RegSetValueExA failed: %d, GLE=%x\n", res, GetLastError());
+
+    /* try to find the value in hkcr */
+    res = RegQueryValueExA(hkcr, "val1", NULL, &type, (LPBYTE)buffer, &size);
+    ok(res == ERROR_SUCCESS, "RegQueryValueExA failed: %d\n", res);
+    ok(!strcmp( buffer, "user" ), "value set to '%s'\n", buffer );
+
+    /* modify the value in hkcr */
+    res = RegSetValueExA(hkcr, "val1", 0, REG_SZ, (const BYTE *)"hkcr", sizeof("hkcr"));
+    ok(res == ERROR_SUCCESS, "RegSetValueExA failed: %d\n", res);
+
+    /* check if the value is also modified in user's classes */
+    res = RegQueryValueExA(hkey, "val1", NULL, &type, (LPBYTE)buffer, &size);
+    ok(res == ERROR_SUCCESS, "RegQueryValueExA failed: %d, GLE=%x\n", res, GetLastError());
+    ok(!strcmp( buffer, "hkcr" ), "value set to '%s'\n", buffer );
+
+    /* cleanup */
+    delete_key( hkey );
+    delete_key( hkcr );
+    RegCloseKey( hkey );
+    RegCloseKey( hkcr );
+
+    /* create a key in the hklm classes */
+    if (!RegOpenKeyA( HKEY_LOCAL_MACHINE, "Software\\Classes\\WineTestCls", &hklm ))
+    {
+        delete_key( hklm );
+        RegCloseKey( hklm );
+    }
+    res = RegCreateKeyExA( HKEY_LOCAL_MACHINE, "Software\\Classes\\WineTestCls", 0, NULL, REG_OPTION_NON_VOLATILE,
+                           KEY_ALL_ACCESS, NULL, &hklm, NULL );
+    if (res == ERROR_ACCESS_DENIED)
+    {
+        skip("not enough privileges to add a system class\n");
+        return;
+    }
+
+    /* try to open that key in hkcr */
+    res = RegOpenKeyExA( HKEY_CLASSES_ROOT, "WineTestCls", 0,
+                         KEY_QUERY_VALUE|KEY_SET_VALUE, &hkcr );
+    ok(res == ERROR_SUCCESS,
+       "test key not found in hkcr: %d\n", res);
+    if (res)
+    {
+        delete_key( hklm );
+        RegCloseKey( hklm );
+        return;
+    }
+
+    /* set a value in hklm classes */
+    res = RegSetValueExA(hklm, "val2", 0, REG_SZ, (const BYTE *)"hklm", sizeof("user"));
+    ok(res == ERROR_SUCCESS, "RegSetValueExA failed: %d, GLE=%x\n", res, GetLastError());
+
+    /* try to find the value in hkcr */
+    res = RegQueryValueExA(hkcr, "val2", NULL, &type, (LPBYTE)buffer, &size);
+    ok(res == ERROR_SUCCESS, "RegQueryValueExA failed: %d\n", res);
+    ok(!strcmp( buffer, "hklm" ), "value set to '%s'\n", buffer );
+
+    /* modify the value in hkcr */
+    res = RegSetValueExA(hkcr, "val2", 0, REG_SZ, (const BYTE *)"hkcr", sizeof("hkcr"));
+    ok(res == ERROR_SUCCESS, "RegSetValueExA failed: %d\n", res);
+
+    /* check that the value is not modified in hklm classes */
+    res = RegQueryValueExA(hklm, "val2", NULL, &type, (LPBYTE)buffer, &size);
+    ok(res == ERROR_SUCCESS, "RegQueryValueExA failed: %d, GLE=%x\n", res, GetLastError());
+    ok(!strcmp( buffer, "hklm" ), "value set to '%s'\n", buffer );
+
+    if (RegCreateKeyExA( HKEY_CURRENT_USER, "Software\\Classes\\WineTestCls", 0, NULL, 0,
+                         KEY_QUERY_VALUE|KEY_SET_VALUE, NULL, &hkey, NULL )) return;
+
+    /* try to open that key in hkcr */
+    res = RegOpenKeyExA( HKEY_CLASSES_ROOT, "WineTestCls", 0,
+                         KEY_QUERY_VALUE|KEY_SET_VALUE, &hkcr );
+    ok(res == ERROR_SUCCESS,
+       "test key not found in hkcr: %d\n", res);
+
+    /* set a value in user's classes */
+    res = RegSetValueExA(hkey, "val2", 0, REG_SZ, (const BYTE *)"user", sizeof("user"));
+    ok(res == ERROR_SUCCESS, "RegSetValueExA failed: %d, GLE=%x\n", res, GetLastError());
+
+    /* try to find the value in hkcr */
+    res = RegQueryValueExA(hkcr, "val2", NULL, &type, (LPBYTE)buffer, &size);
+    ok(res == ERROR_SUCCESS, "RegQueryValueExA failed: %d\n", res);
+    ok(!strcmp( buffer, "user" ), "value set to '%s'\n", buffer );
+
+    /* modify the value in hklm */
+    res = RegSetValueExA(hklm, "val2", 0, REG_SZ, (const BYTE *)"hklm", sizeof("user"));
+    ok(res == ERROR_SUCCESS, "RegSetValueExA failed: %d, GLE=%x\n", res, GetLastError());
+
+    /* check that the value is not overwritten in hkcr or user's classes */
+    res = RegQueryValueExA(hkcr, "val2", NULL, &type, (LPBYTE)buffer, &size);
+    ok(res == ERROR_SUCCESS, "RegQueryValueExA failed: %d\n", res);
+    ok(!strcmp( buffer, "user" ), "value set to '%s'\n", buffer );
+    res = RegQueryValueExA(hkey, "val2", NULL, &type, (LPBYTE)buffer, &size);
+    ok(res == ERROR_SUCCESS, "RegQueryValueExA failed: %d, GLE=%x\n", res, GetLastError());
+    ok(!strcmp( buffer, "user" ), "value set to '%s'\n", buffer );
+
+    /* cleanup */
+    delete_key( hkey );
+    delete_key( hklm );
+    delete_key( hkcr );
+    RegCloseKey( hkey );
+    RegCloseKey( hklm );
+    RegCloseKey( hkcr );
+}
+
 static void test_deleted_key(void)
 {
     HKEY hkey, hkey2;
@@ -2004,6 +2142,7 @@ START_TEST(registry)
     test_string_termination();
     test_symlinks();
     test_redirection();
+    test_classesroot();
 
     /* SaveKey/LoadKey require the SE_BACKUP_NAME privilege to be set */
     if (set_privileges(SE_BACKUP_NAME, TRUE) &&

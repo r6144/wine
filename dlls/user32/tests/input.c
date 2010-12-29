@@ -233,7 +233,7 @@ static BOOL do_test( HWND hwnd, int seqnr, const KEV td[] )
         ADDTOINPUTS(td[i])
         strcat(buf, getdesc[td[i]]);
         if(td[i])
-            expmsg[i].message = KbdMessage(td[i], &(expmsg[i].wParam), &(expmsg[i].lParam)); /* see queue_kbd_event() */
+            expmsg[i].message = KbdMessage(td[i], &(expmsg[i].wParam), &(expmsg[i].lParam));
         else
             expmsg[i].message = 0;
     }
@@ -414,7 +414,7 @@ struct message {
     LPARAM lParam;         /* expected value of lParam */
 };
 
-struct sendinput_test_s {
+static const struct sendinput_test_s {
     WORD wVk;
     DWORD dwFlags;
     BOOL _todo_wine;
@@ -674,10 +674,10 @@ static struct message sent_messages[MAXKEYMESSAGES];
 static UINT sent_messages_cnt;
 
 /* Verify that only specified key state transitions occur */
-static void compare_and_check(int id, BYTE *ks1, BYTE *ks2, struct sendinput_test_s *test)
+static void compare_and_check(int id, BYTE *ks1, BYTE *ks2, const struct sendinput_test_s *test)
 {
     int i, failcount = 0;
-    struct transition_s *t = test->expected_transitions;
+    const struct transition_s *t = test->expected_transitions;
     UINT actual_cnt = 0;
     const struct message *expected = test->expected_messages;
 
@@ -1139,6 +1139,8 @@ static void test_Input_unicode(void)
     WNDCLASSW wclass;
     HANDLE hInstance = GetModuleHandleW(NULL);
     HHOOK hook;
+    HMODULE hModuleImm32;
+    BOOL (WINAPI *pImmDisableIME)(DWORD);
 
     wclass.lpszClassName = classNameW;
     wclass.style         = CS_HREDRAW | CS_VREDRAW;
@@ -1154,6 +1156,16 @@ static void test_Input_unicode(void)
         win_skip("Unicode functions not supported\n");
         return;
     }
+
+    hModuleImm32 = LoadLibrary("imm32.dll");
+    if (hModuleImm32) {
+        pImmDisableIME = (void *)GetProcAddress(hModuleImm32, "ImmDisableIME");
+        if (pImmDisableIME)
+            pImmDisableIME(0);
+    }
+    pImmDisableIME = NULL;
+    FreeLibrary(hModuleImm32);
+
     /* create the test window that will receive the keystrokes */
     hWndTest = CreateWindowW(wclass.lpszClassName, windowNameW,
                              WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, 0, 100, 100,

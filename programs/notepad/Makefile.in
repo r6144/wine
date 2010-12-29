@@ -1,11 +1,7 @@
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = notepad.exe
 APPMODE   = -mwindows -mno-cygwin
 IMPORTS   = comdlg32 shell32 shlwapi user32 gdi32 advapi32
-EXTRAINCL = -I$(TOPSRCDIR)/include/msvcrt
+EXTRAINCL = -I$(top_srcdir)/include/msvcrt
 MODCFLAGS = @BUILTINFLAG@
 EXTRADEFS = -DNO_LIBWINE_PORT -DWINE_NO_UNICODE_MACROS
 
@@ -22,6 +18,7 @@ RC_SRCS = \
 	En.rc \
 	Eo.rc \
 	Es.rc \
+	Fa.rc \
 	Fi.rc \
 	Fr.rc \
 	He.rc \
@@ -37,6 +34,7 @@ RC_SRCS = \
 	Ro.rc \
 	Ru.rc \
 	Si.rc \
+	Sr.rc \
 	Sv.rc \
 	Th.rc \
 	Tr.rc \
@@ -44,6 +42,8 @@ RC_SRCS = \
 	Wa.rc \
 	Zh.rc \
 	rsrc.rc
+
+MANPAGE = notepad.man
 
 SVG_SRCS = notepad.svg
 

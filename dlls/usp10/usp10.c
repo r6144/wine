@@ -40,105 +40,158 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(uniscribe);
 
-static const SCRIPT_PROPERTIES props[] =
+typedef struct _scriptRange
 {
-    { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 9, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0 },
-    { 9, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0 },
-    { 8, 0, 0, 0, 0, 161, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 25, 0, 0, 0, 0, 204, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 43, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0 },
-    { 55, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0 },
-    { 42, 0, 0, 0, 0, 163, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 9, 0, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0 },
-    { 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0 },
-    { 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0 },
-    { 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0 },
-    { 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0 },
-    { 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0 },
-    { 18, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0 },
-    { 18, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0 },
-    { 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0 },
-    { 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0 },
-    { 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0 },
-    { 9, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0 },
-    { 13, 0, 1, 0, 1, 177, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 13, 0, 1, 0, 0, 177, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 1, 0, 1, 0, 0, 178, 0, 0, 0, 0, 0, 0, 1, 1, 0 },
-    { 1, 1, 1, 0, 0, 178, 0, 0, 0, 0, 0, 0, 1, 0, 0 },
-    { 41, 1, 1, 0, 0, 178, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 32, 1, 1, 0, 0, 178, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 90, 0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0 },
-    { 30, 0, 1, 1, 1, 222, 0, 0, 1, 0, 1, 0, 0, 0, 1 },
-    { 30, 1, 1, 0, 0, 222, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 30, 0, 1, 0, 0, 222, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 57, 0, 1, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0 },
-    { 57, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 73, 0, 1, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0 },
-    { 73, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 69, 0, 1, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0 },
-    { 69, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 69, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 70, 0, 1, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0 },
-    { 70, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 71, 0, 1, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0 },
-    { 71, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 72, 0, 1, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0 },
-    { 72, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 74, 0, 1, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0 },
-    { 74, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 75, 0, 1, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0 },
-    { 75, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 76, 0, 1, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0 },
-    { 76, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 81, 0, 1, 1, 1, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0 },
-    { 81, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 84, 0, 1, 1, 1, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0 },
-    { 84, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 83, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0 },
-    { 83, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 85, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0 },
-    { 85, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 80, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 80, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 94, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 94, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 101, 0, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 93, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 92, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 9, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 91, 0, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { 9, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0 },
-    { 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+    WORD script;
+    WORD rangeFirst;
+    WORD rangeLast;
+    WORD numericScript;
+    WORD punctScript;
+} scriptRange;
+
+static const scriptRange scriptRanges[] = {
+    /* Basic Latin: U+0000–U+007A */
+    /* Latin-1 Supplement: U+0080–U+00FF */
+    /* Latin Extended-A: U+0100–U+017F */
+    /* Latin Extended-B: U+0180–U+024F */
+    /* IPA Extensions: U+0250–U+02AF */
+    { Script_Latin,      0x00,   0x2af ,  Script_Numeric, Script_Punctuation},
+    /* Greek: U+0370–U+03FF */
+    { Script_Greek,      0x370,  0x3ff,  0, 0},
+    /* Cyrillic: U+0400–U+04FF */
+    /* Cyrillic Supplement: U+0500–U+052F */
+    { Script_Cyrillic,   0x400,  0x52f,  0, 0},
+    /* Armenian: U+0530–U+058F */
+    { Script_Armenian,   0x530,  0x58f,  0, 0},
+    /* Hebrew: U+0590–U+05FF */
+    { Script_Hebrew,     0x590,  0x5ff,  0, 0},
+    /* Arabic: U+0600–U+06FF */
+    { Script_Arabic,     0x600,  0x6ef,  Script_Arabic_Numeric, 0},
+    /* Defined by Windows */
+    { Script_Persian,    0x6f0,  0x6f9,  0, 0},
+    /* Continue Arabic: U+0600–U+06FF */
+    { Script_Arabic,     0x6fa,  0x6ff,  0, 0},
+    /* Syriac: U+0700–U+074F*/
+    { Script_Syriac,     0x700,  0x74f,  0, 0},
+    /* Arabic Supplement: U+0750–U+077F */
+    { Script_Arabic,     0x750,  0x77f,  0, 0},
+    /* Thaana: U+0780–U+07BF */
+    { Script_Thaana,     0x780,  0x7bf,  0, 0},
+    /* Sinhala: U+0D80–U+0DFF */
+    { Script_Sinhala,   0xd80,  0xdff,  0, 0},
+    /* Thai: U+0E00–U+0E7F */
+    { Script_Thai,      0xe00,  0xe7f,  Script_Thai_Numeric, 0},
+    /* Lao: U+0E80–U+0EFF */
+    { Script_Lao,       0xe80,  0xeff,  Script_Lao_Numeric, 0},
+    /* Tibetan: U+0F00–U+0FFF */
+    { Script_Tibetan,   0xf00,  0xfff,  Script_Tibetan_Numeric, 0},
+    /* Georgian: U+10A0–U+10FF */
+    { Script_Georgian,   0x10a0,  0x10ff,  0, 0},
+    /* Phonetic Extensions: U+1D00–U+1DBF */
+    { Script_Latin,      0x1d00, 0x1dbf, 0, 0},
+    /* Latin Extended Additional: U+1E00–U+1EFF */
+    { Script_Latin,      0x1e00, 0x1eff, 0, 0},
+    /* Greek Extended: U+1F00–U+1FFF */
+    { Script_Greek,      0x1f00, 0x1fff, 0, 0},
+    /* Latin Extended-C: U+2C60–U+2C7F */
+    { Script_Latin,      0x2c60, 0x2c7f, 0, 0},
+    /* Georgian: U+2D00–U+2D2F */
+    { Script_Georgian,   0x2d00,  0x2d2f,  0, 0},
+    /* Cyrillic Extended-A: U+2DE0–U+2DFF */
+    { Script_Cyrillic,   0x2de0, 0x2dff,  0, 0},
+    /* Cyrillic Extended-B: U+A640–U+A69F */
+    { Script_Cyrillic,   0xa640, 0xa69f,  0, 0},
+    /* Modifier Tone Letters: U+A700–U+A71F */
+    /* Latin Extended-D: U+A720–U+A7FF */
+    { Script_Latin,      0xa700, 0xa7ff, 0, 0},
+    /* Phags-pa: U+A840–U+A87F */
+    { Script_Phags_pa,   0xa840, 0xa87f, 0, 0},
+    /* Latin Ligatures: U+FB00–U+FB06 */
+    { Script_Latin,      0xfb00, 0xfb06, 0, 0},
+    /* Armenian ligatures U+FB13..U+FB17 */
+    { Script_Armenian,   0xfb13, 0xfb17,  0, 0},
+    /* Alphabetic Presentation Forms: U+FB1D–U+FB4F */
+    { Script_Hebrew,     0xfb1d, 0xfb4f, 0, 0},
+    /* Arabic Presentation Forms-A: U+FB50–U+FDFF*/
+    { Script_Arabic,     0xfb50, 0xfdff, 0, 0},
+    /* Arabic Presentation Forms-B: U+FE70–U+FEFF*/
+    { Script_Arabic,     0xfe70, 0xfeff, 0, 0},
+    /* END */
+    { SCRIPT_UNDEFINED,  0, 0, 0}
+};
+
+typedef struct _scriptData
+{
+    SCRIPT_ANALYSIS a;
+    SCRIPT_PROPERTIES props;
+} scriptData;
+
+/* the must be in order so that the index matches the Script value */
+static const scriptData scriptInformation[] = {
+    {{SCRIPT_UNDEFINED, 0, 0, 0, 0, 0, 0, { 0,0,0,0,0,0,0,0,0,0,0}},
+     {LANG_NEUTRAL, 0, 0, 0, 0, ANSI_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0}},
+    {{Script_Latin, 0, 0, 0, 0, 0, 0, { 0,0,0,0,0,0,0,0,0,0,0}},
+     {LANG_ENGLISH, 0, 0, 0, 0, ANSI_CHARSET, 0, 0, 0, 0, 0, 0, 1, 0, 0}},
+    {{Script_CR, 0, 0, 0, 0, 0, 0, { 0,0,0,0,0,0,0,0,0,0,0}},
+     {LANG_NEUTRAL, 0, 0, 0, 0, ANSI_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0}},
+    {{Script_Numeric, 0, 0, 0, 0, 0, 0, { 0,0,0,0,0,0,0,0,0,0,0}},
+     {LANG_ENGLISH, 1, 0, 0, 0, ANSI_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0}},
+    {{Script_Control, 0, 0, 0, 0, 0, 0, { 0,0,0,0,0,0,0,0,0,0,0}},
+     {LANG_ENGLISH, 0, 1, 0, 0, ANSI_CHARSET, 1, 0, 0, 0, 0, 0, 1, 0, 0}},
+    {{Script_Punctuation, 0, 0, 0, 0, 0, 0, { 0,0,0,0,0,0,0,0,0,0,0}},
+     {LANG_NEUTRAL, 0, 0, 0, 0, ANSI_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0}},
+    {{Script_Arabic, 1, 1, 0, 0, 0, 0, { 1,0,0,0,0,0,0,0,0,0,0}},
+     {LANG_ARABIC, 0, 1, 0, 0, ARABIC_CHARSET, 0, 0, 0, 0, 0, 0, 1, 1, 0}},
+    {{Script_Arabic_Numeric, 1, 1, 0, 0, 0, 0, { 1,0,0,0,0,0,0,0,0,0,0}},
+     {LANG_ARABIC, 1, 1, 0, 0, ARABIC_CHARSET, 0, 0, 0, 0, 0, 0, 1, 0, 0}},
+    {{Script_Hebrew, 1, 1, 0, 0, 0, 0, { 1,0,0,0,0,0,0,0,0,0,0}},
+     {LANG_HEBREW, 0, 1, 0, 1, HEBREW_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0}},
+    {{Script_Syriac, 1, 1, 0, 0, 0, 0, { 1,0,0,0,0,0,0,0,0,0,0}},
+     {LANG_SYRIAC, 0, 1, 0, 0, DEFAULT_CHARSET, 0, 0, 0, 0, 1, 0, 0, 1, 0}},
+    {{Script_Persian, 1, 1, 0, 0, 0, 0, { 1,0,0,0,0,0,0,0,0,0,0}},
+     {LANG_PERSIAN, 1, 1, 0, 0, ARABIC_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0}},
+    {{Script_Thaana, 1, 1, 0, 0, 0, 0, { 1,0,0,0,0,0,0,0,0,0,0}},
+     {LANG_DIVEHI, 0, 1, 0, 1, DEFAULT_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0}},
+    {{Script_Greek, 0, 0, 0, 0, 0, 0, { 0,0,0,0,0,0,0,0,0,0,0}},
+     {LANG_GREEK, 0, 0, 0, 0, GREEK_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0}},
+    {{Script_Cyrillic, 0, 0, 0, 0, 0, 0, { 0,0,0,0,0,0,0,0,0,0,0}},
+     {LANG_RUSSIAN, 0, 0, 0, 0, RUSSIAN_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0}},
+    {{Script_Armenian, 0, 0, 0, 0, 0, 0, { 0,0,0,0,0,0,0,0,0,0,0}},
+     {LANG_ARMENIAN, 0, 0, 0, 0, ANSI_CHARSET, 0, 0, 0, 0, 0, 0, 1, 0, 0}},
+    {{Script_Georgian, 0, 0, 0, 0, 0, 0, { 0,0,0,0,0,0,0,0,0,0,0}},
+     {LANG_GEORGIAN, 0, 0, 0, 0, ANSI_CHARSET, 0, 0, 0, 0, 0, 0, 1, 0, 0}},
+    {{Script_Sinhala, 0, 0, 0, 0, 0, 0, { 0,0,0,0,0,0,0,0,0,0,0}},
+     {LANG_SINHALESE, 0, 1, 0, 1, DEFAULT_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0}},
+    {{Script_Tibetan, 0, 0, 0, 0, 0, 0, { 0,0,0,0,0,0,0,0,0,0,0}},
+     {LANG_TIBETAN, 0, 1, 1, 1, DEFAULT_CHARSET, 0, 0, 1, 0, 1, 0, 0, 0, 0}},
+    {{Script_Tibetan_Numeric, 0, 0, 0, 0, 0, 0, { 0,0,0,0,0,0,0,0,0,0,0}},
+     {LANG_TIBETAN, 1, 1, 0, 0, DEFAULT_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0}},
+    {{Script_Phags_pa, 0, 0, 0, 0, 0, 0, { 0,0,0,0,0,0,0,0,0,0,0}},
+     {LANG_MONGOLIAN, 0, 1, 0, 0, DEFAULT_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0}},
+    {{Script_Thai, 0, 0, 0, 0, 0, 0, { 0,0,0,0,0,0,0,0,0,0,0}},
+     {LANG_THAI, 0, 1, 1, 1, THAI_CHARSET, 0, 0, 1, 0, 1, 0, 0, 0, 1}},
+    {{Script_Thai_Numeric, 0, 0, 0, 0, 0, 0, { 0,0,0,0,0,0,0,0,0,0,0}},
+     {LANG_THAI, 1, 1, 0, 0, THAI_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0}},
+    {{Script_Lao, 0, 0, 0, 0, 0, 0, { 0,0,0,0,0,0,0,0,0,0,0}},
+     {LANG_LAO, 0, 1, 1, 1, DEFAULT_CHARSET, 0, 0, 1, 0, 1, 0, 0, 0, 0}},
+    {{Script_Lao_Numeric, 0, 0, 0, 0, 0, 0, { 0,0,0,0,0,0,0,0,0,0,0}},
+     {LANG_LAO, 1, 1, 0, 0, DEFAULT_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0}},
 };
 
 static const SCRIPT_PROPERTIES *script_props[] =
 {
-    &props[0], &props[1], &props[2], &props[3],
-    &props[4], &props[5], &props[6], &props[7],
-    &props[8], &props[9], &props[11], &props[12],
-    &props[13], &props[14], &props[15], &props[16],
-    &props[17], &props[18], &props[19], &props[20],
-    &props[21], &props[22], &props[23], &props[24],
-    &props[25], &props[26], &props[27], &props[28],
-    &props[29], &props[30], &props[31], &props[32],
-    &props[33], &props[34], &props[35], &props[36],
-    &props[37], &props[38], &props[39], &props[40],
-    &props[41], &props[42], &props[43], &props[44],
-    &props[45], &props[46], &props[47], &props[48],
-    &props[49], &props[50], &props[51], &props[52],
-    &props[53], &props[54], &props[55], &props[56],
-    &props[57], &props[58], &props[59], &props[60],
-    &props[61], &props[62], &props[63], &props[64],
-    &props[65], &props[66], &props[67], &props[68],
-    &props[69], &props[70], &props[71], &props[72],
-    &props[73]
+    &scriptInformation[0].props, &scriptInformation[1].props,
+    &scriptInformation[2].props, &scriptInformation[3].props,
+    &scriptInformation[4].props, &scriptInformation[5].props,
+    &scriptInformation[6].props, &scriptInformation[7].props,
+    &scriptInformation[8].props, &scriptInformation[9].props,
+    &scriptInformation[10].props, &scriptInformation[11].props,
+    &scriptInformation[12].props, &scriptInformation[13].props,
+    &scriptInformation[14].props, &scriptInformation[15].props,
+    &scriptInformation[16].props, &scriptInformation[17].props,
+    &scriptInformation[18].props, &scriptInformation[19].props,
+    &scriptInformation[20].props, &scriptInformation[21].props,
+    &scriptInformation[22].props, &scriptInformation[23].props
 };
 
 typedef struct {
@@ -265,6 +318,42 @@ static WCHAR mirror_char( WCHAR ch )
     return ch + wine_mirror_map[wine_mirror_map[ch >> 8] + (ch & 0xff)];
 }
 
+static WORD get_char_script( WCHAR ch)
+{
+    WORD type = 0;
+    int i;
+
+    if (ch == 0xc || ch == 0x20 || ch == 0x202f)
+        return Script_CR;
+
+    GetStringTypeW(CT_CTYPE1, &ch, 1, &type);
+
+    if (type == 0)
+        return SCRIPT_UNDEFINED;
+
+    if (type & C1_CNTRL)
+        return Script_Control;
+
+    i = 0;
+    do
+    {
+        if (ch < scriptRanges[i].rangeFirst || scriptRanges[i].script == SCRIPT_UNDEFINED)
+            break;
+
+        if (ch >= scriptRanges[i].rangeFirst && ch <= scriptRanges[i].rangeLast)
+        {
+            if (scriptRanges[i].numericScript && type & C1_DIGIT)
+                return scriptRanges[i].numericScript;
+            if (scriptRanges[i].punctScript && type & C1_PUNCT)
+                return scriptRanges[i].punctScript;
+            return scriptRanges[i].script;
+        }
+        i++;
+    } while (1);
+
+    return SCRIPT_UNDEFINED;
+}
+
 /***********************************************************************
  *      DllMain
  *
@@ -307,6 +396,7 @@ HRESULT WINAPI ScriptFreeCache(SCRIPT_CACHE *psc)
             heap_free(((ScriptCache *)*psc)->widths[i]);
         }
         heap_free(((ScriptCache *)*psc)->GSUB_Table);
+        heap_free(((ScriptCache *)*psc)->features);
         heap_free(*psc);
         *psc = NULL;
     }
@@ -507,21 +597,12 @@ HRESULT WINAPI ScriptItemize(const WCHAR *pwcInChars, int cInChars, int cMaxItem
                              SCRIPT_ITEM *pItems, int *pcItems)
 {
 
-#define Numeric_start 0x0030
-#define Numeric_stop  0x0039
 #define Numeric_space 0x0020
-#define Arabic_start  0x0600
-#define Arabic_stop   0x06ff
-#define Hebrew_start  0x0590
-#define Hebrew_stop   0x05ff
-#define Syriac_start  0x0700
-#define Syriac_stop   0x074f
-#define Latin_start   0x0001
-#define Latin_stop    0x024f
 
-    int   cnt = 0, index = 0;
+    int   cnt = 0, index = 0, str = 0;
     int   New_Script = SCRIPT_UNDEFINED;
     WORD  *levels = NULL;
+    WORD  *strength = NULL;
     WORD  baselevel = 0;
 
     TRACE("%s,%d,%d,%p,%p,%p,%p\n", debugstr_wn(pwcInChars, cInChars), cInChars, cMaxItems, 
@@ -542,98 +623,76 @@ HRESULT WINAPI ScriptItemize(const WCHAR *pwcInChars, int cInChars, int cMaxItem
         for (i = 0; i < cInChars; i++)
             if (levels[i]!=levels[0])
                 break;
-        if (i >= cInChars)
+        if (i >= cInChars && !odd(baselevel))
         {
             heap_free(levels);
             levels = NULL;
         }
+        else
+        {
+            if (!psControl->fMergeNeutralItems)
+            {
+                strength = heap_alloc_zero(cInChars * sizeof(WORD));
+                BIDI_GetStrengths(pwcInChars, cInChars, psControl, strength);
+            }
+        }
+    }
+
+    while (pwcInChars[cnt] == Numeric_space && cnt < cInChars)
+        cnt++;
+
+    if (cnt == cInChars) /* All Spaces */
+    {
+        cnt = 0;
+        New_Script = get_char_script(pwcInChars[cnt]);
     }
 
     pItems[index].iCharPos = 0;
-    memset(&pItems[index].a, 0, sizeof(SCRIPT_ANALYSIS));
+    pItems[index].a = scriptInformation[get_char_script(pwcInChars[cnt])].a;
 
-    if  (pwcInChars[cnt] == '\r')
-        pItems[index].a.eScript = Script_CR;
-    else
-    if  (pwcInChars[cnt] == '\n')
-        pItems[index].a.eScript = Script_LF;
-    else
-    if  (pwcInChars[cnt] >= Numeric_start && pwcInChars[cnt] <= Numeric_stop)
-        pItems[index].a.eScript = Script_Numeric;
-    else
-    if  (pwcInChars[cnt] >= Arabic_start && pwcInChars[cnt] <= Arabic_stop)
-        pItems[index].a.eScript = Script_Arabic;
-    else
-    if  (pwcInChars[cnt] >= Hebrew_start && pwcInChars[cnt] <= Hebrew_stop)
-        pItems[index].a.eScript = Script_Hebrew;
-    else
-    if  (pwcInChars[cnt] >= Syriac_start && pwcInChars[cnt] <= Syriac_stop)
-        pItems[index].a.eScript = Script_Syriac;
-    else
-    if  (pwcInChars[cnt] >= Latin_start && pwcInChars[cnt] <= Latin_stop)
-        pItems[index].a.eScript = Script_Latin;
+    if (strength)
+        str = strength[cnt];
 
+    cnt = 0;
     if (levels)
     {
         pItems[index].a.fRTL = odd(levels[cnt]);
         pItems[index].a.fLayoutRTL = odd(levels[cnt]);
         pItems[index].a.s.uBidiLevel = levels[cnt];
     }
-    else if ((pItems[index].a.eScript  == Script_Arabic) ||
-             (pItems[index].a.eScript  == Script_Hebrew) ||
-             (pItems[index].a.eScript  == Script_Syriac))
-    {
-        pItems[index].a.s.uBidiLevel = 1;
-        pItems[index].a.fRTL = 1;
-        pItems[index].a.fLayoutRTL = 1;
-    }
-    else
+    else if (!pItems[index].a.s.uBidiLevel)
     {
         pItems[index].a.s.uBidiLevel = baselevel;
         pItems[index].a.fLayoutRTL = odd(baselevel);
         pItems[index].a.fRTL = odd(baselevel);
     }
 
-    TRACE("New_Level=%i New_Script=%d, eScript=%d index=%d cnt=%d iCharPos=%d\n",
-          levels?levels[cnt]:-1, New_Script, pItems[index].a.eScript, index, cnt,
+    TRACE("New_Level=%i New_Strength=%i New_Script=%d, eScript=%d index=%d cnt=%d iCharPos=%d\n",
+          levels?levels[cnt]:-1, str, New_Script, pItems[index].a.eScript, index, cnt,
           pItems[index].iCharPos);
 
     for (cnt=1; cnt < cInChars; cnt++)
     {
-        if (levels && (levels[cnt] == pItems[index].a.s.uBidiLevel))
+        if (levels && (levels[cnt] == pItems[index].a.s.uBidiLevel && (!strength || (strength[cnt] == 0 || strength[cnt] == str))))
             continue;
 
-        if  (pwcInChars[cnt] == '\r')
-            New_Script = Script_CR;
-        else
-        if  (pwcInChars[cnt] == '\n')
-            New_Script = Script_LF;
-        else
-        if  ((pwcInChars[cnt] >= Numeric_start && pwcInChars[cnt] <= Numeric_stop)
-             || (New_Script == Script_Numeric && pwcInChars[cnt] == Numeric_space))
-            New_Script = Script_Numeric;
-        else
-        if  ((pwcInChars[cnt] >= Arabic_start && pwcInChars[cnt] <= Arabic_stop)
-             || (New_Script == Script_Arabic && pwcInChars[cnt] == Numeric_space))
-            New_Script = Script_Arabic;
-        else
-        if  ((pwcInChars[cnt] >= Hebrew_start && pwcInChars[cnt] <= Hebrew_stop)
-             || (New_Script == Script_Hebrew && pwcInChars[cnt] == Numeric_space))
-            New_Script = Script_Hebrew;
-        else
-        if  ((pwcInChars[cnt] >= Syriac_start && pwcInChars[cnt] <= Syriac_stop)
-             || (New_Script == Script_Syriac && pwcInChars[cnt] == Numeric_space))
-            New_Script = Script_Syriac;
-        else
-        if  ((pwcInChars[cnt] >= Latin_start && pwcInChars[cnt] <= Latin_stop)
-             || (New_Script == Script_Latin && pwcInChars[cnt] == Numeric_space))
-            New_Script = Script_Latin;
-        else
-            New_Script = SCRIPT_UNDEFINED;
-
-        if ((levels && (levels[cnt] != pItems[index].a.s.uBidiLevel)) || New_Script != pItems[index].a.eScript)
+        if(pwcInChars[cnt] != Numeric_space)
+            New_Script = get_char_script(pwcInChars[cnt]);
+        else if (levels)
         {
-            TRACE("New_Level = %i, New_Script=%d, eScript=%d ", levels?levels[cnt]:-1, New_Script, pItems[index].a.eScript);
+            int j = 1;
+            while (cnt + j < cInChars - 1 && pwcInChars[cnt+j] == Numeric_space)
+                j++;
+            New_Script = get_char_script(pwcInChars[cnt+j]);
+        }
+
+        if ((levels && (levels[cnt] != pItems[index].a.s.uBidiLevel || (strength && (strength[cnt] != str)))) || New_Script != pItems[index].a.eScript || New_Script == Script_Control)
+        {
+            TRACE("New_Level = %i, New_Strength = %i, New_Script=%d, eScript=%d\n", levels?levels[cnt]:-1, strength?strength[cnt]:str, New_Script, pItems[index].a.eScript);
+
+            if (strength && strength[cnt] != 0)
+                str = strength[cnt];
+
             index++;
             if  (index+1 > cMaxItems)
                 return E_OUTOFMEMORY;
@@ -641,28 +700,19 @@ HRESULT WINAPI ScriptItemize(const WCHAR *pwcInChars, int cInChars, int cMaxItem
             pItems[index].iCharPos = cnt;
             memset(&pItems[index].a, 0, sizeof(SCRIPT_ANALYSIS));
 
+            pItems[index].a = scriptInformation[New_Script].a;
             if (levels)
             {
                 pItems[index].a.fRTL = odd(levels[cnt]);
                 pItems[index].a.fLayoutRTL = odd(levels[cnt]);
                 pItems[index].a.s.uBidiLevel = levels[cnt];
             }
-            else if  ((New_Script == Script_Arabic) ||
-                      (New_Script == Script_Hebrew) ||
-                      (New_Script == Script_Syriac))
-            {
-                pItems[index].a.s.uBidiLevel = 1;
-                pItems[index].a.fRTL = 1;
-                pItems[index].a.fLayoutRTL = 1;
-            }
-            else
+            else if (!pItems[index].a.s.uBidiLevel)
             {
                 pItems[index].a.s.uBidiLevel = baselevel;
                 pItems[index].a.fLayoutRTL = odd(baselevel);
                 pItems[index].a.fRTL = odd(baselevel);
             }
-
-            pItems[index].a.eScript = New_Script;
 
             TRACE("index=%d cnt=%d iCharPos=%d\n", index, cnt, pItems[index].iCharPos);
         }
@@ -683,6 +733,7 @@ HRESULT WINAPI ScriptItemize(const WCHAR *pwcInChars, int cInChars, int cMaxItem
     /*  Set SCRIPT_ITEM                                     */
     pItems[index].iCharPos = cnt;         /* the last item contains the ptr to the lastchar */
     heap_free(levels);
+    heap_free(strength);
     return S_OK;
 }
 
@@ -885,6 +936,7 @@ HRESULT WINAPI ScriptStringCPtoX(SCRIPT_STRING_ANALYSIS ssa, int icp, BOOL fTrai
     int runningX = 0;
     int runningCp = 0;
     StringAnalysis* analysis = ssa;
+    BOOL itemTrailing;
 
     TRACE("(%p), %d, %d, (%p)\n", ssa, icp, fTrailing, pX);
 
@@ -899,15 +951,19 @@ HRESULT WINAPI ScriptStringCPtoX(SCRIPT_STRING_ANALYSIS ssa, int icp, BOOL fTrai
 
     for(i=0; i<analysis->numItems; i++)
     {
+        if (analysis->pItem[i].a.fRTL)
+            itemTrailing = !fTrailing;
+        else
+            itemTrailing = fTrailing;
         for(j=0; j<analysis->glyphs[i].numGlyphs; j++)
         {
-            if(runningCp == icp && fTrailing == FALSE)
+            if(runningCp == icp && itemTrailing == FALSE)
             {
                 *pX = runningX;
                 return S_OK;
             }
             runningX += analysis->glyphs[i].piAdvance[j];
-            if(runningCp == icp && fTrailing == TRUE)
+            if(runningCp == icp && itemTrailing == TRUE)
             {
                 *pX = runningX;
                 return S_OK;
@@ -941,8 +997,16 @@ HRESULT WINAPI ScriptStringXtoCP(SCRIPT_STRING_ANALYSIS ssa, int iX, int* piCh, 
     /* out of range */
     if(iX < 0)
     {
-        *piCh = -1;
-        *piTrailing = TRUE;
+        if (analysis->pItem[0].a.fRTL)
+        {
+            *piCh = 1;
+            *piTrailing = FALSE;
+        }
+        else
+        {
+            *piCh = -1;
+            *piTrailing = TRUE;
+        }
         return S_OK;
     }
 
@@ -958,6 +1022,9 @@ HRESULT WINAPI ScriptStringXtoCP(SCRIPT_STRING_ANALYSIS ssa, int iX, int* piCh, 
                     *piTrailing = TRUE;
                 else
                     *piTrailing = FALSE;
+
+                if (analysis->pItem[i].a.fRTL)
+                    *piTrailing = !*piTrailing;
                 return S_OK;
             }
             runningX += width;
@@ -1141,163 +1208,9 @@ HRESULT WINAPI ScriptBreak(const WCHAR *chars, int count, const SCRIPT_ANALYSIS 
     return S_OK;
 }
 
-static const struct
-{
-    WCHAR start;
-    WCHAR end;
-    DWORD flag;
-}
-complex_ranges[] =
-{
-    { 0, 0x0b, SIC_COMPLEX },
-    { 0x0c, 0x0c, SIC_NEUTRAL },
-    { 0x0d, 0x1f, SIC_COMPLEX },
-    { 0x20, 0x2f, SIC_NEUTRAL },
-    { 0x30, 0x39, SIC_ASCIIDIGIT },
-    { 0x3a, 0x40, SIC_NEUTRAL },
-    { 0x5b, 0x60, SIC_NEUTRAL },
-    { 0x7b, 0x7e, SIC_NEUTRAL },
-    { 0x7f, 0x9f, SIC_COMPLEX },
-    { 0xa0, 0xa5, SIC_NEUTRAL },
-    { 0xa7, 0xa8, SIC_NEUTRAL },
-    { 0xab, 0xab, SIC_NEUTRAL },
-    { 0xad, 0xad, SIC_NEUTRAL },
-    { 0xaf, 0xaf, SIC_NEUTRAL },
-    { 0xb0, 0xb1, SIC_NEUTRAL },
-    { 0xb4, 0xb4, SIC_NEUTRAL },
-    { 0xb6, 0xb8, SIC_NEUTRAL },
-    { 0xbb, 0xbf, SIC_NEUTRAL },
-    { 0xd7, 0xd7, SIC_NEUTRAL },
-    { 0xf7, 0xf7, SIC_NEUTRAL },
-    { 0x2b9, 0x2ba, SIC_NEUTRAL },
-    { 0x2c2, 0x2cf, SIC_NEUTRAL },
-    { 0x2d2, 0x2df, SIC_NEUTRAL },
-    { 0x2e5, 0x2e9, SIC_COMPLEX },
-    { 0x2ea, 0x2ed, SIC_NEUTRAL },
-    { 0x300, 0x362, SIC_COMPLEX },
-    { 0x530, 0x60b, SIC_COMPLEX },
-    { 0x60c, 0x60d, SIC_NEUTRAL },
-    { 0x60e, 0x669, SIC_COMPLEX },
-    { 0x66a, 0x66a, SIC_NEUTRAL },
-    { 0x66b, 0x6e8, SIC_COMPLEX },
-    { 0x6e9, 0x6e9, SIC_NEUTRAL },
-    { 0x6ea, 0x7bf, SIC_COMPLEX },
-    { 0x900, 0x1360, SIC_COMPLEX },
-    { 0x137d, 0x137f, SIC_COMPLEX },
-    { 0x1680, 0x1680, SIC_NEUTRAL },
-    { 0x1780, 0x18af, SIC_COMPLEX },
-    { 0x2000, 0x200a, SIC_NEUTRAL },
-    { 0x200b, 0x200f, SIC_COMPLEX },
-    { 0x2010, 0x2016, SIC_NEUTRAL },
-    { 0x2018, 0x2022, SIC_NEUTRAL },
-    { 0x2024, 0x2028, SIC_NEUTRAL },
-    { 0x2029, 0x202e, SIC_COMPLEX },
-    { 0x202f, 0x2037, SIC_NEUTRAL },
-    { 0x2039, 0x203c, SIC_NEUTRAL },
-    { 0x2044, 0x2046, SIC_NEUTRAL },
-    { 0x206a, 0x206f, SIC_COMPLEX },
-    { 0x207a, 0x207e, SIC_NEUTRAL },
-    { 0x208a, 0x20aa, SIC_NEUTRAL },
-    { 0x20ac, 0x20cf, SIC_NEUTRAL },
-    { 0x20d0, 0x20ff, SIC_COMPLEX },
-    { 0x2103, 0x2103, SIC_NEUTRAL },
-    { 0x2105, 0x2105, SIC_NEUTRAL },
-    { 0x2109, 0x2109, SIC_NEUTRAL },
-    { 0x2116, 0x2116, SIC_NEUTRAL },
-    { 0x2121, 0x2122, SIC_NEUTRAL },
-    { 0x212e, 0x212e, SIC_NEUTRAL },
-    { 0x2153, 0x2154, SIC_NEUTRAL },
-    { 0x215b, 0x215e, SIC_NEUTRAL },
-    { 0x2190, 0x2199, SIC_NEUTRAL },
-    { 0x21b8, 0x21b9, SIC_NEUTRAL },
-    { 0x21d2, 0x21d2, SIC_NEUTRAL },
-    { 0x21d4, 0x21d4, SIC_NEUTRAL },
-    { 0x21e7, 0x21e7, SIC_NEUTRAL },
-    { 0x2200, 0x2200, SIC_NEUTRAL },
-    { 0x2202, 0x2203, SIC_NEUTRAL },
-    { 0x2207, 0x2208, SIC_NEUTRAL },
-    { 0x220b, 0x220b, SIC_NEUTRAL },
-    { 0x220f, 0x220f, SIC_NEUTRAL },
-    { 0x2211, 0x2213, SIC_NEUTRAL },
-    { 0x2215, 0x2215, SIC_NEUTRAL },
-    { 0x221a, 0x221a, SIC_NEUTRAL },
-    { 0x221d, 0x2220, SIC_NEUTRAL },
-    { 0x2223, 0x2223, SIC_NEUTRAL },
-    { 0x2225, 0x2225, SIC_NEUTRAL },
-    { 0x2227, 0x222c, SIC_NEUTRAL },
-    { 0x222e, 0x222e, SIC_NEUTRAL },
-    { 0x2234, 0x2237, SIC_NEUTRAL },
-    { 0x223c, 0x223d, SIC_NEUTRAL },
-    { 0x2248, 0x2248, SIC_NEUTRAL },
-    { 0x224c, 0x224c, SIC_NEUTRAL },
-    { 0x2252, 0x2252, SIC_NEUTRAL },
-    { 0x2260, 0x2261, SIC_NEUTRAL },
-    { 0x2264, 0x2267, SIC_NEUTRAL },
-    { 0x226a, 0x226b, SIC_NEUTRAL },
-    { 0x226e, 0x226f, SIC_NEUTRAL },
-    { 0x2282, 0x2283, SIC_NEUTRAL },
-    { 0x2286, 0x2287, SIC_NEUTRAL },
-    { 0x2295, 0x2295, SIC_NEUTRAL },
-    { 0x2299, 0x2299, SIC_NEUTRAL },
-    { 0x22a5, 0x22a5, SIC_NEUTRAL },
-    { 0x22bf, 0x22bf, SIC_NEUTRAL },
-    { 0x2312, 0x2312, SIC_NEUTRAL },
-    { 0x24ea, 0x24ea, SIC_COMPLEX },
-    { 0x2500, 0x254b, SIC_NEUTRAL },
-    { 0x2550, 0x256d, SIC_NEUTRAL },
-    { 0x256e, 0x2574, SIC_NEUTRAL },
-    { 0x2581, 0x258f, SIC_NEUTRAL },
-    { 0x2592, 0x2595, SIC_NEUTRAL },
-    { 0x25a0, 0x25a1, SIC_NEUTRAL },
-    { 0x25a3, 0x25a9, SIC_NEUTRAL },
-    { 0x25b2, 0x25b3, SIC_NEUTRAL },
-    { 0x25b6, 0x25b7, SIC_NEUTRAL },
-    { 0x25bc, 0x25bd, SIC_NEUTRAL },
-    { 0x25c0, 0x25c1, SIC_NEUTRAL },
-    { 0x25c6, 0x25c8, SIC_NEUTRAL },
-    { 0x25cb, 0x25cb, SIC_NEUTRAL },
-    { 0x25ce, 0x25d1, SIC_NEUTRAL },
-    { 0x25e2, 0x25e5, SIC_NEUTRAL },
-    { 0x25ef, 0x25ef, SIC_NEUTRAL },
-    { 0x2605, 0x2606, SIC_NEUTRAL },
-    { 0x2609, 0x2609, SIC_NEUTRAL },
-    { 0x260e, 0x260f, SIC_NEUTRAL },
-    { 0x261c, 0x261c, SIC_NEUTRAL },
-    { 0x261e, 0x261e, SIC_NEUTRAL },
-    { 0x2640, 0x2640, SIC_NEUTRAL },
-    { 0x2642, 0x2642, SIC_NEUTRAL },
-    { 0x2660, 0x2661, SIC_NEUTRAL },
-    { 0x2663, 0x2665, SIC_NEUTRAL },
-    { 0x2667, 0x266a, SIC_NEUTRAL },
-    { 0x266c, 0x266d, SIC_NEUTRAL },
-    { 0x266f, 0x266f, SIC_NEUTRAL },
-    { 0x273d, 0x273d, SIC_NEUTRAL },
-    { 0x2e80, 0x312f, SIC_COMPLEX },
-    { 0x3190, 0x31bf, SIC_COMPLEX },
-    { 0x31f0, 0x31ff, SIC_COMPLEX },
-    { 0x3220, 0x325f, SIC_COMPLEX },
-    { 0x3280, 0xa4ff, SIC_COMPLEX },
-    { 0xd800, 0xdfff, SIC_COMPLEX },
-    { 0xe000, 0xf8ff, SIC_NEUTRAL },
-    { 0xf900, 0xfaff, SIC_COMPLEX },
-    { 0xfb13, 0xfb28, SIC_COMPLEX },
-    { 0xfb29, 0xfb29, SIC_NEUTRAL },
-    { 0xfb2a, 0xfb4f, SIC_COMPLEX },
-    { 0xfd3e, 0xfd3f, SIC_NEUTRAL },
-    { 0xfdd0, 0xfdef, SIC_COMPLEX },
-    { 0xfe20, 0xfe6f, SIC_COMPLEX },
-    { 0xfeff, 0xfeff, SIC_COMPLEX },
-    { 0xff01, 0xff5e, SIC_COMPLEX },
-    { 0xff61, 0xff9f, SIC_COMPLEX },
-    { 0xffe0, 0xffe6, SIC_COMPLEX },
-    { 0xffe8, 0xffee, SIC_COMPLEX },
-    { 0xfff9, 0xfffb, SIC_COMPLEX },
-    { 0xfffe, 0xfffe, SIC_COMPLEX }
-};
-
 /***********************************************************************
  *      ScriptIsComplex (USP10.@)
- * 
+ *
  *  Determine if a string is complex.
  *
  *  PARAMS
@@ -1309,24 +1222,24 @@ complex_ranges[] =
  *   Success: S_OK
  *   Failure: S_FALSE
  *
- *  NOTES
- *   Behaviour matches that of WinXP.
  */
 HRESULT WINAPI ScriptIsComplex(const WCHAR *chars, int len, DWORD flag)
 {
     int i;
-    unsigned int j;
 
     TRACE("(%s,%d,0x%x)\n", debugstr_wn(chars, len), len, flag);
 
     for (i = 0; i < len; i++)
     {
-        for (j = 0; j < sizeof(complex_ranges)/sizeof(complex_ranges[0]); j++)
-        {
-            if (chars[i] >= complex_ranges[j].start &&
-                chars[i] <= complex_ranges[j].end &&
-                (flag & complex_ranges[j].flag)) return S_OK;
-        }
+        int script;
+
+        if ((flag & SIC_ASCIIDIGIT) && chars[i] >= 0x30 && chars[i] <= 0x39)
+            return S_OK;
+
+        script = get_char_script(chars[i]);
+        if ((scriptInformation[script].props.fComplex && (flag & SIC_COMPLEX))||
+            (!scriptInformation[script].props.fComplex && (flag & SIC_NEUTRAL)))
+            return S_OK;
     }
     return S_FALSE;
 }
@@ -1375,9 +1288,28 @@ HRESULT WINAPI ScriptShape(HDC hdc, SCRIPT_CACHE *psc, const WCHAR *pwcChars,
     if ((hr = init_script_cache(hdc, psc)) != S_OK) return hr;
     if (!pwLogClust) return E_FAIL;
 
-    if ((get_cache_pitch_family(psc) & TMPF_TRUETYPE) && !psa->fNoGlyphIndex)
+    /* Initialize a SCRIPT_VISATTR and LogClust for each char in this run */
+    for (i = 0; i < cChars; i++)
     {
-        WCHAR *rChars = heap_alloc(sizeof(WCHAR) * cChars);
+        int idx = i;
+        if (rtl) idx = cChars - 1 - i;
+        /* FIXME: set to better values */
+        psva[i].uJustification = (pwcChars[idx] == ' ') ? SCRIPT_JUSTIFY_BLANK : SCRIPT_JUSTIFY_CHARACTER;
+        psva[i].fClusterStart  = 1;
+        psva[i].fDiacritic     = 0;
+        psva[i].fZeroWidth     = 0;
+        psva[i].fReserved      = 0;
+        psva[i].fShapeReserved = 0;
+
+        pwLogClust[i] = idx;
+    }
+
+    if (!psa->fNoGlyphIndex)
+    {
+        WCHAR *rChars;
+        if ((hr = SHAPE_CheckFontForRequiredFeatures(hdc, (ScriptCache *)*psc, psa)) != S_OK) return hr;
+
+        rChars = heap_alloc(sizeof(WCHAR) * cChars);
         if (!rChars) return E_OUTOFMEMORY;
         for (i = 0; i < cChars; i++)
         {
@@ -1397,7 +1329,12 @@ HRESULT WINAPI ScriptShape(HDC hdc, SCRIPT_CACHE *psc, const WCHAR *pwcChars,
             }
             rChars[i] = chInput;
         }
-        SHAPE_ShapeArabicGlyphs(hdc, (ScriptCache *)*psc, psa, rChars, cChars, pwOutGlyphs, pcGlyphs, cMaxGlyphs);
+
+        if (get_cache_pitch_family(psc) & TMPF_TRUETYPE)
+        {
+            SHAPE_ContextualShaping(hdc, (ScriptCache *)*psc, psa, rChars, cChars, pwOutGlyphs, pcGlyphs, cMaxGlyphs, pwLogClust);
+            SHAPE_ApplyDefaultOpentypeFeatures(hdc, (ScriptCache *)*psc, psa, pwOutGlyphs, pcGlyphs, cMaxGlyphs, cChars, pwLogClust);
+        }
         heap_free(rChars);
     }
     else
@@ -1412,21 +1349,6 @@ HRESULT WINAPI ScriptShape(HDC hdc, SCRIPT_CACHE *psc, const WCHAR *pwcChars,
         }
     }
 
-    /* set up a valid SCRIPT_VISATTR and LogClust for each char in this run */
-    for (i = 0; i < cChars; i++)
-    {
-        int idx = i;
-        if (rtl) idx = cChars - 1 - i;
-        /* FIXME: set to better values */
-        psva[i].uJustification = (pwcChars[idx] == ' ') ? SCRIPT_JUSTIFY_BLANK : SCRIPT_JUSTIFY_CHARACTER;
-        psva[i].fClusterStart  = 1;
-        psva[i].fDiacritic     = 0;
-        psva[i].fZeroWidth     = 0;
-        psva[i].fReserved      = 0;
-        psva[i].fShapeReserved = 0;
-
-        pwLogClust[i] = idx;
-    }
     return S_OK;
 }
 

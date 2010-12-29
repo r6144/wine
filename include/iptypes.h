@@ -20,6 +20,7 @@
 #define WINE_IPTYPES_H_
 
 #include <time.h>
+#include <ifdef.h>
 
 #define MAX_ADAPTER_DESCRIPTION_LENGTH  128
 #define MAX_ADAPTER_NAME_LENGTH         256
@@ -27,6 +28,8 @@
 #define MAX_HOSTNAME_LEN                128
 #define MAX_DOMAIN_NAME_LEN             128
 #define MAX_SCOPE_ID_LEN                256
+#define MAX_DHCPV6_DUID_LENGTH          130
+#define MAX_DNS_SUFFIX_STRING_LENGTH    256
 
 #define BROADCAST_NODETYPE              1
 #define PEER_TO_PEER_NODETYPE           2
@@ -104,16 +107,6 @@ typedef enum {
 } IP_SUFFIX_ORIGIN;
 
 typedef enum {
-    IfOperStatusUp = 1,
-    IfOperStatusDown,
-    IfOperStatusTesting,
-    IfOperStatusUnknown,
-    IfOperStatusDormant,
-    IfOperStatusNotPresent,
-    IfOperStatusLowerLayerDown
-} IF_OPER_STATUS;
-
-typedef enum {
     IpDadStateInvalid = 0,
     IpDadStateTentative,
     IpDadStateDuplicate,
@@ -189,6 +182,45 @@ typedef struct _IP_ADAPTER_PREFIX {
     ULONG                      PrefixLength;
 } IP_ADAPTER_PREFIX, *PIP_ADAPTER_PREFIX;
 
+typedef struct _IP_ADAPTER_WINS_SERVER_ADDRESS_LH {
+    union {
+        ULONGLONG Alignment;
+        struct {
+            ULONG Length;
+            DWORD Reserved;
+        } DUMMYSTRUCTNAME;
+    } DUMMYUNIONNAME;
+    struct _IP_ADAPTER_WINS_SERVER_ADDRESS_LH *Next;
+    SOCKET_ADDRESS Address;
+} IP_ADAPTER_WINS_SERVER_ADDRESS_LH, *PIP_ADAPTER_WINS_SERVER_ADDRESS_LH;
+typedef IP_ADAPTER_WINS_SERVER_ADDRESS_LH IP_ADAPTER_WINS_SERVER_ADDRESS;
+typedef IP_ADAPTER_WINS_SERVER_ADDRESS_LH *PIP_ADAPTER_WINS_SERVER_ADDRESS;
+
+typedef struct _IP_ADAPTER_GATEWAY_ADDRESS_LH {
+    union {
+        ULONGLONG Alignment;
+        struct {
+            ULONG Length;
+            DWORD Reserved;
+        } DUMMYSTRUCTNAME;
+    } DUMMYUNIONNAME;
+    struct _IP_ADAPTER_GATEWAY_ADDRESS_LH *Next;
+    SOCKET_ADDRESS Address;
+} IP_ADAPTER_GATEWAY_ADDRESS_LH, *PIP_ADAPTER_GATEWAY_ADDRESS_LH;
+typedef IP_ADAPTER_GATEWAY_ADDRESS_LH IP_ADAPTER_GATEWAY_ADDRESS;
+typedef IP_ADAPTER_GATEWAY_ADDRESS_LH *PIP_ADAPTER_GATEWAY_ADDRESS;
+
+#define IP_ADAPTER_DDNS_ENABLED               0x1
+#define IP_ADAPTER_REGISTER_ADAPTER_SUFFIX    0x2
+#define IP_ADAPTER_DHCP_ENABLED               0x4
+#define IP_ADAPTER_RECEIVE_ONLY               0x8
+#define IP_ADAPTER_NO_MULTICAST               0x10
+#define IP_ADAPTER_IPV6_OTHER_STATEFUL_CONFIG 0x20
+#define IP_ADAPTER_NETBIOS_OVER_TCPIP_ENABLED 0x40
+#define IP_ADAPTER_IPV4_ENABLED               0x80
+#define IP_ADAPTER_IPV6_ENABLED               0x100
+#define IP_ADAPTER_IPV6_MANAGE_ADDRESS_CONFIG 0x200
+
 typedef struct _IP_ADAPTER_ADDRESSES {
     union {
         ULONGLONG Alignment;
@@ -215,7 +247,35 @@ typedef struct _IP_ADAPTER_ADDRESSES {
     DWORD                           Ipv6IfIndex;
     DWORD                           ZoneIndices[16];
     PIP_ADAPTER_PREFIX              FirstPrefix;
+    ULONG64                         TransmitLinkSpeed;
+    ULONG64                         ReceiveLinkSpeed;
+    PIP_ADAPTER_WINS_SERVER_ADDRESS_LH FirstWinsServerAddress;
+    PIP_ADAPTER_GATEWAY_ADDRESS_LH  FirstGatewayAddress;
+    ULONG                           Ipv4Metric;
+    ULONG                           Ipv6Metric;
+    IF_LUID                         Luid;
+    SOCKET_ADDRESS                  Dhcpv4Server;
+    NET_IF_COMPARTMENT_ID           CompartmentId;
+    NET_IF_NETWORK_GUID             NetworkGuid;
+    NET_IF_CONNECTION_TYPE          ConnectionType;
+    TUNNEL_TYPE                     TunnelType;
+    SOCKET_ADDRESS                  Dhcpv6Server;
+    BYTE                            Dhcpv6ClientDuid[MAX_DHCPV6_DUID_LENGTH];
+    ULONG                           Dhcpv6ClientDuidLength;
+    ULONG                           Dhcpv6Iaid;
 } IP_ADAPTER_ADDRESSES, *PIP_ADAPTER_ADDRESSES;
+
+#define GAA_FLAG_SKIP_UNICAST                0x00000001
+#define GAA_FLAG_SKIP_ANYCAST                0x00000002
+#define GAA_FLAG_SKIP_MULTICAST              0x00000004
+#define GAA_FLAG_SKIP_DNS_SERVER             0x00000008
+#define GAA_FLAG_INCLUDE_PREFIX              0x00000010
+#define GAA_FLAG_SKIP_FRIENDLY_NAME          0x00000020
+#define GAA_FLAG_INCLUDE_WINS_INFO           0x00000040
+#define GAA_FLAG_INCLUDE_ALL_GATEWAYS        0x00000080
+#define GAA_FLAG_INCLUDE_ALL_INTERFACES      0x00000100
+#define GAA_FLAG_INCLUDE_ALL_COMPARTMENTS    0x00000200
+#define GAA_FLAG_INCLUDE_TUNNEL_BINDINGORDER 0x00000400
 
 #endif /* _WINSOCK2API_ */
 

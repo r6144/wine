@@ -27,6 +27,7 @@ static BOOL (WINAPI *pGetConsoleInputExeNameA)(DWORD, LPSTR);
 static DWORD (WINAPI *pGetConsoleProcessList)(LPDWORD, DWORD);
 static HANDLE (WINAPI *pOpenConsoleW)(LPCWSTR,DWORD,BOOL,DWORD);
 static BOOL (WINAPI *pSetConsoleInputExeNameA)(LPCSTR);
+static BOOL (WINAPI *pVerifyConsoleIoHandle)(HANDLE handle);
 
 /* DEFAULT_ATTRIB is used for all initial filling of the console.
  * all modifications are made with TEST_ATTRIB so that we could check
@@ -68,6 +69,7 @@ static void init_function_pointers(void)
     KERNEL32_GET_PROC(GetConsoleProcessList);
     KERNEL32_GET_PROC(OpenConsoleW);
     KERNEL32_GET_PROC(SetConsoleInputExeNameA);
+    KERNEL32_GET_PROC(VerifyConsoleIoHandle);
 
 #undef KERNEL32_GET_PROC
 }
@@ -1083,6 +1085,89 @@ static void test_OpenConsoleW(void)
         CloseHandle(ret);
 }
 
+static void test_VerifyConsoleIoHandle( HANDLE handle )
+{
+    BOOL ret;
+    DWORD error;
+
+    if (!pVerifyConsoleIoHandle)
+    {
+        win_skip("VerifyConsoleIoHandle is not available\n");
+        return;
+    }
+
+    /* invalid handle */
+    SetLastError(0xdeadbeef);
+    ret = pVerifyConsoleIoHandle((HANDLE)0xdeadbee0);
+    error = GetLastError();
+    ok(!ret, "expected VerifyConsoleIoHandle to fail\n");
+    ok(error == 0xdeadbeef, "wrong GetLastError() %d\n", error);
+
+    /* invalid handle + 1 */
+    SetLastError(0xdeadbeef);
+    ret = pVerifyConsoleIoHandle((HANDLE)0xdeadbee1);
+    error = GetLastError();
+    ok(!ret, "expected VerifyConsoleIoHandle to fail\n");
+    ok(error == 0xdeadbeef, "wrong GetLastError() %d\n", error);
+
+    /* invalid handle + 2 */
+    SetLastError(0xdeadbeef);
+    ret = pVerifyConsoleIoHandle((HANDLE)0xdeadbee2);
+    error = GetLastError();
+    ok(!ret, "expected VerifyConsoleIoHandle to fail\n");
+    ok(error == 0xdeadbeef, "wrong GetLastError() %d\n", error);
+
+    /* invalid handle + 3 */
+    SetLastError(0xdeadbeef);
+    ret = pVerifyConsoleIoHandle((HANDLE)0xdeadbee3);
+    error = GetLastError();
+    ok(!ret, "expected VerifyConsoleIoHandle to fail\n");
+    ok(error == 0xdeadbeef, "wrong GetLastError() %d\n", error);
+
+    /* valid handle */
+    SetLastError(0xdeadbeef);
+    ret = pVerifyConsoleIoHandle(handle);
+    error = GetLastError();
+    ok(ret, "expected VerifyConsoleIoHandle to succeed\n");
+    ok(error == 0xdeadbeef, "wrong GetLastError() %d\n", error);
+}
+
+static void test_GetSetStdHandle(void)
+{
+    HANDLE handle;
+    DWORD error;
+    BOOL ret;
+
+    /* get invalid std handle */
+    SetLastError(0xdeadbeef);
+    handle = GetStdHandle(42);
+    error = GetLastError();
+    ok(error == ERROR_INVALID_HANDLE || broken(error == ERROR_INVALID_FUNCTION)/* Win9x */,
+       "wrong GetLastError() %d\n", error);
+    ok(handle == INVALID_HANDLE_VALUE, "expected INVALID_HANDLE_VALUE\n");
+
+    /* get valid */
+    SetLastError(0xdeadbeef);
+    handle = GetStdHandle(STD_INPUT_HANDLE);
+    error = GetLastError();
+    ok(error == 0xdeadbeef, "wrong GetLastError() %d\n", error);
+
+    /* set invalid std handle */
+    SetLastError(0xdeadbeef);
+    ret = SetStdHandle(42, handle);
+    error = GetLastError();
+    ok(!ret, "expected SetStdHandle to fail\n");
+    ok(error == ERROR_INVALID_HANDLE || broken(error == ERROR_INVALID_FUNCTION)/* Win9x */,
+       "wrong GetLastError() %d\n", error);
+
+    /* set valid (restore old value) */
+    SetLastError(0xdeadbeef);
+    ret = SetStdHandle(STD_INPUT_HANDLE, handle);
+    error = GetLastError();
+    ok(ret, "expected SetStdHandle to succeed\n");
+    ok(error == 0xdeadbeef, "wrong GetLastError() %d\n", error);
+}
+
 START_TEST(console)
 {
     HANDLE hConIn, hConOut;
@@ -1134,4 +1219,6 @@ START_TEST(console)
 
     test_GetConsoleProcessList();
     test_OpenConsoleW();
+    test_VerifyConsoleIoHandle(hConOut);
+    test_GetSetStdHandle();
 }

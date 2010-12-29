@@ -68,7 +68,7 @@ static BOOL source_matches_volume(MSIMEDIAINFO *mi, LPCWSTR source_root)
         return FALSE;
     }
 
-    return !lstrcmpW(mi->volume_label, volume_name);
+    return !strcmpW( mi->volume_label, volume_name );
 }
 
 static UINT msi_change_media(MSIPACKAGE *package, MSIMEDIAINFO *mi)
@@ -211,9 +211,6 @@ static INT_PTR CDECL cabinet_open_stream( char *pszFile, int oflag, int pmode )
     UINT r;
     IStream *stm;
 
-    if (oflag)
-        WARN("ignoring open flags 0x%08x\n", oflag);
-
     r = db_get_raw_stream( cab_stream.db, cab_stream.name, &stm );
     if (r != ERROR_SUCCESS)
     {
@@ -334,7 +331,7 @@ static INT_PTR cabinet_next_cabinet(FDINOTIFICATIONTYPE fdint,
         goto done;
     }
 
-    if (lstrcmpiW(mi->cabinet, cab))
+    if (strcmpiW( mi->cabinet, cab ))
     {
         ERR("Continuous cabinet does not match the next cabinet in the Media table\n");
         goto done;
@@ -356,6 +353,40 @@ done:
     msi_free(cab);
     msi_free(cabinet_file);
     return res;
+}
+
+static INT_PTR cabinet_next_cabinet_stream( FDINOTIFICATIONTYPE fdint,
+                                            PFDINOTIFICATION pfdin )
+{
+    MSICABDATA *data = pfdin->pv;
+    MSIMEDIAINFO *mi = data->mi;
+    UINT rc;
+
+    msi_free( mi->disk_prompt );
+    msi_free( mi->cabinet );
+    msi_free( mi->volume_label );
+    mi->disk_prompt = NULL;
+    mi->cabinet = NULL;
+    mi->volume_label = NULL;
+
+    mi->disk_id++;
+    mi->is_continuous = TRUE;
+
+    rc = msi_media_get_disk_info( data->package, mi );
+    if (rc != ERROR_SUCCESS)
+    {
+        ERR("Failed to get next cabinet information: %u\n", rc);
+        return -1;
+    }
+
+    msi_free( cab_stream.name );
+    cab_stream.name = encode_streamname( FALSE, mi->cabinet + 1 );
+    if (!cab_stream.name)
+        return -1;
+
+    TRACE("next cabinet is %s\n", debugstr_w(mi->cabinet));
+
+    return 0;
 }
 
 static INT_PTR cabinet_copy_file(FDINOTIFICATIONTYPE fdint,
@@ -494,6 +525,12 @@ static INT_PTR CDECL cabinet_notify_stream( FDINOTIFICATIONTYPE fdint, PFDINOTIF
 {
     switch (fdint)
     {
+    case fdintPARTIAL_FILE:
+        return cabinet_partial_file( fdint, pfdin );
+
+    case fdintNEXT_CABINET:
+        return cabinet_next_cabinet_stream( fdint, pfdin );
+
     case fdintCOPY_FILE:
         return cabinet_copy_file( fdint, pfdin );
 
@@ -804,7 +841,7 @@ UINT ready_media(MSIPACKAGE *package, MSIFILE *file, MSIMEDIAINFO *mi)
 
     /* check volume matches, change media if not */
     if (mi->volume_label && mi->disk_id > 1 &&
-        lstrcmpW(mi->first_volume, mi->volume_label))
+        strcmpW( mi->first_volume, mi->volume_label ))
     {
         LPWSTR source = msi_dup_property(package->db, cszSourceDir);
         BOOL matches;

@@ -138,6 +138,10 @@ my %debug_conv =
      "GLcharARB" => "%c",
      "GLvoid" => "(void)",
      "_GLfuncptr" => "%p",
+     "GLDEBUGPROCARB" => "%p",
+     "GLDEBUGPROCAMD" => "%p",
+     "GLvdpauSurfaceNV" => "%ld",
+     "INT64" => "%s,wine_dbgstr_longlong(%s)",
      "UINT64" => "%s,wine_dbgstr_longlong(%s)"
     );
 
@@ -150,10 +154,10 @@ my %arg_conv =
      "GLboolean" => [ "long", 4 ],
      "GLbyte" => [ "long", 4 ],
      "GLclampd" => [ "double", 8 ],
-     "GLclampf" => [ "long", 4 ],
+     "GLclampf" => [ "float", 4 ],
      "GLdouble" => [ "double", 8 ],
      "GLenum" => [ "long", 4 ],
-     "GLfloat" => [ "long", 4 ],
+     "GLfloat" => [ "float", 4 ],
      "GLint" => [ "long", 4 ],
      "GLshort" => [ "long", 4 ],
      "GLsizei" => [ "long", 4 ],
@@ -168,7 +172,6 @@ my %arg_conv =
      "GLcharARB" => [ "long", 4 ],
      "GLintptr" => [ "long", 4 ],
      "GLsizeiptr" => [ "long", 4 ],
-     "GLvoid" => [ "void", 4 ],
      "_GLfuncptr" => [ "ptr", 4 ]);
 
 #
@@ -186,7 +189,12 @@ sub ConvertType($)
 	      "GLhandleARB" => "unsigned int",
 	      "GLcharARB" => "char",
 	      "GLchar" => "char",
-	      "GLhalfNV" => "unsigned short" );
+	      "GLhalfNV" => "unsigned short",
+              "GLvdpauSurfaceNV" => "INT_PTR",
+              "struct _cl_context" => "void",
+              "struct _cl_event" => "void",
+              "GLDEBUGPROCARB" => "void *",
+              "GLDEBUGPROCAMD" => "void *" );
 
     foreach my $org (reverse sort keys %hash) {
 	if ($type =~ /$org/) {
@@ -250,7 +258,7 @@ sub GenerateThunk($$$$$)
 	if ($type =~ /\*/) {
 	    $trace_arg .= "%p";
             $trace_call_arg .= $name;
-	} else {
+	} elsif (defined $debug_conv{$type}) {
             if ($debug_conv{$type} =~ /(.*),(.*)/)
             {
                 $trace_arg .= $1;
@@ -262,6 +270,7 @@ sub GenerateThunk($$$$$)
                 $trace_call_arg .= $name;
             }
 	}
+	else { printf "Unknown type %s\n", $type; }
 	if ($i+1 < @{$func_ref->[2]}) {
 	    $ret .= ", ";
 	    $call_arg .= ", ";

@@ -295,6 +295,7 @@ wchar_t* __cdecl fgetws(wchar_t*,int,FILE*);
 wint_t   __cdecl fputwc(wint_t,FILE*);
 int      __cdecl fputws(const wchar_t*,FILE*);
 int      __cdecl fwprintf(FILE*,const wchar_t*,...);
+int      __cdecl fwprintf_s(FILE*,const wchar_t*,...);
 int      __cdecl fputws(const wchar_t*,FILE*);
 int      __cdecl fwscanf(FILE*,const wchar_t*,...);
 int      __cdecl fwscanf_s(FILE*,const wchar_t*,...);
@@ -310,10 +311,13 @@ int      __cdecl swscanf(const wchar_t*,const wchar_t*,...);
 int      __cdecl swscanf_s(const wchar_t*,const wchar_t*,...);
 wint_t   __cdecl ungetwc(wint_t,FILE*);
 int      __cdecl vfwprintf(FILE*,const wchar_t*,__ms_va_list);
+int      __cdecl vfwprintf_s(FILE*,const wchar_t*,__ms_va_list);
 int      __cdecl vswprintf(wchar_t*,const wchar_t*,__ms_va_list);
 int      __cdecl vswprintf_s(wchar_t*,size_t,const wchar_t*,__ms_va_list);
 int      __cdecl vwprintf(const wchar_t*,__ms_va_list);
+int      __cdecl vwprintf_s(const wchar_t*,__ms_va_list);
 int      __cdecl wprintf(const wchar_t*,...);
+int      __cdecl wprintf_s(const wchar_t*,...);
 int      __cdecl wscanf(const wchar_t*,...);
 int      __cdecl wscanf_s(const wchar_t*,...);
 #endif /* _WSTDIO_DEFINED */
@@ -358,6 +362,7 @@ int      __cdecl _wcsicmp(const wchar_t*,const wchar_t*);
 int      __cdecl _wcsicoll(const wchar_t*,const wchar_t*);
 wchar_t* __cdecl _wcslwr(wchar_t*);
 int      __cdecl _wcsnicmp(const wchar_t*,const wchar_t*,size_t);
+int      __cdecl _wcsnicoll(const wchar_t*,const wchar_t*,size_t);
 wchar_t* __cdecl _wcsnset(wchar_t*,wchar_t,size_t);
 wchar_t* __cdecl _wcsrev(wchar_t*);
 wchar_t* __cdecl _wcsset(wchar_t*,wchar_t);
@@ -396,7 +401,9 @@ size_t   __cdecl wcsftime(wchar_t*,size_t,const wchar_t*,const struct tm*);
 wchar_t* __cdecl _wctime32(const __time32_t*);
 wchar_t* __cdecl _wctime64(const __time64_t*);
 wchar_t* __cdecl _wstrdate(wchar_t*);
+errno_t  __cdecl _wstrdate_s(wchar_t*,size_t);
 wchar_t* __cdecl _wstrtime(wchar_t*);
+errno_t  __cdecl _wstrtime_s(wchar_t*,size_t);
 
 #ifndef _USE_32BIT_TIME_T
 static inline wchar_t* _wctime(const time_t *t) { return _wctime64(t); }

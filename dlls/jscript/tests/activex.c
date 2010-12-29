@@ -188,8 +188,8 @@ static HRESULT WINAPI DispatchEx_QueryInterface(IDispatchEx *iface, REFIID riid,
     }else if(IsEqualGUID(&IID_IObjectWithSite, riid)) {
         CHECK_EXPECT(QI_IObjectWithSite);
         *ppv = object_with_site;
-    }else {
-        return E_NOINTERFACE;
+    }else if(IsEqualGUID(&IID_IObjectSafety, riid)) {
+        ok(0, "Unexpected IID_IObjectSafety query\n");
     }
 
     return *ppv ? S_OK : E_NOINTERFACE;
@@ -662,10 +662,10 @@ static const IActiveScriptSiteVtbl ActiveScriptSiteVtbl = {
 
 static IActiveScriptSite ActiveScriptSite = { &ActiveScriptSiteVtbl };
 
-static void set_safety_options(IUnknown *unk)
+static void set_safety_options(IUnknown *unk, BOOL use_sec_mgr)
 {
     IObjectSafety *safety;
-    DWORD supported, enabled;
+    DWORD supported, enabled, options_all, options_set;
     HRESULT hres;
 
     hres = IUnknown_QueryInterface(unk, &IID_IObjectSafety, (void**)&safety);
@@ -673,18 +673,20 @@ static void set_safety_options(IUnknown *unk)
     if(FAILED(hres))
         return;
 
-    hres = IObjectSafety_SetInterfaceSafetyOptions(safety, &IID_IActiveScriptParse,
-            INTERFACESAFE_FOR_UNTRUSTED_DATA|INTERFACE_USES_DISPEX|INTERFACE_USES_SECURITY_MANAGER,
-            INTERFACESAFE_FOR_UNTRUSTED_DATA|INTERFACE_USES_DISPEX|INTERFACE_USES_SECURITY_MANAGER);
+    options_all = INTERFACESAFE_FOR_UNTRUSTED_DATA|INTERFACE_USES_DISPEX|INTERFACE_USES_SECURITY_MANAGER;
+    if(use_sec_mgr)
+        options_set = options_all;
+    else
+        options_set = INTERFACE_USES_DISPEX;
+
+    hres = IObjectSafety_SetInterfaceSafetyOptions(safety, &IID_IActiveScriptParse, options_all, options_set);
     ok(hres == S_OK, "SetInterfaceSafetyOptions failed: %08x\n", hres);
 
     supported = enabled = 0xdeadbeef;
     hres = IObjectSafety_GetInterfaceSafetyOptions(safety, &IID_IActiveScriptParse, &supported, &enabled);
     ok(hres == S_OK, "GetInterfaceSafetyOptions failed: %08x\n", hres);
-    ok(supported == (INTERFACESAFE_FOR_UNTRUSTED_DATA|INTERFACE_USES_DISPEX|INTERFACE_USES_SECURITY_MANAGER),
-       "supported=%x\n", supported);
-    ok(enabled == (INTERFACESAFE_FOR_UNTRUSTED_DATA|INTERFACE_USES_DISPEX|INTERFACE_USES_SECURITY_MANAGER),
-       "enabled=%x\n", enabled);
+    ok(supported == options_all, "supported=%x, expected %x\n", supported, options_all);
+    ok(enabled == options_set, "enabled=%x, expected %x\n", enabled, options_set);
 
     IObjectSafety_Release(safety);
 }
@@ -701,7 +703,7 @@ static void _parse_script_a(unsigned line, IActiveScriptParse *parser, const cha
     ok_(__FILE__,line)(hres == S_OK, "ParseScriptText failed: %08x\n", hres);
 }
 
-static IActiveScriptParse *create_script(void)
+static IActiveScriptParse *create_script(BOOL skip_tests, BOOL use_sec_mgr)
 {
     IActiveScriptParse *parser;
     IActiveScript *script;
@@ -719,11 +721,13 @@ static IActiveScriptParse *create_script(void)
 
     hres = CoCreateInstance(&CLSID_JScript, NULL, CLSCTX_INPROC_SERVER|CLSCTX_INPROC_HANDLER,
             &IID_IActiveScript, (void**)&script);
-    ok(hres == S_OK, "CoCreateInstance failed: %08x\n", hres);
+    if(!skip_tests)
+        ok(hres == S_OK, "CoCreateInstance failed: %08x\n", hres);
     if(FAILED(hres))
         return NULL;
 
-    set_safety_options((IUnknown*)script);
+    if(!skip_tests)
+        set_safety_options((IUnknown*)script, use_sec_mgr);
 
     hres = IActiveScript_QueryInterface(script, &IID_IActiveScriptParse, (void**)&parser);
     ok(hres == S_OK, "Could not get IActiveScriptParse: %08x\n", hres);
@@ -743,17 +747,19 @@ static IActiveScriptParse *create_script(void)
 
     IActiveScript_Release(script);
 
-    parse_script_a(parser,
-            "function testException(func, type, number) {\n"
-            "try {\n"
-            "    func();\n"
-            "}catch(e) {\n"
-            "    ok(e.name === type, 'e.name = ' + e.name + ', expected ' + type)\n"
-            "    ok(e.number === number, 'e.number = ' + e.number + ', expected ' + number);\n"
-            "    return;\n"
-            "}"
-            "ok(false, 'exception expected');\n"
-            "}");
+    if(!skip_tests) {
+        parse_script_a(parser,
+                "function testException(func, type, number) {\n"
+                "    try {\n"
+                "        func();\n"
+                "    }catch(e) {\n"
+                "        ok(e.name === type, 'e.name = ' + e.name + ', expected ' + type)\n"
+                "        ok(e.number === number, 'e.number = ' + e.number + ', expected ' + number);\n"
+                "        return;\n"
+                "    }\n"
+                "    ok(false, 'exception expected');\n"
+                "}");
+    }
 
     return parser;
 }
@@ -800,7 +806,7 @@ static void test_ActiveXObject(void)
     IActiveScriptParse *parser;
     IDispatchEx *proc;
 
-    parser = create_script();
+    parser = create_script(FALSE, TRUE);
 
     SET_EXPECT(Host_QS_SecMgr);
     SET_EXPECT(ProcessUrlAction);
@@ -845,7 +851,7 @@ static void test_ActiveXObject(void)
     IDispatchEx_Release(proc);
     IUnknown_Release(parser);
 
-    parser = create_script();
+    parser = create_script(FALSE, TRUE);
     proc = parse_procedure_a(parser, "(new ActiveXObject('Wine.Test')).reportSuccess();");
 
     SET_EXPECT(Host_QS_SecMgr);
@@ -867,7 +873,7 @@ static void test_ActiveXObject(void)
     IDispatchEx_Release(proc);
     IUnknown_Release(parser);
 
-    parser = create_script();
+    parser = create_script(FALSE, TRUE);
     QS_SecMgr_hres = E_NOINTERFACE;
 
     SET_EXPECT(Host_QS_SecMgr);
@@ -876,7 +882,7 @@ static void test_ActiveXObject(void)
 
     IUnknown_Release(parser);
 
-    parser = create_script();
+    parser = create_script(FALSE, TRUE);
     ProcessUrlAction_hres = E_FAIL;
 
     SET_EXPECT(Host_QS_SecMgr);
@@ -887,7 +893,7 @@ static void test_ActiveXObject(void)
 
     IUnknown_Release(parser);
 
-    parser = create_script();
+    parser = create_script(FALSE, TRUE);
     ProcessUrlAction_policy = URLPOLICY_DISALLOW;
 
     SET_EXPECT(Host_QS_SecMgr);
@@ -898,7 +904,7 @@ static void test_ActiveXObject(void)
 
     IUnknown_Release(parser);
 
-    parser = create_script();
+    parser = create_script(FALSE, TRUE);
     CreateInstance_hres = E_FAIL;
 
     SET_EXPECT(Host_QS_SecMgr);
@@ -911,7 +917,7 @@ static void test_ActiveXObject(void)
 
     IUnknown_Release(parser);
 
-    parser = create_script();
+    parser = create_script(FALSE, TRUE);
     QueryCustomPolicy_hres = E_FAIL;
 
     SET_EXPECT(Host_QS_SecMgr);
@@ -926,7 +932,7 @@ static void test_ActiveXObject(void)
 
     IUnknown_Release(parser);
 
-    parser = create_script();
+    parser = create_script(FALSE, TRUE);
     QueryCustomPolicy_psize = 6;
 
     SET_EXPECT(Host_QS_SecMgr);
@@ -945,7 +951,7 @@ static void test_ActiveXObject(void)
 
     IUnknown_Release(parser);
 
-    parser = create_script();
+    parser = create_script(FALSE, TRUE);
     QueryCustomPolicy_policy = URLPOLICY_DISALLOW;
 
     SET_EXPECT(Host_QS_SecMgr);
@@ -981,7 +987,19 @@ static void test_ActiveXObject(void)
 
     IUnknown_Release(parser);
 
-    parser = create_script();
+    parser = create_script(FALSE, FALSE);
+
+    SET_EXPECT(CreateInstance);
+    SET_EXPECT(QI_IObjectWithSite);
+    SET_EXPECT(reportSuccess);
+    parse_script_a(parser, "(new ActiveXObject('Wine.Test')).reportSuccess();");
+    CHECK_CALLED(CreateInstance);
+    CHECK_CALLED(QI_IObjectWithSite);
+    CHECK_CALLED(reportSuccess);
+
+    IUnknown_Release(parser);
+
+    parser = create_script(FALSE, TRUE);
     object_with_site = &ObjectWithSite;
 
     SET_EXPECT(Host_QS_SecMgr);
@@ -1062,18 +1080,24 @@ static BOOL register_activex(void)
 
 static BOOL check_jscript(void)
 {
+    IActiveScriptProperty *script_prop;
     IActiveScriptParse *parser;
     BSTR str;
     HRESULT hres;
 
-    parser = create_script();
+    parser = create_script(TRUE, TRUE);
     if(!parser)
         return FALSE;
 
     str = a2bstr("if(!('localeCompare' in String.prototype)) throw 1;");
     hres = IActiveScriptParse64_ParseScriptText(parser, str, NULL, NULL, NULL, 0, 0, 0, NULL, NULL);
     SysFreeString(str);
+
+    if(hres == S_OK)
+        hres = IUnknown_QueryInterface(parser, &IID_IActiveScriptProperty, (void**)&script_prop);
     IUnknown_Release(parser);
+    if(hres == S_OK)
+        IActiveScriptProperty_Release(script_prop);
 
     return hres == S_OK;
 }

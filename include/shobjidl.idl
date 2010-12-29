@@ -358,6 +358,13 @@ interface IShellItem : IUnknown
         SIGDN_PARENTRELATIVE               = 0x80080001
     } SIGDN; /* & 0xFFFF => SHGDN */
 
+    [v1_enum] enum _SICHINTF
+    {
+        SICHINT_DISPLAY                       = 0x00000000,
+        SICHINT_CANONICAL                     = 0x10000000,
+        SICHINT_TEST_FILESYSPATH_IF_NOT_EQUAL = 0x20000000,
+        SICHINT_ALLFIELDS                     = 0x80000000
+    };
     typedef DWORD SICHINTF;
 
     HRESULT BindToHandler(
@@ -380,6 +387,75 @@ interface IShellItem : IUnknown
         [in] IShellItem *psi,
         [in] SICHINTF hint,
         [out] int *piOrder);
+}
+
+/*****************************************************************************
+ * IShellItem2 interface
+ */
+[
+    object,
+    uuid(7E9FB0D3-919F-4307-AB2E-9B1860310C93),
+    pointer_default(unique)
+]
+interface IShellItem2 : IShellItem
+{
+    HRESULT GetPropertyStore(
+        [in] GETPROPERTYSTOREFLAGS flags,
+        [in] REFIID riid,
+        [out, iid_is(riid)] void **ppv);
+
+    HRESULT GetPropertyStoreWithCreateObject(
+        [in] GETPROPERTYSTOREFLAGS flags,
+        [in] IUnknown *punkCreateObject,
+        [in] REFIID riid,
+        [out, iid_is(riid)] void **ppv);
+
+    HRESULT GetPropertyStoreForKeys(
+        [in, size_is(cKeys)] const PROPERTYKEY *rgKeys,
+        [in] UINT cKeys,
+        [in] GETPROPERTYSTOREFLAGS flags,
+        [in] REFIID riid,
+        [out, iid_is(riid)] void **ppv);
+
+    HRESULT GetPropertyDescriptionList(
+        [in] REFPROPERTYKEY keyType,
+        [in] REFIID riid,
+        [out, iid_is(riid)] void **ppv);
+
+    HRESULT Update(
+        [in, unique] IBindCtx *pbc);
+
+    HRESULT GetProperty(
+        [in] REFPROPERTYKEY key,
+        [out] PROPVARIANT *ppropvar);
+
+    HRESULT GetCLSID(
+        [in] REFPROPERTYKEY key,
+        [out] CLSID *pclsid);
+
+    HRESULT GetFileTime (
+        [in] REFPROPERTYKEY key,
+        [out] FILETIME *pft);
+
+    HRESULT GetInt32(
+        [in] REFPROPERTYKEY key,
+        [out] int *pi);
+
+    HRESULT GetString(
+        [in] REFPROPERTYKEY key,
+        [out, string] LPWSTR *ppsz);
+
+    HRESULT GetUInt32(
+        [in] REFPROPERTYKEY key,
+        [out] ULONG *pui);
+
+    HRESULT GetUInt64(
+        [in] REFPROPERTYKEY key,
+        [out] ULONGLONG *pull);
+
+    HRESULT GetBool(
+        [in] REFPROPERTYKEY key,
+        [out] BOOL *pf);
 }
 
 typedef enum tagNWMF {
@@ -509,6 +585,10 @@ cpp_quote("HRESULT WINAPI SHCreateItemFromParsingName(PCWSTR pszPath, IBindCtx *
 cpp_quote("HRESULT WINAPI SHCreateItemFromIDList(PCIDLIST_ABSOLUTE pidl, REFIID riid, void **ppv);")
 cpp_quote("HRESULT WINAPI SHGetItemFromDataObject(IDataObject *pdtobj, DATAOBJ_GET_ITEM_FLAGS dwFlags, REFIID riid, void **ppv);")
 cpp_quote("HRESULT WINAPI SHGetIDListFromObject(IUnknown *punk, PIDLIST_ABSOLUTE *ppidl);")
+cpp_quote("HRESULT WINAPI SHGetItemFromObject(IUnknown *punk, REFIID riid, void **ppv);")
+cpp_quote("HRESULT WINAPI SHCreateShellItemArray(PCIDLIST_ABSOLUTE pidlParent, IShellFolder* psf, UINT cidl, PCUITEMID_CHILD_ARRAY ppidl, IShellItemArray **ppsiItemArray);")
+cpp_quote("HRESULT WINAPI SHCreateShellItemArrayFromShellItem(IShellItem *psi, REFIID riid, void **ppv);")
+cpp_quote("HRESULT WINAPI SHCreateShellItemArrayFromDataObject(IDataObject *pdo, REFIID riid, void **ppv);")
 
 /*****************************************************************************
  * IShellItemFilter interface
@@ -1384,6 +1464,7 @@ cpp_quote("#define CMIC_MASK_HASLINKNAME    SEE_MASK_HASLINKNAME")
 cpp_quote("#define CMIC_MASK_FLAG_SEP_VDM   SEE_MASK_FLAG_SEPVDM")
 cpp_quote("#define CMIC_MASK_HASTITLE       SEE_MASK_HASTITLE")
 cpp_quote("#define CMIC_MASK_ASYNCOK        SEE_MASK_ASYNCOK")
+cpp_quote("#define CMIC_MASK_NOASYNC        SEE_MASK_NOASYNC")
 cpp_quote("#define CMIC_MASK_SHIFT_DOWN     0x10000000")
 cpp_quote("#define CMIC_MASK_PTINVOKE       0x20000000")
 cpp_quote("#define CMIC_MASK_CONTROL_DOWN   0x40000000")
@@ -2202,9 +2283,7 @@ interface INameSpaceTreeControlEvents : IUnknown
         [out, iid_is(riid)] void **ppv);
 
     HRESULT OnBeforeStateImageChange(
-        [in] IShellItem *psi,
-        [out] int *piDefaultIcon,
-        [out] int *piOpenIcon);
+        [in] IShellItem *psi);
 
     HRESULT OnGetDefaultIconIndex(
         [in] IShellItem *psi,
@@ -2800,4 +2879,211 @@ interface IFileDialogControlEvents : IUnknown
     HRESULT OnControlActivating(
         [in] IFileDialogCustomize *pfdc,
         [in] DWORD dwIDCtl);
+}
+
+typedef [v1_enum] enum tagKF_CATEGORY
+{
+    KF_CATEGORY_VIRTUAL = 0x00000001,
+    KF_CATEGORY_FIXED   = 0x00000002,
+    KF_CATEGORY_COMMON  = 0x00000003,
+    KF_CATEGORY_PERUSER = 0x00000004
+} KF_CATEGORY;
+
+typedef [v1_enum] enum tagKF_REDIRECTION_CAPABILITIES
+{
+    KF_REDIRECTION_CAPABILITIES_ALLOW_ALL               = 0x000000ff,
+    KF_REDIRECTION_CAPABILITIES_REDIRECTABLE            = 0x00000001,
+    KF_REDIRECTION_CAPABILITIES_DENY_ALL                = 0x000fff00,
+    KF_REDIRECTION_CAPABILITIES_DENY_POLICY_REDIRECTED  = 0x00000100,
+    KF_REDIRECTION_CAPABILITIES_DENY_POLICY             = 0x00000200,
+    KF_REDIRECTION_CAPABILITIES_DENY_PERMISSIONS        = 0x00000400
+} KF_REDIRECTION_CAPABILITIES;
+
+typedef [v1_enum] enum tagKF_DEFINITION_FLAGS
+{
+    KFDF_LOCAL_REDIRECT_ONLY    = 0x00000002,
+    KFDF_ROAMABLE               = 0x00000004,
+    KFDF_PRECREATE              = 0x00000008
+} KF_DEFINITION_FLAGS;
+
+typedef struct tagKNOWNFOLDER_DEFINITION
+{
+    KF_CATEGORY         category;
+    LPWSTR              pszName;
+    LPWSTR              pszDescription;
+    KNOWNFOLDERID       fidParent;
+    LPWSTR              pszRelativePath;
+    LPWSTR              pszParsingName;
+    LPWSTR              pszTooltip;
+    LPWSTR              pszLocalizedName;
+    LPWSTR              pszIcon;
+    LPWSTR              pszSecurity;
+    DWORD               dwAttributes;
+    KF_DEFINITION_FLAGS kfdFlags;
+    FOLDERTYPEID        ftidType;
+} KNOWNFOLDER_DEFINITION;
+
+[
+ object,
+ uuid(3aa7af7e-9b36-420C-a8e3-f77d4674a488),
+ pointer_default(ref)
+]
+interface IKnownFolder : IUnknown
+{
+    HRESULT GetId(
+        [out] KNOWNFOLDERID *pkfid);
+
+    HRESULT GetCategory(
+        [out] KF_CATEGORY *pCategory);
+
+    HRESULT GetShellItem(
+        [in] DWORD dwFlags,
+        [in] REFIID riid,
+        [out, iid_is(riid)] void **ppv);
+
+    HRESULT GetPath(
+        [in] DWORD dwFlags,
+        [out, string] LPWSTR *ppszPath);
+
+    HRESULT SetPath(
+        [in] DWORD dwFlags,
+        [in, string] LPCWSTR pszPath);
+
+    HRESULT GetIDList(
+        [in] DWORD dwFlags,
+        [out] PIDLIST_ABSOLUTE *ppidl);
+
+    HRESULT GetFolderType(
+        [out] FOLDERTYPEID *pftid);
+
+    HRESULT GetRedirectionCapabilities(
+        [out] KF_REDIRECTION_CAPABILITIES *pCapabilities);
+
+    HRESULT GetFolderDefinition(
+        [out] KNOWNFOLDER_DEFINITION *pKFD);
+}
+
+typedef [v1_enum] enum tagKF_REDIRECT_FLAGS
+{
+    KF_REDIRECT_USER_EXCLUSIVE      = 0x00000001,
+    KF_REDIRECT_COPY_SOURCE_DACL    = 0x00000002,
+    KF_REDIRECT_OWNER_USER          = 0x00000004,
+    KF_REDIRECT_SET_OWNER_EXPLICIT  = 0x00000008,
+    KF_REDIRECT_CHECK_ONLY          = 0x00000010,
+    KF_REDIRECT_WITH_UI             = 0x00000020,
+    KF_REDIRECT_UNPIN               = 0x00000040,
+    KF_REDIRECT_PIN                 = 0x00000080,
+    KF_REDIRECT_COPY_CONTENTS       = 0x00000200,
+    KF_REDIRECT_DEL_SOURCE_CONTENTS = 0x00000400,
+    KF_REDIRECT_EXCLUDE_ALL_KNOWN_SUBFOLDERS = 0x00000800
+} KF_REDIRECT_FLAGS;
+
+[
+    object,
+    uuid(8BE2D872-86AA-4d47-B776-32CCA40C7018),
+    pointer_default(ref)
+]
+interface IKnownFolderManager : IUnknown
+{
+    typedef [v1_enum] enum tagFFFP_MODE
+    {
+        FFFP_EXACTMATCH,
+        FFFP_NEARESTPARENTMATCH
+    } FFFP_MODE;
+
+    HRESULT FolderIdFromCsidl(
+        [in] int nCsidl,
+        [out] KNOWNFOLDERID *pfid);
+
+    HRESULT FolderIdToCsidl(
+        [in] REFKNOWNFOLDERID rfid,
+        [out] int *pnCsidl);
+
+    HRESULT GetFolderIds(
+        [out, size_is(, *pCount)] KNOWNFOLDERID **ppKFId,
+        [in, out] UINT *pCount);
+
+    HRESULT GetFolder(
+        [in] REFKNOWNFOLDERID rfid,
+        [out] IKnownFolder **ppkf);
+
+    HRESULT GetFolderByName(
+        [in, string] LPCWSTR pszCanonicalName,
+        [out] IKnownFolder **ppkf);
+
+    HRESULT RegisterFolder(
+        [in] REFKNOWNFOLDERID rfid,
+        [in] KNOWNFOLDER_DEFINITION const *pKFD);
+
+    HRESULT UnregisterFolder(
+        [in] REFKNOWNFOLDERID rfid);
+
+    HRESULT FindFolderFromPath(
+        [in, string] LPCWSTR pszPath,
+        [in] FFFP_MODE mode,
+        [out] IKnownFolder **ppkf);
+
+    HRESULT FindFolderFromIDList(
+        [in] PCIDLIST_ABSOLUTE pidl,
+        [out] IKnownFolder **ppkf);
+
+    HRESULT Redirect(
+        [in] REFKNOWNFOLDERID rfid,
+        [in, unique] HWND hwnd,
+        [in] KF_REDIRECT_FLAGS flags,
+        [in, unique, string] LPCWSTR pszTargetPath,
+        [in] UINT cFolders,
+        [in, size_is(cFolders), unique] KNOWNFOLDERID const *pExclusion,
+        [out, string] LPWSTR *ppszError);
+}
+
+/*****************************************************************************
+ * ShellObjects typelibrary
+ */
+[
+ uuid(50A7E9B1-70EF-11D1-B75A-00A0C90564FE),
+ lcid(0x0000),
+ version(1.0)
+]
+library ShellObjects
+{
+    [
+        uuid(71F96385-DDD6-48D3-A0C1-AE06E8B055FB)
+    ]
+    coclass ExplorerBrowser
+    {
+        interface IExplorerBrowser;
+    }
+
+    [
+        uuid(DC1C5A9C-E88A-4DDE-A5A1-60F82A20AEF7)
+    ]
+    coclass FileOpenDialog
+    {
+        interface IFileOpenDialog;
+    }
+
+    [
+        uuid(C0B4E2F3-BA21-4773-8DBA-335EC946EB8B)
+    ]
+    coclass FileSaveDialog
+    {
+        interface IFileSaveDialog;
+    }
+
+    [
+        uuid(AE054212-3535-4430-83ED-D501AA6680E6)
+    ]
+    coclass NamespaceTreeControl
+    {
+        interface INameSpaceTreeControl2;
+    }
+
+    [
+        uuid(4df0c730-df9d-4ae3-9153-aa6b82e9795a)
+    ]
+    coclass KnownFolderManager
+    {
+        interface IKnownFolderManager;
+    }
 }

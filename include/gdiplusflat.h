@@ -210,6 +210,8 @@ GpStatus WINGDIPAPI GdipFillClosedCurve2(GpGraphics*,GpBrush*,GDIPCONST GpPointF
     REAL,GpFillMode);
 GpStatus WINGDIPAPI GdipFillClosedCurve2I(GpGraphics*,GpBrush*,GDIPCONST GpPoint*,INT,
     REAL,GpFillMode);
+GpStatus WINGDIPAPI GdipFillClosedCurve(GpGraphics*,GpBrush*,GDIPCONST GpPointF*,INT);
+GpStatus WINGDIPAPI GdipFillClosedCurveI(GpGraphics*,GpBrush*,GDIPCONST GpPoint*,INT);
 GpStatus WINGDIPAPI GdipFillEllipse(GpGraphics*,GpBrush*,REAL,REAL,REAL,REAL);
 GpStatus WINGDIPAPI GdipFillEllipseI(GpGraphics*,GpBrush*,INT,INT,INT,INT);
 GpStatus WINGDIPAPI GdipFillPath(GpGraphics*,GpBrush*,GpPath*);
@@ -472,6 +474,7 @@ GpStatus WINGDIPAPI GdipSetLinePresetBlend(GpLineGradient*,GDIPCONST ARGB*,
     GDIPCONST REAL*,INT);
 GpStatus WINGDIPAPI GdipGetLinePresetBlend(GpLineGradient*,ARGB*,REAL*,INT);
 GpStatus WINGDIPAPI GdipGetLinePresetBlendCount(GpLineGradient*,INT*);
+GpStatus WINGDIPAPI GdipGetLineTransform(GpLineGradient*,GpMatrix*);
 GpStatus WINGDIPAPI GdipResetLineTransform(GpLineGradient*);
 GpStatus WINGDIPAPI GdipRotateLineTransform(GpLineGradient*,REAL,GpMatrixOrder);
 GpStatus WINGDIPAPI GdipScaleLineTransform(GpLineGradient*,REAL,REAL,
@@ -641,6 +644,9 @@ GpStatus WINGDIPAPI GdipGetRegionBoundsI(GpRegion *, GpGraphics *, GpRect *);
 GpStatus WINGDIPAPI GdipGetRegionData(GpRegion *, BYTE *, UINT, UINT *);
 GpStatus WINGDIPAPI GdipGetRegionDataSize(GpRegion *, UINT *);
 GpStatus WINGDIPAPI GdipGetRegionHRgn(GpRegion *, GpGraphics *, HRGN *);
+GpStatus WINGDIPAPI GdipGetRegionScans(GpRegion *, GpRectF *, INT *, GpMatrix *);
+GpStatus WINGDIPAPI GdipGetRegionScansI(GpRegion *, GpRect *, INT *, GpMatrix *);
+GpStatus WINGDIPAPI GdipGetRegionScansCount(GpRegion *, UINT *, GpMatrix *);
 GpStatus WINGDIPAPI GdipIsEmptyRegion(GpRegion *, GpGraphics *, BOOL *);
 GpStatus WINGDIPAPI GdipIsEqualRegion(GpRegion *, GpRegion *, GpGraphics *, BOOL *);
 GpStatus WINGDIPAPI GdipIsInfiniteRegion(GpRegion *, GpGraphics *, BOOL *);

@@ -456,17 +456,37 @@ static INT compare_substring( LPCWSTR a, INT operator, LPCWSTR b )
     switch (operator)
     {
     case COND_SS:
-        return strstrW( a, b ) ? 1 : 0;
+        return strstrW( a, b ) != 0;
     case COND_ISS:
-        return strstriW( a, b ) ? 1 : 0;
+        return strstriW( a, b ) != 0;
     case COND_LHS:
-    	return 0 == strncmpW( a, b, lstrlenW( b ) );
+    {
+        int l = strlenW( a );
+        int r = strlenW( b );
+        if (r > l) return 0;
+        return !strncmpW( a, b, r );
+    }
     case COND_RHS:
-    	return 0 == lstrcmpW( a + (lstrlenW( a ) - lstrlenW( b )), b );
+    {
+        int l = strlenW( a );
+        int r = strlenW( b );
+        if (r > l) return 0;
+        return !strncmpW( a + (l - r), b, r );
+    }
     case COND_ILHS:
-    	return 0 == strncmpiW( a, b, lstrlenW( b ) );
+    {
+        int l = strlenW( a );
+        int r = strlenW( b );
+        if (r > l) return 0;
+        return !strncmpiW( a, b, r );
+    }
     case COND_IRHS:
-        return 0 == lstrcmpiW( a + (lstrlenW( a ) - lstrlenW( b )), b );
+    {
+        int l = strlenW( a );
+        int r = strlenW( b );
+        if (r > l) return 0;
+        return !strncmpiW( a + (l - r), b, r );
+    }
     default:
     	ERR("invalid substring operator\n");
         return 0;
@@ -490,29 +510,29 @@ static INT compare_string( LPCWSTR a, INT operator, LPCWSTR b, BOOL convert )
     switch (operator)
     {
     case COND_LT:
-        return -1 == lstrcmpW( a, b );
+        return strcmpW( a, b ) < 0;
     case COND_GT:
-        return  1 == lstrcmpW( a, b );
+        return strcmpW( a, b ) > 0;
     case COND_EQ:
-        return  0 == lstrcmpW( a, b );
+        return strcmpW( a, b ) == 0;
     case COND_NE:
-        return  0 != lstrcmpW( a, b );
+        return strcmpW( a, b ) != 0;
     case COND_GE:
-        return -1 != lstrcmpW( a, b );
+        return strcmpW( a, b ) >= 0;
     case COND_LE:
-        return  1 != lstrcmpW( a, b );
+        return strcmpW( a, b ) <= 0;
     case COND_ILT:
-        return -1 == lstrcmpiW( a, b );
+        return strcmpiW( a, b ) < 0;
     case COND_IGT:
-        return  1 == lstrcmpiW( a, b );
+        return strcmpiW( a, b ) > 0;
     case COND_IEQ:
-        return  0 == lstrcmpiW( a, b );
+        return strcmpiW( a, b ) == 0;
     case COND_INE:
-        return  0 != lstrcmpiW( a, b );
+        return strcmpiW( a, b ) != 0;
     case COND_IGE:
-        return -1 != lstrcmpiW( a, b );
+        return strcmpiW( a, b ) >= 0;
     case COND_ILE:
-        return  1 != lstrcmpiW( a, b );
+        return strcmpiW( a, b ) <= 0;
     default:
         ERR("invalid string operator\n");
         return 0;

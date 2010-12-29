@@ -856,7 +856,7 @@ static HRESULT WINAPI StorageBaseImpl_RenameElement(
     return STG_E_FILENOTFOUND;
   }
 
-  return S_OK;
+  return StorageBaseImpl_Flush(This);
 }
 
 /************************************************************************
@@ -1011,7 +1011,7 @@ static HRESULT WINAPI StorageBaseImpl_CreateStream(
     return STG_E_INSUFFICIENTMEMORY;
   }
 
-  return S_OK;
+  return StorageBaseImpl_Flush(This);
 }
 
 /************************************************************************
@@ -1046,6 +1046,9 @@ static HRESULT WINAPI StorageBaseImpl_SetClass(
                                          This->storageDirEntry,
                                          &currentEntry);
   }
+
+  if (SUCCEEDED(hRes))
+    hRes = StorageBaseImpl_Flush(This);
 
   return hRes;
 }
@@ -1203,6 +1206,8 @@ static HRESULT WINAPI StorageBaseImpl_CreateStorage(
     return hr;
   }
 
+  if (SUCCEEDED(hr))
+    hr = StorageBaseImpl_Flush(This);
 
   return S_OK;
 }
@@ -1916,6 +1921,9 @@ static HRESULT WINAPI StorageBaseImpl_DestroyElement(
   if (SUCCEEDED(hr))
     StorageBaseImpl_DestroyDirEntry(This, entryToDeleteRef);
 
+  if (SUCCEEDED(hr))
+    hr = StorageBaseImpl_Flush(This);
+
   return hr;
 }
 
@@ -2481,7 +2489,7 @@ static HRESULT StorageImpl_StreamSetSize(StorageBaseImpl *base, DirRef index,
   }
   else if (bigblock && newsize.QuadPart < LIMIT_TO_USE_SMALL_BLOCK)
   {
-    smallblock = Storage32Impl_BigBlocksToSmallBlocks(This, pbigblock);
+    smallblock = Storage32Impl_BigBlocksToSmallBlocks(This, pbigblock, newsize);
     if (!smallblock)
       return E_FAIL;
   }
@@ -2752,6 +2760,7 @@ static HRESULT StorageImpl_Construct(
    * There is no block depot cached yet.
    */
   This->indexBlockDepotCached = 0xFFFFFFFF;
+  This->indexExtBlockDepotCached = 0xFFFFFFFF;
 
   /*
    * Start searching for free blocks with block 0.
@@ -2759,6 +2768,40 @@ static HRESULT StorageImpl_Construct(
   This->prevFreeBlock = 0;
 
   This->firstFreeSmallBlock = 0;
+
+  /* Read the extended big block depot locations. */
+  if (This->extBigBlockDepotCount != 0)
+  {
+    ULONG current_block = This->extBigBlockDepotStart;
+    ULONG cache_size = This->extBigBlockDepotCount * 2;
+    int i;
+
+    This->extBigBlockDepotLocations = HeapAlloc(GetProcessHeap(), 0, sizeof(ULONG) * cache_size);
+    if (!This->extBigBlockDepotLocations)
+    {
+      hr = E_OUTOFMEMORY;
+      goto end;
+    }
+
+    This->extBigBlockDepotLocationsSize = cache_size;
+
+    for (i=0; i<This->extBigBlockDepotCount; i++)
+    {
+      if (current_block == BLOCK_END_OF_CHAIN)
+      {
+        WARN("File has too few extended big block depot blocks.\n");
+        hr = STG_E_DOCFILECORRUPT;
+        goto end;
+      }
+      This->extBigBlockDepotLocations[i] = current_block;
+      current_block = Storage32Impl_GetNextExtendedBlock(This, current_block);
+    }
+  }
+  else
+  {
+    This->extBigBlockDepotLocations = NULL;
+    This->extBigBlockDepotLocationsSize = 0;
+  }
 
   /*
    * Create the block chain abstractions.
@@ -2849,7 +2892,10 @@ end:
     *result = NULL;
   }
   else
+  {
+    StorageImpl_Flush((StorageBaseImpl*)This);
     *result = This;
+  }
 
   return hr;
 }
@@ -2873,6 +2919,8 @@ static void StorageImpl_Destroy(StorageBaseImpl* iface)
 
   StorageImpl_Invalidate(iface);
 
+  HeapFree(GetProcessHeap(), 0, This->extBigBlockDepotLocations);
+
   BlockChainStream_Destroy(This->smallBlockRootChain);
   BlockChainStream_Destroy(This->rootBlockChain);
   BlockChainStream_Destroy(This->smallBlockDepotChain);
@@ -2888,8 +2936,26 @@ static void StorageImpl_Destroy(StorageBaseImpl* iface)
 static HRESULT StorageImpl_Flush(StorageBaseImpl* iface)
 {
   StorageImpl *This = (StorageImpl*) iface;
+  int i;
+  HRESULT hr;
+  TRACE("(%p)\n", This);
 
-  return ILockBytes_Flush(This->lockBytes);
+  hr = BlockChainStream_Flush(This->smallBlockRootChain);
+
+  if (SUCCEEDED(hr))
+    hr = BlockChainStream_Flush(This->rootBlockChain);
+
+  if (SUCCEEDED(hr))
+    hr = BlockChainStream_Flush(This->smallBlockDepotChain);
+
+  for (i=0; SUCCEEDED(hr) && i<BLOCKCHAIN_CACHE_SIZE; i++)
+    if (This->blockChainCache[i])
+      hr = BlockChainStream_Flush(This->blockChainCache[i]);
+
+  if (SUCCEEDED(hr))
+    hr = ILockBytes_Flush(This->lockBytes);
+
+  return hr;
 }
 
 /******************************************************************************
@@ -3068,22 +3134,33 @@ static ULONG Storage32Impl_GetExtDepotBlock(StorageImpl* This, ULONG depotIndex)
   ULONG extBlockCount          = numExtBlocks / depotBlocksPerExtBlock;
   ULONG extBlockOffset         = numExtBlocks % depotBlocksPerExtBlock;
   ULONG blockIndex             = BLOCK_UNUSED;
-  ULONG extBlockIndex          = This->extBigBlockDepotStart;
+  ULONG extBlockIndex;
+  BYTE depotBuffer[MAX_BIG_BLOCK_SIZE];
+  int index, num_blocks;
 
   assert(depotIndex >= COUNT_BBDEPOTINHEADER);
 
-  if (This->extBigBlockDepotStart == BLOCK_END_OF_CHAIN)
+  if (extBlockCount >= This->extBigBlockDepotCount)
     return BLOCK_UNUSED;
 
-  while (extBlockCount > 0)
+  if (This->indexExtBlockDepotCached != extBlockCount)
   {
-    extBlockIndex = Storage32Impl_GetNextExtendedBlock(This, extBlockIndex);
-    extBlockCount--;
+    extBlockIndex = This->extBigBlockDepotLocations[extBlockCount];
+
+    StorageImpl_ReadBigBlock(This, extBlockIndex, depotBuffer);
+
+    num_blocks = This->bigBlockSize / 4;
+
+    for (index = 0; index < num_blocks; index++)
+    {
+      StorageUtl_ReadDWord(depotBuffer, index*sizeof(ULONG), &blockIndex);
+      This->extBlockDepotCached[index] = blockIndex;
+    }
+
+    This->indexExtBlockDepotCached = extBlockCount;
   }
 
-  if (extBlockIndex != BLOCK_UNUSED)
-    StorageImpl_ReadDWordFromBigBlock(This, extBlockIndex,
-                        extBlockOffset * sizeof(ULONG), &blockIndex);
+  blockIndex = This->extBlockDepotCached[extBlockOffset];
 
   return blockIndex;
 }
@@ -3101,21 +3178,24 @@ static void Storage32Impl_SetExtDepotBlock(StorageImpl* This, ULONG depotIndex, 
   ULONG numExtBlocks           = depotIndex - COUNT_BBDEPOTINHEADER;
   ULONG extBlockCount          = numExtBlocks / depotBlocksPerExtBlock;
   ULONG extBlockOffset         = numExtBlocks % depotBlocksPerExtBlock;
-  ULONG extBlockIndex          = This->extBigBlockDepotStart;
+  ULONG extBlockIndex;
 
   assert(depotIndex >= COUNT_BBDEPOTINHEADER);
 
-  while (extBlockCount > 0)
-  {
-    extBlockIndex = Storage32Impl_GetNextExtendedBlock(This, extBlockIndex);
-    extBlockCount--;
-  }
+  assert(extBlockCount < This->extBigBlockDepotCount);
+
+  extBlockIndex = This->extBigBlockDepotLocations[extBlockCount];
 
   if (extBlockIndex != BLOCK_UNUSED)
   {
     StorageImpl_WriteDWordToBigBlock(This, extBlockIndex,
                         extBlockOffset * sizeof(ULONG),
                         blockIndex);
+  }
+
+  if (This->indexExtBlockDepotCached == extBlockCount)
+  {
+    This->extBlockDepotCached[extBlockOffset] = blockIndex;
   }
 }
 
@@ -3146,14 +3226,10 @@ static ULONG Storage32Impl_AddExtBlockDepot(StorageImpl* This)
   }
   else
   {
-    unsigned int i;
     /*
-     * Follow the chain to the last one.
+     * Find the last existing extended block.
      */
-    for (i = 0; i < (numExtBlocks - 1); i++)
-    {
-      nextExtBlock = Storage32Impl_GetNextExtendedBlock(This, nextExtBlock);
-    }
+    nextExtBlock = This->extBigBlockDepotLocations[This->extBigBlockDepotCount-1];
 
     /*
      * Add the new extended block to the chain.
@@ -3167,6 +3243,20 @@ static ULONG Storage32Impl_AddExtBlockDepot(StorageImpl* This)
    */
   memset(depotBuffer, BLOCK_UNUSED, This->bigBlockSize);
   StorageImpl_WriteBigBlock(This, index, depotBuffer);
+
+  /* Add the block to our cache. */
+  if (This->extBigBlockDepotLocationsSize == numExtBlocks)
+  {
+    ULONG new_cache_size = (This->extBigBlockDepotLocationsSize+1)*2;
+    ULONG *new_cache = HeapAlloc(GetProcessHeap(), 0, sizeof(ULONG) * new_cache_size);
+
+    memcpy(new_cache, This->extBigBlockDepotLocations, sizeof(ULONG) * This->extBigBlockDepotLocationsSize);
+    HeapFree(GetProcessHeap(), 0, This->extBigBlockDepotLocations);
+
+    This->extBigBlockDepotLocations = new_cache;
+    This->extBigBlockDepotLocationsSize = new_cache_size;
+  }
+  This->extBigBlockDepotLocations[numExtBlocks] = index;
 
   return index;
 }
@@ -3846,13 +3936,20 @@ static BOOL StorageImpl_ReadBigBlock(
   void*          buffer)
 {
   ULARGE_INTEGER ulOffset;
-  DWORD  read;
+  DWORD  read=0;
 
   ulOffset.u.HighPart = 0;
   ulOffset.u.LowPart = StorageImpl_GetBigBlockOffset(This, blockIndex);
 
   StorageImpl_ReadAt(This, ulOffset, buffer, This->bigBlockSize, &read);
-  return (read == This->bigBlockSize);
+
+  if (read && read < This->bigBlockSize)
+  {
+    /* File ends during this block; fill the rest with 0's. */
+    memset((LPBYTE)buffer+read, 0, This->bigBlockSize-read);
+  }
+
+  return (read != 0);
 }
 
 static BOOL StorageImpl_ReadDWordFromBigBlock(
@@ -4035,12 +4132,13 @@ BlockChainStream* Storage32Impl_SmallBlocksToBigBlocks(
  */
 SmallBlockChainStream* Storage32Impl_BigBlocksToSmallBlocks(
                            StorageImpl* This,
-                           BlockChainStream** ppbbChain)
+                           BlockChainStream** ppbbChain,
+                           ULARGE_INTEGER newSize)
 {
     ULARGE_INTEGER size, offset, cbTotalRead;
     ULONG cbRead, cbWritten, sbHeadOfChain = BLOCK_END_OF_CHAIN;
     DirRef streamEntryRef;
-    HRESULT resWrite = S_OK, resRead;
+    HRESULT resWrite = S_OK, resRead = S_OK;
     DirEntry streamEntry;
     BYTE* buffer;
     SmallBlockChainStream* sbTempChain;
@@ -4053,14 +4151,15 @@ SmallBlockChainStream* Storage32Impl_BigBlocksToSmallBlocks(
     if(!sbTempChain)
         return NULL;
 
+    SmallBlockChainStream_SetSize(sbTempChain, newSize);
     size = BlockChainStream_GetSize(*ppbbChain);
-    SmallBlockChainStream_SetSize(sbTempChain, size);
+    size.QuadPart = min(size.QuadPart, newSize.QuadPart);
 
     offset.u.HighPart = 0;
     offset.u.LowPart = 0;
     cbTotalRead.QuadPart = 0;
     buffer = HeapAlloc(GetProcessHeap(), 0, This->bigBlockSize);
-    do
+    while(cbTotalRead.QuadPart < size.QuadPart)
     {
         resRead = BlockChainStream_ReadAt(*ppbbChain, offset,
                 min(This->bigBlockSize, size.u.LowPart - offset.u.LowPart),
@@ -4086,7 +4185,7 @@ SmallBlockChainStream* Storage32Impl_BigBlocksToSmallBlocks(
             resRead = STG_E_READFAULT;
             break;
         }
-    }while(cbTotalRead.QuadPart < size.QuadPart);
+    }
     HeapFree(GetProcessHeap(), 0, buffer);
 
     size.u.HighPart = 0;
@@ -5812,6 +5911,53 @@ ULONG BlockChainStream_GetSectorOfOffset(BlockChainStream *This, ULONG offset)
   return This->indexCache[min_run].firstSector + offset - This->indexCache[min_run].firstOffset;
 }
 
+HRESULT BlockChainStream_GetBlockAtOffset(BlockChainStream *This,
+    ULONG index, BlockChainBlock **block, ULONG *sector, BOOL create)
+{
+  BlockChainBlock *result=NULL;
+  int i;
+
+  for (i=0; i<2; i++)
+    if (This->cachedBlocks[i].index == index)
+    {
+      *sector = This->cachedBlocks[i].sector;
+      *block = &This->cachedBlocks[i];
+      return S_OK;
+    }
+
+  *sector = BlockChainStream_GetSectorOfOffset(This, index);
+  if (*sector == BLOCK_END_OF_CHAIN)
+    return STG_E_DOCFILECORRUPT;
+
+  if (create)
+  {
+    if (This->cachedBlocks[0].index == 0xffffffff)
+      result = &This->cachedBlocks[0];
+    else if (This->cachedBlocks[1].index == 0xffffffff)
+      result = &This->cachedBlocks[1];
+    else
+    {
+      result = &This->cachedBlocks[This->blockToEvict++];
+      if (This->blockToEvict == 2)
+        This->blockToEvict = 0;
+    }
+
+    if (result->dirty)
+    {
+      if (!StorageImpl_WriteBigBlock(This->parentStorage, result->sector, result->data))
+        return STG_E_WRITEFAULT;
+      result->dirty = 0;
+    }
+
+    result->read = 0;
+    result->index = index;
+    result->sector = *sector;
+  }
+
+  *block = result;
+  return S_OK;
+}
+
 BlockChainStream* BlockChainStream_Construct(
   StorageImpl* parentStorage,
   ULONG*         headOfStreamPlaceHolder,
@@ -5827,6 +5973,11 @@ BlockChainStream* BlockChainStream_Construct(
   newStream->indexCache              = NULL;
   newStream->indexCacheLen           = 0;
   newStream->indexCacheSize          = 0;
+  newStream->cachedBlocks[0].index = 0xffffffff;
+  newStream->cachedBlocks[0].dirty = 0;
+  newStream->cachedBlocks[1].index = 0xffffffff;
+  newStream->cachedBlocks[1].dirty = 0;
+  newStream->blockToEvict          = 0;
 
   if (FAILED(BlockChainStream_UpdateIndexCache(newStream)))
   {
@@ -5838,10 +5989,30 @@ BlockChainStream* BlockChainStream_Construct(
   return newStream;
 }
 
+HRESULT BlockChainStream_Flush(BlockChainStream* This)
+{
+  int i;
+  if (!This) return S_OK;
+  for (i=0; i<2; i++)
+  {
+    if (This->cachedBlocks[i].dirty)
+    {
+      if (StorageImpl_WriteBigBlock(This->parentStorage, This->cachedBlocks[i].sector, This->cachedBlocks[i].data))
+        This->cachedBlocks[i].dirty = 0;
+      else
+        return STG_E_WRITEFAULT;
+    }
+  }
+  return S_OK;
+}
+
 void BlockChainStream_Destroy(BlockChainStream* This)
 {
   if (This)
+  {
+    BlockChainStream_Flush(This);
     HeapFree(GetProcessHeap(), 0, This->indexCache);
+  }
   HeapFree(GetProcessHeap(), 0, This);
 }
 
@@ -5907,6 +6078,8 @@ HRESULT BlockChainStream_ReadAt(BlockChainStream* This,
   ULONG blockIndex;
   BYTE* bufferWalker;
   ULARGE_INTEGER stream_size;
+  HRESULT hr;
+  BlockChainBlock *cachedBlock;
 
   TRACE("(%p)-> %i %p %i %p\n",This, offset.u.LowPart, buffer, size, bytesRead);
 
@@ -5928,32 +6101,50 @@ HRESULT BlockChainStream_ReadAt(BlockChainStream* This,
    */
   bufferWalker = buffer;
 
-  while ( (size > 0) && (blockIndex != BLOCK_END_OF_CHAIN) )
+  while (size > 0)
   {
     ULARGE_INTEGER ulOffset;
     DWORD bytesReadAt;
+
     /*
      * Calculate how many bytes we can copy from this big block.
      */
     bytesToReadInBuffer =
       min(This->parentStorage->bigBlockSize - offsetInBlock, size);
 
-     TRACE("block %i\n",blockIndex);
-     ulOffset.u.HighPart = 0;
-     ulOffset.u.LowPart = StorageImpl_GetBigBlockOffset(This->parentStorage, blockIndex) +
-                             offsetInBlock;
+    hr = BlockChainStream_GetBlockAtOffset(This, blockNoInSequence, &cachedBlock, &blockIndex, size == bytesToReadInBuffer);
 
-     StorageImpl_ReadAt(This->parentStorage,
-         ulOffset,
-         bufferWalker,
-         bytesToReadInBuffer,
-         &bytesReadAt);
-    /*
-     * Step to the next big block.
-     */
-    if( size > bytesReadAt && FAILED(StorageImpl_GetNextBlockInChain(This->parentStorage, blockIndex, &blockIndex)))
-      return STG_E_DOCFILECORRUPT;
+    if (FAILED(hr))
+      return hr;
 
+    if (!cachedBlock)
+    {
+      /* Not in cache, and we're going to read past the end of the block. */
+      ulOffset.u.HighPart = 0;
+      ulOffset.u.LowPart = StorageImpl_GetBigBlockOffset(This->parentStorage, blockIndex) +
+                               offsetInBlock;
+
+      StorageImpl_ReadAt(This->parentStorage,
+           ulOffset,
+           bufferWalker,
+           bytesToReadInBuffer,
+           &bytesReadAt);
+    }
+    else
+    {
+      if (!cachedBlock->read)
+      {
+        if (!StorageImpl_ReadBigBlock(This->parentStorage, cachedBlock->sector, cachedBlock->data))
+          return STG_E_READFAULT;
+
+        cachedBlock->read = 1;
+      }
+
+      memcpy(bufferWalker, cachedBlock->data+offsetInBlock, bytesToReadInBuffer);
+      bytesReadAt = bytesToReadInBuffer;
+    }
+
+    blockNoInSequence++;
     bufferWalker += bytesReadAt;
     size         -= bytesReadAt;
     *bytesRead   += bytesReadAt;
@@ -5983,51 +6174,61 @@ HRESULT BlockChainStream_WriteAt(BlockChainStream* This,
   ULONG bytesToWrite;
   ULONG blockIndex;
   const BYTE* bufferWalker;
-
-  /*
-   * Find the first block in the stream that contains part of the buffer.
-   */
-  blockIndex = BlockChainStream_GetSectorOfOffset(This, blockNoInSequence);
-
-  /* BlockChainStream_SetSize should have already been called to ensure we have
-   * enough blocks in the chain to write into */
-  if (blockIndex == BLOCK_END_OF_CHAIN)
-  {
-    ERR("not enough blocks in chain to write data\n");
-    return STG_E_DOCFILECORRUPT;
-  }
+  HRESULT hr;
+  BlockChainBlock *cachedBlock;
 
   *bytesWritten   = 0;
   bufferWalker = buffer;
 
-  while ( (size > 0) && (blockIndex != BLOCK_END_OF_CHAIN) )
+  while (size > 0)
   {
     ULARGE_INTEGER ulOffset;
     DWORD bytesWrittenAt;
+
     /*
-     * Calculate how many bytes we can copy from this big block.
+     * Calculate how many bytes we can copy to this big block.
      */
     bytesToWrite =
       min(This->parentStorage->bigBlockSize - offsetInBlock, size);
 
-    TRACE("block %i\n",blockIndex);
-    ulOffset.u.HighPart = 0;
-    ulOffset.u.LowPart = StorageImpl_GetBigBlockOffset(This->parentStorage, blockIndex) +
-                             offsetInBlock;
+    hr = BlockChainStream_GetBlockAtOffset(This, blockNoInSequence, &cachedBlock, &blockIndex, size == bytesToWrite);
 
-    StorageImpl_WriteAt(This->parentStorage,
-         ulOffset,
-         bufferWalker,
-         bytesToWrite,
-         &bytesWrittenAt);
+    /* BlockChainStream_SetSize should have already been called to ensure we have
+     * enough blocks in the chain to write into */
+    if (FAILED(hr))
+    {
+      ERR("not enough blocks in chain to write data\n");
+      return hr;
+    }
 
-    /*
-     * Step to the next big block.
-     */
-    if(size > bytesWrittenAt && FAILED(StorageImpl_GetNextBlockInChain(This->parentStorage, blockIndex,
-					      &blockIndex)))
-      return STG_E_DOCFILECORRUPT;
+    if (!cachedBlock)
+    {
+      /* Not in cache, and we're going to write past the end of the block. */
+      ulOffset.u.HighPart = 0;
+      ulOffset.u.LowPart = StorageImpl_GetBigBlockOffset(This->parentStorage, blockIndex) +
+                               offsetInBlock;
 
+      StorageImpl_WriteAt(This->parentStorage,
+           ulOffset,
+           bufferWalker,
+           bytesToWrite,
+           &bytesWrittenAt);
+    }
+    else
+    {
+      if (!cachedBlock->read && bytesToWrite != This->parentStorage->bigBlockSize)
+      {
+        if (!StorageImpl_ReadBigBlock(This->parentStorage, cachedBlock->sector, cachedBlock->data))
+          return STG_E_READFAULT;
+      }
+
+      memcpy(cachedBlock->data+offsetInBlock, bufferWalker, bytesToWrite);
+      bytesWrittenAt = bytesToWrite;
+      cachedBlock->read = 1;
+      cachedBlock->dirty = 1;
+    }
+
+    blockNoInSequence++;
     bufferWalker  += bytesWrittenAt;
     size          -= bytesWrittenAt;
     *bytesWritten += bytesWrittenAt;
@@ -6050,6 +6251,7 @@ static BOOL BlockChainStream_Shrink(BlockChainStream* This,
 {
   ULONG blockIndex;
   ULONG numBlocks;
+  int i;
 
   /*
    * Figure out how many blocks are needed to contain the new size
@@ -6115,6 +6317,18 @@ static BOOL BlockChainStream_Shrink(BlockChainStream* This,
       This->indexCacheLen--;
     else
       last_run->lastOffset--;
+  }
+
+  /*
+   * Reset the last accessed block cache.
+   */
+  for (i=0; i<2; i++)
+  {
+    if (This->cachedBlocks[i].index >= numBlocks)
+    {
+      This->cachedBlocks[i].index = 0xffffffff;
+      This->cachedBlocks[i].dirty = 0;
+    }
   }
 
   return TRUE;
@@ -7218,6 +7432,9 @@ HRESULT WINAPI StgCreateStorageEx(const WCHAR* pwcsName, DWORD grfMode, DWORD st
 
     if (stgfmt == STGFMT_STORAGE || stgfmt == STGFMT_DOCFILE)
     {
+        STGOPTIONS defaultOptions = {1, 0, 512};
+
+        if (!pStgOptions) pStgOptions = &defaultOptions;
         return create_storagefile(pwcsName, grfMode, grfAttrs, pStgOptions, riid, ppObjectOpen);
     }
 

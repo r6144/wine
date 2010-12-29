@@ -132,6 +132,7 @@ enum location_error {loc_err_internal = -1,     /* internal while computing */
                      loc_err_too_complex = -2,  /* couldn't compute location (even at runtime) */
                      loc_err_out_of_scope = -3, /* variable isn't available at current address */
                      loc_err_cant_read = -4,    /* couldn't read memory at given address */
+                     loc_err_no_location = -5,  /* likely optimized away (by compiler) */
 };
 
 struct location
@@ -508,9 +509,9 @@ typedef BOOL (*enum_modules_cb)(const WCHAR*, unsigned long addr, void* user);
 
 /* elf_module.c */
 extern BOOL         elf_enum_modules(HANDLE hProc, enum_modules_cb, void*);
-extern BOOL         elf_fetch_file_info(const WCHAR* name, DWORD* base, DWORD* size, DWORD* checksum);
+extern BOOL         elf_fetch_file_info(const WCHAR* name, DWORD_PTR* base, DWORD* size, DWORD* checksum);
 struct image_file_map;
-extern BOOL         elf_load_debug_info(struct module* module, struct image_file_map* fmap);
+extern BOOL         elf_load_debug_info(struct module* module);
 extern struct module*
                     elf_load_module(struct process* pcs, const WCHAR* name, unsigned long);
 extern BOOL         elf_read_wine_loader_dbg_info(struct process* pcs);
@@ -521,7 +522,7 @@ extern int          elf_is_in_thunk_area(unsigned long addr, const struct elf_th
 /* macho_module.c */
 #define MACHO_NO_MAP    ((const void*)-1)
 extern BOOL         macho_enum_modules(HANDLE hProc, enum_modules_cb, void*);
-extern BOOL         macho_fetch_file_info(const WCHAR* name, DWORD* base, DWORD* size, DWORD* checksum);
+extern BOOL         macho_fetch_file_info(const WCHAR* name, DWORD_PTR* base, DWORD* size, DWORD* checksum);
 struct macho_file_map;
 extern BOOL         macho_load_debug_info(struct module* module, struct macho_file_map* fmap);
 extern struct module*
@@ -577,7 +578,7 @@ extern BOOL         path_find_symbol_file(const struct process* pcs, PCSTR full_
 extern BOOL         pe_load_nt_header(HANDLE hProc, DWORD64 base, IMAGE_NT_HEADERS* nth);
 extern struct module*
                     pe_load_native_module(struct process* pcs, const WCHAR* name,
-                                          HANDLE hFile, DWORD base, DWORD size);
+                                          HANDLE hFile, DWORD64 base, DWORD size);
 extern struct module*
                     pe_load_builtin_module(struct process* pcs, const WCHAR* name,
                                            DWORD64 base, DWORD64 size);

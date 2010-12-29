@@ -52,7 +52,7 @@ static void parser(const char*);
 }
 
 %token tCONT tPASS tSTEP tLIST tNEXT tQUIT tHELP tBACKTRACE tALL tINFO tUP tDOWN
-%token tENABLE tDISABLE tBREAK tHBREAK tWATCH tDELETE tSET tPRINT tEXAM
+%token tENABLE tDISABLE tBREAK tHBREAK tWATCH tRWATCH tDELETE tSET tPRINT tEXAM
 %token tABORT tECHO
 %token tCLASS tMAPS tSTACK tSEGMENTS tSYMBOL tREGS tALLREGS tWND tLOCAL tEXCEPTION
 %token tPROCESS tTHREAD tEOL tEOF
@@ -250,9 +250,12 @@ break_command:
     ;
 
 watch_command:
-      tWATCH '*' expr_lvalue    { break_add_watch_from_lvalue(&$3); }
-    | tWATCH identifier         { break_add_watch_from_id($2); }
+      tWATCH '*' expr_lvalue    { break_add_watch_from_lvalue(&$3, TRUE); }
+    | tWATCH identifier         { break_add_watch_from_id($2, TRUE); }
+    | tRWATCH '*' expr_lvalue   { break_add_watch_from_lvalue(&$3, FALSE); }
+    | tRWATCH identifier        { break_add_watch_from_id($2, FALSE); }
     ;
+
 
 display_command:
       tDISPLAY     	       	{ display_print(); }
@@ -287,10 +290,11 @@ info_command:
     | tINFO '*' tWND expr_rvalue { info_win32_window((HWND)$4, TRUE); }
     | tINFO tPROCESS            { info_win32_processes(); }
     | tINFO tTHREAD             { info_win32_threads(); }
-    | tINFO tEXCEPTION          { info_win32_exceptions(dbg_curr_tid); }
-    | tINFO tEXCEPTION expr_rvalue { info_win32_exceptions($3); }
+    | tINFO tFRAME              { info_win32_frame_exceptions(dbg_curr_tid); }
+    | tINFO tFRAME expr_rvalue  { info_win32_frame_exceptions($3); }
     | tINFO tMAPS               { info_win32_virtual(dbg_curr_pid); }
     | tINFO tMAPS expr_rvalue   { info_win32_virtual($3); }
+    | tINFO tEXCEPTION          { info_win32_exception(); }
     ;
 
 maintenance_command:

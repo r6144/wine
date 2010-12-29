@@ -51,6 +51,15 @@ typedef int (CDECL *MSVCRT_matherr_func)(struct MSVCRT__exception *);
 
 static MSVCRT_matherr_func MSVCRT_default_matherr_func = NULL;
 
+/*********************************************************************
+ *      _set_SSE2_enable (MSVCRT.@)
+ */
+int CDECL MSVCRT__set_SSE2_enable(int flag)
+{
+    FIXME("(%x) stub\n", flag);
+    return flag;
+}
+
 #ifdef __x86_64__
 
 /*********************************************************************
@@ -900,12 +909,7 @@ unsigned int CDECL _control87(unsigned int newval, unsigned int mask)
  */
 unsigned int CDECL _controlfp(unsigned int newval, unsigned int mask)
 {
-#ifdef __i386__
   return _control87( newval, mask & ~MSVCRT__EM_DENORMAL );
-#else
-  FIXME(":Not Implemented!\n");
-  return 0;
-#endif
 }
 
 /*********************************************************************
@@ -913,21 +917,19 @@ unsigned int CDECL _controlfp(unsigned int newval, unsigned int mask)
  */
 int CDECL _controlfp_s(unsigned int *cur, unsigned int newval, unsigned int mask)
 {
-#ifdef __i386__
-    unsigned int flags;
+    static const unsigned int all_flags = (MSVCRT__MCW_EM | MSVCRT__MCW_IC | MSVCRT__MCW_RC |
+                                           MSVCRT__MCW_PC | MSVCRT__MCW_DN);
+    unsigned int val;
 
-    FIXME("(%p %u %u) semi-stub\n", cur, newval, mask);
-
-    flags = _control87( newval, mask & ~MSVCRT__EM_DENORMAL );
-
-    if(cur)
-        *cur = flags;
-
+    if (!MSVCRT_CHECK_PMT( !(newval & mask & ~all_flags) ))
+    {
+        if (cur) *cur = _controlfp( 0, 0 );  /* retrieve it anyway */
+        *MSVCRT__errno() = MSVCRT_EINVAL;
+        return MSVCRT_EINVAL;
+    }
+    val = _controlfp( newval, mask );
+    if (cur) *cur = val;
     return 0;
-#else
-    FIXME(":Not Implemented!\n");
-    return 0;
-#endif
 }
 
 /*********************************************************************
@@ -1102,6 +1104,72 @@ char * CDECL _ecvt( double number, int ndigits, int *decpt, int *sign )
     return data->efcvt_buffer;
 }
 
+/*********************************************************************
+ *		_ecvt_s (MSVCRT.@)
+ */
+int CDECL _ecvt_s( char *buffer, MSVCRT_size_t length, double number, int ndigits, int *decpt, int *sign )
+{
+    int prec, len;
+    char *result;
+    const char infret[] = "1#INF";
+
+    if(!MSVCRT_CHECK_PMT(buffer != NULL) || !MSVCRT_CHECK_PMT(decpt != NULL) || !MSVCRT_CHECK_PMT(sign != NULL))
+    {
+        *MSVCRT__errno() = MSVCRT_EINVAL;
+        return MSVCRT_EINVAL;
+    }
+    if(!MSVCRT_CHECK_PMT(length > 2) || !MSVCRT_CHECK_PMT(ndigits < (int)length - 1))
+    {
+        *MSVCRT__errno() = MSVCRT_ERANGE;
+        return MSVCRT_ERANGE;
+    }
+
+    /* special case - inf */
+    if(number == HUGE_VAL || number == -HUGE_VAL)
+    {
+        memset(buffer, '0', ndigits);
+        memcpy(buffer, infret, min(ndigits, sizeof(infret) - 1 ) );
+        buffer[ndigits] = '\0';
+        (*decpt) = 1;
+        if(number == -HUGE_VAL)
+            (*sign) = 1;
+        else
+            (*sign) = 0;
+        return 0;
+    }
+    result = (char*)MSVCRT_malloc(max(ndigits + 7, 7));
+
+    if( number < 0) {
+        *sign = TRUE;
+        number = -number;
+    } else
+        *sign = FALSE;
+    /* handle cases with zero ndigits or less */
+    prec = ndigits;
+    if( prec < 1) prec = 2;
+    len = snprintf(result, 80, "%.*le", prec - 1, number);
+    /* take the decimal "point away */
+    if( prec != 1)
+        memmove( result + 1, result + 2, len - 1 );
+    /* take the exponential "e" out */
+    result[ prec] = '\0';
+    /* read the exponent */
+    sscanf( result + prec + 1, "%d", decpt);
+    (*decpt)++;
+    /* adjust for some border cases */
+    if( result[0] == '0')/* value is zero */
+        *decpt = 0;
+    /* handle cases with zero ndigits or less */
+    if( ndigits < 1){
+        if( result[ 0] >= '5')
+            (*decpt)++;
+        result[ 0] = '\0';
+    }
+    memcpy( buffer, result, max(ndigits + 1, 1) );
+    MSVCRT_free( result );
+    return 0;
+}
+
 /***********************************************************************
  *		_fcvt  (MSVCRT.@)
  */
@@ -1187,13 +1255,52 @@ char * CDECL _fcvt( double number, int ndigits, int *decpt, int *sign )
 
 /***********************************************************************
  *		_gcvt  (MSVCRT.@)
- *
- * FIXME: uses both E and F.
  */
 char * CDECL _gcvt( double number, int ndigit, char *buff )
 {
-    sprintf(buff, "%.*E", ndigit, number);
+    if(!buff) {
+        *MSVCRT__errno() = MSVCRT_EINVAL;
+        return NULL;
+    }
+
+    if(ndigit < 0) {
+        *MSVCRT__errno() = MSVCRT_ERANGE;
+        return NULL;
+    }
+
+    MSVCRT_sprintf(buff, "%.*g", ndigit, number);
     return buff;
+}
+
+/***********************************************************************
+ *              _gcvt_s  (MSVCRT.@)
+ */
+int CDECL _gcvt_s(char *buff, MSVCRT_size_t size, double number, int digits)
+{
+    int len;
+
+    if(!buff) {
+        *MSVCRT__errno() = MSVCRT_EINVAL;
+        return MSVCRT_EINVAL;
+    }
+
+    if( digits<0 || digits>=size) {
+        if(size)
+            buff[0] = '\0';
+
+        *MSVCRT__errno() = MSVCRT_ERANGE;
+        return MSVCRT_ERANGE;
+    }
+
+    len = MSVCRT__scprintf("%.*g", digits, number);
+    if(len > size) {
+        buff[0] = '\0';
+        *MSVCRT__errno() = MSVCRT_ERANGE;
+        return MSVCRT_ERANGE;
+    }
+
+    MSVCRT_sprintf(buff, "%.*g", digits, number);
+    return 0;
 }
 
 #include <stdlib.h> /* div_t, ldiv_t */

@@ -51,8 +51,6 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(shell);
 
-extern const char * const SHELL_Authors[];
-
 /*************************************************************************
  * CommandLineToArgvW            [SHELL32.@]
  *
@@ -94,20 +92,22 @@ LPWSTR* WINAPI CommandLineToArgvW(LPCWSTR lpCmdline, int* numargs)
     if (*lpCmdline==0)
     {
         /* Return the path to the executable */
-        DWORD len, size=16;
+        DWORD len, deslen=MAX_PATH, size;
 
-        argv=LocalAlloc(LMEM_FIXED, size);
+        size = sizeof(LPWSTR) + deslen*sizeof(WCHAR) + sizeof(LPWSTR);
         for (;;)
         {
-            len = GetModuleFileNameW(0, (LPWSTR)(argv+1), (size-sizeof(LPWSTR))/sizeof(WCHAR));
+            if (!(argv = LocalAlloc(LMEM_FIXED, size))) return NULL;
+            len = GetModuleFileNameW(0, (LPWSTR)(argv+1), deslen);
             if (!len)
             {
                 LocalFree(argv);
                 return NULL;
             }
-            if (len < size) break;
-            size*=2;
-            argv=LocalReAlloc(argv, size, 0);
+            if (len < deslen) break;
+            deslen*=2;
+            size = sizeof(LPWSTR) + deslen*sizeof(WCHAR) + sizeof(LPWSTR);
+            LocalFree( argv );
         }
         argv[0]=(LPWSTR)(argv+1);
         if (numargs)
@@ -675,7 +675,7 @@ DWORD_PTR WINAPI SHGetFileInfoA(LPCSTR path,DWORD dwFileAttributes,
     INT len;
     LPWSTR temppath = NULL;
     LPCWSTR pathW;
-    DWORD ret;
+    DWORD_PTR ret;
     SHFILEINFOW temppsfi;
 
     if (flags & SHGFI_PIDL)
@@ -858,7 +858,7 @@ VOID WINAPI Printers_UnregisterWindow(HANDLE hClassPidl, HWND hwnd)
 /*************************************************************************
  * SHGetPropertyStoreFromParsingName [SHELL32.@]
  */
-HRESULT SHGetPropertyStoreFromParsingName(PCWSTR pszPath, IBindCtx *pbc, GETPROPERTYSTOREFLAGS flags, REFIID riid, void **ppv)
+HRESULT WINAPI SHGetPropertyStoreFromParsingName(PCWSTR pszPath, IBindCtx *pbc, GETPROPERTYSTOREFLAGS flags, REFIID riid, void **ppv)
 {
     FIXME("(%s %p %u %p %p) stub!\n", debugstr_w(pszPath), pbc, flags, riid, ppv);
     return E_NOTIMPL;
@@ -930,6 +930,34 @@ HRESULT WINAPI SHLoadInProc (REFCLSID rclsid)
     return DISP_E_MEMBERNOTFOUND;
 }
 
+static void add_authors( HWND list )
+{
+    static const WCHAR eol[] = {'\r','\n',0};
+    static const WCHAR authors[] = {'A','U','T','H','O','R','S',0};
+    WCHAR *strW, *start, *end;
+    HRSRC rsrc = FindResourceW( shell32_hInstance, authors, (LPCWSTR)RT_RCDATA );
+    char *strA = LockResource( LoadResource( shell32_hInstance, rsrc ));
+    DWORD sizeW, sizeA = SizeofResource( shell32_hInstance, rsrc );
+
+    if (!strA) return;
+    sizeW = MultiByteToWideChar( CP_UTF8, 0, strA, sizeA, NULL, 0 ) + 1;
+    if (!(strW = HeapAlloc( GetProcessHeap(), 0, sizeW * sizeof(WCHAR) ))) return;
+    MultiByteToWideChar( CP_UTF8, 0, strA, sizeA, strW, sizeW );
+    strW[sizeW - 1] = 0;
+
+    start = strpbrkW( strW, eol );  /* skip the header line */
+    while (start)
+    {
+        while (*start && strchrW( eol, *start )) start++;
+        if (!*start) break;
+        end = strpbrkW( start, eol );
+        if (end) *end++ = 0;
+        SendMessageW( list, LB_ADDSTRING, -1, (LPARAM)start );
+        start = end;
+    }
+    HeapFree( GetProcessHeap(), 0, strW );
+}
+
 /*************************************************************************
  * AboutDlgProc            (internal)
  */
@@ -950,7 +978,6 @@ static INT_PTR CALLBACK AboutDlgProc( HWND hWnd, UINT msg, WPARAM wParam,
 
             if (info)
             {
-                const char* const *pstr = SHELL_Authors;
                 SendDlgItemMessageW(hWnd, stc1, STM_SETICON,(WPARAM)info->hIcon, 0);
                 GetWindowTextW( hWnd, template, sizeof(template)/sizeof(WCHAR) );
                 sprintfW( buffer, template, info->szApp );
@@ -966,13 +993,7 @@ static INT_PTR CALLBACK AboutDlgProc( HWND hWnd, UINT msg, WPARAM wParam,
                 hWndCtl = GetDlgItem(hWnd, IDC_ABOUT_LISTBOX);
                 SendMessageW( hWndCtl, WM_SETREDRAW, 0, 0 );
                 SendMessageW( hWndCtl, WM_SETFONT, (WPARAM)info->hFont, 0 );
-                while (*pstr)
-                {
-                    /* authors list is in utf-8 format */
-                    MultiByteToWideChar( CP_UTF8, 0, *pstr, -1, buffer, sizeof(buffer)/sizeof(WCHAR) );
-                    SendMessageW( hWndCtl, LB_ADDSTRING, -1, (LPARAM)buffer );
-                    pstr++;
-                }
+                add_authors( hWndCtl );
                 SendMessageW( hWndCtl, WM_SETREDRAW, 1, 0 );
             }
         }

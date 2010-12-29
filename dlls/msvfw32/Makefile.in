@@ -1,7 +1,3 @@
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = msvfw32.dll
 IMPORTLIB = msvfw32
 IMPORTS   = winmm version comctl32 user32 gdi32 advapi32
@@ -17,6 +13,7 @@ RC_SRCS = \
 	msvfw32_En.rc \
 	msvfw32_Es.rc \
 	msvfw32_Fr.rc \
+	msvfw32_He.rc \
 	msvfw32_Hu.rc \
 	msvfw32_It.rc \
 	msvfw32_Ko.rc \
@@ -28,6 +25,7 @@ RC_SRCS = \
 	msvfw32_Ro.rc \
 	msvfw32_Ru.rc \
 	msvfw32_Si.rc \
+	msvfw32_Sr.rc \
 	msvfw32_Sv.rc \
 	msvfw32_Tr.rc \
 	msvfw32_Uk.rc \

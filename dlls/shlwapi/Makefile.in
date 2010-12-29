@@ -1,8 +1,4 @@
 EXTRADEFS = -D_SHLWAPI_
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = shlwapi.dll
 IMPORTLIB = shlwapi
 IMPORTS   = uuid user32 gdi32 advapi32
@@ -32,6 +28,7 @@ RC_SRCS = \
 	shlwapi_Es.rc \
 	shlwapi_Fi.rc \
 	shlwapi_Fr.rc \
+	shlwapi_He.rc \
 	shlwapi_Hu.rc \
 	shlwapi_It.rc \
 	shlwapi_Ja.rc \
@@ -45,6 +42,7 @@ RC_SRCS = \
 	shlwapi_Ru.rc \
 	shlwapi_Si.rc \
 	shlwapi_Sk.rc \
+	shlwapi_Sr.rc \
 	shlwapi_Sv.rc \
 	shlwapi_Tr.rc \
 	shlwapi_Uk.rc \

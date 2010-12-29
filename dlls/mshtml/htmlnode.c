@@ -33,6 +33,7 @@
 WINE_DEFAULT_DEBUG_CHANNEL(mshtml);
 
 static HTMLDOMNode *get_node_obj(HTMLDocumentNode*,IUnknown*);
+static HRESULT create_node(HTMLDocumentNode*,nsIDOMNode*,HTMLDOMNode**);
 
 typedef struct {
     DispatchEx dispex;
@@ -152,8 +153,10 @@ static HRESULT WINAPI HTMLDOMChildrenCollection_item(IHTMLDOMChildrenCollection 
 {
     HTMLDOMChildrenCollection *This = HTMLCHILDCOL_THIS(iface);
     nsIDOMNode *nsnode = NULL;
+    HTMLDOMNode *node;
     PRUint32 length=0;
     nsresult nsres;
+    HRESULT hres;
 
     TRACE("(%p)->(%d %p)\n", This, index, ppItem);
 
@@ -172,7 +175,11 @@ static HRESULT WINAPI HTMLDOMChildrenCollection_item(IHTMLDOMChildrenCollection 
         return E_FAIL;
     }
 
-    *ppItem = (IDispatch*)get_node(This->doc, nsnode, TRUE);
+    hres = get_node(This->doc, nsnode, TRUE, &node);
+    if(FAILED(hres))
+        return hres;
+
+    *ppItem = (IDispatch*)HTMLDOMNODE(node);
     IDispatch_AddRef(*ppItem);
     return S_OK;
 }
@@ -367,6 +374,9 @@ static HRESULT WINAPI HTMLDOMNode_get_nodeType(IHTMLDOMNode *iface, LONG *p)
     case DOCUMENT_NODE:
         *p = 9;
         break;
+    case DOCUMENT_FRAGMENT_NODE:
+        *p = 11;
+        break;
     default:
         /*
          * FIXME:
@@ -386,6 +396,7 @@ static HRESULT WINAPI HTMLDOMNode_get_parentNode(IHTMLDOMNode *iface, IHTMLDOMNo
     HTMLDOMNode *node;
     nsIDOMNode *nsnode;
     nsresult nsres;
+    HRESULT hres;
 
     TRACE("(%p)->(%p)\n", This, p);
 
@@ -400,7 +411,11 @@ static HRESULT WINAPI HTMLDOMNode_get_parentNode(IHTMLDOMNode *iface, IHTMLDOMNo
         return S_OK;
     }
 
-    node = get_node(This->doc, nsnode, TRUE);
+    hres = get_node(This->doc, nsnode, TRUE, &node);
+    nsIDOMNode_Release(nsnode);
+    if(FAILED(hres))
+        return hres;
+
     *p = HTMLDOMNODE(node);
     IHTMLDOMNode_AddRef(*p);
     return S_OK;
@@ -455,7 +470,9 @@ static HRESULT WINAPI HTMLDOMNode_insertBefore(IHTMLDOMNode *iface, IHTMLDOMNode
     HTMLDOMNode *This = HTMLDOMNODE_THIS(iface);
     nsIDOMNode *nsnode, *nsref = NULL;
     HTMLDOMNode *new_child;
+    HTMLDOMNode *node_obj;
     nsresult nsres;
+    HRESULT hres;
 
     TRACE("(%p)->(%p %s %p)\n", This, newChild, debugstr_variant(&refChild), node);
 
@@ -491,8 +508,12 @@ static HRESULT WINAPI HTMLDOMNode_insertBefore(IHTMLDOMNode *iface, IHTMLDOMNode
         return E_FAIL;
     }
 
-    *node = HTMLDOMNODE(get_node(This->doc, nsnode, TRUE));
+    hres = get_node(This->doc, nsnode, TRUE, &node_obj);
     nsIDOMNode_Release(nsnode);
+    if(FAILED(hres))
+        return hres;
+
+    *node = HTMLDOMNODE(node_obj);
     IHTMLDOMNode_AddRef(*node);
     return S_OK;
 }
@@ -504,6 +525,7 @@ static HRESULT WINAPI HTMLDOMNode_removeChild(IHTMLDOMNode *iface, IHTMLDOMNode 
     HTMLDOMNode *node_obj;
     nsIDOMNode *nsnode;
     nsresult nsres;
+    HRESULT hres;
 
     TRACE("(%p)->(%p %p)\n", This, oldChild, node);
 
@@ -517,9 +539,13 @@ static HRESULT WINAPI HTMLDOMNode_removeChild(IHTMLDOMNode *iface, IHTMLDOMNode 
         return E_FAIL;
     }
 
-    /* FIXME: Make sure that node != newChild */
-    *node = HTMLDOMNODE(get_node(This->doc, nsnode, TRUE));
+    hres = get_node(This->doc, nsnode, TRUE, &node_obj);
     nsIDOMNode_Release(nsnode);
+    if(FAILED(hres))
+        return hres;
+
+    /* FIXME: Make sure that node != newChild */
+    *node = HTMLDOMNODE(node_obj);
     IHTMLDOMNode_AddRef(*node);
     return S_OK;
 }
@@ -536,9 +562,10 @@ static HRESULT WINAPI HTMLDOMNode_cloneNode(IHTMLDOMNode *iface, VARIANT_BOOL fD
                                             IHTMLDOMNode **clonedNode)
 {
     HTMLDOMNode *This = HTMLDOMNODE_THIS(iface);
+    HTMLDOMNode *new_node;
     nsIDOMNode *nsnode;
-    HTMLDOMNode *node;
     nsresult nsres;
+    HRESULT hres;
 
     TRACE("(%p)->(%x %p)\n", This, fDeep, clonedNode);
 
@@ -548,9 +575,11 @@ static HRESULT WINAPI HTMLDOMNode_cloneNode(IHTMLDOMNode *iface, VARIANT_BOOL fD
         return E_FAIL;
     }
 
-    node = get_node(This->doc, nsnode, TRUE);
-    IHTMLDOMNode_AddRef(HTMLDOMNODE(node));
-    *clonedNode = HTMLDOMNODE(node);
+    hres = This->vtbl->clone(This, nsnode, &new_node);
+    if(FAILED(hres))
+        return hres;
+
+    *clonedNode = HTMLDOMNODE(new_node);
     return S_OK;
 }
 
@@ -585,6 +614,7 @@ static HRESULT WINAPI HTMLDOMNode_appendChild(IHTMLDOMNode *iface, IHTMLDOMNode 
     HTMLDOMNode *node_obj;
     nsIDOMNode *nsnode;
     nsresult nsres;
+    HRESULT hres;
 
     TRACE("(%p)->(%p %p)\n", This, newChild, node);
 
@@ -598,8 +628,13 @@ static HRESULT WINAPI HTMLDOMNode_appendChild(IHTMLDOMNode *iface, IHTMLDOMNode 
         nsnode = node_obj->nsnode;
     }
 
+    hres = get_node(This->doc, nsnode, TRUE, &node_obj);
+    nsIDOMNode_Release(nsnode);
+    if(FAILED(hres))
+        return hres;
+
     /* FIXME: Make sure that node != newChild */
-    *node = HTMLDOMNODE(get_node(This->doc, nsnode, TRUE));
+    *node = HTMLDOMNODE(node_obj);
     IHTMLDOMNode_AddRef(*node);
     return S_OK;
 }
@@ -687,17 +722,24 @@ static HRESULT WINAPI HTMLDOMNode_get_firstChild(IHTMLDOMNode *iface, IHTMLDOMNo
 {
     HTMLDOMNode *This = HTMLDOMNODE_THIS(iface);
     nsIDOMNode *nschild = NULL;
+    HTMLDOMNode *node;
+    HRESULT hres;
 
     TRACE("(%p)->(%p)\n", This, p);
 
     nsIDOMNode_GetFirstChild(This->nsnode, &nschild);
-    if(nschild) {
-        *p = HTMLDOMNODE(get_node(This->doc, nschild, TRUE));
-        IHTMLDOMNode_AddRef(*p);
-    }else {
+    if(!nschild) {
         *p = NULL;
+        return S_OK;
     }
 
+    hres = get_node(This->doc, nschild, TRUE, &node);
+    nsIDOMNode_Release(nschild);
+    if(FAILED(hres))
+        return hres;
+
+    *p = HTMLDOMNODE(node);
+    IHTMLDOMNode_AddRef(*p);
     return S_OK;
 }
 
@@ -705,17 +747,24 @@ static HRESULT WINAPI HTMLDOMNode_get_lastChild(IHTMLDOMNode *iface, IHTMLDOMNod
 {
     HTMLDOMNode *This = HTMLDOMNODE_THIS(iface);
     nsIDOMNode *nschild = NULL;
+    HTMLDOMNode *node;
+    HRESULT hres;
 
     TRACE("(%p)->(%p)\n", This, p);
 
     nsIDOMNode_GetLastChild(This->nsnode, &nschild);
-    if(nschild) {
-        *p = HTMLDOMNODE(get_node(This->doc, nschild, TRUE));
-        IHTMLDOMNode_AddRef(*p);
-    }else {
+    if(!nschild) {
         *p = NULL;
+        return S_OK;
     }
 
+    hres = get_node(This->doc, nschild, TRUE, &node);
+    nsIDOMNode_Release(nschild);
+    if(FAILED(hres))
+        return hres;
+
+    *p = HTMLDOMNODE(node);
+    IHTMLDOMNode_AddRef(*p);
     return S_OK;
 }
 
@@ -730,17 +779,24 @@ static HRESULT WINAPI HTMLDOMNode_get_nextSibling(IHTMLDOMNode *iface, IHTMLDOMN
 {
     HTMLDOMNode *This = HTMLDOMNODE_THIS(iface);
     nsIDOMNode *nssibling = NULL;
+    HTMLDOMNode *node;
+    HRESULT hres;
 
     TRACE("(%p)->(%p)\n", This, p);
 
     nsIDOMNode_GetNextSibling(This->nsnode, &nssibling);
-    if(nssibling) {
-        *p = HTMLDOMNODE(get_node(This->doc, nssibling, TRUE));
-        IHTMLDOMNode_AddRef(*p);
-    }else {
+    if(!nssibling) {
         *p = NULL;
+        return S_OK;
     }
 
+    hres = get_node(This->doc, nssibling, TRUE, &node);
+    nsIDOMNode_Release(nssibling);
+    if(FAILED(hres))
+        return hres;
+
+    *p = HTMLDOMNODE(node);
+    IHTMLDOMNode_AddRef(*p);
     return S_OK;
 }
 
@@ -840,7 +896,7 @@ static HRESULT WINAPI HTMLDOMNode2_get_ownerDocument(IHTMLDOMNode2 *iface, IDisp
     if(This == &This->doc->node) {
         *p = NULL;
     }else {
-        *p = (IDispatch*)HTMLDOC(&This->doc->basedoc);
+        *p = (IDispatch*)&This->doc->basedoc.IHTMLDocument2_iface;
         IDispatch_AddRef(*p);
     }
     return S_OK;
@@ -904,9 +960,22 @@ void HTMLDOMNode_destructor(HTMLDOMNode *This)
         release_event_target(This->event_target);
 }
 
+static HRESULT HTMLDOMNode_clone(HTMLDOMNode *This, nsIDOMNode *nsnode, HTMLDOMNode **ret)
+{
+    HRESULT hres;
+
+    hres = create_node(This->doc, nsnode, ret);
+    if(FAILED(hres))
+        return hres;
+
+    IHTMLDOMNode_AddRef(HTMLDOMNODE(*ret));
+    return S_OK;
+}
+
 static const NodeImplVtbl HTMLDOMNodeImplVtbl = {
     HTMLDOMNode_QI,
-    HTMLDOMNode_destructor
+    HTMLDOMNode_destructor,
+    HTMLDOMNode_clone
 };
 
 void HTMLDOMNode_Init(HTMLDocumentNode *doc, HTMLDOMNode *node, nsIDOMNode *nsnode)
@@ -924,32 +993,50 @@ void HTMLDOMNode_Init(HTMLDocumentNode *doc, HTMLDOMNode *node, nsIDOMNode *nsno
     doc->nodes = node;
 }
 
-static HTMLDOMNode *create_node(HTMLDocumentNode *doc, nsIDOMNode *nsnode)
+static HRESULT create_node(HTMLDocumentNode *doc, nsIDOMNode *nsnode, HTMLDOMNode **ret)
 {
-    HTMLDOMNode *ret;
     PRUint16 node_type;
+    HRESULT hres;
 
     nsIDOMNode_GetNodeType(nsnode, &node_type);
 
     switch(node_type) {
-    case ELEMENT_NODE:
-        ret = &HTMLElement_Create(doc, nsnode, FALSE)->node;
+    case ELEMENT_NODE: {
+        HTMLElement *elem;
+        hres = HTMLElement_Create(doc, nsnode, FALSE, &elem);
+        if(FAILED(hres))
+            return hres;
+        *ret = &elem->node;
         break;
+    }
     case TEXT_NODE:
-        ret = HTMLDOMTextNode_Create(doc, nsnode);
+        hres = HTMLDOMTextNode_Create(doc, nsnode, ret);
+        if(FAILED(hres))
+            return hres;
         break;
-    case COMMENT_NODE:
-        ret = &HTMLCommentElement_Create(doc, nsnode)->node;
+    case COMMENT_NODE: {
+        HTMLElement *comment;
+        hres = HTMLCommentElement_Create(doc, nsnode, &comment);
+        if(FAILED(hres))
+            return hres;
+        *ret = &comment->node;
         break;
-    default:
-        ret = heap_alloc_zero(sizeof(HTMLDOMNode));
-        ret->vtbl = &HTMLDOMNodeImplVtbl;
-        HTMLDOMNode_Init(doc, ret, nsnode);
+    }
+    default: {
+        HTMLDOMNode *node;
+
+        node = heap_alloc_zero(sizeof(HTMLDOMNode));
+        if(!node)
+            return E_OUTOFMEMORY;
+
+        node->vtbl = &HTMLDOMNodeImplVtbl;
+        HTMLDOMNode_Init(doc, node, nsnode);
+        *ret = node;
+    }
     }
 
-    TRACE("type %d ret %p\n", node_type, ret);
-
-    return ret;
+    TRACE("type %d ret %p\n", node_type, *ret);
+    return S_OK;
 }
 
 /*
@@ -958,7 +1045,7 @@ static HTMLDOMNode *create_node(HTMLDocumentNode *doc, nsIDOMNode *nsnode)
  * (better) find a way to store HTMLDOMelement pointer in nsIDOMNode.
  */
 
-HTMLDOMNode *get_node(HTMLDocumentNode *This, nsIDOMNode *nsnode, BOOL create)
+HRESULT get_node(HTMLDocumentNode *This, nsIDOMNode *nsnode, BOOL create, HTMLDOMNode **ret)
 {
     HTMLDOMNode *iter = This->nodes;
 
@@ -968,10 +1055,12 @@ HTMLDOMNode *get_node(HTMLDocumentNode *This, nsIDOMNode *nsnode, BOOL create)
         iter = iter->next;
     }
 
-    if(iter || !create)
-        return iter;
+    if(iter || !create) {
+        *ret = iter;
+        return S_OK;
+    }
 
-    return create_node(This, nsnode);
+    return create_node(This, nsnode, ret);
 }
 
 /*

@@ -43,6 +43,13 @@ static char *buf_to_string(const unsigned char *bin, int len, int nr)
     return buf[nr];
 }
 
+static void __cdecl test_invalid_parameter_handler(const wchar_t *expression,
+        const wchar_t *function, const wchar_t *file,
+        unsigned line, uintptr_t arg)
+{
+    /* we just ignore handler calls */
+}
+
 #define expect_eq(expr, value, type, format) { type ret = (expr); ok((value) == ret, #expr " expected " format " got " format "\n", value, ret); }
 #define expect_bin(buf, value, len) { ok(memcmp((buf), value, len) == 0, "Binary buffer mismatch - expected %s, got %s\n", buf_to_string((unsigned char *)value, len, 1), buf_to_string((buf), len, 0)); }
 
@@ -50,21 +57,28 @@ static void* (__cdecl *pmemcpy)(void *, const void *, size_t n);
 static int* (__cdecl *pmemcmp)(void *, const void *, size_t n);
 static int (__cdecl *pstrcpy_s)(char *dst, size_t len, const char *src);
 static int (__cdecl *pstrcat_s)(char *dst, size_t len, const char *src);
+static int (__cdecl *p_mbsnbcat_s)(unsigned char *dst, size_t size, const unsigned char *src, size_t count);
 static int (__cdecl *p_mbsnbcpy_s)(unsigned char * dst, size_t size, const unsigned char * src, size_t count);
 static int (__cdecl *p_wcscpy_s)(wchar_t *wcDest, size_t size, const wchar_t *wcSrc);
+static int (__cdecl *p_wcsncat_s)(wchar_t *dst, size_t elem, const wchar_t *src, size_t count);
 static int (__cdecl *p_wcsupr_s)(wchar_t *str, size_t size);
 static size_t (__cdecl *p_strnlen)(const char *, size_t);
 static __int64 (__cdecl *p_strtoi64)(const char *, char **, int);
 static unsigned __int64 (__cdecl *p_strtoui64)(const char *, char **, int);
 static int (__cdecl *pwcstombs_s)(size_t*,char*,size_t,const wchar_t*,size_t);
 static int (__cdecl *pmbstowcs_s)(size_t*,wchar_t*,size_t,const char*,size_t);
+static errno_t (__cdecl *p_gcvt_s)(char*,size_t,double,int);
+static errno_t (__cdecl *p_itoa_s)(int,char*,size_t,int);
+static errno_t (__cdecl *p_strlwr_s)(char*,size_t);
+static errno_t (__cdecl *p_ultoa_s)(__msvcrt_ulong,char*,size_t,int);
 static int *p__mb_cur_max;
 static unsigned char *p_mbctype;
+static _invalid_parameter_handler (__cdecl *p_set_invalid_parameter_handler)(_invalid_parameter_handler);
 
 #define SETNOFAIL(x,y) x = (void*)GetProcAddress(hMsvcrt,y)
 #define SET(x,y) SETNOFAIL(x,y); ok(x != NULL, "Export '%s' not found\n", y)
 
-HMODULE hMsvcrt;
+static HMODULE hMsvcrt;
 
 static void test_swab( void ) {
     char original[]  = "BADCFEHGJILKNMPORQTSVUXWZY@#";
@@ -1184,22 +1198,22 @@ static void test_mbstowcs(void)
     mOut[4] = '!'; mOut[5] = '\0';
 
     ret = mbstowcs(NULL, mSimple, 0);
-    ok(ret == 4, "ret = %d\n", ret);
+    ok(ret == 4, "mbstowcs did not return 4\n");
 
     ret = mbstowcs(wOut, mSimple, 4);
-    ok(ret == 4, "ret = %d\n", ret);
+    ok(ret == 4, "mbstowcs did not return 4\n");
     ok(!memcmp(wOut, wSimple, 4*sizeof(wchar_t)), "wOut = %s\n", wine_dbgstr_w(wOut));
     ok(wOut[4] == '!', "wOut[4] != \'!\'\n");
 
     ret = wcstombs(NULL, wSimple, 0);
-    ok(ret == 4, "ret = %d\n", ret);
+    ok(ret == 4, "wcstombs did not return 4\n");
 
     ret = wcstombs(mOut, wSimple, 6);
-    ok(ret == 4, "ret = %d\n", ret);
+    ok(ret == 4, "wcstombs did not return 4\n");
     ok(!memcmp(mOut, mSimple, 5*sizeof(char)), "mOut = %s\n", mOut);
 
     ret = wcstombs(mOut, wSimple, 2);
-    ok(ret == 2, "ret = %d\n", ret);
+    ok(ret == 2, "wcstombs did not return 2\n");
     ok(!memcmp(mOut, mSimple, 5*sizeof(char)), "mOut = %s\n", mOut);
 
     if(!setlocale(LC_ALL, "Japanese_Japan.932")) {
@@ -1208,11 +1222,11 @@ static void test_mbstowcs(void)
     }
 
     ret = mbstowcs(wOut, mHiragana, 6);
-    ok(ret == 2, "ret = %d\n", ret);
+    ok(ret == 2, "mbstowcs did not return 2\n");
     ok(!memcmp(wOut, wHiragana, sizeof(wHiragana)), "wOut = %s\n", wine_dbgstr_w(wOut));
 
     ret = wcstombs(mOut, wHiragana, 6);
-    ok(ret == 4, "ret = %d\n", ret);
+    ok(ret == 4, "wcstombs did not return 4\n");
     ok(!memcmp(mOut, mHiragana, sizeof(mHiragana)), "mOut = %s\n", mOut);
 
     if(!pmbstowcs_s || !pwcstombs_s) {
@@ -1241,6 +1255,449 @@ static void test_mbstowcs(void)
     ok(!memcmp(mOut, mHiragana, sizeof(mHiragana)), "mOut = %s\n", mOut);
 }
 
+static void test_gcvt(void)
+{
+    char buf[1024], *res;
+    errno_t err;
+
+    if(!p_gcvt_s) {
+        win_skip("Skipping _gcvt tests\n");
+        return;
+    }
+
+    errno = 0;
+    res = _gcvt(1.2, -1, buf);
+    ok(res == NULL, "res != NULL\n");
+    ok(errno == ERANGE, "errno = %d\n", errno);
+
+    errno = 0;
+    res = _gcvt(1.2, 5, NULL);
+    ok(res == NULL, "res != NULL\n");
+    ok(errno == EINVAL, "errno = %d\n", errno);
+
+    res = gcvt(1.2, 5, buf);
+    ok(res == buf, "res != buf\n");
+    ok(!strcmp(buf, "1.2"), "buf = %s\n", buf);
+
+    buf[0] = 'x';
+    err = p_gcvt_s(buf, 5, 1.2, 10);
+    ok(err == ERANGE, "err = %d\n", err);
+    ok(buf[0] == '\0', "buf[0] = %c\n", buf[0]);
+
+    buf[0] = 'x';
+    err = p_gcvt_s(buf, 4, 123456, 2);
+    ok(err == ERANGE, "err = %d\n", err);
+    ok(buf[0] == '\0', "buf[0] = %c\n", buf[0]);
+}
+
+static void test__itoa_s(void)
+{
+    errno_t ret;
+    char buffer[33];
+
+    if (!p_itoa_s)
+    {
+        win_skip("Skipping _itoa_s tests\n");
+        return;
+    }
+
+    if (p_set_invalid_parameter_handler)
+        ok(p_set_invalid_parameter_handler(test_invalid_parameter_handler) == NULL,
+                "Invalid parameter handler was already set\n");
+
+    errno = EBADF;
+    ret = p_itoa_s(0, NULL, 0, 0);
+    ok(ret == EINVAL, "Expected _itoa_s to return EINVAL, got %d\n", ret);
+    ok(errno == EINVAL, "Expected errno to be EINVAL, got %d\n", errno);
+
+    memset(buffer, 'X', sizeof(buffer));
+    errno = EBADF;
+    ret = p_itoa_s(0, buffer, 0, 0);
+    ok(ret == EINVAL, "Expected _itoa_s to return EINVAL, got %d\n", ret);
+    ok(errno == EINVAL, "Expected errno to be EINVAL, got %d\n", errno);
+    ok(buffer[0] == 'X', "Expected the output buffer to be untouched\n");
+
+    memset(buffer, 'X', sizeof(buffer));
+    errno = EBADF;
+    ret = p_itoa_s(0, buffer, sizeof(buffer), 0);
+    ok(ret == EINVAL, "Expected _itoa_s to return EINVAL, got %d\n", ret);
+    ok(errno == EINVAL, "Expected errno to be EINVAL, got %d\n", errno);
+    ok(buffer[0] == '\0', "Expected the output buffer to be null terminated\n");
+
+    memset(buffer, 'X', sizeof(buffer));
+    errno = EBADF;
+    ret = p_itoa_s(0, buffer, sizeof(buffer), 64);
+    ok(ret == EINVAL, "Expected _itoa_s to return EINVAL, got %d\n", ret);
+    ok(errno == EINVAL, "Expected errno to be EINVAL, got %d\n", errno);
+    ok(buffer[0] == '\0', "Expected the output buffer to be null terminated\n");
+
+    memset(buffer, 'X', sizeof(buffer));
+    errno = EBADF;
+    ret = p_itoa_s(12345678, buffer, 4, 10);
+    ok(ret == ERANGE, "Expected _itoa_s to return ERANGE, got %d\n", ret);
+    ok(errno == ERANGE, "Expected errno to be ERANGE, got %d\n", errno);
+    ok(!memcmp(buffer, "\000765", 4),
+       "Expected the output buffer to be null terminated with truncated output\n");
+
+    memset(buffer, 'X', sizeof(buffer));
+    errno = EBADF;
+    ret = p_itoa_s(12345678, buffer, 8, 10);
+    ok(ret == ERANGE, "Expected _itoa_s to return ERANGE, got %d\n", ret);
+    ok(errno == ERANGE, "Expected errno to be ERANGE, got %d\n", errno);
+    ok(!memcmp(buffer, "\0007654321", 8),
+       "Expected the output buffer to be null terminated with truncated output\n");
+
+    memset(buffer, 'X', sizeof(buffer));
+    errno = EBADF;
+    ret = p_itoa_s(-12345678, buffer, 9, 10);
+    ok(ret == ERANGE, "Expected _itoa_s to return ERANGE, got %d\n", ret);
+    ok(errno == ERANGE, "Expected errno to be ERANGE, got %d\n", errno);
+    ok(!memcmp(buffer, "\00087654321", 9),
+       "Expected the output buffer to be null terminated with truncated output\n");
+
+    ret = p_itoa_s(12345678, buffer, 9, 10);
+    ok(ret == 0, "Expected _itoa_s to return 0, got %d\n", ret);
+    ok(!strcmp(buffer, "12345678"),
+       "Expected output buffer string to be \"12345678\", got \"%s\"\n",
+       buffer);
+
+    ret = p_itoa_s(43690, buffer, sizeof(buffer), 2);
+    ok(ret == 0, "Expected _itoa_s to return 0, got %d\n", ret);
+    ok(!strcmp(buffer, "1010101010101010"),
+       "Expected output buffer string to be \"1010101010101010\", got \"%s\"\n",
+       buffer);
+
+    ret = p_itoa_s(1092009, buffer, sizeof(buffer), 36);
+    ok(ret == 0, "Expected _itoa_s to return 0, got %d\n", ret);
+    ok(!strcmp(buffer, "nell"),
+       "Expected output buffer string to be \"nell\", got \"%s\"\n",
+       buffer);
+
+    ret = p_itoa_s(5704, buffer, sizeof(buffer), 18);
+    ok(ret == 0, "Expected _itoa_s to return 0, got %d\n", ret);
+    ok(!strcmp(buffer, "hag"),
+       "Expected output buffer string to be \"hag\", got \"%s\"\n",
+       buffer);
+
+    ret = p_itoa_s(-12345678, buffer, sizeof(buffer), 10);
+    ok(ret == 0, "Expected _itoa_s to return 0, got %d\n", ret);
+    ok(!strcmp(buffer, "-12345678"),
+       "Expected output buffer string to be \"-12345678\", got \"%s\"\n",
+       buffer);
+    if (p_set_invalid_parameter_handler)
+        ok(p_set_invalid_parameter_handler(NULL) == test_invalid_parameter_handler,
+                "Cannot reset invalid parameter handler\n");
+}
+
+static void test__strlwr_s(void)
+{
+    errno_t ret;
+    char buffer[20];
+
+    if (!p_strlwr_s)
+    {
+        win_skip("Skipping _strlwr_s tests\n");
+        return;
+    }
+
+    errno = EBADF;
+    ret = p_strlwr_s(NULL, 0);
+    ok(ret == EINVAL, "Expected _strlwr_s to return EINVAL, got %d\n", ret);
+    ok(errno == EINVAL, "Expected errno to be EINVAL, got %d\n", errno);
+
+    errno = EBADF;
+    ret = p_strlwr_s(NULL, sizeof(buffer));
+    ok(ret == EINVAL, "Expected _strlwr_s to return EINVAL, got %d\n", ret);
+    ok(errno == EINVAL, "Expected errno to be EINVAL, got %d\n", errno);
+
+    errno = EBADF;
+    ret = p_strlwr_s(buffer, 0);
+    ok(ret == EINVAL, "Expected _strlwr_s to return EINVAL, got %d\n", ret);
+    ok(errno == EINVAL, "Expected errno to be EINVAL, got %d\n", errno);
+
+    strcpy(buffer, "GoRrIsTeR");
+    errno = EBADF;
+    ret = p_strlwr_s(buffer, 5);
+    ok(ret == EINVAL, "Expected _strlwr_s to return EINVAL, got %d\n", ret);
+    ok(errno == EINVAL, "Expected errno to be EINVAL, got %d\n", errno);
+    ok(!memcmp(buffer, "\0oRrIsTeR", sizeof("\0oRrIsTeR")),
+       "Expected the output buffer to be \"gorrIsTeR\"\n");
+
+    strcpy(buffer, "GoRrIsTeR");
+    errno = EBADF;
+    ret = p_strlwr_s(buffer, sizeof("GoRrIsTeR") - 1);
+    ok(ret == EINVAL, "Expected _strlwr_s to return EINVAL, got %d\n", ret);
+    ok(errno == EINVAL, "Expected errno to be EINVAL, got %d\n", errno);
+    ok(!memcmp(buffer, "\0oRrIsTeR", sizeof("\0oRrIsTeR")),
+       "Expected the output buffer to be \"gorrIsTeR\"\n");
+
+    strcpy(buffer, "GoRrIsTeR");
+    ret = p_strlwr_s(buffer, sizeof("GoRrIsTeR"));
+    ok(ret == 0, "Expected _strlwr_s to return 0, got %d\n", ret);
+    ok(!strcmp(buffer, "gorrister"),
+       "Expected the output buffer to be \"gorrister\", got \"%s\"\n",
+       buffer);
+
+    memcpy(buffer, "GoRrIsTeR\0ELLEN", sizeof("GoRrIsTeR\0ELLEN"));
+    ret = p_strlwr_s(buffer, sizeof(buffer));
+    ok(ret == 0, "Expected _strlwr_s to return 0, got %d\n", ret);
+    ok(!memcmp(buffer, "gorrister\0ELLEN", sizeof("gorrister\0ELLEN")),
+       "Expected the output buffer to be \"gorrister\\0ELLEN\", got \"%s\"\n",
+       buffer);
+}
+
+static void test_wcsncat_s(void)
+{
+    static wchar_t abcW[] = {'a','b','c',0};
+    int ret;
+    wchar_t dst[4];
+    wchar_t src[4];
+
+    if (!p_wcsncat_s)
+    {
+        win_skip("skipping wcsncat_s tests\n");
+        return;
+    }
+
+    if (p_set_invalid_parameter_handler)
+        ok(p_set_invalid_parameter_handler(test_invalid_parameter_handler) == NULL,
+                "Invalid parameter handler was already set\n");
+
+    memcpy(src, abcW, sizeof(abcW));
+    dst[0] = 0;
+    ret = p_wcsncat_s(NULL, 4, src, 4);
+    ok(ret == EINVAL, "err = %d\n", ret);
+    ret = p_wcsncat_s(dst, 0, src, 4);
+    ok(ret == EINVAL, "err = %d\n", ret);
+    ret = p_wcsncat_s(dst, 0, src, _TRUNCATE);
+    ok(ret == EINVAL, "err = %d\n", ret);
+    ret = p_wcsncat_s(dst, 4, NULL, 0);
+    ok(ret == 0, "err = %d\n", ret);
+
+    dst[0] = 0;
+    ret = p_wcsncat_s(dst, 2, src, 4);
+    ok(ret == ERANGE, "err = %d\n", ret);
+
+    dst[0] = 0;
+    ret = p_wcsncat_s(dst, 2, src, _TRUNCATE);
+    ok(ret == STRUNCATE, "err = %d\n", ret);
+    ok(dst[0] == 'a' && dst[1] == 0, "dst is %s\n", wine_dbgstr_w(dst));
+
+    memcpy(dst, abcW, sizeof(abcW));
+    dst[3] = 'd';
+    ret = p_wcsncat_s(dst, 4, src, 4);
+    ok(ret == EINVAL, "err = %d\n", ret);
+
+    if (p_set_invalid_parameter_handler)
+        ok(p_set_invalid_parameter_handler(NULL) == test_invalid_parameter_handler,
+                "Cannot reset invalid parameter handler\n");
+}
+
+static void test__mbsnbcat_s(void)
+{
+    unsigned char dest[16];
+    const unsigned char first[] = "dinosaur";
+    const unsigned char second[] = "duck";
+    int ret;
+
+    if (!p_mbsnbcat_s)
+    {
+        win_skip("Skipping _mbsnbcat_s tests\n");
+        return;
+    }
+
+    /* Test invalid arguments. */
+    ret = p_mbsnbcat_s(NULL, 0, NULL, 0);
+    ok(ret == 0, "Expected _mbsnbcat_s to return 0, got %d\n", ret);
+
+    errno = EBADF;
+    ret = p_mbsnbcat_s(NULL, 10, NULL, 0);
+    ok(ret == EINVAL, "Expected _mbsnbcat_s to return EINVAL, got %d\n", ret);
+    ok(errno == EINVAL, "Expected errno to be EINVAL, got %d\n", errno);
+
+    errno = EBADF;
+    ret = p_mbsnbcat_s(NULL, 0, NULL, 10);
+    ok(ret == EINVAL, "Expected _mbsnbcat_s to return EINVAL, got %d\n", ret);
+    ok(errno == EINVAL, "Expected errno to be EINVAL, got %d\n", errno);
+
+    memset(dest, 'X', sizeof(dest));
+    errno = EBADF;
+    ret = p_mbsnbcat_s(dest, 0, NULL, 0);
+    ok(ret == EINVAL, "Expected _mbsnbcat_s to return EINVAL, got %d\n", ret);
+    ok(errno == EINVAL, "Expected errno to be EINVAL, got %d\n", errno);
+    ok(dest[0] == 'X', "Expected the output buffer to be untouched\n");
+
+    memset(dest, 'X', sizeof(dest));
+    errno = EBADF;
+    ret = p_mbsnbcat_s(dest, 0, second, 0);
+    ok(ret == EINVAL, "Expected _mbsnbcat_s to return EINVAL, got %d\n", ret);
+    ok(errno == EINVAL, "Expected errno to be EINVAL, got %d\n", errno);
+    ok(dest[0] == 'X', "Expected the output buffer to be untouched\n");
+
+    memset(dest, 'X', sizeof(dest));
+    errno = EBADF;
+    ret = p_mbsnbcat_s(dest, sizeof(dest), NULL, 0);
+    ok(ret == EINVAL, "Expected _mbsnbcat_s to return EINVAL, got %d\n", ret);
+    ok(errno == EINVAL, "Expected errno to be EINVAL, got %d\n", errno);
+    ok(dest[0] == '\0', "Expected the output buffer to be null terminated\n");
+
+    memset(dest, 'X', sizeof(dest));
+    errno = EBADF;
+    ret = p_mbsnbcat_s(dest, sizeof(dest), NULL, 10);
+    ok(ret == EINVAL, "Expected _mbsnbcat_s to return EINVAL, got %d\n", ret);
+    ok(errno == EINVAL, "Expected errno to be EINVAL, got %d\n", errno);
+    ok(dest[0] == '\0', "Expected the output buffer to be null terminated\n");
+
+    memset(dest, 'X', sizeof(dest));
+    dest[0] = '\0';
+    ret = p_mbsnbcat_s(dest, sizeof(dest), second, sizeof(second));
+    ok(ret == 0, "Expected _mbsnbcat_s to return 0, got %d\n", ret);
+    ok(!memcmp(dest, second, sizeof(second)),
+       "Expected the output buffer string to be \"duck\"\n");
+
+    /* Test source truncation behavior. */
+    memset(dest, 'X', sizeof(dest));
+    memcpy(dest, first, sizeof(first));
+    ret = p_mbsnbcat_s(dest, sizeof(dest), second, 0);
+    ok(ret == 0, "Expected _mbsnbcat_s to return 0, got %d\n", ret);
+    ok(!memcmp(dest, first, sizeof(first)),
+       "Expected the output buffer string to be \"dinosaur\"\n");
+
+    memset(dest, 'X', sizeof(dest));
+    memcpy(dest, first, sizeof(first));
+    ret = p_mbsnbcat_s(dest, sizeof(dest), second, sizeof(second));
+    ok(ret == 0, "Expected _mbsnbcat_s to return 0, got %d\n", ret);
+    ok(!memcmp(dest, "dinosaurduck", sizeof("dinosaurduck")),
+       "Expected the output buffer string to be \"dinosaurduck\"\n");
+
+    memset(dest, 'X', sizeof(dest));
+    memcpy(dest, first, sizeof(first));
+    ret = p_mbsnbcat_s(dest, sizeof(dest), second, sizeof(second) + 1);
+    ok(ret == 0, "Expected _mbsnbcat_s to return 0, got %d\n", ret);
+    ok(!memcmp(dest, "dinosaurduck", sizeof("dinosaurduck")),
+       "Expected the output buffer string to be \"dinosaurduck\"\n");
+
+    memset(dest, 'X', sizeof(dest));
+    memcpy(dest, first, sizeof(first));
+    ret = p_mbsnbcat_s(dest, sizeof(dest), second, sizeof(second) - 1);
+    ok(ret == 0, "Expected _mbsnbcat_s to return 0, got %d\n", ret);
+    ok(!memcmp(dest, "dinosaurduck", sizeof("dinosaurduck")),
+       "Expected the output buffer string to be \"dinosaurduck\"\n");
+
+    memset(dest, 'X', sizeof(dest));
+    memcpy(dest, first, sizeof(first));
+    ret = p_mbsnbcat_s(dest, sizeof(dest), second, sizeof(second) - 2);
+    ok(ret == 0, "Expected _mbsnbcat_s to return 0, got %d\n", ret);
+    ok(!memcmp(dest, "dinosaurduc", sizeof("dinosaurduc")),
+       "Expected the output buffer string to be \"dinosaurduc\"\n");
+
+    /* Test destination truncation behavior. */
+    memset(dest, 'X', sizeof(dest));
+    memcpy(dest, first, sizeof(first));
+    errno = EBADF;
+    ret = p_mbsnbcat_s(dest, sizeof(first) - 1, second, sizeof(second));
+    ok(ret == EINVAL, "Expected _mbsnbcat_s to return EINVAL, got %d\n", ret);
+    ok(errno == EINVAL, "Expected errno to be EINVAL, got %d\n", errno);
+    ok(!memcmp(dest, "\0inosaur", sizeof("\0inosaur") - 1),
+       "Expected the output buffer string to be \"\\0inosaur\" without ending null terminator\n");
+
+    memset(dest, 'X', sizeof(dest));
+    memcpy(dest, first, sizeof(first));
+    errno = EBADF;
+    ret = p_mbsnbcat_s(dest, sizeof(first), second, sizeof(second));
+    ok(ret == ERANGE, "Expected _mbsnbcat_s to return ERANGE, got %d\n", ret);
+    ok(errno == ERANGE, "Expected errno to be ERANGE, got %d\n", errno);
+    ok(!memcmp(dest, "\0inosaurd", sizeof("\0inosaurd") - 1),
+       "Expected the output buffer string to be \"\\0inosaurd\" without ending null terminator\n");
+
+    memset(dest, 'X', sizeof(dest));
+    memcpy(dest, first, sizeof(first));
+    errno = EBADF;
+    ret = p_mbsnbcat_s(dest, sizeof(first) + 1, second, sizeof(second));
+    ok(ret == ERANGE, "Expected _mbsnbcat_s to return ERANGE, got %d\n", ret);
+    ok(errno == ERANGE, "Expected errno to be ERANGE, got %d\n", errno);
+    ok(!memcmp(dest, "\0inosaurdu", sizeof("\0inosaurdu") - 1),
+       "Expected the output buffer string to be \"\\0inosaurdu\" without ending null terminator\n");
+}
+
+static void test__ultoa_s(void)
+{
+    errno_t ret;
+    char buffer[33];
+
+    if (!p_ultoa_s)
+    {
+        win_skip("Skipping _ultoa_s tests\n");
+        return;
+    }
+
+    errno = EBADF;
+    ret = p_ultoa_s(0, NULL, 0, 0);
+    ok(ret == EINVAL, "Expected _ultoa_s to return EINVAL, got %d\n", ret);
+    ok(errno == EINVAL, "Expected errno to be EINVAL, got %d\n", errno);
+
+    memset(buffer, 'X', sizeof(buffer));
+    errno = EBADF;
+    ret = p_ultoa_s(0, buffer, 0, 0);
+    ok(ret == EINVAL, "Expected _ultoa_s to return EINVAL, got %d\n", ret);
+    ok(errno == EINVAL, "Expected errno to be EINVAL, got %d\n", errno);
+    ok(buffer[0] == 'X', "Expected the output buffer to be untouched\n");
+
+    memset(buffer, 'X', sizeof(buffer));
+    errno = EBADF;
+    ret = p_ultoa_s(0, buffer, sizeof(buffer), 0);
+    ok(ret == EINVAL, "Expected _ultoa_s to return EINVAL, got %d\n", ret);
+    ok(errno == EINVAL, "Expected errno to be EINVAL, got %d\n", errno);
+    ok(buffer[0] == '\0', "Expected the output buffer to be null terminated\n");
+
+    memset(buffer, 'X', sizeof(buffer));
+    errno = EBADF;
+    ret = p_ultoa_s(0, buffer, sizeof(buffer), 64);
+    ok(ret == EINVAL, "Expected _ultoa_s to return EINVAL, got %d\n", ret);
+    ok(errno == EINVAL, "Expected errno to be EINVAL, got %d\n", errno);
+    ok(buffer[0] == '\0', "Expected the output buffer to be null terminated\n");
+
+    memset(buffer, 'X', sizeof(buffer));
+    errno = EBADF;
+    ret = p_ultoa_s(12345678, buffer, 4, 10);
+    ok(ret == ERANGE, "Expected _ultoa_s to return ERANGE, got %d\n", ret);
+    ok(errno == ERANGE, "Expected errno to be ERANGE, got %d\n", errno);
+    ok(!memcmp(buffer, "\000765", 4),
+       "Expected the output buffer to be null terminated with truncated output\n");
+
+    memset(buffer, 'X', sizeof(buffer));
+    errno = EBADF;
+    ret = p_ultoa_s(12345678, buffer, 8, 10);
+    ok(ret == ERANGE, "Expected _ultoa_s to return ERANGE, got %d\n", ret);
+    ok(errno == ERANGE, "Expected errno to be ERANGE, got %d\n", errno);
+    ok(!memcmp(buffer, "\0007654321", 8),
+       "Expected the output buffer to be null terminated with truncated output\n");
+
+    ret = p_ultoa_s(12345678, buffer, 9, 10);
+    ok(ret == 0, "Expected _ultoa_s to return 0, got %d\n", ret);
+    ok(!strcmp(buffer, "12345678"),
+       "Expected output buffer string to be \"12345678\", got \"%s\"\n",
+       buffer);
+
+    ret = p_ultoa_s(43690, buffer, sizeof(buffer), 2);
+    ok(ret == 0, "Expected _ultoa_s to return 0, got %d\n", ret);
+    ok(!strcmp(buffer, "1010101010101010"),
+       "Expected output buffer string to be \"1010101010101010\", got \"%s\"\n",
+       buffer);
+
+    ret = p_ultoa_s(1092009, buffer, sizeof(buffer), 36);
+    ok(ret == 0, "Expected _ultoa_s to return 0, got %d\n", ret);
+    ok(!strcmp(buffer, "nell"),
+       "Expected output buffer string to be \"nell\", got \"%s\"\n",
+       buffer);
+
+    ret = p_ultoa_s(5704, buffer, sizeof(buffer), 18);
+    ok(ret == 0, "Expected _ultoa_s to return 0, got %d\n", ret);
+    ok(!strcmp(buffer, "hag"),
+       "Expected output buffer string to be \"hag\", got \"%s\"\n",
+       buffer);
+}
+
 START_TEST(string)
 {
     char mem[100];
@@ -1257,14 +1714,21 @@ START_TEST(string)
     SET(p__mb_cur_max,"__mb_cur_max");
     pstrcpy_s = (void *)GetProcAddress( hMsvcrt,"strcpy_s" );
     pstrcat_s = (void *)GetProcAddress( hMsvcrt,"strcat_s" );
+    p_mbsnbcat_s = (void *)GetProcAddress( hMsvcrt,"_mbsnbcat_s" );
     p_mbsnbcpy_s = (void *)GetProcAddress( hMsvcrt,"_mbsnbcpy_s" );
     p_wcscpy_s = (void *)GetProcAddress( hMsvcrt,"wcscpy_s" );
+    p_wcsncat_s = (void *)GetProcAddress( hMsvcrt,"wcsncat_s" );
     p_wcsupr_s = (void *)GetProcAddress( hMsvcrt,"_wcsupr_s" );
     p_strnlen = (void *)GetProcAddress( hMsvcrt,"strnlen" );
-    p_strtoi64 = (void *) GetProcAddress(hMsvcrt, "_strtoi64");
-    p_strtoui64 = (void *) GetProcAddress(hMsvcrt, "_strtoui64");
-    pmbstowcs_s = (void *) GetProcAddress(hMsvcrt, "mbstowcs_s");
-    pwcstombs_s = (void *) GetProcAddress(hMsvcrt, "wcstombs_s");
+    p_strtoi64 = (void *)GetProcAddress(hMsvcrt, "_strtoi64");
+    p_strtoui64 = (void *)GetProcAddress(hMsvcrt, "_strtoui64");
+    pmbstowcs_s = (void *)GetProcAddress(hMsvcrt, "mbstowcs_s");
+    pwcstombs_s = (void *)GetProcAddress(hMsvcrt, "wcstombs_s");
+    p_gcvt_s = (void *)GetProcAddress(hMsvcrt, "_gcvt_s");
+    p_itoa_s = (void *)GetProcAddress(hMsvcrt, "_itoa_s");
+    p_strlwr_s = (void *)GetProcAddress(hMsvcrt, "_strlwr_s");
+    p_ultoa_s = (void *)GetProcAddress(hMsvcrt, "_ultoa_s");
+    p_set_invalid_parameter_handler = (void *) GetProcAddress(hMsvcrt, "_set_invalid_parameter_handler");
 
     /* MSVCRT memcpy behaves like memmove for overlapping moves,
        MFC42 CString::Insert seems to rely on that behaviour */
@@ -1298,4 +1762,10 @@ START_TEST(string)
     test__strtoi64();
     test__strtod();
     test_mbstowcs();
+    test_gcvt();
+    test__itoa_s();
+    test__strlwr_s();
+    test_wcsncat_s();
+    test__mbsnbcat_s();
+    test__ultoa_s();
 }

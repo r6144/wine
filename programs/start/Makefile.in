@@ -1,8 +1,4 @@
 EXTRADEFS = -DWINE_NO_UNICODE_MACROS
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = start.exe
 APPMODE   = -mconsole -municode
 IMPORTS   = shell32 user32
@@ -27,6 +23,8 @@ RC_SRCS = \
 	Ro.rc \
 	Ru.rc \
 	Si.rc \
-	Tr.rc
+	Sv.rc \
+	Tr.rc \
+	Uk.rc
 
 @MAKE_PROG_RULES@

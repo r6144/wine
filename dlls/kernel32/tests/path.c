@@ -310,11 +310,14 @@ static void test_InitPathA(CHAR *newdir, CHAR *curDrive, CHAR *otherDrive)
 {
   CHAR tmppath[MAX_PATH], /*path to TEMP */
        tmpstr[MAX_PATH],
-       tmpstr1[MAX_PATH];
+       tmpstr1[MAX_PATH],
+       invalid_dir[MAX_PATH];
+
   DWORD len,len1,drives;
   INT id;
   HANDLE hndl;
   BOOL bRes;
+  UINT unique;
 
   *curDrive = *otherDrive = NOT_A_VALID_DRIVE;
 
@@ -334,11 +337,7 @@ static void test_InitPathA(CHAR *newdir, CHAR *curDrive, CHAR *otherDrive)
   ok(len1==len+1 || broken(len1 == len), /* WinME */
      "GetTempPathA should return string length %d instead of %d\n",len+1,len1);
 
-/* Test GetTmpFileNameA
-   The only test we do here is whether GetTempFileNameA passes or not.
-   We do not thoroughly test this function yet (specifically, whether
-   it behaves correctly when 'unique' is non zero)
-*/
+/* Test GetTmpFileNameA */
   ok((id=GetTempFileNameA(tmppath,"path",0,newdir)),"GetTempFileNameA failed\n");
   sprintf(tmpstr,"pat%.4x.tmp",id & 0xffff);
   sprintf(tmpstr1,"pat%x.tmp",id & 0xffff);
@@ -359,6 +358,22 @@ static void test_InitPathA(CHAR *newdir, CHAR *curDrive, CHAR *otherDrive)
        "GetTempFileNameA returned '%s' which doesn't match '%s' or '%s'. id=%x\n",
        newdir,tmpstr,tmpstr1,id);
     ok(DeleteFileA(newdir),"Couldn't delete the temporary file we just created\n");
+  }
+
+  for(unique=0;unique<3;unique++) {
+    /* Nonexistent path */
+    sprintf(invalid_dir, "%s\\%s",tmppath,"non_existent_dir_1jwj3y32nb3");
+    SetLastError(0xdeadbeef);
+    ok(!GetTempFileNameA(invalid_dir,"tfn",unique,newdir),"GetTempFileNameA should have failed\n");
+    ok(GetLastError()==ERROR_DIRECTORY || broken(GetLastError()==ERROR_PATH_NOT_FOUND)/*win98*/,
+    "got %d, expected ERROR_DIRECTORY\n", GetLastError());
+
+    /* Check return value for unique !=0 */
+    if(unique) {
+      ok((GetTempFileNameA(tmppath,"tfn",unique,newdir) == unique),"GetTempFileNameA unexpectedly failed\n");
+      /* if unique != 0, the actual temp files are not created: */
+      ok(!DeleteFileA(newdir) && GetLastError() == ERROR_FILE_NOT_FOUND,"Deleted a file that shouldn't exist!\n");
+    }
   }
 
 /* Find first valid drive letter that is neither newdir[0] nor curDrive */
@@ -538,6 +553,28 @@ static void test_CleanupPathA(CHAR *origdir, CHAR *curdir)
   ok(RemoveDirectoryA(tmpstr),"RemoveDirectoryA failed\n");
   ok(SetCurrentDirectoryA(origdir),"SetCurrentDirectoryA failed\n");
   ok(RemoveDirectoryA(curdir),"RemoveDirectoryA failed\n");
+}
+
+/* test that short path name functions work regardless of case */
+static void test_ShortPathCase(const char *tmpdir, const char *dirname,
+                               const char *filename)
+{
+    char buf[MAX_PATH], shortbuf[MAX_PATH];
+    HANDLE hndl;
+    int i;
+
+    snprintf(buf,sizeof(buf),"%s\\%s\\%s",tmpdir,dirname,filename);
+    GetShortPathNameA(buf,shortbuf,sizeof(shortbuf));
+    hndl = CreateFileA(shortbuf,GENERIC_READ|GENERIC_WRITE,0,NULL,OPEN_EXISTING,0,NULL);
+    ok(hndl!=INVALID_HANDLE_VALUE,"CreateFileA failed (%d)\n",GetLastError());
+    CloseHandle(hndl);
+    /* Now for the real test */
+    for(i=0;i<strlen(shortbuf);i++)
+        if (i % 2)
+            shortbuf[i] = tolower(shortbuf[i]);
+    hndl = CreateFileA(shortbuf,GENERIC_READ|GENERIC_WRITE,0,NULL,OPEN_EXISTING,0,NULL);
+    ok(hndl!=INVALID_HANDLE_VALUE,"CreateFileA failed (%d)\n",GetLastError());
+    CloseHandle(hndl);
 }
 
 /* This routine will test Get(Full|Short|Long)PathNameA */
@@ -863,6 +900,10 @@ static void test_PathNameA(CHAR *curdir, CHAR curDrive, CHAR otherDrive)
     sprintf(tmpstr,"Long File %c",funny_chars[i]);
     test_FunnyChars(curdir,curdir_short,tmpstr,valid,tmpstr1);
   }
+  /* Now try it on mixed case short names */
+  test_ShortPathCase(curdir,SHORTDIR,LONGFILE);
+  test_ShortPathCase(curdir,LONGDIR,SHORTFILE);
+  test_ShortPathCase(curdir,LONGDIR,LONGFILE);
 }
 
 static void test_GetTempPathA(char* tmp_dir)

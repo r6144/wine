@@ -33,7 +33,6 @@ static HRESULT WINAPI IWineD3DClipperImpl_QueryInterface(IWineD3DClipper *iface,
     TRACE("iface %p, riid %s, object %p.\n", iface, debugstr_guid(riid), object);
 
     if (IsEqualGUID(riid, &IID_IWineD3DClipper)
-            || IsEqualGUID(riid, &IID_IWineD3DBase)
             || IsEqualGUID(riid, &IID_IUnknown))
     {
         IUnknown_AddRef(iface);
@@ -64,32 +63,19 @@ static ULONG WINAPI IWineD3DClipperImpl_Release(IWineD3DClipper *iface)
 
     TRACE("(%p)->() decrementing from %u.\n", This, ref + 1);
 
-    if (ref == 0)
-    {
-        HeapFree(GetProcessHeap(), 0, This);
-        return 0;
-    }
-    else return ref;
+    if (!ref) HeapFree(GetProcessHeap(), 0, This);
+
+    return ref;
 }
 
-static HRESULT WINAPI IWineD3DClipperImpl_GetParent(IWineD3DClipper *iface, IUnknown **Parent)
-{
-    IWineD3DClipperImpl *This = (IWineD3DClipperImpl *)iface;
-    TRACE("(%p)->(%p)\n", This, Parent);
-
-    *Parent = This->Parent;
-    IUnknown_AddRef(*Parent);
-    return WINED3D_OK;
-}
-
-static HRESULT WINAPI IWineD3DClipperImpl_SetHwnd(IWineD3DClipper *iface, DWORD Flags, HWND hWnd)
+static HRESULT WINAPI IWineD3DClipperImpl_SetHwnd(IWineD3DClipper *iface, DWORD flags, HWND hWnd)
 {
     IWineD3DClipperImpl *This = (IWineD3DClipperImpl *)iface;
 
-    TRACE("(%p)->(0x%08x,%p)\n", This, Flags, hWnd);
-    if( Flags )
+    TRACE("iface %p, flags %#x, window %p.\n", iface, flags, hWnd);
+    if (flags)
     {
-        FIXME("Flags = 0x%08x, not supported.\n",Flags);
+        FIXME("flags %#x, not supported.\n", flags);
         return WINED3DERR_INVALIDCALL;
     }
 
@@ -142,12 +128,12 @@ static HRESULT WINAPI IWineD3DClipperImpl_GetClipList(IWineD3DClipper *iface, co
     }
 }
 
-static HRESULT WINAPI IWineD3DClipperImpl_SetClipList(IWineD3DClipper *iface, const RGNDATA *rgn, DWORD Flags)
+static HRESULT WINAPI IWineD3DClipperImpl_SetClipList(IWineD3DClipper *iface, const RGNDATA *rgn, DWORD flags)
 {
     static int warned = 0;
 
-    if (warned++ < 10 || rgn == NULL)
-        FIXME("iface %p, region %p, flags %#x stub!\n", iface, rgn, Flags);
+    if (warned++ < 10 || !rgn)
+        FIXME("iface %p, region %p, flags %#x stub!\n", iface, rgn, flags);
 
     return WINED3D_OK;
 }
@@ -176,7 +162,6 @@ static const IWineD3DClipperVtbl IWineD3DClipper_Vtbl =
     IWineD3DClipperImpl_QueryInterface,
     IWineD3DClipperImpl_AddRef,
     IWineD3DClipperImpl_Release,
-    IWineD3DClipperImpl_GetParent,
     IWineD3DClipperImpl_GetClipList,
     IWineD3DClipperImpl_GetHwnd,
     IWineD3DClipperImpl_IsClipListChanged,
@@ -184,11 +169,12 @@ static const IWineD3DClipperVtbl IWineD3DClipper_Vtbl =
     IWineD3DClipperImpl_SetHwnd
 };
 
-IWineD3DClipper* WINAPI WineDirect3DCreateClipper(IUnknown *Parent)
+IWineD3DClipper * WINAPI WineDirect3DCreateClipper(void)
 {
     IWineD3DClipperImpl *obj;
 
-    TRACE("Creating clipper, parent %p\n", Parent);
+    TRACE("\n");
+
     obj = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*obj));
     if(!obj)
     {
@@ -197,7 +183,6 @@ IWineD3DClipper* WINAPI WineDirect3DCreateClipper(IUnknown *Parent)
     }
 
     obj->lpVtbl = &IWineD3DClipper_Vtbl;
-    obj->Parent = Parent;
 
     IWineD3DClipper_AddRef((IWineD3DClipper *)obj);
     return (IWineD3DClipper *) obj;

@@ -95,18 +95,20 @@ NTSTATUS WINAPI NtQueryObject(IN HANDLE handle,
             if (!(status = server_get_unix_name( handle, &unix_name )))
             {
                 UNICODE_STRING nt_name;
-                NTSTATUS status;
 
                 if (!(status = wine_unix_to_nt_file_name( &unix_name, &nt_name )))
                 {
-                    if (sizeof(*p) + nt_name.MaximumLength <= len)
+                    if (len < sizeof(*p))
+                        status = STATUS_INFO_LENGTH_MISMATCH;
+                    else if (len < sizeof(*p) + nt_name.MaximumLength)
+                        status = STATUS_BUFFER_OVERFLOW;
+                    else
                     {
                         p->Name.Buffer = (WCHAR *)(p + 1);
                         p->Name.Length = nt_name.Length;
                         p->Name.MaximumLength = nt_name.MaximumLength;
                         memcpy( p->Name.Buffer, nt_name.Buffer, nt_name.MaximumLength );
                     }
-                    else status = STATUS_INFO_LENGTH_MISMATCH;
                     if (used_len) *used_len = sizeof(*p) + nt_name.MaximumLength;
                     RtlFreeUnicodeString( &nt_name );
                 }
@@ -346,6 +348,22 @@ NTSTATUS WINAPI NtDuplicateObject( HANDLE source_process, HANDLE source,
     return ret;
 }
 
+/* Everquest 2 / Pirates of the Burning Sea hooks NtClose, so we need a wrapper */
+NTSTATUS close_handle( HANDLE handle )
+{
+    NTSTATUS ret;
+    int fd = server_remove_fd_from_cache( handle );
+
+    SERVER_START_REQ( close_handle )
+    {
+        req->handle = wine_server_obj_handle( handle );
+        ret = wine_server_call( req );
+    }
+    SERVER_END_REQ;
+    if (fd != -1) close( fd );
+    return ret;
+}
+
 /**************************************************************************
  *                 NtClose				[NTDLL.@]
  *
@@ -360,17 +378,7 @@ NTSTATUS WINAPI NtDuplicateObject( HANDLE source_process, HANDLE source,
  */
 NTSTATUS WINAPI NtClose( HANDLE Handle )
 {
-    NTSTATUS ret;
-    int fd = server_remove_fd_from_cache( Handle );
-
-    SERVER_START_REQ( close_handle )
-    {
-        req->handle = wine_server_obj_handle( Handle );
-        ret = wine_server_call( req );
-    }
-    SERVER_END_REQ;
-    if (fd != -1) close( fd );
-    return ret;
+    return close_handle( Handle );
 }
 
 /*

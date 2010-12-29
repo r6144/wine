@@ -1,7 +1,3 @@
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = msi.dll
 IMPORTLIB = msi
 IMPORTS   = uuid urlmon wininet comctl32 shell32 shlwapi cabinet oleaut32 ole32 version user32 gdi32 advapi32
@@ -11,6 +7,7 @@ C_SRCS = \
 	action.c \
 	alter.c \
 	appsearch.c \
+	assembly.c \
 	automation.c \
 	classes.c \
 	create.c \
@@ -37,7 +34,6 @@ C_SRCS = \
 	preview.c \
 	record.c \
 	registry.c \
-	regsvr.c \
 	script.c \
 	select.c \
 	source.c \
@@ -53,6 +49,7 @@ C_SRCS = \
 
 IDL_H_SRCS = msiserver.idl
 IDL_I_SRCS = msiserver.idl
+IDL_R_SRCS = msiserver.idl
 IDL_TLB_SRCS = msiserver.idl
 
 BISON_SRCS = \

@@ -261,17 +261,20 @@ static void create_environment_registry_keys( void )
     static const WCHAR NumProcW[]  = {'N','U','M','B','E','R','_','O','F','_','P','R','O','C','E','S','S','O','R','S',0};
     static const WCHAR ProcArchW[] = {'P','R','O','C','E','S','S','O','R','_','A','R','C','H','I','T','E','C','T','U','R','E',0};
     static const WCHAR x86W[]      = {'x','8','6',0};
+    static const WCHAR IA64W[]     = {'I','A','6','4',0};
+    static const WCHAR AMD64W[]    = {'A','M','D','6','4',0};
     static const WCHAR ProcIdW[]   = {'P','R','O','C','E','S','S','O','R','_','I','D','E','N','T','I','F','I','E','R',0};
     static const WCHAR ProcLvlW[]  = {'P','R','O','C','E','S','S','O','R','_','L','E','V','E','L',0};
     static const WCHAR ProcRevW[]  = {'P','R','O','C','E','S','S','O','R','_','R','E','V','I','S','I','O','N',0};
     static const WCHAR PercentDW[] = {'%','d',0};
     static const WCHAR Percent04XW[] = {'%','0','4','x',0};
-    static const WCHAR IntelCpuDescrW[]  = {'x','8','6',' ','F','a','m','i','l','y',' ','%','d',' ','M','o','d','e','l',' ','%','d',
+    static const WCHAR IntelCpuDescrW[]  = {'%','s',' ','F','a','m','i','l','y',' ','%','d',' ','M','o','d','e','l',' ','%','d',
                                             ' ','S','t','e','p','p','i','n','g',' ','%','d',',',' ','G','e','n','u','i','n','e','I','n','t','e','l',0};
 
     HKEY env_key;
     SYSTEM_CPU_INFORMATION sci;
     WCHAR buffer[60];
+    const WCHAR *arch;
 
     NtQuerySystemInformation( SystemCpuInformation, &sci, sizeof(sci), NULL );
 
@@ -280,11 +283,17 @@ static void create_environment_registry_keys( void )
     sprintfW( buffer, PercentDW, NtCurrentTeb()->Peb->NumberOfProcessors );
     set_reg_value( env_key, NumProcW, buffer );
 
-    /* TODO: currently hardcoded x86, add different processors */
-    set_reg_value( env_key, ProcArchW, x86W );
+    switch(sci.Architecture)
+    {
+    case PROCESSOR_ARCHITECTURE_AMD64: arch = AMD64W; break;
+    case PROCESSOR_ARCHITECTURE_IA64:  arch = IA64W; break;
+    default:
+    case PROCESSOR_ARCHITECTURE_INTEL: arch = x86W; break;
+    }
+    set_reg_value( env_key, ProcArchW, arch );
 
     /* TODO: currently hardcoded Intel, add different processors */
-    sprintfW( buffer, IntelCpuDescrW, sci.Level, HIBYTE(sci.Revision), LOBYTE(sci.Revision) );
+    sprintfW( buffer, IntelCpuDescrW, arch, sci.Level, HIBYTE(sci.Revision), LOBYTE(sci.Revision) );
     set_reg_value( env_key, ProcIdW, buffer );
 
     sprintfW( buffer, PercentDW, sci.Level );
@@ -309,6 +318,7 @@ static void create_volatile_environment_registry_key(void)
     static const WCHAR LogonServerW[] = {'L','O','G','O','N','S','E','R','V','E','R',0};
     static const WCHAR SessionNameW[] = {'S','E','S','S','I','O','N','N','A','M','E',0};
     static const WCHAR UserNameW[] = {'U','S','E','R','N','A','M','E',0};
+    static const WCHAR UserDomainW[] = {'U','S','E','R','D','O','M','A','I','N',0};
     static const WCHAR UserProfileW[] = {'U','S','E','R','P','R','O','F','I','L','E',0};
     static const WCHAR ConsoleW[] = {'C','o','n','s','o','l','e',0};
     static const WCHAR EmptyW[] = {0};
@@ -338,7 +348,7 @@ static void create_volatile_environment_registry_key(void)
         set_reg_value( hkey, HomeDriveW, path );
     }
 
-    size = sizeof(path);
+    size = sizeof(path)/sizeof(path[0]);
     if (GetUserNameW( path, &size )) set_reg_value( hkey, UserNameW, path );
 
     set_reg_value( hkey, HomeShareW, EmptyW );
@@ -347,9 +357,10 @@ static void create_volatile_environment_registry_key(void)
     if (SUCCEEDED(hr))
         set_reg_value( hkey, LocalAppDataW, path );
 
-    size = sizeof(computername) - 2;
+    size = (sizeof(computername)/sizeof(WCHAR)) - 2;
     if (GetComputerNameW(&computername[2], &size))
     {
+        set_reg_value( hkey, UserDomainW, &computername[2] );
         computername[0] = computername[1] = '\\';
         set_reg_value( hkey, LogonServerW, computername );
     }
@@ -630,7 +641,7 @@ static BOOL ProcessRunKeys( HKEY hkRoot, LPCWSTR szKeyName, BOOL bDelete,
         'M','i','c','r','o','s','o','f','t','\\','W','i','n','d','o','w','s','\\',
         'C','u','r','r','e','n','t','V','e','r','s','i','o','n',0};
     HKEY hkWin, hkRun;
-    DWORD res;
+    DWORD res, dispos;
     DWORD i, nMaxCmdLine=0, nMaxValue=0;
     WCHAR *szCmdLine=NULL;
     WCHAR *szValue=NULL;
@@ -640,15 +651,17 @@ static BOOL ProcessRunKeys( HKEY hkRoot, LPCWSTR szKeyName, BOOL bDelete,
     else
         WINE_TRACE("processing %s entries under HKCU\n",wine_dbgstr_w(szKeyName) );
 
-    if (RegOpenKeyExW( hkRoot, WINKEY_NAME, 0, KEY_READ, &hkWin ) != ERROR_SUCCESS)
+    if (RegCreateKeyExW( hkRoot, WINKEY_NAME, 0, NULL, 0, KEY_READ, NULL, &hkWin, NULL ) != ERROR_SUCCESS)
         return TRUE;
 
-    if (RegOpenKeyExW( hkWin, szKeyName, 0, bDelete?KEY_ALL_ACCESS:KEY_READ, &hkRun ) != ERROR_SUCCESS)
+    if ((res = RegCreateKeyExW( hkWin, szKeyName, 0, NULL, 0, bDelete ? KEY_ALL_ACCESS : KEY_READ,
+                                NULL, &hkRun, &dispos ) != ERROR_SUCCESS))
     {
         RegCloseKey( hkWin );
         return TRUE;
     }
     RegCloseKey( hkWin );
+    if (dispos == REG_CREATED_NEW_KEY) goto end;
 
     if( (res=RegQueryInfoKeyW( hkRun, NULL, NULL, NULL, NULL, NULL, NULL, &i, &nMaxValue,
                     &nMaxCmdLine, NULL, NULL ))!=ERROR_SUCCESS )
@@ -1120,10 +1133,35 @@ int main( int argc, char *argv[] )
     int end_session = 0, force = 0, init = 0, kill = 0, restart = 0, shutdown = 0, update = 0;
     HANDLE event;
     SECURITY_ATTRIBUTES sa;
+    BOOL is_wow64;
 
     GetWindowsDirectoryW( windowsdir, MAX_PATH );
     if( !SetCurrentDirectoryW( windowsdir ) )
         WINE_ERR("Cannot set the dir to %s (%d)\n", wine_dbgstr_w(windowsdir), GetLastError() );
+
+    if (IsWow64Process( GetCurrentProcess(), &is_wow64 ) && is_wow64)
+    {
+        STARTUPINFOW si;
+        PROCESS_INFORMATION pi;
+        WCHAR filename[MAX_PATH];
+        void *redir;
+        DWORD exit_code;
+
+        memset( &si, 0, sizeof(si) );
+        si.cb = sizeof(si);
+        GetModuleFileNameW( 0, filename, MAX_PATH );
+
+        Wow64DisableWow64FsRedirection( &redir );
+        if (CreateProcessW( filename, GetCommandLineW(), NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi ))
+        {
+            WINE_TRACE( "restarting %s\n", wine_dbgstr_w(filename) );
+            WaitForSingleObject( pi.hProcess, INFINITE );
+            GetExitCodeProcess( pi.hProcess, &exit_code );
+            ExitProcess( exit_code );
+        }
+        else WINE_ERR( "failed to restart 64-bit %s, err %d\n", wine_dbgstr_w(filename), GetLastError() );
+        Wow64RevertWow64FsRedirection( redir );
+    }
 
     while ((optc = getopt_long(argc, argv, short_options, long_options, NULL )) != -1)
     {

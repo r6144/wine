@@ -1,7 +1,3 @@
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = jscript.dll
 IMPORTS   = oleaut32 ole32 user32 advapi32
 
@@ -23,6 +19,8 @@ RC_SRCS = \
 	jscript_Ro.rc \
 	jscript_Ru.rc \
 	jscript_Si.rc \
+	jscript_Sr.rc \
+	jscript_Sv.rc \
 	jscript_Uk.rc \
 	rsrc.rc
 
@@ -44,9 +42,12 @@ C_SRCS = \
 	number.c \
 	object.c \
 	regexp.c \
-	string.c
+	string.c \
+	vbarray.c
 
 IDL_TLB_SRCS = jsglobal.idl
+IDL_R_SRCS = jscript_classes.idl
+IDL_H_SRCS = jscript_classes.idl
 
 BISON_SRCS = \
 	parser.y

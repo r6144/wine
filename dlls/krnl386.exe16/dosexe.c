@@ -114,7 +114,7 @@ static WORD init_cs,init_ip,init_ss,init_sp;
 static HANDLE dosvm_thread, loop_thread;
 static DWORD dosvm_tid, loop_tid;
 
-static void MZ_Launch( LPCSTR cmdtail, int length );
+static DWORD MZ_Launch( LPCSTR cmdtail, int length );
 static BOOL MZ_InitTask(void);
 
 static void MZ_CreatePSP( LPVOID lpPSP, WORD env, WORD par )
@@ -433,8 +433,12 @@ void __wine_load_dos_exe( LPCSTR filename, LPCSTR cmdline )
         }
     }
 
-    if (MZ_DoLoadImage( hFile, filename, NULL, 0 )) 
-        MZ_Launch( dos_cmdtail, dos_length );
+    if (MZ_DoLoadImage( hFile, filename, NULL, 0 ))
+    {
+        DWORD err = MZ_Launch( dos_cmdtail, dos_length );
+        /* if we get back here it failed */
+        SetLastError( err );
+    }
 }
 
 /***********************************************************************
@@ -442,7 +446,7 @@ void __wine_load_dos_exe( LPCSTR filename, LPCSTR cmdline )
  *
  * this may only be called from existing DOS processes
  */
-BOOL MZ_Exec( CONTEXT86 *context, LPCSTR filename, BYTE func, LPVOID paramblk )
+BOOL MZ_Exec( CONTEXT *context, LPCSTR filename, BYTE func, LPVOID paramblk )
 {
   DWORD binType;
   STARTUPINFOA st;
@@ -633,23 +637,9 @@ static DWORD WINAPI MZ_DOSVM( LPVOID lpExtra )
   context.EFlags = V86_FLAG | VIF_MASK;
   DOSVM_SetTimer(0x10000);
   ret = DOSVM_Enter( &context );
-  if (ret == -1)
-  {
-      /* fetch the app name from the environment */
-      PDB16 *psp = PTR_REAL_TO_LIN( DOSVM_psp, 0 );
-      char *env = PTR_REAL_TO_LIN( psp->environment, 0 );
-      while (*env) env += strlen(env) + 1;
-      env += 1 + sizeof(WORD);
-
-      if (GetLastError() == ERROR_NOT_SUPPORTED)
-          MESSAGE( "wine: Cannot start DOS application %s\n"
-                   "      because vm86 mode is not supported on this platform.\n",
-                   debugstr_a(env) );
-      else
-          FIXME( "vm86 mode failed error %u\n", GetLastError() );
-  }
+  if (ret == -1) ret = GetLastError();
   dosvm_pid = 0;
-  return ret != 0;
+  return ret;
 }
 
 static BOOL MZ_InitTask(void)
@@ -668,7 +658,7 @@ static BOOL MZ_InitTask(void)
   return TRUE;
 }
 
-static void MZ_Launch( LPCSTR cmdtail, int length )
+static DWORD MZ_Launch( LPCSTR cmdtail, int length )
 {
   TDB *pTask = GlobalLock16( GetCurrentTask() );
   BYTE *psp_start = PTR_REAL_TO_LIN( DOSVM_psp, 0 );
@@ -695,15 +685,16 @@ static void MZ_Launch( LPCSTR cmdtail, int length )
   dosvm_thread = 0; dosvm_tid = 0;
   CloseHandle(loop_thread);
   loop_thread = 0; loop_tid = 0;
+  if (rv) return rv;
 
   VGA_Clean();
-  ExitProcess(rv);
+  ExitProcess(0);
 }
 
 /***********************************************************************
  *		MZ_Exit
  */
-void MZ_Exit( CONTEXT86 *context, BOOL cs_psp, WORD retval )
+void MZ_Exit( CONTEXT *context, BOOL cs_psp, WORD retval )
 {
   if (DOSVM_psp) {
     WORD psp_seg = cs_psp ? context->SegCs : DOSVM_psp;
@@ -755,14 +746,13 @@ BOOL MZ_Current( void )
  */
 void __wine_load_dos_exe( LPCSTR filename, LPCSTR cmdline )
 {
-    FIXME("DOS executables not supported on this platform\n");
-    SetLastError(ERROR_BAD_FORMAT);
+    SetLastError( ERROR_NOT_SUPPORTED );
 }
 
 /***********************************************************************
  *		MZ_Exec
  */
-BOOL MZ_Exec( CONTEXT86 *context, LPCSTR filename, BYTE func, LPVOID paramblk )
+BOOL MZ_Exec( CONTEXT *context, LPCSTR filename, BYTE func, LPVOID paramblk )
 {
   /* can't happen */
   SetLastError(ERROR_BAD_FORMAT);
@@ -788,7 +778,7 @@ void MZ_RunInThread( PAPCFUNC proc, ULONG_PTR arg )
 /***********************************************************************
  *		MZ_Exit
  */
-void MZ_Exit( CONTEXT86 *context, BOOL cs_psp, WORD retval )
+void MZ_Exit( CONTEXT *context, BOOL cs_psp, WORD retval )
 {
   DOSVM_Exit( retval );
 }

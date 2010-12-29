@@ -10,12 +10,12 @@
 #
 
 DLLFLAGS     = @DLLFLAGS@
-DEFS         = -DWINE_STRICT_PROTOTYPES $(EXTRADEFS)
+DEFS         = -DWINE_STRICT_PROTOTYPES -DWINE_NO_NAMELESS_EXTENSION $(EXTRADEFS)
 
 MODULE       = $(TESTDLL:%.dll=%)_test.exe
 TESTRESULTS  = $(C_SRCS:.c=.ok)
 TESTPROGRAM  = $(MODULE)$(DLLEXT)
-RUNTESTFLAGS = -q -P wine -M $(TESTDLL) -T $(TOPOBJDIR) -p $(TESTPROGRAM)
+RUNTESTFLAGS = -q -P wine -M $(TESTDLL) -T $(top_builddir) -p $(TESTPROGRAM)
 
 ALL_LIBS     = $(IMPORTS:%=-l%) $(EXTRALIBS) $(LDFLAGS) $(LIBS)
 EXTRA_OBJS   = testlist.o
@@ -37,7 +37,7 @@ $(MODULE) $(MODULE).so: $(OBJS) Makefile.in
 testlist.c: Makefile.in $(MAKECTESTS)
 	$(MAKECTESTS) -o $@ $(C_SRCS)
 
-testlist.o: testlist.c $(TOPSRCDIR)/include/wine/test.h
+testlist.o: testlist.c $(top_srcdir)/include/wine/test.h
 
 # Rules for testing
 
@@ -47,7 +47,7 @@ $(TESTRESULTS): $(MODULE)$(DLLEXT) ../$(TESTDLL)$(DLLEXT)
 
 # Rules for cross-compiling tests
 
-crosstest: @CROSSTEST@
+crosstest: @CROSSTEST_DISABLE@ $(CROSSTEST)
 
 $(CROSSTEST): $(CROSSOBJS) Makefile.in
 	$(CROSSWINEGCC) $(CROSSOBJS) -o $@ $(ALL_LIBS)

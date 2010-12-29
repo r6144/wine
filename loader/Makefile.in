@@ -1,7 +1,3 @@
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 DEFS      = -D__WINESRC__ $(EXTRADEFS)
 
 C_SRCS = \
@@ -13,12 +9,14 @@ EXTRA_BINARIES = @EXTRA_BINARIES@
 
 PROGRAMS = \
 	wine \
-	wine64 \
 	wine-installed \
-	wine-preloader
+	wine-preloader \
+	wine64 \
+	wine64-preloader
 
-MANPAGES = \
-	wine.man \
+MANPAGE = wine.man
+
+EXTRA_MANPAGES = \
 	wine.de.man \
 	wine.fr.man
 
@@ -28,15 +26,15 @@ INSTALLDIRS = \
 	$(DESTDIR)$(mandir)/de.UTF-8/man$(prog_manext) \
 	$(DESTDIR)$(mandir)/fr.UTF-8/man$(prog_manext)
 
-all: $(MAIN_BINARY) wine-installed $(EXTRA_BINARIES) $(MANPAGES)
+all: $(MAIN_BINARY) wine-installed $(EXTRA_BINARIES)
 
 @MAKE_RULES@
 
 LIBPTHREAD  = @LIBPTHREAD@
 LDEXECFLAGS = @LDEXECFLAGS@
 
-wine-preloader: preloader.o Makefile.in
-	$(CC) -o $@ -static -nostartfiles -nodefaultlibs -Wl,-Ttext=0x7c000000 preloader.o $(LIBPORT) $(LDFLAGS)
+wine-preloader wine64-preloader: preloader.o Makefile.in
+	$(CC) -o $@ -static -nostartfiles -nodefaultlibs -Wl,-Ttext=0x7c400000 preloader.o $(LIBPORT) $(LDFLAGS)
 
 $(MAIN_BINARY): main.o Makefile.in
 	$(CC) -o $@ $(LDEXECFLAGS) main.o $(LIBWINE) $(LIBPORT) $(LIBPTHREAD) $(EXTRALIBS) $(LDFLAGS) $(LDRPATH_LOCAL)
@@ -52,15 +50,11 @@ $(EXTRA_BINARIES:%=__install__%): $(EXTRA_BINARIES) $(DESTDIR)$(bindir) dummy
 install install-lib:: wine-installed $(DESTDIR)$(bindir) $(EXTRA_BINARIES:%=__install__%)
 	$(INSTALL_PROGRAM) wine-installed $(DESTDIR)$(bindir)/$(MAIN_BINARY)
 
-@WOW64_DISABLE@ install install-lib:: install-man-pages
-
-install-man-pages: $(MANPAGES) $(INSTALLDIRS) dummy
-	$(INSTALL_DATA) wine.man $(DESTDIR)$(mandir)/man$(prog_manext)/wine.$(prog_manext)
+install-man-pages:: $(EXTRA_MANPAGES) $(INSTALLDIRS) dummy
 	$(INSTALL_DATA) wine.de.man $(DESTDIR)$(mandir)/de.UTF-8/man$(prog_manext)/wine.$(prog_manext)
 	$(INSTALL_DATA) wine.fr.man $(DESTDIR)$(mandir)/fr.UTF-8/man$(prog_manext)/wine.$(prog_manext)
 
 uninstall::
 	-cd $(DESTDIR)$(bindir) && $(RM) $(MAIN_BINARY) $(EXTRA_BINARIES)
-	$(RM) $(DESTDIR)$(mandir)/man$(prog_manext)/wine.$(prog_manext)
 	$(RM) $(DESTDIR)$(mandir)/de.UTF-8/man$(prog_manext)/wine.$(prog_manext)
 	$(RM) $(DESTDIR)$(mandir)/fr.UTF-8/man$(prog_manext)/wine.$(prog_manext)

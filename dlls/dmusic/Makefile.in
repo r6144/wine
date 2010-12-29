@@ -1,7 +1,3 @@
-TOPSRCDIR = @top_srcdir@
-TOPOBJDIR = ../..
-SRCDIR    = @srcdir@
-VPATH     = @srcdir@
 MODULE    = dmusic.dll
 IMPORTS   = dxguid uuid ole32 advapi32
 
@@ -14,8 +10,9 @@ C_SRCS = \
 	download.c \
 	downloadedinstrument.c \
 	instrument.c \
-	port.c \
-	regsvr.c
+	port.c
+
+IDL_R_SRCS = dmusic.idl
 
 RC_SRCS = version.rc
 

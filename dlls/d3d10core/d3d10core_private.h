@@ -52,8 +52,8 @@ struct d3d10_shader_info
 const char *debug_d3d10_primitive_topology(D3D10_PRIMITIVE_TOPOLOGY topology) DECLSPEC_HIDDEN;
 const char *debug_dxgi_format(DXGI_FORMAT format) DECLSPEC_HIDDEN;
 
-DXGI_FORMAT dxgi_format_from_wined3dformat(WINED3DFORMAT format) DECLSPEC_HIDDEN;
-WINED3DFORMAT wined3dformat_from_dxgi_format(DXGI_FORMAT format) DECLSPEC_HIDDEN;
+DXGI_FORMAT dxgi_format_from_wined3dformat(enum wined3d_format_id format) DECLSPEC_HIDDEN;
+enum wined3d_format_id wined3dformat_from_dxgi_format(DXGI_FORMAT format) DECLSPEC_HIDDEN;
 
 static inline void read_dword(const char **ptr, DWORD *d)
 {
@@ -93,6 +93,19 @@ struct d3d10_texture2d
 
 HRESULT d3d10_texture2d_init(struct d3d10_texture2d *texture, struct d3d10_device *device,
         const D3D10_TEXTURE2D_DESC *desc) DECLSPEC_HIDDEN;
+
+/* ID3D10Texture3D */
+struct d3d10_texture3d
+{
+    const struct ID3D10Texture3DVtbl *vtbl;
+    LONG refcount;
+
+    IWineD3DVolumeTexture *wined3d_texture;
+    D3D10_TEXTURE3D_DESC desc;
+};
+
+HRESULT d3d10_texture3d_init(struct d3d10_texture3d *texture, struct d3d10_device *device,
+        const D3D10_TEXTURE3D_DESC *desc) DECLSPEC_HIDDEN;
 
 /* ID3D10Buffer */
 struct d3d10_buffer

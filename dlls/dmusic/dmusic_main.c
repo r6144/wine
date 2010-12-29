@@ -23,9 +23,11 @@
 #include <stdio.h>
 
 #include "dmusic_private.h"
+#include "rpcproxy.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(dmusic);
 
+static HINSTANCE instance;
 LONG DMUSIC_refCount = 0;
 
 typedef struct {
@@ -137,6 +139,7 @@ static IClassFactoryImpl Collection_CF = {&CollectionCF_Vtbl};
  */
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
 	if (fdwReason == DLL_PROCESS_ATTACH) {
+            instance = hinstDLL;
             DisableThreadLibraryCalls(hinstDLL);
 		/* FIXME: Initialisation */
 	} else if (fdwReason == DLL_PROCESS_DETACH) {
@@ -180,6 +183,21 @@ HRESULT WINAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID *ppv)
     return CLASS_E_CLASSNOTAVAILABLE;
 }
 
+/***********************************************************************
+ *		DllRegisterServer (DMUSIC.@)
+ */
+HRESULT WINAPI DllRegisterServer(void)
+{
+    return __wine_register_resources( instance, NULL );
+}
+
+/***********************************************************************
+ *		DllUnregisterServer (DMUSIC.@)
+ */
+HRESULT WINAPI DllUnregisterServer(void)
+{
+    return __wine_unregister_resources( instance, NULL );
+}
 
 /******************************************************************
  *		Helper functions
@@ -187,7 +205,7 @@ HRESULT WINAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID *ppv)
  *
  */
 /* dwPatch from MIDILOCALE */
-DWORD MIDILOCALE2Patch (LPMIDILOCALE pLocale) {
+DWORD MIDILOCALE2Patch (const MIDILOCALE *pLocale) {
 	DWORD dwPatch = 0;
 	if (!pLocale) return 0;
 	dwPatch |= (pLocale->ulBank & F_INSTRUMENT_DRUMS); /* set drum bit */

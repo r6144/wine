@@ -1,0 +1,21 @@
+EXTRADEFS = -DWINE_NO_UNICODE_MACROS
+MODULE    = taskkill.exe
+APPMODE   = -mconsole -municode
+IMPORTS   = psapi user32
+
+C_SRCS = taskkill.c
+
+RC_SRCS = \
+	De.rc \
+	En.rc \
+	Fr.rc \
+	It.rc \
+	Ko.rc \
+	Lt.rc \
+	Nl.rc \
+	Pl.rc \
+	Si.rc \
+	Sv.rc \
+	Uk.rc
+
+@MAKE_PROG_RULES@
