@@ -2543,9 +2543,10 @@ void CDECL X11DRV_WindowPosChanged( HWND hwnd, HWND insert_after, UINT swp_flags
             data->iconic = (new_style & WS_MINIMIZE) != 0;
             TRACE( "changing win %p iconic state to %u\n", data->hwnd, data->iconic );
             wine_tsx11_lock();
-            if (data->iconic)
-                XIconifyWindow( display, data->whole_window, DefaultScreen(display) );
-            else if (is_window_rect_mapped( rectWindow ))
+            if (data->iconic) {
+		/* We don't actually iconify windows, since it is a bit annoying in many Touhou games ... */
+		if (0) XIconifyWindow( display, data->whole_window, DefaultScreen(display) );
+	    } else if (is_window_rect_mapped( rectWindow ))
                 XMapWindow( display, data->whole_window );
             wine_tsx11_unlock();
             update_net_wm_states( display, data );
