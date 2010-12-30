@@ -1487,7 +1487,6 @@ WINE_NOTICE_WITH(gstreamer,[test "x$ac_cv_lib_gstapp_0_10_gst_app_buffer_new" !=
                  [gstreamer-0.10 base plugins ${notice_platform}development files not found, gstreamer support disabled])
 test "x$ac_cv_lib_gstapp_0_10_gst_app_buffer_new" = xyes || enable_winegstreamer=${enable_winegstreamer:-no}
 
->>>>>>> wine-1.3.10
 dnl **** Check for ALSA 1.x ****
 AC_SUBST(ALSALIBS,"")
 if test "$ac_cv_header_sys_asoundlib_h" = "yes" -o "$ac_cv_header_alsa_asoundlib_h" = "yes"

@@ -749,8 +749,8 @@ static void surface_upload_data(IWineD3DSurfaceImpl *This, const struct wined3d_
 	/* We use PPM due to convenience, but it doesn't preserve alpha information unless we output a separate file.
 	   It's a pity that ImageMagick can't be persuaded to open 16bpp raw RGBA files; for 32bpp files we could use
 	   "gm display -size 640x480 -depth 8 RGBA:/tmp/tex1.img" */
-	assert(format_desc->glFormat == GL_BGRA);
-	switch (format_desc->glType) {
+	assert(format->glFormat == GL_BGRA);
+	switch (format->glType) {
 	case GL_UNSIGNED_SHORT_1_5_5_5_REV: maxval = 31; bytes_pixel = 2; break;
 	case GL_UNSIGNED_INT_8_8_8_8_REV: maxval = 255; bytes_pixel = 4; break;
 	default: assert(0); break;
@@ -771,7 +771,7 @@ static void surface_upload_data(IWineD3DSurfaceImpl *This, const struct wined3d_
 		default: assert(0); break;
 		}
 		/* REV means that the first item in glFormat occupy the least significant bits (the rightmost field in 1_5_5_5) */
-		switch (format_desc->glType) {
+		switch (format->glType) {
 		case GL_UNSIGNED_SHORT_1_5_5_5_REV: /* BGRA reversed is ARGB, from most to least significant */
 		    r = (val >> 10) & 31; g = (val >> 5) & 31; b = val & 31; break;
 		case GL_UNSIGNED_INT_8_8_8_8_REV:

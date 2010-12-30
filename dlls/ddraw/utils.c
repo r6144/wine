@@ -337,16 +337,6 @@ void PixelFormat_WineD3DtoDD(DDPIXELFORMAT *DDPixelFormat, enum wined3d_format_i
             DDPixelFormat->dwFlags = DDPF_BUMPDUDV;
             DDPixelFormat->dwFourCC = 0;
             DDPixelFormat->u1.dwBumpBitCount = 16;
-            DDPixelFormat->u2.dwBumpDuBitMask =         0x0000ffff;
-            DDPixelFormat->u3.dwBumpDvBitMask =         0xffff0000;
-            DDPixelFormat->u4.dwBumpLuminanceBitMask =  0x00000000;
-            DDPixelFormat->u5.dwLuminanceAlphaBitMask = 0x00000000;
-	    break;
-	    
-        case WINED3DFMT_R5G5_SNORM_L6_UNORM:
-            DDPixelFormat->dwFlags = DDPF_BUMPDUDV;
-            DDPixelFormat->dwFourCC = 0;
-            DDPixelFormat->u1.dwBumpBitCount = 32;
             DDPixelFormat->u2.dwBumpDuBitMask =         0x0000001f;
             DDPixelFormat->u3.dwBumpDvBitMask =         0x000003e0;
             DDPixelFormat->u4.dwBumpLuminanceBitMask =  0x0000fc00;

@@ -5,7 +5,7 @@ VPATH     = @srcdir@
 MODULE    = winepulse.drv
 IMPORTS   = winmm user32 kernel32
 EXTRALIBS = @PULSELIBS@
-EXTRACFLAGS = @PULSEINCL@
+EXTRACFLAGS += @PULSECFLAGS@
 
 C_SRCS = waveout.c \
          wavein.c \
