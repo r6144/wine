@@ -320,11 +320,17 @@ static HRESULT WINAPI IWineD3DSwapChainImpl_Present(IWineD3DSwapChain *iface,
     if (pDestRect) dst_rect = *pDestRect;
     else GetClientRect(This->win_handle, &dst_rect);
 
-    if (!render_to_fbo && (dst_rect.left || dst_rect.top
+    if ((dst_rect.left || dst_rect.top
             || dst_rect.right != This->presentParms.BackBufferWidth
             || dst_rect.bottom != This->presentParms.BackBufferHeight))
     {
+	TRACE("dst_rect changed to %s (was %ux%u), should enable render_to_fbo\n", wine_dbgstr_rect(&dst_rect),
+	      This->presentParms.BackBufferWidth, This->presentParms.BackBufferHeight);
+	/* Very often the window is simply minimized (to 32x32) rather than resized.  Actually, most games don't allow
+	   its window to be resized at all.  Enabling render_to_fbo in this way can only expose potential driver bugs. */
+#if 0
         render_to_fbo = TRUE;
+#endif
     }
 
     /* Rendering to a window of different size, presenting partial rectangles,

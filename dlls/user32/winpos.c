@@ -1958,6 +1958,8 @@ BOOL set_window_pos( HWND hwnd, HWND insert_after, UINT swp_flags,
     RECT visible_rect, old_window_rect;
     int old_width;
 
+    TRACE("set_window_pos(%p, %p, 0x%x, %s, %s)\n", hwnd, insert_after, swp_flags,
+	  wine_dbgstr_rect(window_rect), wine_dbgstr_rect(client_rect));
     visible_rect = *window_rect;
     USER_Driver->pWindowPosChanging( hwnd, insert_after, swp_flags,
                                      window_rect, client_rect, &visible_rect );
@@ -2008,6 +2010,7 @@ BOOL set_window_pos( HWND hwnd, HWND insert_after, UINT swp_flags,
     SERVER_END_REQ;
     WIN_ReleasePtr( win );
 
+    TRACE("set_window_pos finished\n");
     if (ret)
     {
         if (((swp_flags & SWP_AGG_NOPOSCHANGE) != SWP_AGG_NOPOSCHANGE) ||
