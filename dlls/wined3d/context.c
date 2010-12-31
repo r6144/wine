@@ -77,6 +77,7 @@ void context_bind_fbo(struct wined3d_context *context, GLenum target, GLuint *fb
             break;
     }
 
+    TRACE("Binding FBO %u to target %#x.\n", f, target);
     gl_info->fbo_ops.glBindFramebuffer(target, f);
     checkGLcall("glBindFramebuffer()");
 }
@@ -107,6 +108,7 @@ static void context_destroy_fbo(struct wined3d_context *context, GLuint *fbo)
     context_clean_fbo_attachments(gl_info, GL_FRAMEBUFFER);
     context_bind_fbo(context, GL_FRAMEBUFFER, NULL);
 
+    TRACE("Deleting FBO %u.\n", *fbo);
     gl_info->fbo_ops.glDeleteFramebuffers(1, fbo);
     checkGLcall("glDeleteFramebuffers()");
 }
