@@ -336,6 +336,7 @@ static unsigned dwarf2_leb128_length(const dwarf2_traverse_context_t* ctx)
 static unsigned long dwarf2_get_addr(const unsigned char* ptr, unsigned word_size)
 {
     unsigned long ret;
+    static int shown_fixme = 0;
 
     switch (word_size)
     {
@@ -346,7 +347,7 @@ static unsigned long dwarf2_get_addr(const unsigned char* ptr, unsigned word_siz
         ret = dwarf2_get_u8(ptr);
 	break;
     default:
-        FIXME("Unsupported Word Size %u\n", word_size);
+	if (! shown_fixme) { FIXME("Unsupported Word Size %u\n", word_size); shown_fixme = 1; }
         ret = 0;
     }
     return ret;
