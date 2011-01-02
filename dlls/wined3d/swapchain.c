@@ -23,7 +23,8 @@
 
 #include "config.h"
 #include "wined3d_private.h"
-
+#include <stdio.h>
+#include <stdlib.h>
 
 /*TODO: some of the additional parameters may be required to
     set the gamma ramp (for some weird reason microsoft have left swap gammaramp in device
@@ -221,6 +222,7 @@ static void swapchain_blit(IWineD3DSwapChainImpl *This, struct wined3d_context *
     }
 }
 
+unsigned skip_frame_count = 0, skip_frame_interval = 0;
 static HRESULT WINAPI IWineD3DSwapChainImpl_Present(IWineD3DSwapChain *iface,
         const RECT *pSourceRect, const RECT *pDestRect, HWND hDestWindowOverride,
         const RGNDATA *pDirtyRegion, DWORD flags)
@@ -365,10 +367,27 @@ static HRESULT WINAPI IWineD3DSwapChainImpl_Present(IWineD3DSwapChain *iface,
     }
 
     if (This->num_contexts > 1) wglFinish();
-    SwapBuffers(context->hdc); /* TODO: cycle through the swapchain buffers */
+    if (skip_frame_count == 0) SwapBuffers(context->hdc); /* TODO: cycle through the swapchain buffers */
 
     TRACE("SwapBuffers called, Starting new frame\n");
     TRACE_(d3d_frame)("== SwapBuffers ==\n");
+    if (skip_frame_interval == 0) { /* unset yet */
+	/* This is useful for e.g. suwapyon.exe, whose built-in frame-skip functionality does not work.  Be sure to disable vsync
+	   (use the "Timing" option), otherwise the game will run too fast. */
+	const char *str;
+	skip_frame_interval = 1;
+	str = getenv("WINE_SKIP_FRAME");
+	if (str) {
+	    unsigned val;
+	    int result = sscanf(str, "%u", &val);
+	    if (result == 1 && val > 0) {
+		FIXME("WINE_SKIP_FRAME set to %u\n", val);
+		skip_frame_interval = val;
+	    }
+	}
+    }
+    skip_frame_count++;
+    if (skip_frame_count >= skip_frame_interval) skip_frame_count = 0;
     /* FPS support */
     if (TRACE_ON(fps))
     {

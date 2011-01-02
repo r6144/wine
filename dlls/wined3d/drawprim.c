@@ -598,7 +598,9 @@ void drawPrimitive(IWineD3DDeviceImpl *device, UINT index_count, UINT StartIdx, 
     const struct wined3d_state *state = &device->stateBlock->state;
     struct wined3d_context *context;
     unsigned int i;
+    extern unsigned skip_frame_count;
 
+    if (skip_frame_count != 0) return;
     if (!index_count) return;
 
     if (state->render_states[WINED3DRS_COLORWRITEENABLE])
