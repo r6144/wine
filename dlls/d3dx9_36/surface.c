@@ -141,7 +141,7 @@ HRESULT WINAPI D3DXGetImageInfoFromFileInMemory(LPCVOID data, UINT datasize, D3D
                     else if (IsEqualGUID(&pixel_format, &GUID_WICPixelFormat32bppBGRA))
                         info->Format = D3DFMT_A8R8G8B8;
                     else {
-                        WARN("Unsupported pixel format %s\n", debugstr_guid(&pixel_format));
+                        FIXME("Unsupported pixel format %s\n", debugstr_guid(&pixel_format));
                         hr = D3DXERR_INVALIDDATA;
                     }
                 }
@@ -383,7 +383,7 @@ HRESULT WINAPI D3DXLoadSurfaceFromFileInMemory(LPDIRECT3DSURFACE9 pDestSurface,
 
     if (formatdesc->format == D3DFMT_UNKNOWN)
     {
-        FIXME("Unsupported pixel format\n");
+	FIXME("Unsupported pixel format 0x%x\n", (unsigned) imginfo.Format);
         hr = D3DXERR_INVALIDDATA;
     }
     else
