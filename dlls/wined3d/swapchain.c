@@ -235,6 +235,22 @@ static HRESULT WINAPI IWineD3DSwapChainImpl_Present(IWineD3DSwapChain *iface,
     unsigned int sync;
     int retval;
 
+    if (skip_frame_interval == 0) { /* unset yet */
+	/* This is useful for e.g. suwapyon.exe, whose built-in frame-skip functionality does not work.  Be sure to disable vsync
+	   (use the "Timing" option), otherwise the game will run too fast. */
+	const char *str;
+	skip_frame_interval = 1;
+	str = getenv("WINE_SKIP_FRAME");
+	if (str) {
+	    unsigned val;
+	    int result = sscanf(str, "%u", &val);
+	    if (result == 1 && val > 0) {
+		FIXME("WINE_SKIP_FRAME set to %u\n", val);
+		skip_frame_interval = val;
+	    }
+	}
+    }
+
     IWineD3DSwapChain_SetDestWindowOverride(iface, hDestWindowOverride);
 
     context = context_acquire(This->device, This->back_buffers[0]);
@@ -367,25 +383,11 @@ static HRESULT WINAPI IWineD3DSwapChainImpl_Present(IWineD3DSwapChain *iface,
     }
 
     if (This->num_contexts > 1) wglFinish();
+    TRACE_(d3d_frame)("== SwapBuffers start (%u/%u) %u ==\n", skip_frame_count, skip_frame_interval, GetTickCount());
     if (skip_frame_count == 0) SwapBuffers(context->hdc); /* TODO: cycle through the swapchain buffers */
 
     TRACE("SwapBuffers called, Starting new frame\n");
-    TRACE_(d3d_frame)("== SwapBuffers ==\n");
-    if (skip_frame_interval == 0) { /* unset yet */
-	/* This is useful for e.g. suwapyon.exe, whose built-in frame-skip functionality does not work.  Be sure to disable vsync
-	   (use the "Timing" option), otherwise the game will run too fast. */
-	const char *str;
-	skip_frame_interval = 1;
-	str = getenv("WINE_SKIP_FRAME");
-	if (str) {
-	    unsigned val;
-	    int result = sscanf(str, "%u", &val);
-	    if (result == 1 && val > 0) {
-		FIXME("WINE_SKIP_FRAME set to %u\n", val);
-		skip_frame_interval = val;
-	    }
-	}
-    }
+    TRACE_(d3d_frame)("== SwapBuffers finish (%u/%u) %u ==\n", skip_frame_count, skip_frame_interval, GetTickCount());
     skip_frame_count++;
     if (skip_frame_count >= skip_frame_interval) skip_frame_count = 0;
     /* FPS support */
@@ -480,13 +482,17 @@ static HRESULT WINAPI IWineD3DSwapChainImpl_Present(IWineD3DSwapChain *iface,
         }
     }
 
+    TRACE_(d3d_frame)("== PresentationInterval=%u, SGI_VIDEO_SYNC %s ==\n",
+		      This->presentParms.PresentationInterval, gl_info->supported[SGI_VIDEO_SYNC] ? "supported" : "unsupported");
     if (This->presentParms.PresentationInterval != WINED3DPRESENT_INTERVAL_IMMEDIATE
             && gl_info->supported[SGI_VIDEO_SYNC])
     {
         if ((retval = GL_EXTCALL(glXGetVideoSyncSGI(&sync))))
             ERR("glXGetVideoSyncSGI failed(retval = %d\n", retval);
 
-        switch(This->presentParms.PresentationInterval) {
+	TRACE_(d3d_frame)("== Video Sync start (%u) sync=%u/%u %u ==\n",
+			  This->presentParms.PresentationInterval, sync, This->vSyncCounter, GetTickCount());
+	switch(This->presentParms.PresentationInterval) {
             case WINED3DPRESENT_INTERVAL_DEFAULT:
             case WINED3DPRESENT_INTERVAL_ONE:
                 if(sync <= This->vSyncCounter) {
@@ -519,6 +525,8 @@ static HRESULT WINAPI IWineD3DSwapChainImpl_Present(IWineD3DSwapChain *iface,
             default:
                 FIXME("Unknown presentation interval %08x\n", This->presentParms.PresentationInterval);
         }
+	TRACE_(d3d_frame)("== Video Sync finish (%u) sync=%u/%u %u ==\n",
+			  This->presentParms.PresentationInterval, sync, This->vSyncCounter, GetTickCount());
     }
 
     context_release(context);

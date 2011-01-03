@@ -2159,6 +2159,8 @@ static BOOL IWineD3DImpl_FillGLCaps(struct wined3d_adapter *adapter)
             }
         }
     }
+    /* This is a GLX extension.  Just assume it is supported.  FIXME: query */
+    gl_info->supported[SGI_VIDEO_SYNC] = TRUE;
 
     /* Now work out what GL support this card really has */
     load_gl_funcs( gl_info, gl_version );
