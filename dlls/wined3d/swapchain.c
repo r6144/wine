@@ -223,7 +223,10 @@ static void swapchain_blit(IWineD3DSwapChainImpl *This, struct wined3d_context *
     }
 }
 
-unsigned skip_frame_count = 0, skip_frame_interval = 0;
+/* NOTE: This skip frame stuff assumes that there is only one swap chain, but even if this is not the case,
+   as long as skip_frame_interval_{min,max} are both 1, we should be safe. */
+unsigned skip_frame_count = 0;
+static unsigned skip_frame_interval_min, skip_frame_interval_max, skip_frame_interval = 0;
 static HRESULT WINAPI IWineD3DSwapChainImpl_Present(IWineD3DSwapChain *iface,
         const RECT *pSourceRect, const RECT *pDestRect, HWND hDestWindowOverride,
         const RGNDATA *pDirtyRegion, DWORD flags)
@@ -236,20 +239,23 @@ static HRESULT WINAPI IWineD3DSwapChainImpl_Present(IWineD3DSwapChain *iface,
     unsigned int sync;
     int retval;
 
-    if (skip_frame_interval == 0) { /* unset yet */
+    if (skip_frame_interval_max == 0) { /* unset yet */
 	/* This is useful for e.g. suwapyon.exe, whose built-in frame-skip functionality does not work.  Be sure to disable vsync
 	   (use the "Timing" option), otherwise the game will run too fast. */
 	const char *str;
-	skip_frame_interval = 1;
+	skip_frame_interval_min = skip_frame_interval_max = 1;
 	str = getenv("WINE_SKIP_FRAME");
 	if (str) {
-	    unsigned val;
-	    int result = sscanf(str, "%u", &val);
-	    if (result == 1 && val > 0) {
-		FIXME("WINE_SKIP_FRAME set to %u\n", val);
-		skip_frame_interval = val;
+	    unsigned val1, val2;
+	    int result = sscanf(str, "%u%u", &val1, &val2);
+	    if (result == 2 && val1 > 0 && val2 > val1) {
+		skip_frame_interval_min = val1; skip_frame_interval_max = val2;
+	    } else if (result == 1 && val1 > 0) {
+		skip_frame_interval_min = 1; skip_frame_interval_max = val1;
 	    }
 	}
+	skip_frame_interval = skip_frame_interval_max; /* In case it isn't adjusted */
+	FIXME("skip_frame_interval: min=%u, max=%u\n", skip_frame_interval_min, skip_frame_interval_max);
     }
 
     IWineD3DSwapChain_SetDestWindowOverride(iface, hDestWindowOverride);
@@ -392,10 +398,12 @@ static HRESULT WINAPI IWineD3DSwapChainImpl_Present(IWineD3DSwapChain *iface,
 
     TRACE_(d3d_frame)("== PresentationInterval=%u, SGI_VIDEO_SYNC %s ==\n",
 		      This->presentParms.PresentationInterval, gl_info->supported[SGI_VIDEO_SYNC] ? "supported" : "unsupported");
-    if (This->presentParms.PresentationInterval != WINED3DPRESENT_INTERVAL_IMMEDIATE
+    /* NOTE: Currently both the SGI_VIDEO_SYNC extension and the test below use WINE_VSYNC */
+    if ((This->presentParms.PresentationInterval != WINED3DPRESENT_INTERVAL_IMMEDIATE || getenv("WINE_VSYNC") != NULL)
 	&& gl_info->supported[SGI_VIDEO_SYNC])
     {
 	unsigned sync_interval; /* sync interval in hardware frames */
+	unsigned max_delta_sync;
 
 	switch(This->presentParms.PresentationInterval) {
 	case WINED3DPRESENT_INTERVAL_DEFAULT:
@@ -412,20 +420,41 @@ static HRESULT WINAPI IWineD3DSwapChainImpl_Present(IWineD3DSwapChain *iface,
 	sync_interval *= skip_frame_interval;
 	assert(sync_interval >= 1);
 	/* Now sync_interval is the number of hardware frames per SwapBuffers */
+	max_delta_sync = sync_interval; /* in effect, the amount of tolerable "jitter"; if too small, framerate would be unstable */
 
         if ((retval = GL_EXTCALL(glXGetVideoSyncSGI(&sync))))
             ERR("glXGetVideoSyncSGI failed(retval = %d)\n", retval);
-	/* This->vSyncCounter is the hardware frame number on which glXSwapbuffers() was last called;
-	   The actual swap may occur one hardware frame later, if we consider the vblank interval as the beginning
-	   of each hardware frame. */
-	TRACE_(d3d_frame)("== Video Sync start (%u) sync=%u/%u %u ==\n", sync_interval, sync, This->vSyncCounter, GetTickCount());
-	if (sync < This->vSyncCounter + sync_interval) {
-	    /* Wait until sync reaches This->vSyncCounter + sync_interval */
-	    retval = GL_EXTCALL(glXWaitVideoSyncSGI(sync_interval, This->vSyncCounter % sync_interval, &This->vSyncCounter));
-	    if (retval) ERR("glXWaitVideoSyncSGI failed(retval = %d)\n", retval);
-	    sync = This->vSyncCounter;
-	} else This->vSyncCounter = sync;
-	TRACE_(d3d_frame)("== Video Sync finish (%u) sync=%u %u ==\n", sync_interval, sync, GetTickCount());
+	This->vSyncRef += sync_interval;
+	/* This->vSyncCounter is the hardware frame number on which glXSwapbuffers() is called last,
+	   while This->vSyncRef is the frame number where it should be called this time; The
+	   actual swap may occur one hardware frame later, if we consider the vblank interval as the
+	   beginning of each hardware frame. */
+	/* To deal with wraparounds better, we should only compare deltas */
+	TRACE_(d3d_frame)("== Video Sync start (%u) sync=%u->%u(%u) %u ==\n",
+			  sync_interval, This->vSyncCounter, sync, This->vSyncRef, GetTickCount());
+	if ((int) (sync - This->vSyncRef) < 0) { /* ahead */
+	    if (skip_frame_interval > skip_frame_interval_min && (int) (sync - This->vSyncCounter) < sync_interval)
+		skip_frame_interval--; /* We are ahead and becoming more ahead */
+	    if ((int) (sync - This->vSyncRef) < -(int) max_delta_sync) {
+		/* We are too much ahead; wait until This->vSyncRef - max_delta_sync */
+		unsigned target = This->vSyncRef - max_delta_sync, act_interval = target - sync;
+		/* If we need to wait longer, sync must have gone backwards for some reason (e.g. initialization) */
+		if (act_interval > sync_interval) {
+		    act_interval = sync_interval; target = sync + act_interval;
+		    This->vSyncRef = target + max_delta_sync;
+		}
+		retval = GL_EXTCALL(glXWaitVideoSyncSGI(act_interval, target % act_interval, &sync));
+		if (retval) ERR("glXWaitVideoSyncSGI failed(retval = %d)\n", retval);
+	    }
+	    /* Otherwise don't waste time waiting */
+	} else { /* behind */
+	    if (skip_frame_interval < skip_frame_interval_max && (int) (sync - This->vSyncCounter) > sync_interval)
+		skip_frame_interval++; /* We are behind and becoming more behind */
+	    /* If we are too much behind; limit the amount so that we can adjust the interval if we later catch up. */
+	    if ((int) (sync - This->vSyncRef) > (int) max_delta_sync) This->vSyncRef = sync - max_delta_sync;
+	}
+	This->vSyncCounter = sync;
+	TRACE_(d3d_frame)("== Video Sync finish (%u) sync=%u(%u) %u ==\n", sync_interval, sync, This->vSyncRef, GetTickCount());
     }
 
     /* NOTE: As of Fedora 14, glSwapBuffers() does not block unless it is called too frequently and gets throttled as a result.

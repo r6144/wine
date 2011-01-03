@@ -2589,7 +2589,7 @@ struct IWineD3DSwapChainImpl
     const struct wined3d_format *ds_format;
 
     LONG prev_time, frames;   /* Performance tracking */
-    unsigned int vSyncCounter;
+    unsigned int vSyncCounter, vSyncRef;
 
     struct wined3d_context **context;
     unsigned int            num_contexts;
