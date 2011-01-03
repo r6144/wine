@@ -25,6 +25,7 @@
 
 #include "config.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include "wined3d_private.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(d3d);
@@ -2160,7 +2161,7 @@ static BOOL IWineD3DImpl_FillGLCaps(struct wined3d_adapter *adapter)
         }
     }
     /* This is a GLX extension.  Just assume it is supported.  FIXME: query */
-    gl_info->supported[SGI_VIDEO_SYNC] = TRUE;
+    gl_info->supported[SGI_VIDEO_SYNC] = (getenv("WINE_VSYNC") != NULL);
 
     /* Now work out what GL support this card really has */
     load_gl_funcs( gl_info, gl_version );

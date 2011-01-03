@@ -25,6 +25,7 @@
 #include "wined3d_private.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <assert.h>
 
 /*TODO: some of the additional parameters may be required to
     set the gamma ramp (for some weird reason microsoft have left swap gammaramp in device
@@ -383,11 +384,57 @@ static HRESULT WINAPI IWineD3DSwapChainImpl_Present(IWineD3DSwapChain *iface,
     }
 
     if (This->num_contexts > 1) wglFinish();
-    TRACE_(d3d_frame)("== SwapBuffers start (%u/%u) %u ==\n", skip_frame_count, skip_frame_interval, GetTickCount());
-    if (skip_frame_count == 0) SwapBuffers(context->hdc); /* TODO: cycle through the swapchain buffers */
 
+    if (skip_frame_count != 0) {
+	TRACE_(d3d_frame)("== Skipped frame %u ==\n", GetTickCount());
+	goto skip_frame;
+    }
+
+    TRACE_(d3d_frame)("== PresentationInterval=%u, SGI_VIDEO_SYNC %s ==\n",
+		      This->presentParms.PresentationInterval, gl_info->supported[SGI_VIDEO_SYNC] ? "supported" : "unsupported");
+    if (This->presentParms.PresentationInterval != WINED3DPRESENT_INTERVAL_IMMEDIATE
+	&& gl_info->supported[SGI_VIDEO_SYNC])
+    {
+	unsigned sync_interval; /* sync interval in hardware frames */
+
+	switch(This->presentParms.PresentationInterval) {
+	case WINED3DPRESENT_INTERVAL_DEFAULT:
+	case WINED3DPRESENT_INTERVAL_ONE: sync_interval = 1; break;
+	case WINED3DPRESENT_INTERVAL_TWO: sync_interval = 2; break;
+	case WINED3DPRESENT_INTERVAL_THREE: sync_interval = 3; break;
+	case WINED3DPRESENT_INTERVAL_FOUR: sync_interval = 4; break;
+	default:
+	    FIXME("Unknown presentation interval %08x\n", This->presentParms.PresentationInterval);
+	    sync_interval = 1;
+	    break;
+        }
+	/* Now sync_interval is the number of hardware frames (counted by sync) per Present call */
+	sync_interval *= skip_frame_interval;
+	assert(sync_interval >= 1);
+	/* Now sync_interval is the number of hardware frames per SwapBuffers */
+
+        if ((retval = GL_EXTCALL(glXGetVideoSyncSGI(&sync))))
+            ERR("glXGetVideoSyncSGI failed(retval = %d)\n", retval);
+	/* This->vSyncCounter is the hardware frame number on which glXSwapbuffers() was last called;
+	   The actual swap may occur one hardware frame later, if we consider the vblank interval as the beginning
+	   of each hardware frame. */
+	TRACE_(d3d_frame)("== Video Sync start (%u) sync=%u/%u %u ==\n", sync_interval, sync, This->vSyncCounter, GetTickCount());
+	if (sync < This->vSyncCounter + sync_interval) {
+	    /* Wait until sync reaches This->vSyncCounter + sync_interval */
+	    retval = GL_EXTCALL(glXWaitVideoSyncSGI(sync_interval, This->vSyncCounter % sync_interval, &This->vSyncCounter));
+	    if (retval) ERR("glXWaitVideoSyncSGI failed(retval = %d)\n", retval);
+	    sync = This->vSyncCounter;
+	} else This->vSyncCounter = sync;
+	TRACE_(d3d_frame)("== Video Sync finish (%u) sync=%u %u ==\n", sync_interval, sync, GetTickCount());
+    }
+
+    /* NOTE: As of Fedora 14, glSwapBuffers() does not block unless it is called too frequently and gets throttled as a result.
+       Nevertheless, the actual buffer swap will only be scheduled to occur during the next vblank interval. */
+    TRACE_(d3d_frame)("== SwapBuffers start (%u) %u ==\n", skip_frame_interval, GetTickCount());
+    SwapBuffers(context->hdc); /* TODO: cycle through the swapchain buffers */
     TRACE("SwapBuffers called, Starting new frame\n");
-    TRACE_(d3d_frame)("== SwapBuffers finish (%u/%u) %u ==\n", skip_frame_count, skip_frame_interval, GetTickCount());
+    TRACE_(d3d_frame)("== SwapBuffers finish (%u) %u ==\n", skip_frame_interval, GetTickCount());
+skip_frame:
     skip_frame_count++;
     if (skip_frame_count >= skip_frame_interval) skip_frame_count = 0;
     /* FPS support */
@@ -480,53 +527,6 @@ static HRESULT WINAPI IWineD3DSwapChainImpl_Present(IWineD3DSwapChain *iface,
                 This->device->onscreen_depth_stencil = NULL;
             }
         }
-    }
-
-    TRACE_(d3d_frame)("== PresentationInterval=%u, SGI_VIDEO_SYNC %s ==\n",
-		      This->presentParms.PresentationInterval, gl_info->supported[SGI_VIDEO_SYNC] ? "supported" : "unsupported");
-    if (This->presentParms.PresentationInterval != WINED3DPRESENT_INTERVAL_IMMEDIATE
-            && gl_info->supported[SGI_VIDEO_SYNC])
-    {
-        if ((retval = GL_EXTCALL(glXGetVideoSyncSGI(&sync))))
-            ERR("glXGetVideoSyncSGI failed(retval = %d\n", retval);
-
-	TRACE_(d3d_frame)("== Video Sync start (%u) sync=%u/%u %u ==\n",
-			  This->presentParms.PresentationInterval, sync, This->vSyncCounter, GetTickCount());
-	switch(This->presentParms.PresentationInterval) {
-            case WINED3DPRESENT_INTERVAL_DEFAULT:
-            case WINED3DPRESENT_INTERVAL_ONE:
-                if(sync <= This->vSyncCounter) {
-                    retval = GL_EXTCALL(glXWaitVideoSyncSGI(1, 0, &This->vSyncCounter));
-                } else {
-                    This->vSyncCounter = sync;
-                }
-                break;
-            case WINED3DPRESENT_INTERVAL_TWO:
-                if(sync <= This->vSyncCounter + 1) {
-                    retval = GL_EXTCALL(glXWaitVideoSyncSGI(2, This->vSyncCounter & 0x1, &This->vSyncCounter));
-                } else {
-                    This->vSyncCounter = sync;
-                }
-                break;
-            case WINED3DPRESENT_INTERVAL_THREE:
-                if(sync <= This->vSyncCounter + 2) {
-                    retval = GL_EXTCALL(glXWaitVideoSyncSGI(3, This->vSyncCounter % 0x3, &This->vSyncCounter));
-                } else {
-                    This->vSyncCounter = sync;
-                }
-                break;
-            case WINED3DPRESENT_INTERVAL_FOUR:
-                if(sync <= This->vSyncCounter + 3) {
-                    retval = GL_EXTCALL(glXWaitVideoSyncSGI(4, This->vSyncCounter & 0x3, &This->vSyncCounter));
-                } else {
-                    This->vSyncCounter = sync;
-                }
-                break;
-            default:
-                FIXME("Unknown presentation interval %08x\n", This->presentParms.PresentationInterval);
-        }
-	TRACE_(d3d_frame)("== Video Sync finish (%u) sync=%u/%u %u ==\n",
-			  This->presentParms.PresentationInterval, sync, This->vSyncCounter, GetTickCount());
     }
 
     context_release(context);
