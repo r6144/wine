@@ -23,7 +23,7 @@
 
 #include "initguid.h"
 #include "wincodec.h"
-
+#include <stdio.h>
 WINE_DEFAULT_DEBUG_CHANNEL(d3dx);
 
 
@@ -574,6 +574,10 @@ struct argb_conversion_info
 static void init_argb_conversion_info(CONST PixelFormatDesc *srcformat, CONST PixelFormatDesc *destformat, struct argb_conversion_info *info)
 {
     UINT i;
+
+    if (0)
+	fprintf(stderr, "init_argb_conversion_info: srcformat=%u destformat=%u\n",
+		(unsigned) srcformat->format, (unsigned) destformat->format);
     ZeroMemory(info->process_channel, 4 * sizeof(BOOL));
     info->channelmask = 0;
 
