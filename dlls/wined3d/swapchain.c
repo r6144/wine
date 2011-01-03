@@ -238,6 +238,7 @@ static HRESULT WINAPI IWineD3DSwapChainImpl_Present(IWineD3DSwapChain *iface,
     BOOL render_to_fbo;
     unsigned int sync;
     int retval;
+    UINT PresentationInterval;
 
     if (skip_frame_interval_max == 0) { /* unset yet */
 	/* This is useful for e.g. suwapyon.exe, whose built-in frame-skip functionality does not work.  Be sure to disable vsync
@@ -396,23 +397,25 @@ static HRESULT WINAPI IWineD3DSwapChainImpl_Present(IWineD3DSwapChain *iface,
 	goto skip_frame;
     }
 
+    PresentationInterval = This->presentParms.PresentationInterval;
+    if (getenv("WINE_VSYNC") != NULL) PresentationInterval = WINED3DPRESENT_INTERVAL_ONE;
     TRACE_(d3d_frame)("== PresentationInterval=%u, SGI_VIDEO_SYNC %s ==\n",
-		      This->presentParms.PresentationInterval, gl_info->supported[SGI_VIDEO_SYNC] ? "supported" : "unsupported");
+		      PresentationInterval, gl_info->supported[SGI_VIDEO_SYNC] ? "supported" : "unsupported");
     /* NOTE: Currently both the SGI_VIDEO_SYNC extension and the test below use WINE_VSYNC */
-    if ((This->presentParms.PresentationInterval != WINED3DPRESENT_INTERVAL_IMMEDIATE || getenv("WINE_VSYNC") != NULL)
+    if ((PresentationInterval != WINED3DPRESENT_INTERVAL_IMMEDIATE)
 	&& gl_info->supported[SGI_VIDEO_SYNC])
     {
 	unsigned sync_interval; /* sync interval in hardware frames */
 	unsigned max_delta_sync;
 
-	switch(This->presentParms.PresentationInterval) {
+	switch(PresentationInterval) {
 	case WINED3DPRESENT_INTERVAL_DEFAULT:
 	case WINED3DPRESENT_INTERVAL_ONE: sync_interval = 1; break;
 	case WINED3DPRESENT_INTERVAL_TWO: sync_interval = 2; break;
 	case WINED3DPRESENT_INTERVAL_THREE: sync_interval = 3; break;
 	case WINED3DPRESENT_INTERVAL_FOUR: sync_interval = 4; break;
 	default:
-	    FIXME("Unknown presentation interval %08x\n", This->presentParms.PresentationInterval);
+	    FIXME("Unknown presentation interval %08x\n", PresentationInterval);
 	    sync_interval = 1;
 	    break;
         }
