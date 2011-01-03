@@ -105,6 +105,7 @@ DWORD WINAPI SleepEx( DWORD timeout, BOOL alertable )
     NTSTATUS status;
     LARGE_INTEGER time;
 
+    TRACE("SleepEx(%u)\n", timeout);
     status = NtDelayExecution( alertable, get_nt_timeout( &time, timeout ) );
     if (status == STATUS_USER_APC) return WAIT_IO_COMPLETION;
     return 0;
