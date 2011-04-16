@@ -435,8 +435,8 @@ static HRESULT WINAPI IWineD3DSwapChainImpl_Present(IWineD3DSwapChain *iface,
 	/* To deal with wraparounds better, we should only compare deltas */
 	TRACE_(d3d_frame)("== Video Sync start (%u) sync=%u->%u(%u) %u ==\n",
 			  sync_interval, This->vSyncCounter, sync, This->vSyncRef, GetTickCount());
-	if ((int) (sync - This->vSyncRef) < 0) { /* ahead */
-	    if (skip_frame_interval > skip_frame_interval_min && (int) (sync - This->vSyncCounter) < sync_interval)
+	if ((int) (sync - This->vSyncRef) <= 0) { /* ahead */
+	    if (skip_frame_interval > skip_frame_interval_min && (int) (sync - This->vSyncCounter) <= sync_interval)
 		skip_frame_interval--; /* We are ahead and becoming more ahead */
 	    if ((int) (sync - This->vSyncRef) < -(int) max_delta_sync) {
 		/* We are too much ahead; wait until This->vSyncRef - max_delta_sync */
@@ -455,6 +455,12 @@ static HRESULT WINAPI IWineD3DSwapChainImpl_Present(IWineD3DSwapChain *iface,
 		skip_frame_interval++; /* We are behind and becoming more behind */
 	    /* If we are too much behind; limit the amount so that we can adjust the interval if we later catch up. */
 	    if ((int) (sync - This->vSyncRef) > (int) max_delta_sync) This->vSyncRef = sync - max_delta_sync;
+	    /* Occasionally try catching up even if we are barely able to catch up; useful if the per-frame
+	       overhead is high even when we are not rendering */
+	    if (This->catchUpCounter == 0) {
+	      TRACE_(d3d_frame)("Trying to catch up...\n");
+	      This->vSyncRef = sync; This->catchUpCounter = 10;
+	    } else --This->catchUpCounter;
 	}
 	This->vSyncCounter = sync;
 	TRACE_(d3d_frame)("== Video Sync finish (%u) sync=%u(%u) %u ==\n", sync_interval, sync, This->vSyncRef, GetTickCount());

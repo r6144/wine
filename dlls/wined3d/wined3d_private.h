@@ -2590,6 +2590,7 @@ struct IWineD3DSwapChainImpl
 
     LONG prev_time, frames;   /* Performance tracking */
     unsigned int vSyncCounter, vSyncRef;
+    unsigned int catchUpCounter;
 
     struct wined3d_context **context;
     unsigned int            num_contexts;
