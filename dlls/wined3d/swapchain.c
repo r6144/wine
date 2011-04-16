@@ -620,6 +620,8 @@ HRESULT swapchain_init(IWineD3DSwapChainImpl *swapchain, WINED3DSURFTYPE surface
     HRESULT hr;
     UINT i;
 
+    present_parameters->Windowed = TRUE; // we don't like fullscreen mode
+    
     if (present_parameters->BackBufferCount > WINED3DPRESENT_BACK_BUFFER_MAX)
     {
         FIXME("The application requested %u back buffers, this is not supported.\n",

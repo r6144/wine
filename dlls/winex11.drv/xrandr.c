@@ -179,6 +179,8 @@ static LONG X11DRV_XRandR_SetCurrentMode(int mode)
     unsigned int i;
     int j;
 
+    return DISP_CHANGE_FAILED; // don't change resolution
+
     wine_tsx11_lock();
     root = RootWindow (gdi_display, DefaultScreen(gdi_display));
     sc = pXRRGetScreenInfo (gdi_display, root);
