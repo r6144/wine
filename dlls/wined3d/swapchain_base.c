@@ -123,6 +123,7 @@ HRESULT WINAPI IWineD3DBaseSwapChainImpl_GetBackBuffer(IWineD3DSwapChain *iface,
 
 HRESULT WINAPI IWineD3DBaseSwapChainImpl_GetRasterStatus(IWineD3DSwapChain *iface, WINED3DRASTER_STATUS *pRasterStatus) {
     static BOOL warned;
+    static BOOL InVBlank = TRUE;
     /* No OpenGL equivalent */
     if (!warned)
     {
@@ -134,6 +135,9 @@ HRESULT WINAPI IWineD3DBaseSwapChainImpl_GetRasterStatus(IWineD3DSwapChain *ifac
      * the pRasterStatus->InVBlank value differs over time. To prevent Starcraft 2
      * from running in an infinite loop at startup this method returns INVALIDCALL.
      */
+    InVBlank = ! InVBlank;
+    pRasterStatus->InVBlank = InVBlank;
+    pRasterStatus->ScanLine = 0;
     return WINED3DERR_INVALIDCALL;
 }
 

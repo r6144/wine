@@ -620,7 +620,10 @@ HRESULT swapchain_init(IWineD3DSwapChainImpl *swapchain, WINED3DSURFTYPE surface
     HRESULT hr;
     UINT i;
 
-    present_parameters->Windowed = TRUE; // we don't like fullscreen mode
+    /* Fullscreen mode is generally not desired, especially when the game does not run perfectly.
+       However, somehow the window then does not have any border, so it is still recommended that
+       the application be set to use windowed mode explicitly. */
+    present_parameters->Windowed = TRUE;
     
     if (present_parameters->BackBufferCount > WINED3DPRESENT_BACK_BUFFER_MAX)
     {
