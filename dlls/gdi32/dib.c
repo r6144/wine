@@ -1269,6 +1269,13 @@ HBITMAP WINAPI CreateDIBSection(HDC hdc, CONST BITMAPINFO *bmi, UINT usage,
         dib->dsBitfields[1] = 0x03e0;
         dib->dsBitfields[2] = 0x001f;
     }
+    else if ((bpp == 24 || bpp == 32) && compression == BI_RGB)
+    {
+	/* Hopefully this is right... */
+        dib->dsBitfields[0] = 0xff0000;
+        dib->dsBitfields[1] = 0x00ff00;
+        dib->dsBitfields[2] = 0x0000ff;
+    }
     else if(compression == BI_BITFIELDS)
     {
         dib->dsBitfields[0] =  *(const DWORD *)bmi->bmiColors;
@@ -1276,7 +1283,7 @@ HBITMAP WINAPI CreateDIBSection(HDC hdc, CONST BITMAPINFO *bmi, UINT usage,
         dib->dsBitfields[2] =  *((const DWORD *)bmi->bmiColors + 2);
     }
     if (bpp >= 15 && (dib->dsBitfields[0] == 0 || dib->dsBitfields[1] == 0 || dib->dsBitfields[2] == 0))
-	ERR("mask is zero\n");
+	ERR("mask is zero (bpp=%u, compression=0x%x)\n", bpp, compression);
 
     /* get storage location for DIB bits */
 
