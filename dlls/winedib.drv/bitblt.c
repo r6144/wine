@@ -512,8 +512,8 @@ BOOL DIBDRV_BitBlt( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
     int devXSrc, devWidth;
     int devYSrc, devHeight, zeroYSrc;
     
-CheckMapping(__FUNCTION__, "DEST", physDevDst);
-CheckMapping(__FUNCTION__, "SOURCE",physDevSrc);
+//	CheckMapping(__FUNCTION__, "DEST", physDevDst);
+//	CheckMapping(__FUNCTION__, "SOURCE",physDevSrc);
     MAYBE(TRACE("physDevDst:%p(%s%s), xDst:%d, yDst:%d, width:%d, height:%d, physDevSrc:%p(%s%s), xSrc:%d, ySrc:%d, rop:%08x\n",
           physDevDst, physDevDst->hasDIB ? "DIB-" : "DDB", physDevDst->hasDIB ? _DIBDRVBITMAP_GetFormatName(physDevDst->physBitmap) : "",
           xDst, yDst, width, height,
@@ -631,8 +631,12 @@ CheckMapping(__FUNCTION__, "SOURCE",physDevSrc);
         if(!physDevSrc || !physDevSrc->hasDIB)
         {
             /* source is null or has also a DDB, no need to convert anything */
-            res = _DIBDRV_GetDisplayDriver()->pBitBlt(physDevDst->X11PhysDev, xDst, yDst, width, height,
-                                                      physDevSrc ? physDevSrc->X11PhysDev : 0, xSrc, ySrc, rop);
+			if(_DIBDRV_GetDisplayDriver()->pBitBlt)
+				res = _DIBDRV_GetDisplayDriver()->pBitBlt(physDevDst->X11PhysDev, xDst, yDst, width, height,
+														physDevSrc ? physDevSrc->X11PhysDev : 0, xSrc, ySrc, rop);
+			else
+				res = _DIBDRV_GetDisplayDriver()->pStretchBlt(physDevDst->X11PhysDev, xDst, yDst, width, height,
+														physDevSrc ? physDevSrc->X11PhysDev : 0, xSrc, ySrc, width, height, rop);
         }
         else
         {
@@ -668,8 +672,12 @@ CheckMapping(__FUNCTION__, "SOURCE",physDevSrc);
             zeroYSrc = 0;
             _DIBDRV_Position_ds2ws(physDevSrc, &dummy, &zeroYSrc);
 
-            res = _DIBDRV_GetDisplayDriver()->pBitBlt(physDevDst->X11PhysDev, xDst, yDst, width, height,
-                                                      physDevSrc->X11PhysDev, xSrc, zeroYSrc, rop);
+			if(_DIBDRV_GetDisplayDriver()->pBitBlt)
+				res = _DIBDRV_GetDisplayDriver()->pBitBlt(physDevDst->X11PhysDev, xDst, yDst, width, height,
+														physDevSrc->X11PhysDev, xSrc, zeroYSrc, rop);
+			else
+				res = _DIBDRV_GetDisplayDriver()->pStretchBlt(physDevDst->X11PhysDev, xDst, yDst, width, height,
+														physDevSrc->X11PhysDev, xSrc, zeroYSrc, width, height, rop);
             SelectObject(physDevSrc->hdc, dib);
             DeleteObject(ddb);
 noBlt3:
@@ -952,7 +960,10 @@ BOOL DIBDRV_PatBlt( DIBDRVPHYSDEV *physDev, INT left, INT top, INT width, INT he
     else
     {
         /* DDB selected in, use X11 driver */
-        res = _DIBDRV_GetDisplayDriver()->pPatBlt(physDev->X11PhysDev, left, top, width, height, rop);
+		if(_DIBDRV_GetDisplayDriver()->pPatBlt)
+			res = _DIBDRV_GetDisplayDriver()->pPatBlt(physDev->X11PhysDev, left, top, width, height, rop);
+		else
+			res = _DIBDRV_GetDisplayDriver()->pStretchBlt(physDev->X11PhysDev, left, top, width, height, 0, left, top, width, height, rop);
     }
     return res;
 }
