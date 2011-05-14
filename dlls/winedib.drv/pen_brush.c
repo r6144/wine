@@ -31,10 +31,22 @@ WINE_DEFAULT_DEBUG_CHANNEL(dibdrv);
  */
 HPEN DIBDRV_SelectPen( DIBDRVPHYSDEV *physDev, HPEN hpen )
 {
+    HPEN res;
+    
     TRACE("physDev:%p, hpen:%p\n", physDev, hpen);
 
-    ONCE(FIXME("stub\n"));
-    return _DIBDRV_GetDisplayDriver()->pSelectPen(physDev->X11PhysDev, hpen);
+    if(physDev->hasDIB)
+    {
+        /* DIB section selected in, use DIB Engine */
+        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
+        res = _DIBDRV_GetDisplayDriver()->pSelectPen(physDev->X11PhysDev, hpen);
+    }
+    else
+    {
+        /* DDB selected in, use X11 driver */
+        res = _DIBDRV_GetDisplayDriver()->pSelectPen(physDev->X11PhysDev, hpen);
+    }
+    return res;
 }
 
 /***********************************************************************
@@ -42,10 +54,22 @@ HPEN DIBDRV_SelectPen( DIBDRVPHYSDEV *physDev, HPEN hpen )
  */
 COLORREF DIBDRV_SetDCPenColor( DIBDRVPHYSDEV *physDev, COLORREF crColor )
 {
+    COLORREF res;
+    
     TRACE("physDev:%p, crColor:%x\n", physDev, crColor);
 
-    ONCE(FIXME("stub\n"));
-    return _DIBDRV_GetDisplayDriver()->pSetDCPenColor(physDev->X11PhysDev, crColor);
+    if(physDev->hasDIB)
+    {
+        /* DIB section selected in, use DIB Engine */
+        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
+        res = _DIBDRV_GetDisplayDriver()->pSetDCPenColor(physDev->X11PhysDev, crColor);
+    }
+    else
+    {
+        /* DDB selected in, use X11 driver */
+        res = _DIBDRV_GetDisplayDriver()->pSetDCPenColor(physDev->X11PhysDev, crColor);
+    }
+    return res;
 }
 
 /***********************************************************************
@@ -53,10 +77,22 @@ COLORREF DIBDRV_SetDCPenColor( DIBDRVPHYSDEV *physDev, COLORREF crColor )
  */
 HBRUSH DIBDRV_SelectBrush( DIBDRVPHYSDEV *physDev, HBRUSH hbrush )
 {
+    HBRUSH res;
+    
     TRACE("physDev:%p, hbrush:%p\n", physDev, hbrush);
 
-    ONCE(FIXME("stub\n"));
-    return _DIBDRV_GetDisplayDriver()->pSelectBrush(physDev->X11PhysDev, hbrush);
+    if(physDev->hasDIB)
+    {
+        /* DIB section selected in, use DIB Engine */
+        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
+        res = _DIBDRV_GetDisplayDriver()->pSelectBrush(physDev->X11PhysDev, hbrush);
+    }
+    else
+    {
+        /* DDB selected in, use X11 driver */
+        res = _DIBDRV_GetDisplayDriver()->pSelectBrush(physDev->X11PhysDev, hbrush);
+    }
+    return res;
 }
 
 /***********************************************************************
@@ -64,10 +100,22 @@ HBRUSH DIBDRV_SelectBrush( DIBDRVPHYSDEV *physDev, HBRUSH hbrush )
  */
 COLORREF DIBDRV_SetDCBrushColor( DIBDRVPHYSDEV *physDev, COLORREF crColor )
 {
+    COLORREF res;
+    
     TRACE("physDev:%p, crColor:%x\n", physDev, crColor);
 
-    ONCE(FIXME("stub\n"));
-    return _DIBDRV_GetDisplayDriver()->pSetDCBrushColor(physDev->X11PhysDev, crColor);
+    if(physDev->hasDIB)
+    {
+        /* DIB section selected in, use DIB Engine */
+        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
+        res = _DIBDRV_GetDisplayDriver()->pSetDCBrushColor(physDev->X11PhysDev, crColor);
+    }
+    else
+    {
+        /* DDB selected in, use X11 driver */
+        res = _DIBDRV_GetDisplayDriver()->pSetDCBrushColor(physDev->X11PhysDev, crColor);
+    }
+    return res;
 }
 
 /***********************************************************************
@@ -79,7 +127,6 @@ INT DIBDRV_SetROP2( DIBDRVPHYSDEV *physDev, INT rop )
     
     TRACE("physDev:%p, rop:%x\n", physDev, rop);
 
-    ONCE(FIXME("stub\n"));
     prevRop = physDev->rop2;
     physDev->rop2 = rop;
     return prevRop;
@@ -91,8 +138,20 @@ INT DIBDRV_SetROP2( DIBDRVPHYSDEV *physDev, INT rop )
  */
 COLORREF DIBDRV_SetBkColor( DIBDRVPHYSDEV *physDev, COLORREF color )
 {
+    COLORREF res;
+    
     TRACE("physDev:%p, color:%x\n", physDev, color);
 
-    ONCE(FIXME("stub\n"));
-    return _DIBDRV_GetDisplayDriver()->pSetBkColor(physDev->X11PhysDev, color);
+    if(physDev->hasDIB)
+    {
+        /* DIB section selected in, use DIB Engine */
+        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
+        res = _DIBDRV_GetDisplayDriver()->pSetBkColor(physDev->X11PhysDev, color);
+    }
+    else
+    {
+        /* DDB selected in, use X11 driver */
+        res = _DIBDRV_GetDisplayDriver()->pSetBkColor(physDev->X11PhysDev, color);
+    }
+    return res;
 }

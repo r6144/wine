@@ -52,10 +52,15 @@ BOOL DIBDRV_CreateDC( HDC hdc, DIBDRVPHYSDEV **pdev, LPCWSTR driver, LPCWSTR dev
     /* sets X11 Device pointer in DIB Engine device */
     physDev->X11PhysDev = X11PhysDev;
     
+    /* stock bitmap selected on DC creation */
+    physDev->hbitmap = GetStockObject(DEFAULT_BITMAP);
+    
+    /* no DIB selected into DC on creation */
+    physDev->hasDIB = FALSE;
+    
     /* sets the result value and returns */
     *pdev = physDev;
 
-    ONCE(FIXME("stub\n"));
     return TRUE;
 }
 
@@ -85,11 +90,23 @@ BOOL DIBDRV_DeleteDC( DIBDRVPHYSDEV *physDev )
 INT DIBDRV_ExtEscape( DIBDRVPHYSDEV *physDev, INT escape, INT in_count, LPCVOID in_data,
                       INT out_count, LPVOID out_data )
 {
+    INT res;
+    
     TRACE("physDev:%p, escape:%d, in_count:%d, in_data:%p, out_count:%d, out_data:%p\n",
           physDev, escape, in_count, in_data, out_count, out_data);
 
-    ONCE(FIXME("stub\n"));
-    return _DIBDRV_GetDisplayDriver()->pExtEscape(physDev->X11PhysDev, escape, in_count, in_data, out_count, out_data);
+    if(physDev->hasDIB)
+    {
+        /* DIB section selected in, use DIB Engine */
+        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
+        res = _DIBDRV_GetDisplayDriver()->pExtEscape(physDev->X11PhysDev, escape, in_count, in_data, out_count, out_data);
+    }
+    else
+    {
+        /* DDB selected in, use X11 driver */
+        res = _DIBDRV_GetDisplayDriver()->pExtEscape(physDev->X11PhysDev, escape, in_count, in_data, out_count, out_data);
+    }
+    return res;
 }
 
 /***********************************************************************
@@ -97,8 +114,20 @@ INT DIBDRV_ExtEscape( DIBDRVPHYSDEV *physDev, INT escape, INT in_count, LPCVOID 
  */
 INT DIBDRV_GetDeviceCaps( DIBDRVPHYSDEV *physDev, INT cap )
 {
+    INT res;
+    
     TRACE("physDev:%p, cap:%d\n", physDev, cap); 
 
-    ONCE(FIXME("stub\n"));
-    return _DIBDRV_GetDisplayDriver()->pGetDeviceCaps(physDev->X11PhysDev, cap);
+    if(physDev->hasDIB)
+    {
+        /* DIB section selected in, use DIB Engine */
+        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
+        res = _DIBDRV_GetDisplayDriver()->pGetDeviceCaps(physDev->X11PhysDev, cap);
+    }
+    else
+    {
+        /* DDB selected in, use X11 driver */
+        res = _DIBDRV_GetDisplayDriver()->pGetDeviceCaps(physDev->X11PhysDev, cap);
+    }
+    return res;
 }

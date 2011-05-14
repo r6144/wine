@@ -52,6 +52,9 @@
     } \
 }
 
+/* extra stock object: default 1x1 bitmap for memory DCs
+   grabbed from gdi_private.h */
+#define DEFAULT_BITMAP (STOCK_LAST+1)
 
 /* DIB driver physical device */
 typedef struct _DIBDRVPHYSDEV
@@ -59,6 +62,12 @@ typedef struct _DIBDRVPHYSDEV
     /* X11 driver physical device */
     PHYSDEV X11PhysDev;
     
+    /* is a DIB selected into DC ? */
+    BOOL hasDIB;
+    
+    /* currently selected HBITMAP */
+    HBITMAP hbitmap;
+
     /* active ROP2 */
     INT rop2;
 

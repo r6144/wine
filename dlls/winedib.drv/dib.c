@@ -31,10 +31,15 @@ WINE_DEFAULT_DEBUG_CHANNEL(dibdrv);
 HBITMAP DIBDRV_CreateDIBSection( DIBDRVPHYSDEV *physDev, HBITMAP hbitmap,
                                  const BITMAPINFO *bmi, UINT usage )
 {
+    HBITMAP res;
+    
     TRACE("physDev:%p, hbitmap:%p, bmi:%p, usage:%d\n", physDev, hbitmap, bmi, usage);
 
-    ONCE(FIXME("stub\n"));
-    return _DIBDRV_GetDisplayDriver()->pCreateDIBSection(physDev->X11PhysDev, hbitmap, bmi, usage);
+    /* createDIBSection is only DIB-related, so we just use the engine */
+    ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
+    res = _DIBDRV_GetDisplayDriver()->pCreateDIBSection(physDev->X11PhysDev, hbitmap, bmi, usage);
+
+    return res;
 }
 
 /***********************************************************************
@@ -43,11 +48,15 @@ HBITMAP DIBDRV_CreateDIBSection( DIBDRVPHYSDEV *physDev, HBITMAP hbitmap,
 INT DIBDRV_GetDIBits( DIBDRVPHYSDEV *physDev, HBITMAP hbitmap, UINT startscan,
                       UINT lines, LPCVOID bits, const BITMAPINFO *bmi, UINT coloruse )
 {
+    INT res;
+    
     TRACE("physDev:%p, hbitmap:%p, startscan:%d, lines:%d, bits:%p, bmi:%p, coloruse:%d\n",
         physDev, hbitmap, startscan, lines, bits, bmi, coloruse);
 
-    ONCE(FIXME("stub\n"));
-    return _DIBDRV_GetDisplayDriver()->pGetDIBits(physDev->X11PhysDev, hbitmap, startscan, lines, bits, bmi, coloruse);
+    /* GetDIBits reads bits from a DDB, so we should use the X11 driver */
+    res = _DIBDRV_GetDisplayDriver()->pGetDIBits(physDev->X11PhysDev, hbitmap, startscan, lines, bits, bmi, coloruse);
+    
+    return res;
 }
 
 /***********************************************************************
@@ -56,10 +65,15 @@ INT DIBDRV_GetDIBits( DIBDRVPHYSDEV *physDev, HBITMAP hbitmap, UINT startscan,
 UINT DIBDRV_SetDIBColorTable( DIBDRVPHYSDEV *physDev, UINT start, UINT count,
                               const RGBQUAD *colors )
 {
+    UINT res;
+    
     TRACE("physDev:%p, start:%d, count:%d, colors:%p\n", physDev, start, count, colors);
 
-    ONCE(FIXME("stub\n"));
-    return _DIBDRV_GetDisplayDriver()->pSetDIBColorTable(physDev->X11PhysDev, start, count, colors);
+    /* SetDIBColorTable operates on a DIB, so we use the engine */
+    ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
+    res = _DIBDRV_GetDisplayDriver()->pSetDIBColorTable(physDev->X11PhysDev, start, count, colors);
+
+    return res;
 }
 
 /***********************************************************************
@@ -68,11 +82,15 @@ UINT DIBDRV_SetDIBColorTable( DIBDRVPHYSDEV *physDev, UINT start, UINT count,
 INT DIBDRV_SetDIBits( DIBDRVPHYSDEV *physDev, HBITMAP hbitmap, UINT startscan,
                       UINT lines, LPCVOID bits, const BITMAPINFO *info, UINT coloruse )
 {
+    INT res;
+    
     TRACE("physDev:%p, hbitmap:%p, startscan:%d, lines:%d, bits:%p, bmi:%p, coloruse:%d\n",
         physDev, hbitmap, startscan, lines, bits, info, coloruse);
 
-    ONCE(FIXME("stub\n"));
-    return _DIBDRV_GetDisplayDriver()->pSetDIBits(physDev->X11PhysDev, hbitmap, startscan, lines, bits, info, coloruse);
+    /* SetDIBits writes bits to a DDB, so we should use the X11 driver */
+    res =  _DIBDRV_GetDisplayDriver()->pSetDIBits(physDev->X11PhysDev, hbitmap, startscan, lines, bits, info, coloruse);
+
+    return res;
 }
 
 /*************************************************************************
@@ -83,10 +101,14 @@ INT DIBDRV_SetDIBitsToDevice( DIBDRVPHYSDEV *physDev, INT xDest, INT yDest, DWOR
                               UINT startscan, UINT lines, LPCVOID bits,
                               const BITMAPINFO *info, UINT coloruse )
 {
+    INT res;
+    
     TRACE("physDev:%p, xDest:%d, yDest:%d, cx:%x, cy:%x, xSrc:%d, ySrc:%d, startscan:%d, lines:%d, bits:%p, info:%p, coloruse:%d\n",
         physDev, xDest, yDest, cx, cy, xSrc, ySrc, startscan, lines, bits, info, coloruse);
 
-    ONCE(FIXME("stub\n"));
-    return _DIBDRV_GetDisplayDriver()->pSetDIBitsToDevice(physDev->X11PhysDev, xDest, yDest, cx, cy, xSrc, ySrc,
+    /* SetDIBitsToDevice operates on a physical device, so we should use the X11 driver */
+    res = _DIBDRV_GetDisplayDriver()->pSetDIBitsToDevice(physDev->X11PhysDev, xDest, yDest, cx, cy, xSrc, ySrc,
                                                           startscan, lines, bits, info, coloruse);
+
+    return res;
 }

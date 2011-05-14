@@ -28,17 +28,29 @@ WINE_DEFAULT_DEBUG_CHANNEL(dibdrv);
 /***********************************************************************
  *           DIBDRV_ExtTextOut
  */
-BOOL
-DIBDRV_ExtTextOut( DIBDRVPHYSDEV *physDev, INT x, INT y, UINT flags,
-                   const RECT *lprect, LPCWSTR wstr, UINT count,
-                   const INT *lpDx )
+BOOL DIBDRV_ExtTextOut( DIBDRVPHYSDEV *physDev, INT x, INT y, UINT flags,
+                        const RECT *lprect, LPCWSTR wstr, UINT count,
+                        const INT *lpDx )
 {
+    BOOL res;
+    
     TRACE("physDev:%p, x:%d, y:%d, flags:%x, lprect:%p, wstr:%s, count:%d, lpDx:%p\n",
           physDev, x, y, flags, lprect, debugstr_w(wstr), count, lpDx);
 
-    ONCE(FIXME("stub\n"));
-    return _DIBDRV_GetDisplayDriver()->pExtTextOut(physDev->X11PhysDev, x, y, flags, lprect,
+    if(physDev->hasDIB)
+    {
+        /* DIB section selected in, use DIB Engine */
+        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
+        res = _DIBDRV_GetDisplayDriver()->pExtTextOut(physDev->X11PhysDev, x, y, flags, lprect,
                                                    wstr, count, lpDx);
+    }
+    else
+    {
+        /* DDB selected in, use X11 driver */
+        res = _DIBDRV_GetDisplayDriver()->pExtTextOut(physDev->X11PhysDev, x, y, flags, lprect,
+                                                   wstr, count, lpDx);
+    }
+    return res;
 }
 
 /***********************************************************************
@@ -47,9 +59,23 @@ DIBDRV_ExtTextOut( DIBDRVPHYSDEV *physDev, INT x, INT y, UINT flags,
 BOOL DIBDRV_GetTextExtentExPoint( DIBDRVPHYSDEV *physDev, LPCWSTR str, INT count,
                                   INT maxExt, LPINT lpnFit, LPINT alpDx, LPSIZE size )
 {
+    BOOL res;
+    
     TRACE("physDev:%p, str:%s, count:%d, maxExt:%d, lpnFit:%p, alpDx:%p, size:%p\n",
         physDev, debugstr_w(str), count, maxExt, lpnFit, alpDx, size);
-    ONCE(FIXME("stub\n"));
-    return _DIBDRV_GetDisplayDriver()->pGetTextExtentExPoint(physDev->X11PhysDev, str, count, maxExt,
-                                                             lpnFit, alpDx, size);
+
+    if(physDev->hasDIB)
+    {
+        /* DIB section selected in, use DIB Engine */
+        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
+        res = _DIBDRV_GetDisplayDriver()->pGetTextExtentExPoint(physDev->X11PhysDev, str, count, maxExt,
+                                                                lpnFit, alpDx, size);
+    }
+    else
+    {
+        /* DDB selected in, use X11 driver */
+        res = _DIBDRV_GetDisplayDriver()->pGetTextExtentExPoint(physDev->X11PhysDev, str, count, maxExt,
+                                                                lpnFit, alpDx, size);
+    }
+    return res;
 }
