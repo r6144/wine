@@ -28,6 +28,7 @@
 #include FT_TRUETYPE_TABLES_H
 #include FT_SFNT_NAMES_H
 #include FT_TRUETYPE_IDS_H
+#include FT_BITMAP_H
 
 /* freetype library handle */
 extern FT_Library DIBDRV_ftLibrary;
@@ -179,6 +180,9 @@ MAKE_FUNCPTR(FT_Set_Pixel_Sizes)
 MAKE_FUNCPTR(FT_Get_First_Char)
 MAKE_FUNCPTR(FT_Render_Glyph)
 MAKE_FUNCPTR(FT_Glyph_Transform)
+MAKE_FUNCPTR(FT_Bitmap_New)
+MAKE_FUNCPTR(FT_Bitmap_Done)
+MAKE_FUNCPTR(FT_Bitmap_Convert)
 #undef MAKE_FUNCPTR
 
 #endif /* HAVE_FREETYPE */

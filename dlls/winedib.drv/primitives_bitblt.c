@@ -216,7 +216,7 @@ BOOL _DIBDRV_AlphaBlend_generic(DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
             PemultiplyLine(strBuf, widthDst, constAlpha);
             
             /* blends source on dest */
-            BlendLine(dBuf, sBuf, widthDst);
+            BlendLine(dBuf, strBuf, widthDst);
             
             /* puts dest line back */
             dstBmp->funcs->PutLine(dstBmp, yd, xDst, widthDst, dBuf);
@@ -391,6 +391,10 @@ BOOL _DIBDRV_BitBlt_generic(DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
     useSrc = (((rop >> 2) & 0x330000) != (rop & 0x330000));
     useDst = (((rop >> 1) & 0x550000) != (rop & 0x550000));
     
+    /* sanity check -- MSN messenger crashes without */
+    if(useSrc && !physDevSrc)
+        return FALSE;
+    
     /* gets source, dest and pattern bitmaps, if available */
     if(usePat && physDevDst->isBrushBitmap)
         patBmp = &physDevDst->brushBmpCache;
@@ -501,8 +505,8 @@ BOOL _DIBDRV_BitBlt_generic(DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
                   {
                       srcBmp->funcs->GetLine(srcBmp, ys, xSrc, width, dBuf);
                       patBmp->funcs->GetLine(patBmp, ys%patBmp->height, 0, width, pBuf);
-                      wDstPnt = sBuf;
-                      wSrcPnt = sBuf;
+                      wDstPnt = dBuf;
+                      wSrcPnt = dBuf;
                       wPatPnt = pBuf;
                       for(i = width; i > 0 ; i--)
                       {
@@ -521,8 +525,8 @@ BOOL _DIBDRV_BitBlt_generic(DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
                   for(ys = ySrc, yd = yDst; ys < ySrc+height; ys++, yd++)
                   {
                       srcBmp->funcs->GetLine(srcBmp, ys, xSrc, width, dBuf);
-                      wDstPnt = sBuf;
-                      wSrcPnt = sBuf;
+                      wDstPnt = dBuf;
+                      wSrcPnt = dBuf;
                       for(i = width; i > 0 ; i--)
                       {
                           *wDstPnt = _DIBDRV_ROP3(patColor, *wSrcPnt++, 0, rop);
@@ -538,9 +542,9 @@ BOOL _DIBDRV_BitBlt_generic(DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
                       goto error;
                   for(ys = ySrc, yd = yDst; ys < ySrc+height; ys++, yd++)
                   {
-                      dstBmp->funcs->GetLine(srcBmp, ys, xDst, width, dBuf);
+                      dstBmp->funcs->GetLine(dstBmp, ys, xDst, width, dBuf);
                       patBmp->funcs->GetLine(patBmp, ys%patBmp->height, 0, width, pBuf);
-                      wDstPnt = sBuf;
+                      wDstPnt = dBuf;
                       wPatPnt = pBuf;
                       for(i = width; i > 0 ; i--)
                       {
@@ -558,8 +562,8 @@ BOOL _DIBDRV_BitBlt_generic(DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
                       MAYBE(TRACE("BitBlt use: dst\n"));
                   for(ys = ySrc, yd = yDst; ys < ySrc+height; ys++, yd++)
                   {
-                      dstBmp->funcs->GetLine(srcBmp, ys, xDst, width, dBuf);
-                      wDstPnt = sBuf;
+                      dstBmp->funcs->GetLine(dstBmp, ys, xDst, width, dBuf);
+                      wDstPnt = dBuf;
                       for(i = width; i > 0 ; i--)
                       {
                           *wDstPnt = _DIBDRV_ROP3(patColor, 0, *wDstPnt, rop);
@@ -637,6 +641,10 @@ BOOL _DIBDRV_StretchBlt_generic(DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
     usePat = (((rop >> 4) & 0x0f0000) != (rop & 0x0f0000));
     useSrc = (((rop >> 2) & 0x330000) != (rop & 0x330000));
     useDst = (((rop >> 1) & 0x550000) != (rop & 0x550000));
+    
+    /* sanity check -- MSN messenger crashes without */
+    if(useSrc && !physDevSrc)
+        return FALSE;
     
     /* gets source, dest and pattern bitmaps, if available */
     if(usePat && physDevDst->isBrushBitmap)

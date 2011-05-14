@@ -292,7 +292,7 @@ BOOL _DIBDRV_GetLine1(const DIBDRVBITMAP *bmp, INT line, INT startx, int width, 
 
     src = ((BYTE *)bmp->bits + line * bmp->stride + (startx >> 3));
     /* get first partial byte, if any */
-    startx = (8 - (startx & 0x03)) & 0x03;
+    startx = (8 - (startx & 0x07)) & 0x07;
     width -= startx;
     if(startx)
     {
@@ -322,7 +322,7 @@ BOOL _DIBDRV_GetLine1(const DIBDRVBITMAP *bmp, INT line, INT startx, int width, 
     }
     
     /* last partial byte, if any */
-    if(width)
+    if(width > 0)
     {
         b = *src;
         while(width--)
@@ -398,13 +398,17 @@ BOOL _DIBDRV_PutLine16_BITFIELDS(const DIBDRVBITMAP *bmp, INT line, INT startx, 
     DWORD *dwBuf = (DWORD *)buf;
     WORD *dst = (WORD *)((BYTE *)bmp->bits + line * bmp->stride + 2 * startx);
     DWORD c;
+
+    BYTE bShift =  8 - bmp->blueLen;
+    BYTE gShift = 16 - bmp->greenLen;
+    BYTE rShift = 24 - bmp->redLen;
     for(; width; width--)
     {
         c = *dwBuf++;
         *dst++ =
-            ((( c & 0x000000ff)        << bmp->blueShift)  & bmp->blueMask) |
-            ((((c & 0x0000ff00) >>  8) << bmp->greenShift) & bmp->greenMask) |
-            ((((c & 0x00ff0000) >> 16) << bmp->redShift)   & bmp->redMask);
+            ((((c & 0x000000ff) >> bShift) << bmp->blueShift)  & bmp->blueMask) |
+            ((((c & 0x0000ff00) >> gShift) << bmp->greenShift) & bmp->greenMask) |
+            ((((c & 0x00ff0000) >> rShift) << bmp->redShift)   & bmp->redMask);
     }
     return TRUE;
 }
@@ -480,7 +484,7 @@ BOOL _DIBDRV_PutLine4(const DIBDRVBITMAP *bmp, INT line, INT startx, int width, 
     }
     
     /* last nibble, if any */
-    if(width)
+    if(width > 0)
     {
         c = *dwBuf;
         
@@ -500,14 +504,14 @@ BOOL _DIBDRV_PutLine1(const DIBDRVBITMAP *bmp, INT line, INT startx, int width, 
     BYTE b, mask;
     char i;
     DWORD c;
-    
+
     /* get foreground color */
     DWORD fore = *((DWORD *)bmp->colorTable + 1) & 0x00ffffff;
     
     /* put first partial byte, if any */
-    startx &= 0x03;
+    startx &= 0x07;
     mask = 0x80 >> startx;
-    startx = (8 - startx) & 0x03;
+    startx = (8 - startx) & 0x07;
     if(startx)
     {
         width -= startx;
@@ -540,7 +544,7 @@ BOOL _DIBDRV_PutLine1(const DIBDRVBITMAP *bmp, INT line, INT startx, int width, 
     }
     
     /* last partial byte, if any */
-    if(width)
+    if(width > 0)
     {
         b = *dst;
         mask = 0x80;

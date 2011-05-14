@@ -413,7 +413,7 @@ DWORD _DIBDRV_ROP3(DWORD p, DWORD s, DWORD d, BYTE rop)
             return (0x123456) & 0x00ffffff;
             
         case 0x85:   /* PDSPnoaxn                */
-            return (0x123456) & 0x00ffffff;
+            return (~(p ^ (d & (s | ~p)))) & 0x00ffffff;
             
         case 0x86:   /* DSPDSoaxx                */
             return (0x123456) & 0x00ffffff;

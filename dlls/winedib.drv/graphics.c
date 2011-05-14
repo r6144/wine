@@ -295,7 +295,7 @@ static BOOL ScanPolygon(const POINT *pt, int count, int ys, POINT **scans, int *
 }
 
 /* gets bounding box of a polygon */
-void PolygonBoundingBox(const POINT *pt, int count, RECT *bBox)
+static void PolygonBoundingBox(const POINT *pt, int count, RECT *bBox)
 {
     const POINT *p;
     int iPoint;
@@ -309,6 +309,76 @@ void PolygonBoundingBox(const POINT *pt, int count, RECT *bBox)
         if(p->y < bBox->top   ) bBox->top    = p->y;
         if(p->y > bBox->bottom) bBox->bottom = p->y;
     }
+}
+
+/* intersect 2 rectangles (just to not use USER32 one...)
+   bottom and tight sides are considered OUTSIDE */
+BOOL _DIBDRV_IntersectRect(RECT *d, const RECT *s1, const RECT *s2)
+{
+    if(s1->right <= s2->left ||
+       s2->right <= s1->left ||
+       s1->bottom <= s2->top ||
+       s2->bottom <= s1->top
+    )
+        return FALSE;
+    d->left = s1->left > s2->left ? s1->left : s2->left;
+    d->top = s1->top > s2->top ? s1->top : s2->top;
+    d->right = s1->right < s2->right ? s1->right : s2->right;
+    d->bottom = s1->bottom < s2->bottom ? s1->bottom : s2->bottom;
+    return TRUE;
+}
+
+/* converts a rectangle form Word space to Device space */
+void _DIBDRV_Rect_ws2ds(DIBDRVPHYSDEV *physDev, const RECT *src, RECT *dst)
+{
+    POINT pts[2];
+    pts[0].x = src->left;
+    pts[0].y = src->top;
+    pts[1].x = src->right;
+    pts[1].y = src->bottom;
+    LPtoDP(physDev->hdc, pts, 2);
+    dst->left   = pts[0].x;
+    dst->top    = pts[0].y;
+    dst->right  = pts[1].x;
+    dst->bottom = pts[1].y;
+}
+
+/* converts positions  from Word space to Device space */
+void _DIBDRV_Position_ws2ds(DIBDRVPHYSDEV *physDev, int *x, int *y)
+{
+    POINT p;
+    p.x = *x;
+    p.y = *y;
+    LPtoDP(physDev->hdc, &p, 1);
+    *x = p.x;
+    *y = p.y;
+}
+
+void _DIBDRV_Positions_ws2ds(DIBDRVPHYSDEV *physDev, int *x1, int *y1, int *x2, int *y2)
+{
+    POINT pts[2];
+    pts[0].x = *x1;
+    pts[0].y = *y1;
+    pts[1].x = *x2;
+    pts[1].y = *y2;
+    LPtoDP(physDev->hdc, pts, 2);
+    *x1 = pts[0].x;
+    *y1 = pts[0].y;
+    *x2 = pts[1].x;
+    *y2 = pts[1].y;
+}
+
+/* converts sizes from Word space to Device space */
+void _DIBDRV_Sizes_ws2ds(DIBDRVPHYSDEV *physDev, int *w, int *h)
+{
+    POINT pts[2];
+    pts[0].x = 0;
+    pts[0].y = 0;
+    pts[1].x = *w;
+    pts[1].y = *h;
+    LPtoDP(physDev->hdc, pts, 2);
+    *w = pts[1].x - pts[0].x;
+    *h = pts[1].y - pts[0].y;
 }
 
 /***********************************************************************
@@ -446,6 +516,7 @@ COLORREF DIBDRV_GetPixel( DIBDRVPHYSDEV *physDev, int x, int y )
 
     if(physDev->hasDIB)
     {
+        _DIBDRV_Position_ws2ds(physDev, &x, &y);
         res = physDev->physBitmap.funcs->GetPixel(&physDev->physBitmap, x, y);
     }
     else
@@ -463,22 +534,44 @@ BOOL DIBDRV_LineTo( DIBDRVPHYSDEV *physDev, int x, int y )
 {
     BOOL res;
     POINT curPos;
+    RECT *r;
+    int iRec;
+    POINT p1, p2, pc1, pc2; 
     
     MAYBE(TRACE("physDev:%p, x:%d, y:%d\n", physDev, x, y));
 
     if(physDev->hasDIB)
     {
+        res = FALSE;
         GetCurrentPositionEx(physDev->hdc, &curPos);
 
-        _DIBDRV_ResetDashOrigin(physDev);
+        /* converts position to device space */
+        p1.x = curPos.x; p1.y = curPos.y;
+        p2.x = x; p2.y = y;
+        LPtoDP(physDev->hdc, &p1, 1);
+        LPtoDP(physDev->hdc, &p2, 1);
 
-        if(curPos.y == y)
-            physDev->penHLine(physDev, curPos.x, x, y);
-        else if(curPos.x == x)
-            physDev->penVLine(physDev, x, curPos.y, y);
-        else
-            physDev->penLine(physDev, curPos.x, curPos.y, x, y);
-        res = TRUE;
+        /* cycle on all current clipping rectangles */
+        r = physDev->regionRects;
+        for(iRec = 0; iRec < physDev->regionRectCount; iRec++, r++)
+        {
+            _DIBDRV_ResetDashOrigin(physDev);
+            
+            /* clipe line on current region area */
+            if(ClipLine(&p1, &p2, r, &pc1, &pc2))
+            {
+                if(pc1.y == pc2.y)
+                    physDev->penHLine(physDev, pc1.x, pc2.x, pc1.y);
+                else if(pc1.x == pc2.x)
+                    physDev->penVLine(physDev, pc1.x, pc1.y, pc2.y);
+                else
+                    physDev->penLine(physDev, pc1.x, pc1.y, pc2.x, pc2.y);
+                res = TRUE;
+            }
+        }
+        
+        /* moves current position to next point */
+        MoveToEx(physDev->hdc, x, y, NULL);
     }
     else
     {
@@ -583,7 +676,7 @@ BOOL DIBDRV_Polygon( DIBDRVPHYSDEV *physDev, const POINT* ptw, int count )
     POINT pc1, pc2;
     
     MAYBE(TRACE("physDev:%p, pt:%p, count:%d\n", physDev, ptw, count));
-
+ 
     if(physDev->hasDIB)
     {
         /* DIB section selected in, use DIB Engine */
@@ -771,58 +864,67 @@ BOOL DIBDRV_PolyPolyline( DIBDRVPHYSDEV *physDev, const POINT* pt, const DWORD* 
  */
 BOOL DIBDRV_Rectangle( DIBDRVPHYSDEV *physDev, int x1, int y1, int x2, int y2)
 {
-    BOOL res = TRUE;
+    BOOL res;
     int i;
-    DIBDRVBITMAP *bmp = &physDev->physBitmap;
+    RECT rWorld, rDevice, rClipped;
+    RECT *r;
+    int iRec;
     
     MAYBE(TRACE("physDev:%p, left:%d, top:%d, right:%d, bottom:%d\n", physDev, x1, y1, x2, y2));
 
     if(physDev->hasDIB)
     {
+        res = FALSE;
+        
         OrderInt(&x1, &x2);
         OrderInt(&y1, &y2);
 
-        /* temporary fix.... should be done by clipping */
-        if(x1 < 0) x1 = 0;
-        if(x2 < 0) x2 = 0;
-        if(y1 < 0) y1 = 0;
-        if(y2 < 0) y2 = 0;
-        if(x1 >= bmp->width)  x1 = bmp->width  - 1;
-        if(y1 >= bmp->height) y1 = bmp->height - 1;
-        if(x2 >  bmp->width)  x2 = bmp->width;
-        if(y2 >  bmp->height) y2 = bmp->height ;
-        if(x1 >= x2 || y1 >= y2)
-            goto fin;
+        /* converts to device space */
+        rWorld.left = x1; rWorld.top = y1; rWorld.right = x2; rWorld.bottom = y2;
+        _DIBDRV_Rect_ws2ds(physDev, &rWorld, &rDevice);
 
-        _DIBDRV_ResetDashOrigin(physDev);
-        
-        /* particular case where the rectangle
-           degenerates to a line or a point */
-        if(x1 >= x2 - 1)
+        /* loop on all clip region rectangles */
+        r = physDev->regionRects;
+        for(iRec = 0; iRec < physDev->regionRectCount; iRec++, r++)
         {
-            physDev->penVLine(physDev, x1, y1, y2);
-            goto fin;
-        }
-        else if (y1 >= y2 -1)
-        {
-            physDev->penHLine(physDev, x1, x2, y1);
-            goto fin;
-        }
-        
-        /* Draw the perimeter */
-        physDev->penHLine(physDev, x1    , x2    , y1   );
-        physDev->penHLine(physDev, x1    , x2    , y2 - 1);
-        physDev->penVLine(physDev, x1    , y1 + 1, y2 - 1);
-        physDev->penVLine(physDev, x2 - 1, y1 + 1, y2 - 1);
+            /* clips rectangle to current region */
+            if(_DIBDRV_IntersectRect(&rClipped, &rDevice, r))
+            {
+                x1 = rClipped.left; y1 = rClipped.top;
+                x2 = rClipped.right; y2 = rClipped.bottom;
+                
+                _DIBDRV_ResetDashOrigin(physDev);
+                
+                /* fill the inside, if not null brush */
+                if(physDev->brushStyle != BS_NULL)
+                {
+                    if(x2 > x1)
+                        for (i = y1; i < y2; i++)
+                            physDev->brushHLine(physDev, x1, x2, i);
+                }
 
-        /* fill the inside */
-        if(x2 >= x1 + 2)
-            for (i = y1 + 1; i < y2 - 1; i++)
-                physDev->brushHLine(physDev, x1 + 1, x2 - 1, i);
-
-        res = TRUE;
-fin:
-        ;
+                /* draw perimeter, if not null pen */
+                if(physDev->penStyle != PS_NULL)
+                {
+                
+                    /* particular case where the rectangle
+                       degenerates to a line or a point */
+                    if(x1 >= x2 - 1)
+                        physDev->penVLine(physDev, x1, y1, y2);
+                    else if (y1 >= y2 -1)
+                        physDev->penHLine(physDev, x1, x2, y1);
+                    else
+                    {
+                        /* Draw the perimeter */
+                        physDev->penHLine(physDev, x1    , x2    , y1   );
+                        physDev->penHLine(physDev, x1    , x2    , y2 - 1);
+                        physDev->penVLine(physDev, x1    , y1 + 1, y2 - 1);
+                        physDev->penVLine(physDev, x2 - 1, y1 + 1, y2 - 1);
+                    }
+                }
+                res = TRUE;
+            }
+        }
     }
     else
     {
@@ -870,6 +972,8 @@ COLORREF DIBDRV_SetPixel( DIBDRVPHYSDEV *physDev, int x, int y, COLORREF color )
 
     if(physDev->hasDIB)
     {
+        _DIBDRV_Position_ws2ds(physDev, &x, &y);
+
         /* gets previous pixel */
         res = physDev->physBitmap.funcs->GetPixel(&physDev->physBitmap, x, y);
      
