@@ -11,15 +11,27 @@ C_SRCS = \
     bitblt.c \
     bitmap.c \
     clipping.c \
+    convert.c \
     dc.c \
     dib.c \
     dibdrv_main.c \
+    dibdrvbitmap.c \
     driver.c \
     font.c \
+    freetype.c \
     graphics.c \
     opengl.c \
     palette.c \
     pen_brush.c \
+    primitives.c \
+    primitives_bitblt.c \
+    primitives_color.c \
+    primitives_convert.c \
+    primitives_font.c \
+    primitives_line.c \
+    primitives_pixel.c \
+    primitives_rop2.c \
+    primitives_rop3.c \
     text.c \
     video.c
 

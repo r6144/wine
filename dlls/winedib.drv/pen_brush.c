@@ -26,20 +26,317 @@
 WINE_DEFAULT_DEBUG_CHANNEL(dibdrv);
 
 
+static const DASHPATTERN dashPatterns[4] =
+{
+    {2, {18, 6}},
+    {2, {3,  3}},
+    {4, {9, 6, 3, 6}},
+    {6, {9, 3, 3, 3, 3, 3}}
+};
+
+static inline void OrderEndPoints(int *s, int *e)
+{
+    if(*s > *e)
+    {
+        int tmp;
+        tmp = *s + 1;
+        *s = *e + 1;
+        *e = tmp;
+    }
+}
+
+static void SolidPenHLine(DIBDRVPHYSDEV *physDev, int x1, int x2, int y)
+{
+    OrderEndPoints(&x1, &x2);
+    physDev->physBitmap.funcs->SolidHLine(&physDev->physBitmap, x1, x2, y, physDev->penAnd, physDev->penXor);
+}
+
+static void SolidPenVline(DIBDRVPHYSDEV *physDev, int x, int y1, int y2)
+{
+    OrderEndPoints(&y1, &y2);
+    physDev->physBitmap.funcs->SolidVLine(&physDev->physBitmap, x, y1, y2, physDev->penAnd, physDev->penXor);
+}
+
+static void WINAPI SolidPenLineCallback(int x, int y, LPARAM lparam)
+{
+    DIBDRVPHYSDEV *physDev = (DIBDRVPHYSDEV *)lparam;
+
+    physDev->physBitmap.funcs->SetPixel(&physDev->physBitmap, x, y, physDev->penAnd, physDev->penXor);
+    return;
+}
+
+void SolidPenLine(DIBDRVPHYSDEV *physDev, int x1, int y1, int x2, int y2)
+{
+    LineDDA(x1, y1, x2, y2, SolidPenLineCallback, (LPARAM)physDev);
+}
+
+static inline void GetDashColors(DIBDRVPHYSDEV *physDev, DWORD *and, DWORD *xor)
+{
+    if(physDev->markSpace == mark)
+    {
+        *and = physDev->penAnd;
+        *xor = physDev->penXor;
+    }
+    else if(GetBkMode(physDev->hdc) == OPAQUE)
+    {
+        *and = physDev->backgroundAnd;
+        *xor = physDev->backgroundXor;
+    }
+    else
+    {
+        *and = 0xffffffff;
+        *xor = 0;
+    }
+}
+
+static inline void NextDash(DIBDRVPHYSDEV *physDev)
+{
+    if(physDev->leftInDash != 0)
+        return;
+
+    physDev->curDash++;
+    if(physDev->curDash == physDev->penPattern->count)
+        physDev->curDash = 0;
+    physDev->leftInDash = physDev->penPattern->dashes[physDev->curDash];
+    if(physDev->markSpace == mark)
+        physDev->markSpace = space;
+    else
+        physDev->markSpace = mark;
+}
+
+static void DashedPenHLine(DIBDRVPHYSDEV *physDev, int x1, int x2, int y)
+{
+    int x = x1;
+    DWORD and, xor;
+    DWORD dashLen;
+
+    if(x1 <= x2)
+    {
+        while(x != x2)
+        {
+            GetDashColors(physDev, &and, &xor);
+
+            dashLen = physDev->leftInDash;
+            if(x + dashLen > x2)
+                dashLen = x2 - x;
+
+            physDev->physBitmap.funcs->SolidHLine(&physDev->physBitmap, x, x + dashLen, y, and, xor);
+            x += dashLen;
+
+            physDev->leftInDash -= dashLen;
+            NextDash(physDev);
+        }
+    }
+    else
+    {
+        while(x != x2)
+        {
+            GetDashColors(physDev, &and, &xor);
+
+            dashLen = physDev->leftInDash;
+            if(x - (int)dashLen < x2)
+                dashLen = x - x2;
+
+            physDev->physBitmap.funcs->SolidHLine(&physDev->physBitmap, x - dashLen + 1, x + 1, y, and, xor);
+            x -= dashLen;
+
+            physDev->leftInDash -= dashLen;
+            NextDash(physDev);
+        }
+    }
+}
+
+static void DashedPenVLine(DIBDRVPHYSDEV *physDev, int x, int y1, int y2)
+{
+    int y = y1;
+    DWORD and, xor;
+    DWORD dashLen;
+
+    if(y1 <= y2)
+    {
+        while(y != y2)
+        {
+            GetDashColors(physDev, &and, &xor);
+
+            dashLen = physDev->leftInDash;
+            if(y + dashLen > y2)
+                dashLen = y2 - y;
+
+            physDev->physBitmap.funcs->SolidVLine(&physDev->physBitmap, x, y, y + dashLen, and, xor);
+            y += dashLen;
+
+            physDev->leftInDash -= dashLen;
+            NextDash(physDev);
+        }
+    }
+    else
+    {
+        while(y != y2)
+        {
+            GetDashColors(physDev, &and, &xor);
+
+            dashLen = physDev->leftInDash;
+            if(y - (int)dashLen < y2)
+                dashLen = y - y2;
+
+            physDev->physBitmap.funcs->SolidVLine(&physDev->physBitmap, x, y - dashLen + 1, y + 1, and, xor);
+            y -= dashLen;
+
+            physDev->leftInDash -= dashLen;
+            NextDash(physDev);
+        }
+    }
+}
+
+static void WINAPI DashedPenLineCallback(int x, int y, LPARAM lparam)
+{
+    DIBDRVPHYSDEV *physDev = (DIBDRVPHYSDEV *)lparam;
+    DWORD and, xor;
+
+    GetDashColors(physDev, &and, &xor);
+
+    physDev->physBitmap.funcs->SetPixel(&physDev->physBitmap, x, y, and, xor);
+
+    physDev->leftInDash--;
+    NextDash(physDev);
+
+    return;
+}
+
+static void DashedPenLine(DIBDRVPHYSDEV *physDev, int x1, int y1, int x2, int y2)
+{
+    LineDDA(x1, y1, x2, y2, DashedPenLineCallback, (LPARAM)physDev);
+}
+
+void _DIBDRV_ResetDashOrigin(DIBDRVPHYSDEV *physDev)
+{
+    physDev->curDash = 0;
+    if(physDev->penPattern)
+        physDev->leftInDash = physDev->penPattern->dashes[0];
+    physDev->markSpace = mark;
+}
+
+
+/* For 1bpp bitmaps, unless the selected foreground color exactly
+   matches foreground's colortable OR it's the WHITE color,
+   the background color is used -- tested on WinXP */
+static DWORD AdjustFgColor(DIBDRVPHYSDEV *physDev, COLORREF color)
+{
+    RGBQUAD *fore = physDev->physBitmap.colorTable+1;
+    
+    if((color & 0x00ffffff) == 0x00ffffff ||
+       (
+           fore->rgbRed   == GetRValue(color) &&
+           fore->rgbGreen == GetGValue(color) &&
+           fore->rgbBlue  == GetBValue(color)
+    ))
+       return 1;
+    return 0;
+}
+
+static void FixupFgColors1(DIBDRVPHYSDEV *physDev)
+{
+    int rop = GetROP2(physDev->hdc);
+
+    physDev->penColor   = AdjustFgColor(physDev, physDev->penColorref);
+    physDev->brushColor = AdjustFgColor(physDev, physDev->brushColorref);
+
+    _DIBDRV_CalcAndXorMasks(rop, physDev->penColor, &physDev->penAnd, &physDev->penXor);
+    _DIBDRV_CalcAndXorMasks(rop, physDev->brushColor, &physDev->brushAnd, &physDev->brushXor);
+    HeapFree(GetProcessHeap(), 0, physDev->brushAnds);
+    HeapFree(GetProcessHeap(), 0, physDev->brushXors);
+    physDev->brushAnds = NULL;
+    physDev->brushXors = NULL;
+}
+
+static void SolidBrushHLine(DIBDRVPHYSDEV *physDev, int x1, int x2, int y)
+{
+    OrderEndPoints(&x1, &x2);
+    physDev->physBitmap.funcs->SolidHLine(&physDev->physBitmap, x1, x2, y, physDev->brushAnd, physDev->brushXor);
+}
+
+
+static void GenerateMasks(DIBDRVPHYSDEV *physDev, DIBDRVBITMAP *bmp, DWORD **and, DWORD **xor)
+{
+    int rop = GetROP2(physDev->hdc);
+    DWORD *color_ptr, *and_ptr, *xor_ptr;
+    DWORD size = bmp->height * abs(bmp->stride);
+
+    *and = HeapAlloc(GetProcessHeap(), 0, size);
+    *xor = HeapAlloc(GetProcessHeap(), 0, size);
+
+    color_ptr = bmp->bits;
+    and_ptr = *and;
+    xor_ptr = *xor;
+
+    while(size)
+    {
+        _DIBDRV_CalcAndXorMasks(rop, *color_ptr++, and_ptr++, xor_ptr++);
+        size -= 4;
+    }
+}
+
+static void PatternBrushHLine(DIBDRVPHYSDEV *physDev, int x1, int x2, int y)
+{
+    DWORD *and, *xor, brushY = y % physDev->brushBitmap.height;
+
+    if(!physDev->brushAnds)
+        GenerateMasks(physDev, &physDev->brushBitmap, &physDev->brushAnds, &physDev->brushXors);
+
+    OrderEndPoints(&x1, &x2);
+    and = (DWORD *)((char *)physDev->brushAnds + brushY * physDev->brushBitmap.stride);
+    xor = (DWORD *)((char *)physDev->brushXors + brushY * physDev->brushBitmap.stride);
+
+    physDev->physBitmap.funcs->PatternHLine(&physDev->physBitmap, x1, x2, y, and, xor, physDev->brushBitmap.width, x1 % physDev->brushBitmap.width);
+}
+
 /***********************************************************************
  *           DIBDRV_SelectPen
  */
 HPEN DIBDRV_SelectPen( DIBDRVPHYSDEV *physDev, HPEN hpen )
 {
     HPEN res;
+    LOGPEN logpen;
     
-    TRACE("physDev:%p, hpen:%p\n", physDev, hpen);
+    MAYBE(TRACE("physDev:%p, hpen:%p\n", physDev, hpen));
 
     if(physDev->hasDIB)
     {
-        /* DIB section selected in, use DIB Engine */
-        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
-        res = _DIBDRV_GetDisplayDriver()->pSelectPen(physDev->X11PhysDev, hpen);
+        GetObjectW(hpen, sizeof(logpen), &logpen);
+
+        physDev->penColorref = logpen.lopnColor;
+
+        if(physDev->physBitmap.bitCount == 1)
+            FixupFgColors1(physDev);
+        else
+            physDev->penColor = physDev->physBitmap.funcs->ColorToPixel(&physDev->physBitmap, logpen.lopnColor);
+
+        _DIBDRV_CalcAndXorMasks(GetROP2(physDev->hdc), physDev->penColor, &physDev->penAnd, &physDev->penXor);
+
+        switch(logpen.lopnStyle)
+        {
+            default:
+                ONCE(FIXME("Unhandled pen style %d\n", logpen.lopnStyle));
+                /* fall through */
+            case PS_SOLID:
+                physDev->penHLine = SolidPenHLine;
+                physDev->penVLine = SolidPenVline;
+                physDev->penLine  = SolidPenLine;
+                physDev->penPattern = NULL;
+                break;
+
+            case PS_DASH:
+            case PS_DOT:
+            case PS_DASHDOT:
+            case PS_DASHDOTDOT:
+                physDev->penHLine = DashedPenHLine;
+                physDev->penVLine = DashedPenVLine;
+                physDev->penLine  = DashedPenLine;
+                physDev->penPattern = &dashPatterns[logpen.lopnStyle - PS_DASH];
+                _DIBDRV_ResetDashOrigin(physDev);
+                break;
+        }
+        res = hpen;
     }
     else
     {
@@ -56,13 +353,13 @@ COLORREF DIBDRV_SetDCPenColor( DIBDRVPHYSDEV *physDev, COLORREF crColor )
 {
     COLORREF res;
     
-    TRACE("physDev:%p, crColor:%x\n", physDev, crColor);
+    MAYBE(TRACE("physDev:%p, crColor:%x\n", physDev, crColor));
 
     if(physDev->hasDIB)
     {
         /* DIB section selected in, use DIB Engine */
-        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
-        res = _DIBDRV_GetDisplayDriver()->pSetDCPenColor(physDev->X11PhysDev, crColor);
+        ONCE(FIXME("STUB\n"));
+        res = crColor;
     }
     else
     {
@@ -77,19 +374,151 @@ COLORREF DIBDRV_SetDCPenColor( DIBDRVPHYSDEV *physDev, COLORREF crColor )
  */
 HBRUSH DIBDRV_SelectBrush( DIBDRVPHYSDEV *physDev, HBRUSH hbrush )
 {
-    HBRUSH res;
+    HBRUSH res = hbrush;
+    LOGBRUSH logbrush;
+
     
-    TRACE("physDev:%p, hbrush:%p\n", physDev, hbrush);
+    MAYBE(TRACE("physDev:%p, hbrush:%p\n", physDev, hbrush));
 
     if(physDev->hasDIB)
     {
-        /* DIB section selected in, use DIB Engine */
-        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
-        res = _DIBDRV_GetDisplayDriver()->pSelectBrush(physDev->X11PhysDev, hbrush);
+        GetObjectW(hbrush, sizeof(logbrush), &logbrush);
+
+        /* frees any currently selected DIB brush and cache */
+        _DIBDRVBITMAP_Free(&physDev->brushBitmap);
+        _DIBDRVBITMAP_Free(&physDev->brushBmpCache);
+        if(physDev->brushAnds)
+        {
+            HeapFree(GetProcessHeap(), 0, physDev->brushAnds);
+            HeapFree(GetProcessHeap(), 0, physDev->brushXors);
+        }
+        physDev->brushAnds = NULL;
+        physDev->brushXors = NULL;
+
+        switch (logbrush.lbStyle)
+        {
+            default:
+                FIXME("Unhandled brush style %d\n", logbrush.lbStyle);
+                physDev->brushColorref = 0;
+                goto solid;
+                
+            case BS_SOLID:
+                physDev->brushColorref = logbrush.lbColor;
+    solid:
+                MAYBE(TRACE("SOLID Pattern -- color is %x\n", physDev->brushColorref));
+                physDev->brushStyle = BS_SOLID;
+                physDev->brushHLine = SolidBrushHLine;
+
+                if(physDev->physBitmap.bitCount == 1)
+                    FixupFgColors1(physDev);
+                else
+                    physDev->brushColor = physDev->physBitmap.funcs->ColorToPixel(&physDev->physBitmap, logbrush.lbColor);
+
+                _DIBDRV_CalcAndXorMasks(physDev->rop2, physDev->brushColor,
+                                           &physDev->brushAnd, &physDev->brushXor);
+
+                /* set the physDev brush style */
+                physDev->brushStyle = BS_SOLID;
+                physDev->isBrushBitmap = FALSE;
+                
+                break;
+
+            case BS_DIBPATTERN8X8:
+            case BS_DIBPATTERN:
+            {
+                DIBDRVBITMAP src;
+                BITMAPINFO *bmi;
+                
+                FIXME("DIB Pattern\n");
+                
+                /* if no DIB selected in, fallback to null brush */
+                if(!physDev->physBitmap.bits)
+                {
+                    physDev->brushColorref = 0;
+                    goto solid;
+                }
+
+                /* gets brush DIB's pointer */
+                bmi = GlobalLock16(logbrush.lbHatch);
+        
+                /* initializes a temporary DIB with brush's one */
+                if(!_DIBDRVBITMAP_InitFromBitmapinfo(&src, bmi))
+                {
+                    ERR("Failed to initialize brush DIB\n");
+                    res = 0;
+                    goto err;
+                }
+                
+                /* converts brush bitmap to match currently selected one's format */
+                if(!_DIBDRVBITMAP_Convert(&physDev->brushBitmap, &src, &physDev->physBitmap))
+                {
+                    ERR("Failed to convert brush DIB\n");
+                    _DIBDRVBITMAP_Free(&src);
+                    res = 0;
+                    goto err;
+                }
+
+                /* frees temporary DIB's data */
+                _DIBDRVBITMAP_Free(&src);
+                
+                /* use DIB pattern for brush lines */
+                physDev->brushHLine = PatternBrushHLine;
+
+    err:            
+                /* frees brush's DIB pointer */
+                GlobalUnlock16(logbrush.lbHatch);
+                
+                break;
+            }
+            case BS_DIBPATTERNPT:
+                FIXME("BS_DIBPATTERNPT not supported\n");
+                physDev->brushColorref = 0;
+                goto solid;
+                
+            case BS_HATCHED:
+                FIXME("BS_HATCHED not supported\n");
+                physDev->brushColorref = 0;
+                goto solid;
+                
+            case BS_NULL:
+            {
+                MAYBE(TRACE("NULL Pattern\n"));
+                physDev->brushColorref = 0;
+                goto solid;
+            }
+                
+            case BS_PATTERN:
+            case BS_PATTERN8X8:
+                FIXME("BS_PATTERN not supported\n");
+                physDev->brushColorref = 0;
+                goto solid;
+        }
+
+        MAYBE(TRACE("END\n"));
+        return hbrush;
     }
     else
     {
         /* DDB selected in, use X11 driver */
+ 
+        /* we must check if a DIB pattern is requested */       
+        GetObjectW(hbrush, sizeof(logbrush), &logbrush);
+        switch (logbrush.lbStyle)
+        {
+            case BS_DIBPATTERN8X8:
+            case BS_DIBPATTERN:
+            case BS_DIBPATTERNPT:
+                FIXME("A DIB pattern was requested for a DDB bitmap\n");
+                break;
+
+            case BS_SOLID:
+            case BS_HATCHED:
+            case BS_NULL:
+            case BS_PATTERN:
+            case BS_PATTERN8X8:
+            default:
+                break;
+        }
         res = _DIBDRV_GetDisplayDriver()->pSelectBrush(physDev->X11PhysDev, hbrush);
     }
     return res;
@@ -102,13 +531,13 @@ COLORREF DIBDRV_SetDCBrushColor( DIBDRVPHYSDEV *physDev, COLORREF crColor )
 {
     COLORREF res;
     
-    TRACE("physDev:%p, crColor:%x\n", physDev, crColor);
+    MAYBE(TRACE("physDev:%p, crColor:%x\n", physDev, crColor));
 
     if(physDev->hasDIB)
     {
         /* DIB section selected in, use DIB Engine */
-        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
-        res = _DIBDRV_GetDisplayDriver()->pSetDCBrushColor(physDev->X11PhysDev, crColor);
+        ONCE(FIXME("STUB\n"));
+        res = crColor;
     }
     else
     {
@@ -121,14 +550,29 @@ COLORREF DIBDRV_SetDCBrushColor( DIBDRVPHYSDEV *physDev, COLORREF crColor )
 /***********************************************************************
  *           SetROP2
  */
-INT DIBDRV_SetROP2( DIBDRVPHYSDEV *physDev, INT rop )
+int DIBDRV_SetROP2( DIBDRVPHYSDEV *physDev, int rop )
 {
-    INT prevRop;
+    int prevRop;
     
-    TRACE("physDev:%p, rop:%x\n", physDev, rop);
+    MAYBE(TRACE("physDev:%p, rop:%x\n", physDev, rop));
 
     prevRop = physDev->rop2;
     physDev->rop2 = rop;
+
+    if(prevRop != rop)
+    {
+        _DIBDRV_CalcAndXorMasks(rop, physDev->penColor,   &physDev->penAnd,   &physDev->penXor);
+        _DIBDRV_CalcAndXorMasks(rop, physDev->brushColor, &physDev->brushAnd, &physDev->brushXor);
+        _DIBDRV_CalcAndXorMasks(rop, physDev->backgroundColor, &physDev->backgroundAnd, &physDev->backgroundXor);
+        if(physDev->brushAnds)
+        {
+            HeapFree(GetProcessHeap(), 0, physDev->brushAnds);
+            HeapFree(GetProcessHeap(), 0, physDev->brushXors);
+        }
+        physDev->brushAnds = NULL;
+        physDev->brushXors = NULL;
+    }
+
     return prevRop;
     /* note : X11 Driver don't have SetROP2() function exported */
 }
@@ -140,13 +584,17 @@ COLORREF DIBDRV_SetBkColor( DIBDRVPHYSDEV *physDev, COLORREF color )
 {
     COLORREF res;
     
-    TRACE("physDev:%p, color:%x\n", physDev, color);
+    MAYBE(TRACE("physDev:%p, color:%x\n", physDev, color));
 
     if(physDev->hasDIB)
     {
-        /* DIB section selected in, use DIB Engine */
-        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
-        res = _DIBDRV_GetDisplayDriver()->pSetBkColor(physDev->X11PhysDev, color);
+        physDev->backgroundColor = physDev->physBitmap.funcs->ColorToPixel(&physDev->physBitmap, color);
+
+        if(physDev->physBitmap.bitCount == 1)
+            FixupFgColors1(physDev);
+        _DIBDRV_CalcAndXorMasks(physDev->rop2, physDev->backgroundColor, &physDev->backgroundAnd, &physDev->backgroundXor);
+        
+        res = TRUE;
     }
     else
     {

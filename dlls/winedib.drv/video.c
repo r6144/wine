@@ -32,7 +32,7 @@ BOOL DIBDRV_GetDeviceGammaRamp( DIBDRVPHYSDEV *physDev, LPVOID ramp )
 {
     BOOL res;
     
-    TRACE("physDev:%p, ramp:%p\n", physDev, ramp);
+    MAYBE(TRACE("physDev:%p, ramp:%p\n", physDev, ramp));
 
     if(physDev->hasDIB)
     {
@@ -55,13 +55,13 @@ BOOL DIBDRV_SetDeviceGammaRamp( DIBDRVPHYSDEV *physDev, LPVOID ramp )
 {
     BOOL res;
     
-    TRACE("physDev:%p, ramp:%p\n", physDev, ramp);
+    MAYBE(TRACE("physDev:%p, ramp:%p\n", physDev, ramp));
 
     if(physDev->hasDIB)
     {
         /* DIB section selected in, use DIB Engine */
-        ONCE(FIXME("TEMPORARY - fallback to X11 driver\n"));
-        res = _DIBDRV_GetDisplayDriver()->pSetDeviceGammaRamp(physDev->X11PhysDev, ramp);
+        ONCE(FIXME("STUB\n"));
+        res = TRUE;
     }
     else
     {
