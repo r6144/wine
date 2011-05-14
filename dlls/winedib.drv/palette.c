@@ -38,12 +38,12 @@ COLORREF _DIBDRV_MapColor(DIBDRVPHYSDEV *physDev, COLORREF color)
         case 0x10 : /* DIBINDEX */
             MAYBE(TRACE("DIBINDEX Color is %08x\n", color));
             index =  color & 0xffff;
-            if(index >= physDev->physBitmap.colorTableSize)
+            if(index >= physDev->physBitmap->colorTableSize)
             {
-                WARN("DIBINDEX color out of range\n");
+                WARN("DIBINDEX color %d out of range, color table size is %d\n", index, physDev->physBitmap->colorTableSize);
                 return 0;
             }
-            palColor = physDev->physBitmap.colorTable + index;
+            palColor = physDev->physBitmap->colorTable + index;
             MAYBE(TRACE("Returning color %08x\n", RGB(palColor->rgbRed, palColor->rgbGreen, palColor->rgbBlue)));
             return RGB(palColor->rgbRed, palColor->rgbGreen, palColor->rgbBlue);
             
@@ -64,24 +64,36 @@ COLORREF _DIBDRV_MapColor(DIBDRVPHYSDEV *physDev, COLORREF color)
             return RGB(paletteEntry.peRed, paletteEntry.peGreen, paletteEntry.peBlue);
         
         case 0x02: /* PALETTERGB */
-            return _DIBDRV_GetNearestColor(&physDev->physBitmap, color & 0xffffff);
+            return _DIBDRV_GetNearestColor(physDev->physBitmap, color & 0xffffff);
         
         default:
             /* RGB color -- we must process special case for monochrome bitmaps */
-            if(physDev->physBitmap.bitCount == 1)
+            if(physDev->physBitmap->bitCount == 1)
             {
-                RGBQUAD *back = physDev->physBitmap.colorTable;
+                RGBQUAD *back = physDev->physBitmap->colorTable;
                 RGBQUAD *fore = back+1;
-                if(fore->rgbRed * fore->rgbRed + fore->rgbGreen * fore->rgbGreen + fore->rgbBlue * fore->rgbBlue <
-                   back->rgbRed * back->rgbRed + back->rgbGreen * back->rgbGreen + back->rgbBlue * back->rgbBlue)
+                COLORREF lightColorref, darkColorref;
+                
+                /* lightest color is considered to be 'foreground' one, i.e. associated to white color */
+                if(physDev->physBitmap->lightColor == 1)
                 {
-                    fore = back;
-                    back = fore + 1;
+                    darkColorref = RGB(back->rgbRed, back->rgbGreen, back->rgbBlue);
+                    lightColorref = RGB(fore->rgbRed, fore->rgbGreen, fore->rgbBlue);
                 }
-                if ( ((color >> 16) & 0xff) + ((color >>  8) & 0xff) + (color & 0xff) > 255*3/2)
-                    return RGB(fore->rgbRed, fore->rgbGreen, fore->rgbBlue);
                 else
-                    return RGB(back->rgbRed, back->rgbGreen, back->rgbBlue);
+                {
+                    darkColorref = RGB(fore->rgbRed, fore->rgbGreen, fore->rgbBlue);
+                    lightColorref = RGB(back->rgbRed, back->rgbGreen, back->rgbBlue);
+                }
+                
+                /* tested on Windows XP -- if present in colortable, maps to corresponding color
+                   if not, if white maps to the lightest color, otherwise darkest one. */
+                if(color == lightColorref || color == darkColorref)
+                    return color;
+                else if (color == 0x00ffffff)
+                    return lightColorref;
+                else
+                    return darkColorref;
             }
             else
                 return color;
@@ -200,20 +212,24 @@ UINT DIBDRV_RealizeDefaultPalette( DIBDRVPHYSDEV *physDev )
         /* HACK - we can't get the dib color table during SelectBitmap since it hasn't
            been initialized yet.  This is called from DC_InitDC so it's a convenient place
            to grab the color table. */
-        MAYBE(TRACE("Color table size = %d, Color table = %p\n", physDev->physBitmap.colorTableSize, physDev->physBitmap.colorTable));
-        if(!physDev->physBitmap.colorTableGrabbed)
+        MAYBE(TRACE("Color table size = %d, Color table = %p\n", physDev->physBitmap->colorTableSize, physDev->physBitmap->colorTable));
+        if(!physDev->physBitmap->colorTableGrabbed)
         {
             MAYBE(TRACE("Grabbing palette\n"));
-            physDev->physBitmap.colorTable = HeapAlloc(GetProcessHeap(), 0, sizeof(physDev->physBitmap.colorTable[0]) * physDev->physBitmap.colorTableSize);
-            GetDIBColorTable(physDev->hdc, 0, physDev->physBitmap.colorTableSize, physDev->physBitmap.colorTable);
+            physDev->physBitmap->colorTable = HeapAlloc(GetProcessHeap(), 0, sizeof(physDev->physBitmap->colorTable[0]) * physDev->physBitmap->colorTableSize);
+            GetDIBColorTable(physDev->hdc, 0, physDev->physBitmap->colorTableSize, physDev->physBitmap->colorTable);
 #ifdef DIBDRV_ENABLE_MAYBE 
-           for(i = 0; i < physDev->physBitmap.colorTableSize; i++)
+           for(i = 0; i < physDev->physBitmap->colorTableSize; i++)
             {
-                q = physDev->physBitmap.colorTable + i;
+                q = physDev->physBitmap->colorTable + i;
                 TRACE("  %03d : R%03d G%03d B%03d\n", i, q->rgbRed, q->rgbGreen, q->rgbBlue);
             }
 #endif
-            physDev->physBitmap.colorTableGrabbed = TRUE;
+            physDev->physBitmap->colorTableGrabbed = TRUE;
+
+            /* for monochrome bitmaps, we need the 'lightest' color */
+            _DIBDRVBITMAP_GetLightestColorIndex(physDev->physBitmap);
+    
         }
         res = 0;
     }

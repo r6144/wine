@@ -517,7 +517,7 @@ COLORREF DIBDRV_GetPixel( DIBDRVPHYSDEV *physDev, int x, int y )
     if(physDev->hasDIB)
     {
         _DIBDRV_Position_ws2ds(physDev, &x, &y);
-        res = physDev->physBitmap.funcs->GetPixel(&physDev->physBitmap, x, y);
+        res = physDev->physBitmap->funcs->GetPixel(physDev->physBitmap, x, y);
     }
     else
     {
@@ -976,18 +976,18 @@ COLORREF DIBDRV_SetPixel( DIBDRVPHYSDEV *physDev, int x, int y, COLORREF color )
         color = _DIBDRV_MapColor(physDev, color);
         
         /* map to pixel color / palette index */
-        color = physDev->physBitmap.funcs->ColorToPixel(&physDev->physBitmap, color);
+        color = physDev->physBitmap->funcs->ColorToPixel(physDev->physBitmap, color);
         
         _DIBDRV_Position_ws2ds(physDev, &x, &y);
 
         /* gets previous pixel */
-        res = physDev->physBitmap.funcs->GetPixel(&physDev->physBitmap, x, y);
+        res = physDev->physBitmap->funcs->GetPixel(physDev->physBitmap, x, y);
      
         /* calculates AND and XOR from color */
         _DIBDRV_CalcAndXorMasks(GetROP2(physDev->hdc), color, &and, &xor);
         
         /* sets the pixel */
-        physDev->physBitmap.funcs->SetPixel(&physDev->physBitmap, x, y, and, xor);
+        physDev->physBitmap->funcs->SetPixel(physDev->physBitmap, x, y, and, xor);
     }
     else
     {

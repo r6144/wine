@@ -267,8 +267,12 @@ BOOL _DIBDRV_InternalAlphaBlend( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst, 
     _DIBDRV_Position_ws2ds(physDevSrc, &xSrc, &ySrc);
     _DIBDRV_Sizes_ws2ds(physDevSrc, &widthSrc, &heightSrc);
     
-    /* from tests, it seems that negative coords on phys space are not allowed */
-    if(xDst < 0 || yDst < 0 || xSrc < 0 || ySrc < 0)
+    /* from tests, it seems that coords out of phys spaces are not allowed */
+    if(xDst < 0 || yDst < 0 || xSrc < 0 || ySrc < 0 ||
+       xDst + widthDst > physDevDst->physBitmap->width ||
+       yDst + heightDst > physDevDst->physBitmap->height ||
+       xSrc + widthSrc > physDevSrc->physBitmap->width ||
+       ySrc + heightSrc > physDevSrc->physBitmap->height)
     {
         SetLastError(ERROR_INVALID_PARAMETER);
         return FALSE;
@@ -279,10 +283,10 @@ BOOL _DIBDRV_InternalAlphaBlend( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst, 
     setPoint(&ps, xSrc, ySrc);
     setSize(&szDst, widthDst, heightDst);
     setSize(&szSrc, widthSrc, heightSrc);
-    setRect(&dstClip, 0, 0, physDevDst->physBitmap.width, physDevDst->physBitmap.height);
+    setRect(&dstClip, 0, 0, physDevDst->physBitmap->width, physDevDst->physBitmap->height);
     if(physDevSrc)
     {
-        setRect(&srcClip, 0, 0, physDevSrc->physBitmap.width, physDevSrc->physBitmap.height);
+        setRect(&srcClip, 0, 0, physDevSrc->physBitmap->width, physDevSrc->physBitmap->height);
         res = StretchBlt_ClipAreas(&ps, &pd, &szSrc, &szDst, &srcClip, &dstClip);
     }
     else
@@ -306,7 +310,7 @@ BOOL _DIBDRV_InternalAlphaBlend( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst, 
         setSize(&szSrc, widthSrc, heightSrc);
         if(!StretchBlt_ClipAreas(&ps, &pd, &szSrc, &szDst, 0, &dstClip))
             continue;
-        if(physDevDst->physBitmap.funcs->AlphaBlend(physDevDst, pd.x, pd.y, szDst.cx, szDst.cy,
+        if(physDevDst->physBitmap->funcs->AlphaBlend(physDevDst, pd.x, pd.y, szDst.cx, szDst.cy,
                                                     physDevSrc, ps.x, ps.y, szSrc.cx, szSrc.cy, blendfn))
             res = TRUE;
     }
@@ -326,9 +330,9 @@ BOOL DIBDRV_AlphaBlend( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst, INT width
     SIZE szDst = {widthDst, heightDst};
 
     MAYBE(TRACE("physDevDst:%p(%s%s), xDst:%d, yDst:%d, widthDst:%d, heightDst:%d, physDevSrc:%p(%s%s), xSrc:%d, ySrc:%d, widthSrc:%d, heightSrc:%d\n",
-          physDevDst, physDevDst->hasDIB ? "DIB-" : "DDB", physDevDst->hasDIB ? _DIBDRVBITMAP_GetFormatName(&physDevDst->physBitmap) : "",
+          physDevDst, physDevDst->hasDIB ? "DIB-" : "DDB", physDevDst->hasDIB ? _DIBDRVBITMAP_GetFormatName(physDevDst->physBitmap) : "",
           xDst, yDst, widthDst, heightDst,
-          physDevSrc, physDevSrc->hasDIB ? "DIB-" : "DDB", physDevSrc->hasDIB ? _DIBDRVBITMAP_GetFormatName(&physDevSrc->physBitmap) : "",
+          physDevSrc, physDevSrc->hasDIB ? "DIB-" : "DDB", physDevSrc->hasDIB ? _DIBDRVBITMAP_GetFormatName(physDevSrc->physBitmap) : "",
           xSrc, ySrc, widthSrc, heightSrc));
 
     /* if sizes are null or negative, or source positions are negatives, returns false */
@@ -349,7 +353,7 @@ BOOL DIBDRV_AlphaBlend( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst, INT width
     }
     else if(!physDevSrc->hasDIB)
     {
-        FIXME("DDB source bitmap -- shouldn't happen\n");
+        FIXME("DDB source bitmap still not supported\n");
         res = FALSE;
         goto fin;
     }
@@ -450,11 +454,11 @@ BOOL _DIBDRV_InternalBitBlt( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
     setPoint(&pd, xDst, yDst);
     setPoint(&ps, xSrc, ySrc);
     setSize(&sz, width, height);
-    setRect(&dstClip, 0, 0, physDevDst->physBitmap.width, physDevDst->physBitmap.height);
+    setRect(&dstClip, 0, 0, physDevDst->physBitmap->width, physDevDst->physBitmap->height);
 
     if(physDevSrc)
     {
-        setRect(&srcClip, 0, 0, physDevSrc->physBitmap.width, physDevSrc->physBitmap.height);
+        setRect(&srcClip, 0, 0, physDevSrc->physBitmap->width, physDevSrc->physBitmap->height);
         res = BitBlt_ClipAreas(&ps, &pd, &sz, &srcClip, &dstClip);
     }
     else
@@ -476,7 +480,7 @@ BOOL _DIBDRV_InternalBitBlt( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
         setSize(&sz, width, height);
         if(!BitBlt_ClipAreas(&ps, &pd, &sz, 0, &dstClip))
             continue;
-        if(!physDevDst->physBitmap.funcs->BitBlt(physDevDst, pd.x, pd.y, sz.cx, sz.cy, physDevSrc, ps.x, ps.y, rop))
+        if(!physDevDst->physBitmap->funcs->BitBlt(physDevDst, pd.x, pd.y, sz.cx, sz.cy, physDevSrc, ps.x, ps.y, rop))
             res = FALSE;
     }
     return res;
@@ -496,16 +500,16 @@ BOOL DIBDRV_BitBlt( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
     SIZE sz = {width, height};
 
     MAYBE(TRACE("physDevDst:%p(%s%s), xDst:%d, yDst:%d, width:%d, height:%d, physDevSrc:%p(%s%s), xSrc:%d, ySrc:%d, rop:%08x\n",
-          physDevDst, physDevDst->hasDIB ? "DIB-" : "DDB", physDevDst->hasDIB ? _DIBDRVBITMAP_GetFormatName(&physDevDst->physBitmap) : "",
+          physDevDst, physDevDst->hasDIB ? "DIB-" : "DDB", physDevDst->hasDIB ? _DIBDRVBITMAP_GetFormatName(physDevDst->physBitmap) : "",
           xDst, yDst, width, height,
-          physDevSrc, physDevSrc ? (physDevSrc->hasDIB ? "DIB-" : "DDB"): "---", physDevSrc && physDevSrc->hasDIB ? _DIBDRVBITMAP_GetFormatName(&physDevSrc->physBitmap) : "",
+          physDevSrc, physDevSrc ? (physDevSrc->hasDIB ? "DIB-" : "DDB"): "---", physDevSrc && physDevSrc->hasDIB ? _DIBDRVBITMAP_GetFormatName(physDevSrc->physBitmap) : "",
           xSrc, ySrc, rop));
 
     if(physDevDst->hasDIB)
     {
         /* DIB section selected in dest DC, use DIB Engine */
         /* clip blit area */
-        RECT dstClip = {0, 0, physDevDst->physBitmap.width, physDevDst->physBitmap.height};
+        RECT dstClip = {0, 0, physDevDst->physBitmap->width, physDevDst->physBitmap->height};
         
         if(!physDevSrc || physDevSrc->hasDIB)
         {
@@ -609,7 +613,7 @@ BOOL DIBDRV_BitBlt( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
             /* clip blit area */
             if(physDevSrc)
             {
-                RECT srcClip = {0, 0, physDevSrc->physBitmap.width, physDevSrc->physBitmap.height};
+                RECT srcClip = {0, 0, physDevSrc->physBitmap->width, physDevSrc->physBitmap->height};
                 res = !BitBlt_ClipAreas(&ps, &pd, &sz, &srcClip, 0);
             }
             else
@@ -672,10 +676,10 @@ BOOL _DIBDRV_InternalStretchBlt( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
     setPoint(&ps, xSrc, ySrc);
     setSize(&szDst, widthDst, heightDst);
     setSize(&szSrc, widthSrc, heightSrc);
-    setRect(&dstClip, 0, 0, physDevDst->physBitmap.width, physDevDst->physBitmap.height);
+    setRect(&dstClip, 0, 0, physDevDst->physBitmap->width, physDevDst->physBitmap->height);
     if(physDevSrc)
     {
-        setRect(&srcClip, 0, 0, physDevSrc->physBitmap.width, physDevSrc->physBitmap.height);
+        setRect(&srcClip, 0, 0, physDevSrc->physBitmap->width, physDevSrc->physBitmap->height);
         res = StretchBlt_ClipAreas(&ps, &pd, &szSrc, &szDst, &srcClip, &dstClip);
     }
     else
@@ -699,7 +703,7 @@ BOOL _DIBDRV_InternalStretchBlt( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
         setSize(&szSrc, widthSrc, heightSrc);
         if(!StretchBlt_ClipAreas(&ps, &pd, &szSrc, &szDst, 0, &dstClip))
             continue;
-        if(physDevDst->physBitmap.funcs->StretchBlt(physDevDst, pd.x, pd.y, szDst.cx, szDst.cy,
+        if(physDevDst->physBitmap->funcs->StretchBlt(physDevDst, pd.x, pd.y, szDst.cx, szDst.cy,
                                                     physDevSrc, ps.x, ps.y, szSrc.cx, szSrc.cy, rop))
             res = TRUE;
     }
@@ -727,9 +731,9 @@ BOOL DIBDRV_StretchBlt( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
         return DIBDRV_BitBlt(physDevDst, xDst, yDst, widthDst, heightDst, physDevSrc, xSrc, ySrc, rop);
 
     MAYBE(TRACE("physDevDst:%p(%s%s), xDst:%d, yDst:%d, widthDst:%d, heightDst:%d, physDevSrc:%p(%s%s), xSrc:%d, ySrc:%d, widthSrc:%d, heightSrc:%d, rop:%08x\n",
-          physDevDst, physDevDst->hasDIB ? "DIB-" : "DDB", physDevDst->hasDIB ? _DIBDRVBITMAP_GetFormatName(&physDevDst->physBitmap) : "",
+          physDevDst, physDevDst->hasDIB ? "DIB-" : "DDB", physDevDst->hasDIB ? _DIBDRVBITMAP_GetFormatName(physDevDst->physBitmap) : "",
           xDst, yDst, widthDst, heightDst,
-          physDevSrc, physDevSrc->hasDIB ? "DIB-" : "DDB", physDevSrc->hasDIB ? _DIBDRVBITMAP_GetFormatName(&physDevSrc->physBitmap) : "",
+          physDevSrc, physDevSrc->hasDIB ? "DIB-" : "DDB", physDevSrc->hasDIB ? _DIBDRVBITMAP_GetFormatName(physDevSrc->physBitmap) : "",
           xSrc, ySrc, widthSrc, heightSrc, rop));
 
     if(physDevDst->hasDIB)
@@ -833,7 +837,7 @@ BOOL DIBDRV_StretchBlt( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
             /* clip blit area */
             if(physDevSrc)
             {
-                RECT srcClip = {0, 0, physDevSrc->physBitmap.width, physDevSrc->physBitmap.height};
+                RECT srcClip = {0, 0, physDevSrc->physBitmap->width, physDevSrc->physBitmap->height};
                 res = StretchBlt_ClipAreas(&ps, &pd, &szSrc, &szDst, &srcClip, 0);
             }
             else

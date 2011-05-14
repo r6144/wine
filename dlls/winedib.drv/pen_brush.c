@@ -48,20 +48,20 @@ static inline void OrderEndPoints(int *s, int *e)
 static void SolidPenHLine(DIBDRVPHYSDEV *physDev, int x1, int x2, int y)
 {
     OrderEndPoints(&x1, &x2);
-    physDev->physBitmap.funcs->SolidHLine(&physDev->physBitmap, x1, x2, y, physDev->penAnd, physDev->penXor);
+    physDev->physBitmap->funcs->SolidHLine(physDev->physBitmap, x1, x2, y, physDev->penAnd, physDev->penXor);
 }
 
 static void SolidPenVLine(DIBDRVPHYSDEV *physDev, int x, int y1, int y2)
 {
     OrderEndPoints(&y1, &y2);
-    physDev->physBitmap.funcs->SolidVLine(&physDev->physBitmap, x, y1, y2, physDev->penAnd, physDev->penXor);
+    physDev->physBitmap->funcs->SolidVLine(physDev->physBitmap, x, y1, y2, physDev->penAnd, physDev->penXor);
 }
 
 static void WINAPI SolidPenLineCallback(int x, int y, LPARAM lparam)
 {
     DIBDRVPHYSDEV *physDev = (DIBDRVPHYSDEV *)lparam;
 
-    physDev->physBitmap.funcs->SetPixel(&physDev->physBitmap, x, y, physDev->penAnd, physDev->penXor);
+    physDev->physBitmap->funcs->SetPixel(physDev->physBitmap, x, y, physDev->penAnd, physDev->penXor);
     return;
 }
 
@@ -120,7 +120,7 @@ static void DashedPenHLine(DIBDRVPHYSDEV *physDev, int x1, int x2, int y)
             if(x + dashLen > x2)
                 dashLen = x2 - x;
 
-            physDev->physBitmap.funcs->SolidHLine(&physDev->physBitmap, x, x + dashLen, y, and, xor);
+            physDev->physBitmap->funcs->SolidHLine(physDev->physBitmap, x, x + dashLen, y, and, xor);
             x += dashLen;
 
             physDev->leftInDash -= dashLen;
@@ -137,7 +137,7 @@ static void DashedPenHLine(DIBDRVPHYSDEV *physDev, int x1, int x2, int y)
             if(x - (int)dashLen < x2)
                 dashLen = x - x2;
 
-            physDev->physBitmap.funcs->SolidHLine(&physDev->physBitmap, x - dashLen + 1, x + 1, y, and, xor);
+            physDev->physBitmap->funcs->SolidHLine(physDev->physBitmap, x - dashLen + 1, x + 1, y, and, xor);
             x -= dashLen;
 
             physDev->leftInDash -= dashLen;
@@ -162,7 +162,7 @@ static void DashedPenVLine(DIBDRVPHYSDEV *physDev, int x, int y1, int y2)
             if(y + dashLen > y2)
                 dashLen = y2 - y;
 
-            physDev->physBitmap.funcs->SolidVLine(&physDev->physBitmap, x, y, y + dashLen, and, xor);
+            physDev->physBitmap->funcs->SolidVLine(physDev->physBitmap, x, y, y + dashLen, and, xor);
             y += dashLen;
 
             physDev->leftInDash -= dashLen;
@@ -179,7 +179,7 @@ static void DashedPenVLine(DIBDRVPHYSDEV *physDev, int x, int y1, int y2)
             if(y - (int)dashLen < y2)
                 dashLen = y - y2;
 
-            physDev->physBitmap.funcs->SolidVLine(&physDev->physBitmap, x, y - dashLen + 1, y + 1, and, xor);
+            physDev->physBitmap->funcs->SolidVLine(physDev->physBitmap, x, y - dashLen + 1, y + 1, and, xor);
             y -= dashLen;
 
             physDev->leftInDash -= dashLen;
@@ -195,7 +195,7 @@ static void WINAPI DashedPenLineCallback(int x, int y, LPARAM lparam)
 
     GetDashColors(physDev, &and, &xor);
 
-    physDev->physBitmap.funcs->SetPixel(&physDev->physBitmap, x, y, and, xor);
+    physDev->physBitmap->funcs->SetPixel(physDev->physBitmap, x, y, and, xor);
 
     physDev->leftInDash--;
     NextDash(physDev);
@@ -222,8 +222,8 @@ void _DIBDRV_ResetDashOrigin(DIBDRVPHYSDEV *physDev)
    the background color is used -- tested on WinXP */
 static DWORD AdjustFgColor(DIBDRVPHYSDEV *physDev, COLORREF color)
 {
-    RGBQUAD *back = physDev->physBitmap.colorTable;
-    RGBQUAD *fore = physDev->physBitmap.colorTable+1;
+    RGBQUAD *back = physDev->physBitmap->colorTable;
+    RGBQUAD *fore = physDev->physBitmap->colorTable+1;
     
     if(
       fore->rgbRed   == GetRValue(color) &&
@@ -270,9 +270,9 @@ static DWORD AdjustFgColor(DIBDRVPHYSDEV *physDev, COLORREF color)
     rgb.rgbGreen = GetGValue(color);
     rgb.rgbBlue  = GetBValue(color);
 
-    for(i = 0; i < physDev->physBitmap.colorTableSize; i++)
+    for(i = 0; i < physDev->physBitmap->colorTableSize; i++)
     {
-        RGBQUAD *cur = physDev->physBitmap.colorTable + i;
+        RGBQUAD *cur = physDev->physBitmap->colorTable + i;
         if((rgb.rgbRed == cur->rgbRed) && (rgb.rgbGreen == cur->rgbGreen) && (rgb.rgbBlue == cur->rgbBlue))
             return i;
     }
@@ -298,7 +298,7 @@ static void FixupFgColors1(DIBDRVPHYSDEV *physDev)
 static void SolidBrushHLine(DIBDRVPHYSDEV *physDev, int x1, int x2, int y)
 {
     OrderEndPoints(&x1, &x2);
-    physDev->physBitmap.funcs->SolidHLine(&physDev->physBitmap, x1, x2, y, physDev->brushAnd, physDev->brushXor);
+    physDev->physBitmap->funcs->SolidHLine(physDev->physBitmap, x1, x2, y, physDev->brushAnd, physDev->brushXor);
 }
 
 
@@ -324,16 +324,16 @@ static void GenerateMasks(DIBDRVPHYSDEV *physDev, DIBDRVBITMAP *bmp, DWORD **and
 
 static void PatternBrushHLine(DIBDRVPHYSDEV *physDev, int x1, int x2, int y)
 {
-    DWORD *and, *xor, brushY = y % physDev->brushBitmap.height;
+    DWORD *and, *xor, brushY = y % physDev->brushBitmap->height;
 
     if(!physDev->brushAnds)
-        GenerateMasks(physDev, &physDev->brushBitmap, &physDev->brushAnds, &physDev->brushXors);
+        GenerateMasks(physDev, physDev->brushBitmap, &physDev->brushAnds, &physDev->brushXors);
 
     OrderEndPoints(&x1, &x2);
-    and = (DWORD *)((char *)physDev->brushAnds + brushY * physDev->brushBitmap.stride);
-    xor = (DWORD *)((char *)physDev->brushXors + brushY * physDev->brushBitmap.stride);
+    and = (DWORD *)((char *)physDev->brushAnds + brushY * physDev->brushBitmap->stride);
+    xor = (DWORD *)((char *)physDev->brushXors + brushY * physDev->brushBitmap->stride);
 
-    physDev->physBitmap.funcs->PatternHLine(&physDev->physBitmap, x1, x2, y, and, xor, physDev->brushBitmap.width, x1 % physDev->brushBitmap.width);
+    physDev->physBitmap->funcs->PatternHLine(physDev->physBitmap, x1, x2, y, and, xor, physDev->brushBitmap->width, x1 % physDev->brushBitmap->width);
 }
 
 /* null function for PS_NULL and BS_NULL pen and brush styles */
@@ -356,8 +356,10 @@ HPEN DIBDRV_SelectPen( DIBDRVPHYSDEV *physDev, HPEN hpen )
     {
         GetObjectW(hpen, sizeof(logpen), &logpen);
 
-        physDev->penColorref = _DIBDRV_MapColor(physDev, logpen.lopnColor);
-        physDev->penColor = physDev->physBitmap.funcs->ColorToPixel(&physDev->physBitmap, physDev->penColorref);
+        physDev->penColorref = logpen.lopnColor;
+        physDev->penColor = physDev->physBitmap->funcs->ColorToPixel(
+          physDev->physBitmap,
+          _DIBDRV_MapColor(physDev, physDev->penColorref));
 
         _DIBDRV_CalcAndXorMasks(GetROP2(physDev->hdc), physDev->penColor, &physDev->penAnd, &physDev->penXor);
 
@@ -441,8 +443,10 @@ HBRUSH DIBDRV_SelectBrush( DIBDRVPHYSDEV *physDev, HBRUSH hbrush )
         GetObjectW(hbrush, sizeof(logbrush), &logbrush);
 
         /* frees any currently selected DIB brush and cache */
-        _DIBDRVBITMAP_Free(&physDev->brushBitmap);
-        _DIBDRVBITMAP_Free(&physDev->brushBmpCache);
+        _DIBDRVBITMAP_Free(physDev->brushBitmap);
+        physDev->brushBitmap = NULL;
+        _DIBDRVBITMAP_Free(physDev->brushBmpCache);
+        physDev->brushBmpCache = NULL;
         if(physDev->brushAnds)
         {
             HeapFree(GetProcessHeap(), 0, physDev->brushAnds);
@@ -459,13 +463,15 @@ HBRUSH DIBDRV_SelectBrush( DIBDRVPHYSDEV *physDev, HBRUSH hbrush )
                 goto solid;
                 
             case BS_SOLID:
-                physDev->brushColorref = _DIBDRV_MapColor(physDev, logbrush.lbColor);
+                physDev->brushColorref = logbrush.lbColor;
     solid:
                 MAYBE(TRACE("SOLID Pattern -- color is %x\n", physDev->brushColorref));
                 physDev->brushStyle = BS_SOLID;
                 physDev->brushHLine = SolidBrushHLine;
 
-                physDev->brushColor = physDev->physBitmap.funcs->ColorToPixel(&physDev->physBitmap, physDev->brushColorref);
+                physDev->brushColor = physDev->physBitmap->funcs->ColorToPixel(
+                  physDev->physBitmap,
+                  _DIBDRV_MapColor(physDev, physDev->brushColorref));
 
                 _DIBDRV_CalcAndXorMasks(physDev->rop2, physDev->brushColor,
                                            &physDev->brushAnd, &physDev->brushXor);
@@ -485,7 +491,7 @@ HBRUSH DIBDRV_SelectBrush( DIBDRVPHYSDEV *physDev, HBRUSH hbrush )
                 FIXME("DIB Pattern\n");
                 
                 /* if no DIB selected in, fallback to null brush */
-                if(!physDev->physBitmap.bits)
+                if(!physDev->physBitmap->bits)
                 {
                     physDev->brushColorref = 0;
                     goto solid;
@@ -495,7 +501,7 @@ HBRUSH DIBDRV_SelectBrush( DIBDRVPHYSDEV *physDev, HBRUSH hbrush )
                 bmi = GlobalLock16(logbrush.lbHatch);
         
                 /* initializes a temporary DIB with brush's one */
-                if(!_DIBDRVBITMAP_InitFromBitmapinfo(&src, bmi))
+                if(!_DIBDRVBITMAP_InitFromBitmapinfo(&src, bmi, NULL))
                 {
                     ERR("Failed to initialize brush DIB\n");
                     res = 0;
@@ -503,7 +509,7 @@ HBRUSH DIBDRV_SelectBrush( DIBDRVPHYSDEV *physDev, HBRUSH hbrush )
                 }
                 
                 /* converts brush bitmap to match currently selected one's format */
-                if(!_DIBDRVBITMAP_Convert(&physDev->brushBitmap, &src, &physDev->physBitmap))
+                if(!_DIBDRVBITMAP_Convert(physDev->brushBitmap, &src, physDev->physBitmap))
                 {
                     ERR("Failed to convert brush DIB\n");
                     _DIBDRVBITMAP_Free(&src);
@@ -537,7 +543,9 @@ HBRUSH DIBDRV_SelectBrush( DIBDRVPHYSDEV *physDev, HBRUSH hbrush )
             {
                 MAYBE(TRACE("NULL Pattern\n"));
                 physDev->brushColorref = 0;
-                physDev->brushColor = physDev->physBitmap.funcs->ColorToPixel(&physDev->physBitmap, 0);
+                physDev->brushColor = physDev->physBitmap->funcs->ColorToPixel(
+                  physDev->physBitmap,
+                  _DIBDRV_MapColor(physDev, 0));
                 physDev->brushHLine = NullBrushHLine;
                 break;
             }
@@ -644,7 +652,7 @@ COLORREF DIBDRV_SetBkColor( DIBDRVPHYSDEV *physDev, COLORREF color )
     if(physDev->hasDIB)
     {
         physDev->backgroundColor = _DIBDRV_MapColor(physDev, color);
-        physDev->backgroundColor = physDev->physBitmap.funcs->ColorToPixel(&physDev->physBitmap, physDev->backgroundColor);
+        physDev->backgroundColor = physDev->physBitmap->funcs->ColorToPixel(physDev->physBitmap, physDev->backgroundColor);
 
         _DIBDRV_CalcAndXorMasks(physDev->rop2, physDev->backgroundColor, &physDev->backgroundAnd, &physDev->backgroundXor);
         

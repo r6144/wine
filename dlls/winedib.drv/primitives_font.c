@@ -31,7 +31,7 @@ void _DIBDRV_freetype_blit_8888(DIBDRVPHYSDEV *physDev, int x, int y, RECT *clip
 {
     /* FIXME : MUST BE OPTIMIZED !!! */
     
-    DIBDRVBITMAP *dib = &physDev->physBitmap;
+    DIBDRVBITMAP *dib = physDev->physBitmap;
     int bmpX, bmpY;
     BYTE *buf;
     int dibX, dibY;
@@ -84,7 +84,7 @@ void _DIBDRV_freetype_blit_32_RGB(DIBDRVPHYSDEV *physDev, int x, int y, RECT *cl
 {
     /* FIXME : MUST BE OPTIMIZED !!! */
     
-    DIBDRVBITMAP *dib = &physDev->physBitmap;
+    DIBDRVBITMAP *dib = physDev->physBitmap;
     int bmpX, bmpY;
     BYTE *buf;
     int dibX, dibY;
@@ -137,7 +137,7 @@ void _DIBDRV_freetype_blit_32_BITFIELDS(DIBDRVPHYSDEV *physDev, int x, int y, RE
 {
     /* FIXME : MUST BE OPTIMIZED !!! */
     
-    DIBDRVBITMAP *dib = &physDev->physBitmap;
+    DIBDRVBITMAP *dib = physDev->physBitmap;
     int bmpX, bmpY;
     BYTE *buf;
     int dibX, dibY;
@@ -189,7 +189,7 @@ void _DIBDRV_freetype_blit_24(DIBDRVPHYSDEV *physDev, int x, int y, RECT *clipRe
 {
     /* FIXME : MUST BE OPTIMIZED !!! */
     
-    DIBDRVBITMAP *dib = &physDev->physBitmap;
+    DIBDRVBITMAP *dib = physDev->physBitmap;
     int bmpX, bmpY;
     BYTE *buf;
     int dibX, dibY;
@@ -241,7 +241,7 @@ void _DIBDRV_freetype_blit_16_RGB(DIBDRVPHYSDEV *physDev, int x, int y, RECT *cl
 {
     /* FIXME : MUST BE OPTIMIZED !!! */
     
-    DIBDRVBITMAP *dib = &physDev->physBitmap;
+    DIBDRVBITMAP *dib = physDev->physBitmap;
     int bmpX, bmpY;
     BYTE *buf;
     int dibX, dibY;
@@ -293,7 +293,7 @@ void _DIBDRV_freetype_blit_16_BITFIELDS(DIBDRVPHYSDEV *physDev, int x, int y, RE
 {
     /* FIXME : MUST BE OPTIMIZED !!! */
     
-    DIBDRVBITMAP *dib = &physDev->physBitmap;
+    DIBDRVBITMAP *dib = physDev->physBitmap;
     int bmpX, bmpY;
     BYTE *buf;
     int dibX, dibY;
@@ -345,7 +345,7 @@ void _DIBDRV_freetype_blit_8(DIBDRVPHYSDEV *physDev, int x, int y, RECT *clipRec
 {
     /* FIXME : MUST BE OPTIMIZED !!! */
     
-    DIBDRVBITMAP *dib = &physDev->physBitmap;
+    DIBDRVBITMAP *dib = physDev->physBitmap;
     int bmpX, bmpY;
     BYTE *buf;
     int dibX, dibY;
@@ -375,7 +375,7 @@ void _DIBDRV_freetype_blit_4(DIBDRVPHYSDEV *physDev, int x, int y, RECT *clipRec
 {
     /* FIXME : MUST BE OPTIMIZED !!! */
     
-    DIBDRVBITMAP *dib = &physDev->physBitmap;
+    DIBDRVBITMAP *dib = physDev->physBitmap;
     int bmpX, bmpY;
     BYTE *buf;
     int dibX, dibY;
@@ -405,7 +405,7 @@ void _DIBDRV_freetype_blit_1(DIBDRVPHYSDEV *physDev, int x, int y, RECT *clipRec
 {
     /* FIXME : MUST BE OPTIMIZED !!! */
     
-    DIBDRVBITMAP *dib = &physDev->physBitmap;
+    DIBDRVBITMAP *dib = physDev->physBitmap;
     int bmpX, bmpY;
     BYTE *buf;
     int dibX, dibY;

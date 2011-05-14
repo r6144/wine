@@ -93,7 +93,7 @@ COLORREF DIBDRV_SetTextColor( DIBDRVPHYSDEV *physDev, COLORREF color )
 
 #ifdef DIBDRV_ANTIALIASED_FONTS        
         /* fills the text color table used on antialiased font display */
-        if(physDev->physBitmap.funcs)
+        if(physDev->physBitmap->funcs)
         {
             BYTE r, g, b;
             INT i;
@@ -103,7 +103,7 @@ COLORREF DIBDRV_SetTextColor( DIBDRVPHYSDEV *physDev, COLORREF color )
             b = GetBValue(color);
             for(i = 0; i < 256; i++)
             {
-                physDev->textColorTable[i] = physDev->physBitmap.funcs->ColorToPixel(&physDev->physBitmap, RGB(
+                physDev->textColorTable[i] = physDev->physBitmap->funcs->ColorToPixel(physDev->physBitmap, RGB(
                     MulDiv(r, i, 255),
                     MulDiv(g, i, 255),
                     MulDiv(b, i, 255)

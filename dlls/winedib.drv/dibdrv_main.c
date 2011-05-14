@@ -42,6 +42,9 @@ BOOL WINAPI DllMain( HINSTANCE hinst, DWORD reason, LPVOID reserved )
         /* initializes freetype library */
         if(!_DIBDRV_FreeType_Init())
             ERR("Couldn't initialize freetype library.\n");
+            
+        /* initializes internal bitmap list */
+        _BITMAPLIST_Init();
 
         break;
     case DLL_THREAD_DETACH:
@@ -54,6 +57,9 @@ BOOL WINAPI DllMain( HINSTANCE hinst, DWORD reason, LPVOID reserved )
 
         /* unloads display driver */
         _DIBDRV_FreeDisplayDriver();
+
+        /* terminates internal bitmap list */
+        _BITMAPLIST_Terminate();
 
         break;
     }
