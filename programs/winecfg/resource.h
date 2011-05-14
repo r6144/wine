@@ -204,6 +204,8 @@
 #define IDS_UNAVAILABLE_DRIVER          8320
 #define IDS_WARNING                     8321
 
+#define IDS_DRIVER_PULSE                8322
+
 /* desktop integration tab */
 #define IDC_THEME_COLORCOMBO            1401
 #define IDC_THEME_COLORTEXT             1402
