@@ -132,7 +132,7 @@ static inline void SideIntersect(const POINT *p1, const POINT *p2, const RECT *r
 			break;
 		case TOP_SIDE: /* top */
             inters->x = MulDiv(p2->x - p1->x, r->top - p1->y, p2->y - p1->y) + p1->x;
-            inters->y = r->bottom;
+            inters->y = r->top;
 			break;
 		case RIGHT_SIDE: /* right */
             inters->x = r->right - 1;
@@ -698,7 +698,7 @@ BOOL DIBDRV_Polygon( DIBDRVPHYSDEV *physDev, const POINT* ptw, int count )
             {
                 /* gets polygon bounding box -- for ytop and ybottom */
                 PolygonBoundingBox(clipped, clippedCount, &bBox);
-                
+
                 /* gets all ordered intersections of polygon with
                    current scanline */
                 for(ys = bBox.top; ys < bBox.bottom; ys++)
@@ -972,6 +972,12 @@ COLORREF DIBDRV_SetPixel( DIBDRVPHYSDEV *physDev, int x, int y, COLORREF color )
 
     if(physDev->hasDIB)
     {
+        /* get real colorref */
+        color = _DIBDRV_MapColor(physDev, color);
+        
+        /* map to pixel color / palette index */
+        color = physDev->physBitmap.funcs->ColorToPixel(&physDev->physBitmap, color);
+        
         _DIBDRV_Position_ws2ds(physDev, &x, &y);
 
         /* gets previous pixel */

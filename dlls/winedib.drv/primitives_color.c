@@ -94,31 +94,30 @@ DWORD _DIBDRV_ColorToPixel16_BITFIELDS(const DIBDRVBITMAP *dib, COLORREF color)
            PutField16(b, dib->blueShift,  dib->blueLen);
 }
 
-DWORD _DIBDRV_ColorToPixelColortable(const DIBDRVBITMAP *dib, COLORREF color)
+/* gets nearest color to DIB palette color */
+DWORD _DIBDRV_GetNearestColor(const DIBDRVBITMAP *dib, COLORREF color)
 {
-    int i, best_index = 0;
-    DWORD r, g, b;
-    DWORD diff, best_diff = 0xffffffff;
+    RGBQUAD *c;
 
+    if(dib->bitCount > 8)
+        return color;
+        
+    c = dib->colorTable + _DIBDRV_GetNearestColorIndex(dib, color);
+    return RGB(c->rgbRed, c->rgbGreen, c->rgbBlue);
+
+}
+
+/* gets nearest color index in DIB palette of a given colorref */
+DWORD _DIBDRV_GetNearestColorIndex(const DIBDRVBITMAP *dib, COLORREF color)
+{
+    DWORD r, g, b;
+    int i, best_index = 0;
+    DWORD diff, best_diff = 0xffffffff;
+    
     r = GetRValue(color);
     g = GetGValue(color);
     b = GetBValue(color);
     
-    /* just in case it's being called without color table
-       properly initialized */
-    if(!dib->colorTableGrabbed)
-        return 0;
-        
-    /* for monochrome bitmaps, color is background
-       if not matching foreground */
-    if(dib->colorTableSize == 2)
-    {
-        RGBQUAD *fore = dib->colorTable + 1;
-        if(r == fore->rgbRed && g == fore->rgbGreen && b == fore->rgbBlue)
-            return 1;
-        return 0;
-    }
-
     for(i = 0; i < dib->colorTableSize; i++)
     {
         RGBQUAD *cur = dib->colorTable + i;
@@ -139,4 +138,40 @@ DWORD _DIBDRV_ColorToPixelColortable(const DIBDRVBITMAP *dib, COLORREF color)
         }
     }
     return best_index;
+}
+
+DWORD _DIBDRV_ColorToPixelColortable(const DIBDRVBITMAP *dib, COLORREF color)
+{
+    DWORD r, g, b;
+
+    r = GetRValue(color);
+    g = GetGValue(color);
+    b = GetBValue(color);
+    
+    /* just in case it's being called without color table
+       properly initialized */
+    if(!dib->colorTableGrabbed)
+        return 0;
+        
+    /* for monochrome bitmaps, color is :
+           foreground if matching foreground ctable
+           else background if matching background ctable
+           else foreground ix 0xffffff
+           else background */
+    if(dib->colorTableSize == 2)
+    {
+        RGBQUAD *back = dib->colorTable;
+        RGBQUAD *fore = dib->colorTable + 1;
+        if(r == fore->rgbRed && g == fore->rgbGreen && b == fore->rgbBlue)
+            return 1;
+        else if(r == back->rgbRed && g == back->rgbGreen && b == back->rgbBlue)
+            return 0;
+        if((color & 0xffffff) == 0xffffff)
+            return 1;
+        else
+            return 0;
+    }
+    
+    /* otherwise looks for nearest color in palette */
+    return _DIBDRV_GetNearestColorIndex(dib, color);
 }

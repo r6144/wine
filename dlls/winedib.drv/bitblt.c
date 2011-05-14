@@ -82,7 +82,7 @@ static BOOL BitBlt_ClipAreas(POINT *ps, POINT *pd, SIZE *sz, RECT*srcClip, RECT*
     ys1 = ps->y;
     xs2 = xs1 + w;
     ys2 = ys1 + h;
-        
+
     /* if source clip area is not null, do first clipping on it */
     if(srcClip)
     {
@@ -91,7 +91,7 @@ static BOOL BitBlt_ClipAreas(POINT *ps, POINT *pd, SIZE *sz, RECT*srcClip, RECT*
         ysc1 = srcClip->top;
         xsc2 = srcClip->right;
         ysc2 = srcClip->bottom;
-        
+
         /* order clip area rectangle points */
         if(xsc1 > xsc2) intSwap(&xsc1, &xsc2);
         if(ysc1 > ysc2) intSwap(&ysc1, &ysc2);
@@ -103,13 +103,12 @@ static BOOL BitBlt_ClipAreas(POINT *ps, POINT *pd, SIZE *sz, RECT*srcClip, RECT*
         /* clip on source clipping end point */
         if(xs2 > xsc2) { dx = xs2 - xsc2; w -= dx; xd2 -= dx; xs2 = xsc2; }
         if(ys2 > ysc2) { dy = ys2 - ysc2; h -= dy; yd2 -= dy; ys2 = ysc2; }
-        
+
         /* if already zero area, return false */
         if(w <= 0 || h <= 0)
             return FALSE;
     }
     /* now do clipping on destination area */
-
     if(dstClip)
     {    
         /* extract destination clipping area */
@@ -117,7 +116,7 @@ static BOOL BitBlt_ClipAreas(POINT *ps, POINT *pd, SIZE *sz, RECT*srcClip, RECT*
         ydc1 = dstClip->top;
         xdc2 = dstClip->right;
         ydc2 = dstClip->bottom;
-        
+
         /* order clip area rectangle points */
         if(xdc1 > xdc2) intSwap(&xdc1, &xdc2);
         if(ydc1 > ydc2) intSwap(&ydc1, &ydc2);
@@ -267,6 +266,13 @@ BOOL _DIBDRV_InternalAlphaBlend( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst, 
     _DIBDRV_Sizes_ws2ds(physDevDst, &widthDst, &heightDst);
     _DIBDRV_Position_ws2ds(physDevSrc, &xSrc, &ySrc);
     _DIBDRV_Sizes_ws2ds(physDevSrc, &widthSrc, &heightSrc);
+    
+    /* from tests, it seems that negative coords on phys space are not allowed */
+    if(xDst < 0 || yDst < 0 || xSrc < 0 || ySrc < 0)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
 
     /* first clip on physical DC sizes */
     setPoint(&pd, xDst, yDst);
@@ -282,7 +288,7 @@ BOOL _DIBDRV_InternalAlphaBlend( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst, 
     else
         res = StretchBlt_ClipAreas(&ps, &pd, &szSrc, &szDst, 0, &dstClip);
     if(!res)
-        return FALSE;
+        return TRUE;
     xDst = pd.x; yDst = pd.y;
     xSrc = ps.x; ySrc = ps.y;
     widthDst = szDst.cx; heightDst = szDst.cy;
@@ -317,9 +323,7 @@ BOOL DIBDRV_AlphaBlend( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst, INT width
     BOOL res;
     
     POINT pd = {xDst, yDst};
-    POINT ps = {xSrc, ySrc};
     SIZE szDst = {widthDst, heightDst};
-    SIZE szSrc = {widthSrc, heightSrc};
 
     MAYBE(TRACE("physDevDst:%p(%s%s), xDst:%d, yDst:%d, widthDst:%d, heightDst:%d, physDevSrc:%p(%s%s), xSrc:%d, ySrc:%d, widthSrc:%d, heightSrc:%d\n",
           physDevDst, physDevDst->hasDIB ? "DIB-" : "DDB", physDevDst->hasDIB ? _DIBDRVBITMAP_GetFormatName(&physDevDst->physBitmap) : "",
@@ -327,10 +331,12 @@ BOOL DIBDRV_AlphaBlend( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst, INT width
           physDevSrc, physDevSrc->hasDIB ? "DIB-" : "DDB", physDevSrc->hasDIB ? _DIBDRVBITMAP_GetFormatName(&physDevSrc->physBitmap) : "",
           xSrc, ySrc, widthSrc, heightSrc));
 
-    /* if sizes are null or negative, returns false */
-    if(widthSrc <= 0 || heightSrc <= 0 || widthDst <= 0 || heightDst <= 0)
+    /* if sizes are null or negative, or source positions are negatives, returns false */
+    if(widthSrc <= 0 || heightSrc <= 0 ||
+       widthDst <= 0 || heightDst <= 0)
     {
         res = FALSE;
+        SetLastError(ERROR_INVALID_PARAMETER);
         goto fin;
     }
           
@@ -360,18 +366,25 @@ BOOL DIBDRV_AlphaBlend( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst, INT width
         /* DDB selected on dest DC -- must double-convert */
         HBITMAP tmpDIB, stock;
         HDC tmpDC;
-        RECT srcClip = {0, 0, physDevSrc->physBitmap.width, physDevSrc->physBitmap.height};
         MAYBE(TRACE("Blending DIB->DDB\n"));
         
-        /* clip blit area */
-        res = StretchBlt_ClipAreas(&ps, &pd, &szSrc, &szDst, &srcClip, 0);
-        if(!res)
+        /* we should anyways convert dest to physical coordinates here before processing
+           in order to check its consistency -- source coords will be converted/clipped later
+           As we do a conversion to a temporary DIB for destination, we don't care about it */
+        _DIBDRV_Position_ws2ds(physDevDst, &pd.x, &pd.y);
+        _DIBDRV_Sizes_ws2ds(physDevDst, &szDst.cx, &szDst.cy);
+        
+        /* test shows that negatives origins are not allowed */
+        if(pd.x < 0 || pd.y < 0)
+        {
+            SetLastError(ERROR_INVALID_PARAMETER);
+            res = FALSE;
             goto fin;
-        xDst = pd.x; yDst = pd.y; widthDst = szDst.cx; heightDst = szDst.cy; 
-        xSrc = ps.x; ySrc = ps.y; widthSrc = szSrc.cx; heightSrc = szSrc.cy;
+        }
 
         /* converts dest DDB onto a temporary DIB -- just the needed part */
-        tmpDIB = _DIBDRV_ConvertDevDDBtoDIB(physDevDst->hdc, physDevSrc->hdc, xDst, yDst, widthDst, heightDst);
+        /* WARNING -- that one could fail if rectangle on dest id out of range */
+        tmpDIB = _DIBDRV_ConvertDevDDBtoDIB(physDevDst->hdc, physDevSrc->hdc, pd.x, pd.y, szDst.cx, szDst.cy);
         if(!tmpDIB)
         {
             ERR("Couldn't convert dest DDB to DIB\n");
@@ -399,7 +412,7 @@ BOOL DIBDRV_AlphaBlend( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst, INT width
         }
         
         /* blends source DIB onto temp DIB and re-blits onto dest DC */
-        res = GdiAlphaBlend(tmpDC, 0, 0, widthDst, heightDst, physDevSrc->hdc, xSrc, ySrc, widthSrc, heightSrc, blendfn);
+        res = GdiAlphaBlend(tmpDC, 0, 0, szDst.cx, szDst.cy, physDevSrc->hdc, xSrc, ySrc, widthSrc, heightSrc, blendfn);
         if(!res)
             MAYBE(TRACE("AlphaBlend failed\n"));
         else
@@ -438,6 +451,7 @@ BOOL _DIBDRV_InternalBitBlt( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
     setPoint(&ps, xSrc, ySrc);
     setSize(&sz, width, height);
     setRect(&dstClip, 0, 0, physDevDst->physBitmap.width, physDevDst->physBitmap.height);
+
     if(physDevSrc)
     {
         setRect(&srcClip, 0, 0, physDevSrc->physBitmap.width, physDevSrc->physBitmap.height);
@@ -446,13 +460,13 @@ BOOL _DIBDRV_InternalBitBlt( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
     else
         res = BitBlt_ClipAreas(&ps, &pd, &sz, 0, &dstClip);
     if(!res)
-        return FALSE;
+        return TRUE;
     xDst = pd.x; yDst = pd.y;
     xSrc = ps.x; ySrc = ps.y;
     width = sz.cx; height = sz.cy;
     
     /* then, do blitting for each dest clip area (no clipping on source) */
-    res = FALSE;
+    res = TRUE;
     for(iRec = 0; iRec < physDevDst->regionRectCount; iRec++)
     {
         RECT *r = physDevDst->regionRects + iRec;
@@ -462,8 +476,8 @@ BOOL _DIBDRV_InternalBitBlt( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
         setSize(&sz, width, height);
         if(!BitBlt_ClipAreas(&ps, &pd, &sz, 0, &dstClip))
             continue;
-        if(physDevDst->physBitmap.funcs->BitBlt(physDevDst, pd.x, pd.y, sz.cx, sz.cy, physDevSrc, ps.x, ps.y, rop))
-            res = TRUE;
+        if(!physDevDst->physBitmap.funcs->BitBlt(physDevDst, pd.x, pd.y, sz.cx, sz.cy, physDevSrc, ps.x, ps.y, rop))
+            res = FALSE;
     }
     return res;
 }
@@ -503,8 +517,8 @@ BOOL DIBDRV_BitBlt( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
             /* source is a DDB, must convert it to DIB */
 
             /* don't clip on source */            
-            res = BitBlt_ClipAreas(&ps, &pd, &sz, 0, &dstClip);
-            if(!res)
+            res = !BitBlt_ClipAreas(&ps, &pd, &sz, 0, &dstClip);
+            if(res)
                 goto noBlt2;
             xDst = pd.x; yDst = pd.y; width = sz.cx; height = sz.cy; xSrc = ps.x; ySrc = ps.y;
 
@@ -596,11 +610,11 @@ BOOL DIBDRV_BitBlt( DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
             if(physDevSrc)
             {
                 RECT srcClip = {0, 0, physDevSrc->physBitmap.width, physDevSrc->physBitmap.height};
-                res = BitBlt_ClipAreas(&ps, &pd, &sz, &srcClip, 0);
+                res = !BitBlt_ClipAreas(&ps, &pd, &sz, &srcClip, 0);
             }
             else
-                res = TRUE;
-            if(!res)
+                res = FALSE;
+            if(res)
                 goto noBlt3;
             xDst = pd.x; yDst = pd.y; width = sz.cx; height = sz.cy; xSrc = ps.x; ySrc = ps.y;
 

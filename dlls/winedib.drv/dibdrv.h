@@ -312,6 +312,11 @@ DWORD _DIBDRV_ROP3(DWORD p, DWORD s, DWORD d, BYTE rop);
 /* gets human-readable dib format name */
 const char *_DIBDRVBITMAP_GetFormatName(DIBDRVBITMAP const *bmp);
 
+/* sets/gets bits of a DIBDRVBITMAP taking in account if it's a top down
+   or a bottom-up DIB */
+void _DIBDRVBITMAP_Set_Bits(DIBDRVBITMAP *dib, void *bits, BOOL owns);
+void *_DIBDRVBITMAP_Get_Bits(DIBDRVBITMAP *dib);
+
 /* initializes dib from a bitmap : 
     dib           dib being initialized
     bi            source BITMAPINFOHEADER with required DIB format info
@@ -322,7 +327,7 @@ const char *_DIBDRVBITMAP_GetFormatName(DIBDRVBITMAP const *bmp);
 BOOL _DIBDRVBITMAP_InitFromBMIH(DIBDRVBITMAP *dib, const BITMAPINFOHEADER *bi, const DWORD *bit_fields,
                                 const RGBQUAD *color_table, void *bits);
 
-BOOL _DIBDRVBITMAP_InitFromBitmapinfo(DIBDRVBITMAP *dib, BITMAPINFO *bmi);
+BOOL _DIBDRVBITMAP_InitFromBitmapinfo(DIBDRVBITMAP *dib, const BITMAPINFO *bmi);
 
 /* initializes a DIBRDVBITMAP copying it from a source one
    Parameters :
@@ -330,6 +335,13 @@ BOOL _DIBDRVBITMAP_InitFromBitmapinfo(DIBDRVBITMAP *dib, BITMAPINFO *bmi);
       src       source DIBDRVBITMAP
       copy      TRUE->copy source pixel array FALSE->link to source pixel array */
 BOOL _DIBDRVBITMAP_InitFromDibdrvbitmap(DIBDRVBITMAP *dib, const DIBDRVBITMAP *src, BOOL copy);
+
+/* initializes a DIBRDVBITMAP from a DIB HBITMAP
+   Parameters :
+      bmp           destination DIBDRVBITMAP
+      hbmp          source HBITMAP
+      copyPixels    TRUE->copy source pixel array FALSE->link to source pixel array */
+BOOL _DIBDRVBITMAP_InitFromHBITMAP(DIBDRVBITMAP *bmp, const HBITMAP hbmp, BOOL copyPixels);
 
 /* creates a DIBRDVBITMAP copying format info from a source one
    Parameters :
@@ -412,5 +424,18 @@ void _DIBDRV_Sizes_ws2ds(DIBDRVPHYSDEV *physDev, int *w, int *h);
 
 /* converts a rectangle form Word space to Device space */
 void _DIBDRV_Rect_ws2ds(DIBDRVPHYSDEV *physDev, const RECT *src, RECT *dst);
+
+/* *********************************************************************
+ * COLOR UTILITIES
+ * ********************************************************************/
+
+/* maps a colorref to actual color */
+COLORREF _DIBDRV_MapColor(DIBDRVPHYSDEV *physDev, COLORREF color);
+
+/* gets nearest color index in DIB palette of a given colorref */
+DWORD _DIBDRV_GetNearestColorIndex(const DIBDRVBITMAP *dib, COLORREF color);
+
+/* gets nearest color to DIB palette color */
+DWORD _DIBDRV_GetNearestColor(const DIBDRVBITMAP *dib, COLORREF color);
 
 #endif

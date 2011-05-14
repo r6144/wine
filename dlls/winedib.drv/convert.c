@@ -51,7 +51,7 @@ HBITMAP _DIBDRV_ConvertDIBtoDDB( HDC hdc, HBITMAP srcBmp, int startScan, int sca
     HDC tmpHdc;
     HBITMAP tmpBmp;
     int res;
-    
+
     /* gets DIBSECTION data from source DIB */
     if(GetObjectW(srcBmp, sizeof(DIBSECTION), &ds) != sizeof(DIBSECTION))
     {
@@ -87,13 +87,10 @@ HBITMAP _DIBDRV_ConvertDIBtoDDB( HDC hdc, HBITMAP srcBmp, int startScan, int sca
         
     /* gets the size of DIB palette and bitfields, if any */
     bitFields = 0;
-    if(ds.dsBmih.biBitCount > 8)
-    {
-        colorUsed = 0;
-        if(ds.dsBmih.biCompression == BI_BITFIELDS)
+    colorUsed = 0;
+    if(ds.dsBmih.biCompression == BI_BITFIELDS)
             bitFields = 3;
-    }
-    else
+    else if(ds.dsBmih.biBitCount <= 8)
     {
         colorUsed = ds.dsBmih.biClrUsed;
         if(!colorUsed)
@@ -131,9 +128,11 @@ HBITMAP _DIBDRV_ConvertDIBtoDDB( HDC hdc, HBITMAP srcBmp, int startScan, int sca
             HeapFree(GetProcessHeap(), 0, bmi);
             return 0;
         }
-        GetDIBColorTable(tmpHdc, 0, colorUsed, bmi->bmiColors);
+        if(!GetDIBColorTable(tmpHdc, 0, colorUsed, bmi->bmiColors))
+            ERR("GetDIBColorTable failed\n");
         SelectObject(tmpHdc, tmpBmp);
         DeleteDC(tmpHdc);
+        
     }
     
     /* fill the bitfields part, if any */
@@ -165,6 +164,7 @@ HBITMAP _DIBDRV_ConvertDIBtoDDB( HDC hdc, HBITMAP srcBmp, int startScan, int sca
         DeleteObject( hBmp );
         return 0;
     }
+    
     return hBmp;
 }
 

@@ -51,7 +51,7 @@ static void SolidPenHLine(DIBDRVPHYSDEV *physDev, int x1, int x2, int y)
     physDev->physBitmap.funcs->SolidHLine(&physDev->physBitmap, x1, x2, y, physDev->penAnd, physDev->penXor);
 }
 
-static void SolidPenVline(DIBDRVPHYSDEV *physDev, int x, int y1, int y2)
+static void SolidPenVLine(DIBDRVPHYSDEV *physDev, int x, int y1, int y2)
 {
     OrderEndPoints(&y1, &y2);
     physDev->physBitmap.funcs->SolidVLine(&physDev->physBitmap, x, y1, y2, physDev->penAnd, physDev->penXor);
@@ -65,7 +65,7 @@ static void WINAPI SolidPenLineCallback(int x, int y, LPARAM lparam)
     return;
 }
 
-void SolidPenLine(DIBDRVPHYSDEV *physDev, int x1, int y1, int x2, int y2)
+static void SolidPenLine(DIBDRVPHYSDEV *physDev, int x1, int y1, int x2, int y2)
 {
     LineDDA(x1, y1, x2, y2, SolidPenLineCallback, (LPARAM)physDev);
 }
@@ -216,22 +216,29 @@ void _DIBDRV_ResetDashOrigin(DIBDRVPHYSDEV *physDev)
     physDev->markSpace = mark;
 }
 
-
+#if 0
 /* For 1bpp bitmaps, unless the selected foreground color exactly
    matches foreground's colortable OR it's the WHITE color,
    the background color is used -- tested on WinXP */
 static DWORD AdjustFgColor(DIBDRVPHYSDEV *physDev, COLORREF color)
 {
+    RGBQUAD *back = physDev->physBitmap.colorTable;
     RGBQUAD *fore = physDev->physBitmap.colorTable+1;
     
-    if((color & 0x00ffffff) == 0x00ffffff ||
-       (
-           fore->rgbRed   == GetRValue(color) &&
-           fore->rgbGreen == GetGValue(color) &&
-           fore->rgbBlue  == GetBValue(color)
-    ))
-       return 1;
-    return 0;
+    if(
+      fore->rgbRed   == GetRValue(color) &&
+      fore->rgbGreen == GetGValue(color) &&
+      fore->rgbBlue  == GetBValue(color))
+        return 1;
+    else if(
+      back->rgbRed   == GetRValue(color) &&
+      back->rgbGreen == GetGValue(color) &&
+      back->rgbBlue  == GetBValue(color))
+        return 0;
+    else if((color & 0x00ffffff) == 0x00ffffff)
+        return 1;
+    else
+        return 0;
 }
 
 static void FixupFgColors1(DIBDRVPHYSDEV *physDev)
@@ -248,6 +255,45 @@ static void FixupFgColors1(DIBDRVPHYSDEV *physDev)
     physDev->brushAnds = NULL;
     physDev->brushXors = NULL;
 }
+#endif
+
+#if 0
+/* For 1bpp bitmaps, unless the selected foreground color exactly
+   matches one of the colors in the colortable, then the color that
+   isn't the bkgnd color is used. */
+static DWORD AdjustFgColor(DIBDRVPHYSDEV *physDev, COLORREF color)
+{
+    RGBQUAD rgb;
+    int i;
+
+    rgb.rgbRed   = GetRValue(color);
+    rgb.rgbGreen = GetGValue(color);
+    rgb.rgbBlue  = GetBValue(color);
+
+    for(i = 0; i < physDev->physBitmap.colorTableSize; i++)
+    {
+        RGBQUAD *cur = physDev->physBitmap.colorTable + i;
+        if((rgb.rgbRed == cur->rgbRed) && (rgb.rgbGreen == cur->rgbGreen) && (rgb.rgbBlue == cur->rgbBlue))
+            return i;
+    }
+    return ~physDev->backgroundColor & 1;
+}
+
+static void FixupFgColors1(DIBDRVPHYSDEV *physDev)
+{
+    int rop = GetROP2(physDev->hdc);
+
+    physDev->penColor   = AdjustFgColor(physDev, physDev->penColorref);
+    physDev->brushColor = AdjustFgColor(physDev, physDev->brushColorref);
+
+    _DIBDRV_CalcAndXorMasks(rop, physDev->penColor, &physDev->penAnd, &physDev->penXor);
+    _DIBDRV_CalcAndXorMasks(rop, physDev->brushColor, &physDev->brushAnd, &physDev->brushXor);
+    HeapFree(GetProcessHeap(), 0, physDev->brushAnds);
+    HeapFree(GetProcessHeap(), 0, physDev->brushXors);
+    physDev->brushAnds = NULL;
+    physDev->brushXors = NULL;
+}
+#endif
 
 static void SolidBrushHLine(DIBDRVPHYSDEV *physDev, int x1, int x2, int y)
 {
@@ -310,23 +356,21 @@ HPEN DIBDRV_SelectPen( DIBDRVPHYSDEV *physDev, HPEN hpen )
     {
         GetObjectW(hpen, sizeof(logpen), &logpen);
 
-        physDev->penColorref = logpen.lopnColor;
-
-        if(physDev->physBitmap.bitCount == 1)
-            FixupFgColors1(physDev);
-        else
-            physDev->penColor = physDev->physBitmap.funcs->ColorToPixel(&physDev->physBitmap, logpen.lopnColor);
+        physDev->penColorref = _DIBDRV_MapColor(physDev, logpen.lopnColor);
+        physDev->penColor = physDev->physBitmap.funcs->ColorToPixel(&physDev->physBitmap, physDev->penColorref);
 
         _DIBDRV_CalcAndXorMasks(GetROP2(physDev->hdc), physDev->penColor, &physDev->penAnd, &physDev->penXor);
 
+        physDev->penStyle = logpen.lopnStyle;
         switch(logpen.lopnStyle)
         {
             default:
                 ONCE(FIXME("Unhandled pen style %d\n", logpen.lopnStyle));
+                physDev->penStyle = PS_SOLID;
                 /* fall through */
             case PS_SOLID:
                 physDev->penHLine = SolidPenHLine;
-                physDev->penVLine = SolidPenVline;
+                physDev->penVLine = SolidPenVLine;
                 physDev->penLine  = SolidPenLine;
                 physDev->penPattern = NULL;
                 break;
@@ -415,16 +459,13 @@ HBRUSH DIBDRV_SelectBrush( DIBDRVPHYSDEV *physDev, HBRUSH hbrush )
                 goto solid;
                 
             case BS_SOLID:
-                physDev->brushColorref = logbrush.lbColor;
+                physDev->brushColorref = _DIBDRV_MapColor(physDev, logbrush.lbColor);
     solid:
                 MAYBE(TRACE("SOLID Pattern -- color is %x\n", physDev->brushColorref));
                 physDev->brushStyle = BS_SOLID;
                 physDev->brushHLine = SolidBrushHLine;
 
-                if(physDev->physBitmap.bitCount == 1)
-                    FixupFgColors1(physDev);
-                else
-                    physDev->brushColor = physDev->physBitmap.funcs->ColorToPixel(&physDev->physBitmap, logbrush.lbColor);
+                physDev->brushColor = physDev->physBitmap.funcs->ColorToPixel(&physDev->physBitmap, physDev->brushColorref);
 
                 _DIBDRV_CalcAndXorMasks(physDev->rop2, physDev->brushColor,
                                            &physDev->brushAnd, &physDev->brushXor);
@@ -496,8 +537,9 @@ HBRUSH DIBDRV_SelectBrush( DIBDRVPHYSDEV *physDev, HBRUSH hbrush )
             {
                 MAYBE(TRACE("NULL Pattern\n"));
                 physDev->brushColorref = 0;
+                physDev->brushColor = physDev->physBitmap.funcs->ColorToPixel(&physDev->physBitmap, 0);
                 physDev->brushHLine = NullBrushHLine;
-                goto solid;
+                break;
             }
                 
             case BS_PATTERN:
@@ -601,10 +643,9 @@ COLORREF DIBDRV_SetBkColor( DIBDRVPHYSDEV *physDev, COLORREF color )
 
     if(physDev->hasDIB)
     {
-        physDev->backgroundColor = physDev->physBitmap.funcs->ColorToPixel(&physDev->physBitmap, color);
+        physDev->backgroundColor = _DIBDRV_MapColor(physDev, color);
+        physDev->backgroundColor = physDev->physBitmap.funcs->ColorToPixel(&physDev->physBitmap, physDev->backgroundColor);
 
-        if(physDev->physBitmap.bitCount == 1)
-            FixupFgColors1(physDev);
         _DIBDRV_CalcAndXorMasks(physDev->rop2, physDev->backgroundColor, &physDev->backgroundAnd, &physDev->backgroundXor);
         
         res = TRUE;
