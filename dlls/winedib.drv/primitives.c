@@ -133,6 +133,10 @@ BOOL _DIBDRV_StretchBlt_generic(DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
                     INT widthDst, INT heightDst, const DIBDRVPHYSDEV *physDevSrc,
                     INT xSrc, INT ySrc, int widthSrc, int heightSrc, DWORD rop);
 
+BOOL _DIBDRV_AlphaBlend_generic(DIBDRVPHYSDEV *physDevDst, int xDst, int yDst,
+                    int widthDst, int heightDst, const DIBDRVPHYSDEV *physDevSrc,
+                    int xSrc, int ySrc, int widthSrc, int heightSrc, BLENDFUNCTION blendFn );
+                    
 /* ------------------------------------------------------------*/
 /*               FREETYPE FONT BITMAP BLITTING                 */
 void _DIBDRV_freetype_blit_8888        (DIBDRVPHYSDEV *dib, int x, int y, FT_Bitmap *bmp);
@@ -156,6 +160,7 @@ DIBDRV_PRIMITIVE_FUNCS DIBDRV_funcs_DIB32_RGB =
     _DIBDRV_SolidVLine32,
     _DIBDRV_GetLine32_RGB,
     _DIBDRV_PutLine32_RGB,
+    _DIBDRV_AlphaBlend_generic,
     _DIBDRV_BitBlt_generic,
     _DIBDRV_StretchBlt_generic,
     _DIBDRV_freetype_blit_32_RGB
@@ -172,6 +177,7 @@ DIBDRV_PRIMITIVE_FUNCS DIBDRV_funcs_DIB32_BITFIELDS =
     _DIBDRV_SolidVLine32,
     _DIBDRV_GetLine32_BITFIELDS,
     _DIBDRV_PutLine32_BITFIELDS,
+    _DIBDRV_AlphaBlend_generic,
     _DIBDRV_BitBlt_generic,
     _DIBDRV_StretchBlt_generic,
     _DIBDRV_freetype_blit_32_BITFIELDS
@@ -188,6 +194,7 @@ DIBDRV_PRIMITIVE_FUNCS DIBDRV_funcs_DIB24 =
     _DIBDRV_SolidVLine24,
     _DIBDRV_GetLine24,
     _DIBDRV_PutLine24,
+    _DIBDRV_AlphaBlend_generic,
     _DIBDRV_BitBlt_generic,
     _DIBDRV_StretchBlt_generic,
     _DIBDRV_freetype_blit_24
@@ -204,6 +211,7 @@ DIBDRV_PRIMITIVE_FUNCS DIBDRV_funcs_DIB16_RGB =
     _DIBDRV_SolidVLine16,
     _DIBDRV_GetLine16_RGB,
     _DIBDRV_PutLine16_RGB,
+    _DIBDRV_AlphaBlend_generic,
     _DIBDRV_BitBlt_generic,
     _DIBDRV_StretchBlt_generic,
     _DIBDRV_freetype_blit_16_RGB
@@ -220,6 +228,7 @@ DIBDRV_PRIMITIVE_FUNCS DIBDRV_funcs_DIB16_BITFIELDS =
     _DIBDRV_SolidVLine16,
     _DIBDRV_GetLine16_BITFIELDS,
     _DIBDRV_PutLine16_BITFIELDS,
+    _DIBDRV_AlphaBlend_generic,
     _DIBDRV_BitBlt_generic,
     _DIBDRV_StretchBlt_generic,
     _DIBDRV_freetype_blit_16_BITFIELDS
@@ -236,6 +245,7 @@ DIBDRV_PRIMITIVE_FUNCS DIBDRV_funcs_DIB8 =
     _DIBDRV_SolidVLine8,
     _DIBDRV_GetLine8,
     _DIBDRV_PutLine8,
+    _DIBDRV_AlphaBlend_generic,
     _DIBDRV_BitBlt_generic,
     _DIBDRV_StretchBlt_generic,
     _DIBDRV_freetype_blit_8
@@ -252,6 +262,7 @@ DIBDRV_PRIMITIVE_FUNCS DIBDRV_funcs_DIB4 =
     _DIBDRV_SolidVLine4,
     _DIBDRV_GetLine4,
     _DIBDRV_PutLine4,
+    _DIBDRV_AlphaBlend_generic,
     _DIBDRV_BitBlt_generic,
     _DIBDRV_StretchBlt_generic,
     _DIBDRV_freetype_blit_4
@@ -268,6 +279,7 @@ DIBDRV_PRIMITIVE_FUNCS DIBDRV_funcs_DIB1 =
     _DIBDRV_SolidVLine1,
     _DIBDRV_GetLine1,
     _DIBDRV_PutLine1,
+    _DIBDRV_AlphaBlend_generic,
     _DIBDRV_BitBlt_generic,
     _DIBDRV_StretchBlt_generic,
     _DIBDRV_freetype_blit_1
