@@ -385,6 +385,7 @@ CheckMapping(__FUNCTION__, "SOURCE",physDevSrc);
         /* DDB selected on dest DC -- must double-convert */
         HBITMAP tmpDIB, stock;
         HDC tmpDC;
+
         MAYBE(TRACE("Blending DIB->DDB\n"));
         
         /* we should anyways convert dest to physical coordinates here before processing
@@ -403,7 +404,7 @@ CheckMapping(__FUNCTION__, "SOURCE",physDevSrc);
 
         /* converts dest DDB onto a temporary DIB -- just the needed part */
         /* WARNING -- that one could fail if rectangle on dest id out of range */
-        tmpDIB = _DIBDRV_ConvertDevDDBtoDIB(physDevDst->hdc, physDevSrc->hdc, pd.x, pd.y, szDst.cx, szDst.cy);
+        tmpDIB = _DIBDRV_ConvertDevDDBtoDIB(physDevDst->hdc, physDevSrc->hdc, xDst, yDst, widthDst, heightDst);
         if(!tmpDIB)
         {
             ERR("Couldn't convert dest DDB to DIB\n");

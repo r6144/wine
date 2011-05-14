@@ -89,7 +89,7 @@ static void StretchLine(DWORD *dst, int dstWidth, DWORD *src, int srcWidth)
 /* premultiply alpha channel on a line by a constant alpha
    note : it seems that pixels are already premultiplied
    by alpha channel content */
-static void PemultiplyLine(DWORD *dst, int width, BYTE constAlpha)
+static void PemultiplyLine(DWORD *dst, int width, BYTE constAlpha, BOOL hasAlpha)
 {
     int i = width;
     BYTE *alphaPnt = (BYTE *)dst + 3;
@@ -106,14 +106,29 @@ static void PemultiplyLine(DWORD *dst, int width, BYTE constAlpha)
     
     /* fully opaque, just do nothing */
     if(constAlpha == 255)
+    {
+        if(!hasAlpha)
+            while(i--)
+            {
+                *alphaPnt = 0xff;
+                alphaPnt += 4;
+            }
         return;
+    }
 
     /* intermediate -- premultiply alpha values */
-    while(i--)
-    {
-        *alphaPnt = MulDiv(*alphaPnt, constAlpha, 255);
-        alphaPnt += 4;
-    }
+    if(hasAlpha)
+        while(i--)
+        {
+            *alphaPnt = MulDiv(*alphaPnt, constAlpha, 255);
+            alphaPnt += 4;
+        }
+    else
+        while(i--)
+        {
+            *alphaPnt = constAlpha;
+            alphaPnt += 4;
+        }
     return;
         
 }
@@ -128,6 +143,7 @@ static void BlendLine(DWORD *dst, DWORD *src, int width)
     BYTE *blueDst  = (BYTE *)dst;
     BYTE *greenDst = blueDst  + 1;
     BYTE *redDst   = greenDst + 1;
+    BYTE *alphaDst = redDst   + 1;
     BYTE *blueSrc  = (BYTE *)src;
     BYTE *greenSrc = blueSrc  + 1;
     BYTE *redSrc   = greenSrc + 1;
@@ -143,6 +159,7 @@ static void BlendLine(DWORD *dst, DWORD *src, int width)
         *blueDst  = *blueSrc  + MulDiv(*blueDst,  alpha, 255);
         *greenDst = *greenSrc + MulDiv(*greenDst, alpha, 255);
         *redDst   = *redSrc   + MulDiv(*redDst,   alpha, 255);
+        *alphaDst = *alphaSrc + MulDiv(*alphaDst, alpha, 255);
 
         blueSrc  += 4;
         greenSrc += 4;
@@ -151,6 +168,7 @@ static void BlendLine(DWORD *dst, DWORD *src, int width)
         blueDst  += 4;
         greenDst += 4;
         redDst   += 4;
+        alphaDst += 4;
     }
 
 }
@@ -167,6 +185,9 @@ BOOL _DIBDRV_AlphaBlend_generic(DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
     
     /* constant alpha value */
     BYTE constAlpha = blendFn.SourceConstantAlpha;
+    
+    /* checks wether source has alpha channel */
+    BOOL hasAlpha = blendFn.AlphaFormat & AC_SRC_ALPHA;
     
     /* source and dest bitmaps */
     const DIBDRVBITMAP *srcBmp = physDevSrc->physBitmap;
@@ -194,7 +215,7 @@ BOOL _DIBDRV_AlphaBlend_generic(DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
             dstBmp->funcs->GetLine(dstBmp, yd, xDst, widthDst, dBuf);
             
             /* premultiply source by constant and pixel alpha */
-            PemultiplyLine(sBuf, widthSrc, constAlpha);
+            PemultiplyLine(sBuf, widthSrc, constAlpha, hasAlpha);
             
             /* blends source on dest */
             BlendLine(dBuf, sBuf, widthSrc);
@@ -219,7 +240,7 @@ BOOL _DIBDRV_AlphaBlend_generic(DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
             StretchLine(strBuf, widthDst, sBuf, widthSrc);
         
             /* premultiply source by constant and pixel alpha */
-            PemultiplyLine(strBuf, widthDst, constAlpha);
+            PemultiplyLine(strBuf, widthDst, constAlpha, hasAlpha);
             
             /* blends source on dest */
             BlendLine(dBuf, strBuf, widthDst);
@@ -245,7 +266,7 @@ BOOL _DIBDRV_AlphaBlend_generic(DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
                 dstBmp->funcs->GetLine(dstBmp, yd, xDst, widthDst, dBuf);
 
                 /* premultiply source by constant and pixel alpha */
-                PemultiplyLine(sBuf, widthSrc, constAlpha);
+                PemultiplyLine(sBuf, widthSrc, constAlpha, hasAlpha);
                 
                 /* blends source on dest */
                 BlendLine(dBuf, sBuf, widthDst);
@@ -273,7 +294,7 @@ BOOL _DIBDRV_AlphaBlend_generic(DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
                 srcBmp->funcs->GetLine(srcBmp, ys, xSrc, widthSrc, sBuf);
                 
                 /* premultiply source by constant and pixel alpha */
-                PemultiplyLine(sBuf, widthSrc, constAlpha);
+                PemultiplyLine(sBuf, widthSrc, constAlpha, hasAlpha);
                 
                 while(delta < heightDst)
                 {
@@ -314,7 +335,7 @@ BOOL _DIBDRV_AlphaBlend_generic(DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
                 StretchLine(strBuf, widthDst, sBuf, widthSrc);
 
                 /* premultiply source by constant and pixel alpha */
-                PemultiplyLine(strBuf, widthDst, constAlpha);
+                PemultiplyLine(strBuf, widthDst, constAlpha, hasAlpha);
                 
                 /* blends source on dest */
                 BlendLine(dBuf, strBuf, widthDst);
@@ -345,7 +366,7 @@ BOOL _DIBDRV_AlphaBlend_generic(DIBDRVPHYSDEV *physDevDst, INT xDst, INT yDst,
                 StretchLine(strBuf, widthDst, sBuf, widthSrc);
 
                 /* premultiply source by constant and pixel alpha */
-                PemultiplyLine(strBuf, widthDst, constAlpha);
+                PemultiplyLine(strBuf, widthDst, constAlpha, hasAlpha);
                 
                 while(delta < heightDst)
                 {
