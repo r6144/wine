@@ -113,6 +113,7 @@ BOOL _DIBDRV_GetLine32_BITFIELDS(const DIBDRVBITMAP *bmp, INT line, INT startx, 
     for(; width ; width--)
     {
         *dwBuf++ =
+			0xff000000 |
             GetField32(*src, bmp->redShift  , bmp->redLen  ) << 16 |
             GetField32(*src, bmp->greenShift, bmp->greenLen) <<  8 |
             GetField32(*src, bmp->blueShift , bmp->blueLen );
@@ -148,7 +149,7 @@ BOOL _DIBDRV_GetLine24(const DIBDRVBITMAP *bmp, INT line, INT startx, int width,
         *bBuf++ = *src++;
         *bBuf++ = *src++;
         *bBuf++ = *src++;
-        *bBuf++ = 0x0;
+        *bBuf++ = 0xff;
     }
     return TRUE;
 }
@@ -180,7 +181,7 @@ BOOL _DIBDRV_GetLine16_RGB(const DIBDRVBITMAP *bmp, INT line, INT startx, int wi
     {
         b = *src++;
         /* 0RRR|RRGG|GGGB|BBBB */
-        *dwBuf++ = ((b & 0x1f) << 3) | ((b & 0x3e0) << 6) | ((b & 0x7c00) << 9);
+        *dwBuf++ = 0xff000000 | ((b & 0x1f) << 3) | ((b & 0x3e0) << 6) | ((b & 0x7c00) << 9);
     }
     return TRUE;
 }
@@ -212,7 +213,9 @@ BOOL _DIBDRV_GetLine16_BITFIELDS(const DIBDRVBITMAP *bmp, INT line, INT startx, 
     {
         b = *src++;
 
-        *dwBuf++ =((( b & bmp->blueMask) >> bmp->blueShift ) << ( 8 - bmp->blueLen )) |
+        *dwBuf++ =
+				  0xff000000 |
+				  ((( b & bmp->blueMask) >> bmp->blueShift ) << ( 8 - bmp->blueLen )) |
                   (((b & bmp->greenMask) >> bmp->greenShift) << (16 - bmp->greenLen)) |
                   (((b & bmp->redMask  ) >> bmp->redShift  ) << (24 - bmp->redLen  ));
     }
@@ -242,7 +245,7 @@ BOOL _DIBDRV_GetLine8(const DIBDRVBITMAP *bmp, INT line, INT startx, int width, 
 
     src = ((BYTE *)bmp->bits + line * bmp->stride + startx);
     for(; width ; width--)
-        *dwBuf++ = *((DWORD *)bmp->colorTable + *src++);
+        *dwBuf++ = 0xff000000 | *((DWORD *)bmp->colorTable + *src++);
     return TRUE;
 }
 
@@ -276,20 +279,20 @@ BOOL _DIBDRV_GetLine4(const DIBDRVBITMAP *bmp, INT line, INT startx, int width, 
     /* if startx is odd, get first nibble */
     if(startx & 0x01)
     {
-        *dwBuf++ = *((DWORD *)bmp->colorTable + (*src++ & 0x0f));
+        *dwBuf++ = 0xff000000 | *((DWORD *)bmp->colorTable + (*src++ & 0x0f));
         width--;
     }
     
     /* then gets all full image bytes */
     for( ; width > 1 ; width -= 2)
     {
-        *dwBuf++ = *((DWORD *)bmp->colorTable + ((*src >> 4) & 0x0f));
-        *dwBuf++ = *((DWORD *)bmp->colorTable + (*src++ & 0x0f));
+        *dwBuf++ = 0xff000000 | *((DWORD *)bmp->colorTable + ((*src >> 4) & 0x0f));
+        *dwBuf++ = 0xff000000 | *((DWORD *)bmp->colorTable + (*src++ & 0x0f));
     }
     
     /* last nibble, if any */
     if(width)
-        *dwBuf++ = *((DWORD *)bmp->colorTable + ((*src >> 4) & 0x0f));
+        *dwBuf++ = 0xff000000 | *((DWORD *)bmp->colorTable + ((*src >> 4) & 0x0f));
     return TRUE;
 }
 
@@ -299,8 +302,8 @@ BOOL _DIBDRV_GetLine1(const DIBDRVBITMAP *bmp, INT line, INT startx, int width, 
     BYTE *src;
     BYTE b;
     char i;
-    DWORD pixOn  = *((DWORD *)bmp->colorTable + 1);
-    DWORD pixOff = *(DWORD *)bmp->colorTable;
+    DWORD pixOn  = 0xff000000 | *((DWORD *)bmp->colorTable + 1);
+    DWORD pixOff = 0xff000000 | *(DWORD *)bmp->colorTable;
 
 #ifdef DIBDRV_CHECK_RANGES
     /* range check */
