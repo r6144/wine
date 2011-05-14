@@ -138,6 +138,9 @@ typedef struct _DIBDRVBITMAP
 {
     /* bitmap format of dib */
     DIBFORMAT format;
+    
+    /* topdown flag */
+    BOOL topdown;
 
     /* pointer to top left corner of bitmap */
     void *bits;
