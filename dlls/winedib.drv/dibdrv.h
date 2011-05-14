@@ -450,6 +450,13 @@ void _DIBDRV_Sizes_ws2ds(DIBDRVPHYSDEV *physDev, int *w, int *h);
 /* converts a rectangle form Word space to Device space */
 void _DIBDRV_Rect_ws2ds(DIBDRVPHYSDEV *physDev, const RECT *src, RECT *dst);
 
+/* converts positions  from Device space to World space */
+void _DIBDRV_Position_ds2ws(DIBDRVPHYSDEV *physDev, int *x, int *y);
+void _DIBDRV_Positions_ds2ws(DIBDRVPHYSDEV *physDev, int *x1, int *y1, int *x2, int *y2);
+
+/* converts sizes from Device space to World space */
+void _DIBDRV_Sizes_ds2ws(DIBDRVPHYSDEV *physDev, int *w, int *h);
+
 /* *********************************************************************
  * COLOR UTILITIES
  * ********************************************************************/

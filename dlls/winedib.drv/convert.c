@@ -201,20 +201,12 @@ HBITMAP _DIBDRV_ConvertDDBtoDIB( HDC hdc, HBITMAP srcBmp, int startScan, int sca
     bi->bmiHeader.biWidth       = bitmap.bmWidth;
     bi->bmiHeader.biHeight      = scanLines;
     bi->bmiHeader.biPlanes      = bitmap.bmPlanes;
-    bi->bmiHeader.biBitCount    = 32; /* bitmap.bmBitsPixel; */
+    bi->bmiHeader.biBitCount    = 32;
     bi->bmiHeader.biCompression = BI_RGB;
     bi->bmiHeader.biSizeImage   = 0;
     
-    /* Get the color table or the color masks */
-    /* NO NEED -- WE'RE REQUESTING A 32 bit DIB */
-#if 0
-    if (!GetDIBits(hdc, srcBmp, startScan, scanLines, NULL, bi, DIB_RGB_COLORS))
-    {
-        ERR("Couldn't get the color table/masks\n");
-        HeapFree( GetProcessHeap(), 0, bi );
-        return 0;
-    }
-#endif
+    /* No need to get the color table or the color masks 
+       as we're requesting a 32 bit rgba DIB */
 
     /* Create bitmap and fill in bits */
     hBmp = CreateDIBSection(hdc, bi, DIB_RGB_COLORS, &bits, NULL, 0);
