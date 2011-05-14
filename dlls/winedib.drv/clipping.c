@@ -25,22 +25,50 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(dibdrv);
 
-
 /***********************************************************************
  *           DIBDRV_SetDeviceClipping
  */
 void DIBDRV_SetDeviceClipping( DIBDRVPHYSDEV *physDev, HRGN vis_rgn, HRGN clip_rgn )
 {
+    RGNDATA *data;
+    DWORD size;
+    int iRect;
+
     MAYBE(TRACE("physDev:%p, vis_rgn:%p, clip_rgn:%p\n", physDev, vis_rgn, clip_rgn));
 
-    if(physDev->hasDIB)
+    /* sets the region for X11 driver anyways... we may change bitmap later on */
+    _DIBDRV_GetDisplayDriver()->pSetDeviceClipping(physDev->X11PhysDev, vis_rgn, clip_rgn);
+    
+    /* then we set the region for DIB engine, same reason */
+
+    CombineRgn( physDev->region, vis_rgn, clip_rgn, clip_rgn ? RGN_AND : RGN_COPY );
+
+    /* get region rectangles */
+    if(!(size = GetRegionData(physDev->region, 0, NULL)))
+        return;
+    data = HeapAlloc(GetProcessHeap(), 0, size);
+    if (!GetRegionData(physDev->region, size, data))
     {
-        /* DIB section selected in, use DIB Engine */
-        ONCE(FIXME("STUB\n"));
+        HeapFree( GetProcessHeap(), 0, data );
+        return;
     }
-    else
+    
+    /* frees any previous regions rectangles in DC */
+    if(physDev->regionData)
+        HeapFree(GetProcessHeap(), 0, physDev->regionData);
+        
+    /* sets the rectangles on physDev */
+    physDev->regionData = data;
+    physDev->regionRects = (RECT *)data->Buffer;
+    physDev->regionRectCount = data->rdh.nCount;
+    
+    if(TRACE_ON(dibdrv))
     {
-        /* DDB selected in, use X11 driver */
-        _DIBDRV_GetDisplayDriver()->pSetDeviceClipping(physDev->X11PhysDev, vis_rgn, clip_rgn);
+        TRACE("Region dump : %d rectangles\n", physDev->regionRectCount);
+        for(iRect = 0; iRect < physDev->regionRectCount; iRect++)
+        {
+            RECT *r = physDev->regionRects + iRect;
+            TRACE("Rect #%03d, x1:%4d, y1:%4d, x2:%4d, y2:%4d\n", iRect, r->left, r->top, r->right, r->bottom);
+        }
     }
 }
