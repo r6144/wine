@@ -51,17 +51,30 @@ struct winstation
     struct atom_table *atom_table;         /* global atom table */
 };
 
+struct global_cursor
+{
+    int                  x;                /* cursor position */
+    int                  y;
+    rectangle_t          clip;             /* cursor clip rectangle */
+    unsigned int         clip_msg;         /* message to post for cursor clip changes */
+    unsigned int         last_change;      /* time of last position change */
+    user_handle_t        win;              /* window that contains the cursor */
+};
+
 struct desktop
 {
-    struct object        obj;            /* object header */
-    unsigned int         flags;          /* desktop flags */
-    struct winstation   *winstation;     /* winstation this desktop belongs to */
-    struct list          entry;          /* entry in winstation list of desktops */
-    struct window       *top_window;     /* desktop window for this desktop */
-    struct window       *msg_window;     /* HWND_MESSAGE top window */
-    struct hook_table   *global_hooks;   /* table of global hooks on this desktop */
-    struct timeout_user *close_timeout;  /* timeout before closing the desktop */
-    unsigned int         users;          /* processes and threads using this desktop */
+    struct object        obj;              /* object header */
+    unsigned int         flags;            /* desktop flags */
+    struct winstation   *winstation;       /* winstation this desktop belongs to */
+    struct list          entry;            /* entry in winstation list of desktops */
+    struct window       *top_window;       /* desktop window for this desktop */
+    struct window       *msg_window;       /* HWND_MESSAGE top window */
+    struct hook_table   *global_hooks;     /* table of global hooks on this desktop */
+    struct timeout_user *close_timeout;    /* timeout before closing the desktop */
+    struct thread_input *foreground_input; /* thread input of foreground thread */
+    unsigned int         users;            /* processes and threads using this desktop */
+    struct global_cursor cursor;           /* global cursor information */
+    unsigned char        keystate[256];    /* asynchronous key state */
 };
 
 /* user handles functions */
@@ -82,6 +95,7 @@ extern void cleanup_clipboard_thread( struct thread *thread );
 
 extern void remove_thread_hooks( struct thread *thread );
 extern unsigned int get_active_hooks(void);
+extern struct thread *get_first_global_hook( int id );
 
 /* queue functions */
 
@@ -130,7 +144,9 @@ extern int rect_in_region( struct region *region, const rectangle_t *rect );
 /* window functions */
 
 extern struct process *get_top_window_owner( struct desktop *desktop );
-extern void close_desktop_window( struct desktop *desktop );
+extern void get_top_window_rectangle( struct desktop *desktop, rectangle_t *rect );
+extern void post_desktop_message( struct desktop *desktop, unsigned int message,
+                                  lparam_t wparam, lparam_t lparam );
 extern void destroy_window( struct window *win );
 extern void destroy_thread_windows( struct thread *thread );
 extern int is_child_window( user_handle_t parent, user_handle_t child );
@@ -172,6 +188,16 @@ static inline void mirror_rect( const rectangle_t *client_rect, rectangle_t *rec
     int tmp = rect->left;
     rect->left = width - rect->right;
     rect->right = width - tmp;
+}
+
+/* compute the intersection of two rectangles; return 0 if the result is empty */
+static inline int intersect_rect( rectangle_t *dst, const rectangle_t *src1, const rectangle_t *src2 )
+{
+    dst->left   = max( src1->left, src2->left );
+    dst->top    = max( src1->top, src2->top );
+    dst->right  = min( src1->right, src2->right );
+    dst->bottom = min( src1->bottom, src2->bottom );
+    return (dst->left < dst->right && dst->top < dst->bottom);
 }
 
 #endif  /* __WINE_SERVER_USER_H */

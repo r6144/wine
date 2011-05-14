@@ -149,7 +149,7 @@ static INT_PTR CDECL sc_cb_open(char *pszFile, int oflag, int pmode)
     ioflag |= GENERIC_WRITE;
     break;
   case _O_RDWR:
-    ioflag |= GENERIC_READ & GENERIC_WRITE;
+    ioflag |= GENERIC_READ | GENERIC_WRITE;
     break;
   case _O_WRONLY | _O_RDWR: /* hmmm.. */
     ERR("_O_WRONLY & _O_RDWR in oflag?\n");
@@ -412,7 +412,7 @@ static INT_PTR CDECL sc_FNNOTIFY_W(FDINOTIFICATIONTYPE fdint, PFDINOTIFICATION p
 
   TRACE("(fdint == %d, pfdin == ^%p)\n", fdint, pfdin);
 
-  if (pfdin && pfdin->pv && (*((void **) pfdin->pv) == (void *)SC_HSC_W_MAGIC))
+  if (pfdin && pfdin->pv && (((PSC_HSC_W) pfdin->pv)->magic == SC_HSC_W_MAGIC))
     phsc = pfdin->pv;
   else {
     ERR("pv %p is not an SC_HSC_W.\n", (pfdin) ? pfdin->pv : NULL);

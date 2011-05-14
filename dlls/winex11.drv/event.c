@@ -32,6 +32,9 @@
 #include <X11/Xlib.h>
 #include <X11/Xresource.h>
 #include <X11/Xutil.h>
+#ifdef HAVE_X11_EXTENSIONS_XINPUT2_H
+#include <X11/extensions/XInput2.h>
+#endif
 
 #include <assert.h>
 #include <stdarg.h>
@@ -86,105 +89,98 @@ extern BOOL ximInComposeMode;
 #define XEMBED_UNREGISTER_ACCELERATOR 13
 #define XEMBED_ACTIVATE_ACCELERATOR   14
 
+Bool (*pXGetEventData)( Display *display, XEvent /*XGenericEventCookie*/ *event ) = NULL;
+void (*pXFreeEventData)( Display *display, XEvent /*XGenericEventCookie*/ *event ) = NULL;
+
   /* Event handlers */
 static void X11DRV_FocusIn( HWND hwnd, XEvent *event );
 static void X11DRV_FocusOut( HWND hwnd, XEvent *event );
 static void X11DRV_Expose( HWND hwnd, XEvent *event );
 static void X11DRV_MapNotify( HWND hwnd, XEvent *event );
+static void X11DRV_UnmapNotify( HWND hwnd, XEvent *event );
 static void X11DRV_ReparentNotify( HWND hwnd, XEvent *event );
 static void X11DRV_ConfigureNotify( HWND hwnd, XEvent *event );
 static void X11DRV_PropertyNotify( HWND hwnd, XEvent *event );
 static void X11DRV_ClientMessage( HWND hwnd, XEvent *event );
 static void X11DRV_GravityNotify( HWND hwnd, XEvent *event );
 
-struct event_handler
+#define MAX_EVENT_HANDLERS 128
+
+static x11drv_event_handler handlers[MAX_EVENT_HANDLERS] =
 {
-    int                  type;    /* event type */
-    x11drv_event_handler handler; /* corresponding handler function */
+    NULL,                     /*  0 reserved */
+    NULL,                     /*  1 reserved */
+    X11DRV_KeyEvent,          /*  2 KeyPress */
+    X11DRV_KeyEvent,          /*  3 KeyRelease */
+    X11DRV_ButtonPress,       /*  4 ButtonPress */
+    X11DRV_ButtonRelease,     /*  5 ButtonRelease */
+    X11DRV_MotionNotify,      /*  6 MotionNotify */
+    X11DRV_EnterNotify,       /*  7 EnterNotify */
+    NULL,                     /*  8 LeaveNotify */
+    X11DRV_FocusIn,           /*  9 FocusIn */
+    X11DRV_FocusOut,          /* 10 FocusOut */
+    X11DRV_KeymapNotify,      /* 11 KeymapNotify */
+    X11DRV_Expose,            /* 12 Expose */
+    NULL,                     /* 13 GraphicsExpose */
+    NULL,                     /* 14 NoExpose */
+    NULL,                     /* 15 VisibilityNotify */
+    NULL,                     /* 16 CreateNotify */
+    X11DRV_DestroyNotify,     /* 17 DestroyNotify */
+    X11DRV_UnmapNotify,       /* 18 UnmapNotify */
+    X11DRV_MapNotify,         /* 19 MapNotify */
+    NULL,                     /* 20 MapRequest */
+    X11DRV_ReparentNotify,    /* 21 ReparentNotify */
+    X11DRV_ConfigureNotify,   /* 22 ConfigureNotify */
+    NULL,                     /* 23 ConfigureRequest */
+    X11DRV_GravityNotify,     /* 24 GravityNotify */
+    NULL,                     /* 25 ResizeRequest */
+    NULL,                     /* 26 CirculateNotify */
+    NULL,                     /* 27 CirculateRequest */
+    X11DRV_PropertyNotify,    /* 28 PropertyNotify */
+    X11DRV_SelectionClear,    /* 29 SelectionClear */
+    X11DRV_SelectionRequest,  /* 30 SelectionRequest */
+    NULL,                     /* 31 SelectionNotify */
+    NULL,                     /* 32 ColormapNotify */
+    X11DRV_ClientMessage,     /* 33 ClientMessage */
+    X11DRV_MappingNotify,     /* 34 MappingNotify */
+    X11DRV_GenericEvent       /* 35 GenericEvent */
 };
 
-#define MAX_EVENT_HANDLERS 64
-
-static struct event_handler handlers[MAX_EVENT_HANDLERS] =
+static const char * event_names[MAX_EVENT_HANDLERS] =
 {
-    /* list must be sorted by event type */
-    { KeyPress,         X11DRV_KeyEvent },
-    { KeyRelease,       X11DRV_KeyEvent },
-    { ButtonPress,      X11DRV_ButtonPress },
-    { ButtonRelease,    X11DRV_ButtonRelease },
-    { MotionNotify,     X11DRV_MotionNotify },
-    { EnterNotify,      X11DRV_EnterNotify },
-    /* LeaveNotify */
-    { FocusIn,          X11DRV_FocusIn },
-    { FocusOut,         X11DRV_FocusOut },
-    { KeymapNotify,     X11DRV_KeymapNotify },
-    { Expose,           X11DRV_Expose },
-    /* GraphicsExpose */
-    /* NoExpose */
-    /* VisibilityNotify */
-    /* CreateNotify */
-    { DestroyNotify,    X11DRV_DestroyNotify },
-    /* UnmapNotify */
-    { MapNotify,        X11DRV_MapNotify },
-    /* MapRequest */
-    { ReparentNotify,   X11DRV_ReparentNotify },
-    { ConfigureNotify,  X11DRV_ConfigureNotify },
-    /* ConfigureRequest */
-    { GravityNotify,    X11DRV_GravityNotify },
-    /* ResizeRequest */
-    /* CirculateNotify */
-    /* CirculateRequest */
-    { PropertyNotify,   X11DRV_PropertyNotify },
-    { SelectionClear,   X11DRV_SelectionClear },
-    { SelectionRequest, X11DRV_SelectionRequest },
-    /* SelectionNotify */
-    /* ColormapNotify */
-    { ClientMessage,    X11DRV_ClientMessage },
-    { MappingNotify,    X11DRV_MappingNotify },
+    NULL, NULL, "KeyPress", "KeyRelease", "ButtonPress", "ButtonRelease",
+    "MotionNotify", "EnterNotify", "LeaveNotify", "FocusIn", "FocusOut",
+    "KeymapNotify", "Expose", "GraphicsExpose", "NoExpose", "VisibilityNotify",
+    "CreateNotify", "DestroyNotify", "UnmapNotify", "MapNotify", "MapRequest",
+    "ReparentNotify", "ConfigureNotify", "ConfigureRequest", "GravityNotify", "ResizeRequest",
+    "CirculateNotify", "CirculateRequest", "PropertyNotify", "SelectionClear", "SelectionRequest",
+    "SelectionNotify", "ColormapNotify", "ClientMessage", "MappingNotify", "GenericEvent"
 };
 
-static int nb_event_handlers = 20;  /* change this if you add handlers above */
-
+int xinput2_opcode = 0;
 
 /* return the name of an X event */
 static const char *dbgstr_event( int type )
 {
-    static const char * const event_names[] =
-    {
-        "KeyPress", "KeyRelease", "ButtonPress", "ButtonRelease",
-        "MotionNotify", "EnterNotify", "LeaveNotify", "FocusIn", "FocusOut",
-        "KeymapNotify", "Expose", "GraphicsExpose", "NoExpose", "VisibilityNotify",
-        "CreateNotify", "DestroyNotify", "UnmapNotify", "MapNotify", "MapRequest",
-        "ReparentNotify", "ConfigureNotify", "ConfigureRequest", "GravityNotify",
-        "ResizeRequest", "CirculateNotify", "CirculateRequest", "PropertyNotify",
-        "SelectionClear", "SelectionRequest", "SelectionNotify", "ColormapNotify",
-        "ClientMessage", "MappingNotify"
-    };
-
-    if (type >= KeyPress && type <= MappingNotify) return event_names[type - KeyPress];
-    return wine_dbg_sprintf( "Extension event %d", type );
+    if (type < MAX_EVENT_HANDLERS && event_names[type]) return event_names[type];
+    return wine_dbg_sprintf( "Unknown event %d", type );
 }
 
-
-/***********************************************************************
- *           find_handler
- *
- * Find the handler for a given event type. Caller must hold the x11 lock.
- */
-static inline x11drv_event_handler find_handler( int type )
+static inline void get_event_data( XEvent *event )
 {
-    int min = 0, max = nb_event_handlers - 1;
-
-    while (min <= max)
-    {
-        int pos = (min + max) / 2;
-        if (handlers[pos].type == type) return handlers[pos].handler;
-        if (handlers[pos].type > type) max = pos - 1;
-        else min = pos + 1;
-    }
-    return NULL;
+#if defined(GenericEvent) && defined(HAVE_XEVENT_XCOOKIE)
+    if (event->xany.type != GenericEvent) return;
+    if (!pXGetEventData || !pXGetEventData( event->xany.display, event )) event->xcookie.data = NULL;
+#endif
 }
 
+static inline void free_event_data( XEvent *event )
+{
+#if defined(GenericEvent) && defined(HAVE_XEVENT_XCOOKIE)
+    if (event->xany.type != GenericEvent) return;
+    if (event->xcookie.data) pXFreeEventData( event->xany.display, event );
+#endif
+}
 
 /***********************************************************************
  *           X11DRV_register_event_handler
@@ -192,33 +188,13 @@ static inline x11drv_event_handler find_handler( int type )
  * Register a handler for a given event type.
  * If already registered, overwrite the previous handler.
  */
-void X11DRV_register_event_handler( int type, x11drv_event_handler handler )
+void X11DRV_register_event_handler( int type, x11drv_event_handler handler, const char *name )
 {
-    int min, max;
-
-    wine_tsx11_lock();
-    min = 0;
-    max = nb_event_handlers - 1;
-    while (min <= max)
-    {
-        int pos = (min + max) / 2;
-        if (handlers[pos].type == type)
-        {
-            handlers[pos].handler = handler;
-            goto done;
-        }
-        if (handlers[pos].type > type) max = pos - 1;
-        else min = pos + 1;
-    }
-    /* insert it between max and min */
-    memmove( &handlers[min+1], &handlers[min], (nb_event_handlers - min) * sizeof(handlers[0]) );
-    handlers[min].type = type;
-    handlers[min].handler = handler;
-    nb_event_handlers++;
-    assert( nb_event_handlers <= MAX_EVENT_HANDLERS );
-done:
-    wine_tsx11_unlock();
-    TRACE("registered handler %p for event %d count %d\n", handler, type, nb_event_handlers );
+    assert( type < MAX_EVENT_HANDLERS );
+    assert( !handlers[type] || handlers[type] == handler );
+    handlers[type] = handler;
+    event_names[type] = name;
+    TRACE("registered handler %p for event %d %s\n", handler, type, debugstr_a(name) );
 }
 
 
@@ -265,8 +241,49 @@ enum event_merge_action
 {
     MERGE_DISCARD,  /* discard the old event */
     MERGE_HANDLE,   /* handle the old event */
-    MERGE_KEEP      /* keep the old event for future merging */
+    MERGE_KEEP,     /* keep the old event for future merging */
+    MERGE_IGNORE    /* ignore the new event, keep the old one */
 };
+
+/***********************************************************************
+ *           merge_raw_motion_events
+ */
+#ifdef HAVE_X11_EXTENSIONS_XINPUT2_H
+static enum event_merge_action merge_raw_motion_events( XIRawEvent *prev, XIRawEvent *next )
+{
+    int i, j, k;
+    unsigned char mask;
+
+    if (!prev->valuators.mask_len) return MERGE_HANDLE;
+    if (!next->valuators.mask_len) return MERGE_HANDLE;
+
+    mask = prev->valuators.mask[0] | next->valuators.mask[0];
+    if (mask == next->valuators.mask[0])  /* keep next */
+    {
+        for (i = j = k = 0; i < 8; i++)
+        {
+            if (XIMaskIsSet( prev->valuators.mask, i ))
+                next->valuators.values[j] += prev->valuators.values[k++];
+            if (XIMaskIsSet( next->valuators.mask, i )) j++;
+        }
+        TRACE( "merging duplicate GenericEvent\n" );
+        return MERGE_DISCARD;
+    }
+    if (mask == prev->valuators.mask[0])  /* keep prev */
+    {
+        for (i = j = k = 0; i < 8; i++)
+        {
+            if (XIMaskIsSet( next->valuators.mask, i ))
+                prev->valuators.values[j] += next->valuators.values[k++];
+            if (XIMaskIsSet( prev->valuators.mask, i )) j++;
+        }
+        TRACE( "merging duplicate GenericEvent\n" );
+        return MERGE_IGNORE;
+    }
+    /* can't merge events with disjoint masks */
+    return MERGE_HANDLE;
+}
+#endif
 
 /***********************************************************************
  *           merge_events
@@ -299,6 +316,30 @@ static enum event_merge_action merge_events( XEvent *prev, XEvent *next )
             return MERGE_DISCARD;
         }
         break;
+#ifdef HAVE_X11_EXTENSIONS_XINPUT2_H
+    case GenericEvent:
+        if (prev->xcookie.extension != xinput2_opcode) break;
+        if (prev->xcookie.evtype != XI_RawMotion) break;
+        switch (next->type)
+        {
+        case MotionNotify:
+            {
+                struct x11drv_thread_data *thread_data = x11drv_thread_data();
+                if (next->xany.window == thread_data->clip_window &&
+                    next->xmotion.time - thread_data->last_motion_notify < 1000)
+                {
+                    TRACE( "ignoring MotionNotify for clip window\n" );
+                    return MERGE_IGNORE;
+                }
+            }
+            break;
+        case GenericEvent:
+            if (next->xcookie.extension != xinput2_opcode) break;
+            if (next->xcookie.evtype != XI_RawMotion) break;
+            return merge_raw_motion_events( prev->xcookie.data, next->xcookie.data );
+        }
+        break;
+#endif
     }
     return MERGE_HANDLE;
 }
@@ -310,11 +351,10 @@ static enum event_merge_action merge_events( XEvent *prev, XEvent *next )
 static inline void call_event_handler( Display *display, XEvent *event )
 {
     HWND hwnd;
-    x11drv_event_handler handler;
     XEvent *prev;
     struct x11drv_thread_data *thread_data;
 
-    if (!(handler = find_handler( event->type )))
+    if (!handlers[event->type])
     {
         TRACE( "%s for win %lx, ignoring\n", dbgstr_event( event->type ), event->xany.window );
         return;  /* no handler, ignore it */
@@ -330,7 +370,7 @@ static inline void call_event_handler( Display *display, XEvent *event )
     thread_data = x11drv_thread_data();
     prev = thread_data->current_event;
     thread_data->current_event = event;
-    handler( hwnd, event );
+    handlers[event->type]( hwnd, event );
     thread_data->current_event = prev;
     wine_tsx11_lock();
 }
@@ -380,22 +420,27 @@ static int process_events( Display *display, Bool (*filter)(Display*, XEvent*,XP
             else
                 continue;  /* filtered, ignore it */
         }
+        get_event_data( &event );
         if (prev_event.type) action = merge_events( &prev_event, &event );
         switch( action )
         {
-        case MERGE_DISCARD:  /* discard prev, keep new */
-            prev_event = event;
-            break;
         case MERGE_HANDLE:  /* handle prev, keep new */
             call_event_handler( display, &prev_event );
+            /* fall through */
+        case MERGE_DISCARD:  /* discard prev, keep new */
+            free_event_data( &prev_event );
             prev_event = event;
             break;
         case MERGE_KEEP:  /* handle new, keep prev for future merging */
             call_event_handler( display, &event );
+            /* fall through */
+        case MERGE_IGNORE: /* ignore new, keep prev for future merging */
+            free_event_data( &event );
             break;
         }
     }
     if (prev_event.type) call_event_handler( display, &prev_event );
+    free_event_data( &prev_event );
     XFlush( gdi_display );
     wine_tsx11_unlock();
     if (count) TRACE( "processed %d events\n", count );
@@ -665,6 +710,7 @@ static void X11DRV_FocusIn( HWND hwnd, XEvent *xev )
     TRACE( "win %p xwin %lx detail=%s\n", hwnd, event->window, focus_details[event->detail] );
 
     if (event->detail == NotifyPointer) return;
+    if (hwnd == GetDesktopWindow()) return;
 
     if ((xic = X11DRV_get_ic( hwnd )))
     {
@@ -672,7 +718,11 @@ static void X11DRV_FocusIn( HWND hwnd, XEvent *xev )
         XSetICFocus( xic );
         wine_tsx11_unlock();
     }
-    if (use_take_focus) return;  /* ignore FocusIn if we are using take focus */
+    if (use_take_focus)
+    {
+        if (hwnd == GetForegroundWindow()) clip_fullscreen_window( hwnd, FALSE );
+        return;
+    }
 
     if (!can_activate_window(hwnd))
     {
@@ -699,11 +749,13 @@ static void X11DRV_FocusOut( HWND hwnd, XEvent *xev )
     int revert;
     XIC xic;
 
-    if (!hwnd) return;
-
     TRACE( "win %p xwin %lx detail=%s\n", hwnd, event->window, focus_details[event->detail] );
 
-    if (event->detail == NotifyPointer) return;
+    if (event->detail == NotifyPointer)
+    {
+        if (!hwnd && event->window == x11drv_thread_data()->clip_window) reset_clipping_window();
+        return;
+    }
     if (ximInComposeMode) return;
 
     x11drv_thread_data()->last_focus = hwnd;
@@ -713,8 +765,12 @@ static void X11DRV_FocusOut( HWND hwnd, XEvent *xev )
         XUnsetICFocus( xic );
         wine_tsx11_unlock();
     }
+    if (root_window != DefaultRootWindow(event->display))
+    {
+        if (hwnd == GetDesktopWindow()) reset_clipping_window();
+        return;
+    }
     if (hwnd != GetForegroundWindow()) return;
-    if (root_window != DefaultRootWindow(event->display)) return;
     SendMessageW( hwnd, WM_CANCELMODE, 0, 0 );
 
     /* don't reset the foreground window, if the window which is
@@ -801,6 +857,11 @@ static void X11DRV_MapNotify( HWND hwnd, XEvent *event )
 {
     struct x11drv_win_data *data;
 
+    if (event->xany.window == x11drv_thread_data()->clip_window)
+    {
+        clipping_cursor = 1;
+        return;
+    }
     if (!(data = X11DRV_get_win_data( hwnd ))) return;
     if (!data->mapped || data->embedded) return;
 
@@ -809,6 +870,15 @@ static void X11DRV_MapNotify( HWND hwnd, XEvent *event )
         HWND hwndFocus = GetFocus();
         if (hwndFocus && IsChild( hwnd, hwndFocus )) X11DRV_SetFocus(hwndFocus);  /* FIXME */
     }
+}
+
+
+/**********************************************************************
+ *		X11DRV_UnmapNotify
+ */
+static void X11DRV_UnmapNotify( HWND hwnd, XEvent *event )
+{
+    if (event->xany.window == x11drv_thread_data()->clip_window) clipping_cursor = 0;
 }
 
 
@@ -945,25 +1015,6 @@ void X11DRV_ConfigureNotify( HWND hwnd, XEvent *xev )
            hwnd, data->whole_window, rect.left, rect.top, rect.right-rect.left, rect.bottom-rect.top,
            event->x, event->y, event->width, event->height );
 
-    if (is_net_wm_state_maximized( event->display, data ))
-    {
-        if (!IsZoomed( data->hwnd ))
-        {
-            TRACE( "win %p/%lx is maximized\n", data->hwnd, data->whole_window );
-            SendMessageW( data->hwnd, WM_SYSCOMMAND, SC_MAXIMIZE, 0 );
-            return;
-        }
-    }
-    else
-    {
-        if (IsZoomed( data->hwnd ))
-        {
-            TRACE( "window %p/%lx is no longer maximized\n", data->hwnd, data->whole_window );
-            SendMessageW( data->hwnd, WM_SYSCOMMAND, SC_RESTORE, 0 );
-            return;
-        }
-    }
-
     X11DRV_X_to_window_rect( data, &rect );
     if (root_coords) MapWindowPoints( 0, parent, (POINT *)&rect, 2 );
 
@@ -986,13 +1037,36 @@ void X11DRV_ConfigureNotify( HWND hwnd, XEvent *xev )
          data->window_rect.bottom - data->window_rect.top == cy) ||
         (IsRectEmpty( &data->window_rect ) && event->width == 1 && event->height == 1))
     {
-        if (flags & SWP_NOMOVE) return;  /* if nothing changed, don't do anything */
+        if (flags & SWP_NOMOVE)  /* if nothing changed, don't do anything */
+        {
+            TRACE( "Nothing has changed, ignoring event\n" );
+            return;
+        }
         flags |= SWP_NOSIZE;
     }
     else
         TRACE( "%p resizing from (%dx%d) to (%dx%d)\n",
                hwnd, data->window_rect.right - data->window_rect.left,
                data->window_rect.bottom - data->window_rect.top, cx, cy );
+
+    if (is_net_wm_state_maximized( event->display, data ))
+    {
+        if (!IsZoomed( data->hwnd ))
+        {
+            TRACE( "win %p/%lx is maximized\n", data->hwnd, data->whole_window );
+            SendMessageW( data->hwnd, WM_SYSCOMMAND, SC_MAXIMIZE, 0 );
+            return;
+        }
+    }
+    else
+    {
+        if (IsZoomed( data->hwnd ))
+        {
+            TRACE( "window %p/%lx is no longer maximized\n", data->hwnd, data->whole_window );
+            SendMessageW( data->hwnd, WM_SYSCOMMAND, SC_RESTORE, 0 );
+            return;
+        }
+    }
 
     SetWindowPos( hwnd, 0, x, y, cx, cy, flags );
 }
@@ -1548,33 +1622,4 @@ static void X11DRV_ClientMessage( HWND hwnd, XEvent *xev )
         }
     }
     TRACE( "no handler found for %ld\n", event->message_type );
-}
-
-
-/***********************************************************************
- *		X11DRV_SendInput  (X11DRV.@)
- */
-UINT CDECL X11DRV_SendInput( UINT count, LPINPUT inputs, int size )
-{
-    UINT i;
-
-    for (i = 0; i < count; i++, inputs++)
-    {
-        switch(inputs->type)
-        {
-        case INPUT_MOUSE:
-            X11DRV_send_mouse_input( 0, 0, inputs->u.mi.dwFlags, inputs->u.mi.dx, inputs->u.mi.dy,
-                                     inputs->u.mi.mouseData, inputs->u.mi.time,
-                                     inputs->u.mi.dwExtraInfo, LLMHF_INJECTED );
-            break;
-        case INPUT_KEYBOARD:
-            X11DRV_send_keyboard_input( inputs->u.ki.wVk, inputs->u.ki.wScan, inputs->u.ki.dwFlags,
-                                        inputs->u.ki.time, inputs->u.ki.dwExtraInfo, LLKHF_INJECTED );
-            break;
-        case INPUT_HARDWARE:
-            FIXME( "INPUT_HARDWARE not supported\n" );
-            break;
-        }
-    }
-    return count;
 }

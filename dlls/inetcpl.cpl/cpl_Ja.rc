@@ -27,12 +27,6 @@
 
 LANGUAGE LANG_JAPANESE, SUBLANG_DEFAULT
 
-STRINGTABLE DISCARDABLE
-BEGIN
-    IDS_CPL_NAME        "インターネット設定"
-    IDS_CPL_INFO        "Wine インターネット ブラウザや関連する設定を構成します"
-END
-
 /* "General" propsheet */
 IDD_GENERAL DIALOG  0, 0, 320, 220
 STYLE WS_CAPTION | WS_CHILD | WS_DISABLED
@@ -47,6 +41,11 @@ BEGIN
     PUSHBUTTON  "現在のページ(&C)", IDC_HOME_CURRENT, 58, 36, 80, 14
     PUSHBUTTON  "デフォルト(&D)", IDC_HOME_DEFAULT, 144, 36, 80, 14
     PUSHBUTTON  "空白(&B)", IDC_HOME_BLANK, 230, 36, 80, 14
+    GROUPBOX    " 閲覧履歴 ", IDC_STATIC, 4, 60, 312, 46
+    LTEXT       "キャッシュされたページやクッキー、その他のデータを削除できます。",
+                IDC_STATIC, 58, 72, 252, 10
+    PUSHBUTTON  "ファイルを削除(&F)...", IDC_HISTORY_DELETE, 144, 86, 80, 14
+    PUSHBUTTON  "設定(&S)...", IDC_HISTORY_SETTINGS, 230, 86, 80, 14
 
 END
 

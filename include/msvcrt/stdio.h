@@ -94,6 +94,9 @@ FILE* __cdecl __iob_func(void);
 #define stdout             (_iob+STDOUT_FILENO)
 #define stderr             (_iob+STDERR_FILENO)
 
+/* return value for _get_output_format */
+#define _TWO_DIGIT_EXPONENT 0x1
+
 #ifndef _STDIO_DEFINED
 #define _STDIO_DEFINED
 int    __cdecl _fcloseall(void);
@@ -105,12 +108,14 @@ int    __cdecl _flsbuf(int,FILE*);
 int    __cdecl _flushall(void);
 int    __cdecl _fputchar(int);
 FILE*  __cdecl _fsopen(const char*,const char*,int);
+int    __cdecl _get_printf_count_output(void);
 int    __cdecl _getmaxstdio(void);
 int    __cdecl _getw(FILE*);
 int    __cdecl _pclose(FILE*);
 FILE*  __cdecl _popen(const char*,const char*);
 int    __cdecl _putw(int,FILE*);
 int    __cdecl _rmtmp(void);
+int    __cdecl _set_printf_count_output(int);
 int    __cdecl _setmaxstdio(int);
 int    __cdecl _snprintf(char*,size_t,const char*,...);
 int    __cdecl _snprintf_s(char*,size_t,size_t,const char*,...);
@@ -173,6 +178,7 @@ int    __cdecl vprintf(const char*,__ms_va_list);
 int    __cdecl vprintf_s(const char*,__ms_va_list);
 int    __cdecl vsprintf(char*,const char*,__ms_va_list);
 int    __cdecl vsprintf_s(char*,size_t,const char*,__ms_va_list);
+unsigned int __cdecl _get_output_format(void);
 
 #ifndef _WSTDIO_DEFINED
 #define _WSTDIO_DEFINED

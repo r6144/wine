@@ -46,6 +46,7 @@
 #define WIN32_NO_STATUS
 #include "winternl.h"
 #include "kernel_private.h"
+#include "psapi.h"
 #include "wine/library.h"
 #include "wine/server.h"
 #include "wine/unicode.h"
@@ -1450,7 +1451,7 @@ static char **build_envp( const WCHAR *envW )
 static int fork_and_exec( const char *filename, const WCHAR *cmdline, const WCHAR *env,
                           const char *newdir, DWORD flags, STARTUPINFOW *startup )
 {
-    int fd[2], stdin_fd = -1, stdout_fd = -1;
+    int fd[2], stdin_fd = -1, stdout_fd = -1, stderr_fd = -1;
     int pid, err;
     char **argv, **envp;
 
@@ -1471,25 +1472,30 @@ static int fork_and_exec( const char *filename, const WCHAR *cmdline, const WCHA
 
     if (!(flags & (CREATE_NEW_PROCESS_GROUP | CREATE_NEW_CONSOLE | DETACHED_PROCESS)))
     {
-        HANDLE hstdin, hstdout;
+        HANDLE hstdin, hstdout, hstderr;
 
         if (startup->dwFlags & STARTF_USESTDHANDLES)
         {
             hstdin = startup->hStdInput;
             hstdout = startup->hStdOutput;
+            hstderr = startup->hStdError;
         }
         else
         {
             hstdin = GetStdHandle(STD_INPUT_HANDLE);
             hstdout = GetStdHandle(STD_OUTPUT_HANDLE);
+            hstderr = GetStdHandle(STD_ERROR_HANDLE);
         }
 
         if (is_console_handle( hstdin ))
             hstdin = wine_server_ptr_handle( console_handle_unmap( hstdin ));
         if (is_console_handle( hstdout ))
             hstdout = wine_server_ptr_handle( console_handle_unmap( hstdout ));
+        if (is_console_handle( hstderr ))
+            hstderr = wine_server_ptr_handle( console_handle_unmap( hstderr ));
         wine_server_handle_to_fd( hstdin, FILE_READ_DATA, &stdin_fd, NULL );
         wine_server_handle_to_fd( hstdout, FILE_WRITE_DATA, &stdout_fd, NULL );
+        wine_server_handle_to_fd( hstderr, FILE_WRITE_DATA, &stderr_fd, NULL );
     }
 
     argv = build_argv( cmdline, 0 );
@@ -1528,6 +1534,11 @@ static int fork_and_exec( const char *filename, const WCHAR *cmdline, const WCHA
                 dup2( stdout_fd, 1 );
                 close( stdout_fd );
             }
+            if (stderr_fd != -1)
+            {
+                dup2( stderr_fd, 2 );
+                close( stderr_fd );
+            }
         }
 
         /* Reset signals that we previously set to SIG_IGN */
@@ -1545,6 +1556,7 @@ static int fork_and_exec( const char *filename, const WCHAR *cmdline, const WCHA
     HeapFree( GetProcessHeap(), 0, envp );
     if (stdin_fd != -1) close( stdin_fd );
     if (stdout_fd != -1) close( stdout_fd );
+    if (stderr_fd != -1) close( stderr_fd );
     close( fd[1] );
     if ((pid != -1) && (read( fd[0], &err, sizeof(err) ) > 0))  /* exec failed */
     {
@@ -2156,55 +2168,11 @@ static LPWSTR get_file_name( LPCWSTR appname, LPWSTR cmdline, LPWSTR buffer,
 }
 
 
-/**********************************************************************
- *       CreateProcessA          (KERNEL32.@)
- */
-BOOL WINAPI DECLSPEC_HOTPATCH CreateProcessA( LPCSTR app_name, LPSTR cmd_line, LPSECURITY_ATTRIBUTES process_attr,
-                                              LPSECURITY_ATTRIBUTES thread_attr, BOOL inherit,
-                                              DWORD flags, LPVOID env, LPCSTR cur_dir,
-                                              LPSTARTUPINFOA startup_info, LPPROCESS_INFORMATION info )
-{
-    BOOL ret = FALSE;
-    WCHAR *app_nameW = NULL, *cmd_lineW = NULL, *cur_dirW = NULL;
-    UNICODE_STRING desktopW, titleW;
-    STARTUPINFOW infoW;
-
-    desktopW.Buffer = NULL;
-    titleW.Buffer = NULL;
-    if (app_name && !(app_nameW = FILE_name_AtoW( app_name, TRUE ))) goto done;
-    if (cmd_line && !(cmd_lineW = FILE_name_AtoW( cmd_line, TRUE ))) goto done;
-    if (cur_dir && !(cur_dirW = FILE_name_AtoW( cur_dir, TRUE ))) goto done;
-
-    if (startup_info->lpDesktop) RtlCreateUnicodeStringFromAsciiz( &desktopW, startup_info->lpDesktop );
-    if (startup_info->lpTitle) RtlCreateUnicodeStringFromAsciiz( &titleW, startup_info->lpTitle );
-
-    memcpy( &infoW, startup_info, sizeof(infoW) );
-    infoW.lpDesktop = desktopW.Buffer;
-    infoW.lpTitle = titleW.Buffer;
-
-    if (startup_info->lpReserved)
-      FIXME("StartupInfo.lpReserved is used, please report (%s)\n",
-            debugstr_a(startup_info->lpReserved));
-
-    ret = CreateProcessW( app_nameW, cmd_lineW, process_attr, thread_attr,
-                          inherit, flags, env, cur_dirW, &infoW, info );
-done:
-    HeapFree( GetProcessHeap(), 0, app_nameW );
-    HeapFree( GetProcessHeap(), 0, cmd_lineW );
-    HeapFree( GetProcessHeap(), 0, cur_dirW );
-    RtlFreeUnicodeString( &desktopW );
-    RtlFreeUnicodeString( &titleW );
-    return ret;
-}
-
-
-/**********************************************************************
- *       CreateProcessW          (KERNEL32.@)
- */
-BOOL WINAPI DECLSPEC_HOTPATCH CreateProcessW( LPCWSTR app_name, LPWSTR cmd_line, LPSECURITY_ATTRIBUTES process_attr,
-                                              LPSECURITY_ATTRIBUTES thread_attr, BOOL inherit, DWORD flags,
-                                              LPVOID env, LPCWSTR cur_dir, LPSTARTUPINFOW startup_info,
-                                              LPPROCESS_INFORMATION info )
+/* Steam hotpatches CreateProcessA and W, so to prevent it from crashing use an internal function */
+static BOOL create_process_impl( LPCWSTR app_name, LPWSTR cmd_line, LPSECURITY_ATTRIBUTES process_attr,
+                                 LPSECURITY_ATTRIBUTES thread_attr, BOOL inherit, DWORD flags,
+                                 LPVOID env, LPCWSTR cur_dir, LPSTARTUPINFOW startup_info,
+                                 LPPROCESS_INFORMATION info )
 {
     BOOL retv = FALSE;
     HANDLE hFile = 0;
@@ -2332,6 +2300,61 @@ BOOL WINAPI DECLSPEC_HOTPATCH CreateProcessW( LPCWSTR app_name, LPWSTR cmd_line,
     if (retv)
         TRACE( "started process pid %04x tid %04x\n", info->dwProcessId, info->dwThreadId );
     return retv;
+}
+
+
+/**********************************************************************
+ *       CreateProcessA          (KERNEL32.@)
+ */
+BOOL WINAPI DECLSPEC_HOTPATCH CreateProcessA( LPCSTR app_name, LPSTR cmd_line, LPSECURITY_ATTRIBUTES process_attr,
+                                              LPSECURITY_ATTRIBUTES thread_attr, BOOL inherit,
+                                              DWORD flags, LPVOID env, LPCSTR cur_dir,
+                                              LPSTARTUPINFOA startup_info, LPPROCESS_INFORMATION info )
+{
+    BOOL ret = FALSE;
+    WCHAR *app_nameW = NULL, *cmd_lineW = NULL, *cur_dirW = NULL;
+    UNICODE_STRING desktopW, titleW;
+    STARTUPINFOW infoW;
+
+    desktopW.Buffer = NULL;
+    titleW.Buffer = NULL;
+    if (app_name && !(app_nameW = FILE_name_AtoW( app_name, TRUE ))) goto done;
+    if (cmd_line && !(cmd_lineW = FILE_name_AtoW( cmd_line, TRUE ))) goto done;
+    if (cur_dir && !(cur_dirW = FILE_name_AtoW( cur_dir, TRUE ))) goto done;
+
+    if (startup_info->lpDesktop) RtlCreateUnicodeStringFromAsciiz( &desktopW, startup_info->lpDesktop );
+    if (startup_info->lpTitle) RtlCreateUnicodeStringFromAsciiz( &titleW, startup_info->lpTitle );
+
+    memcpy( &infoW, startup_info, sizeof(infoW) );
+    infoW.lpDesktop = desktopW.Buffer;
+    infoW.lpTitle = titleW.Buffer;
+
+    if (startup_info->lpReserved)
+      FIXME("StartupInfo.lpReserved is used, please report (%s)\n",
+            debugstr_a(startup_info->lpReserved));
+
+    ret = create_process_impl( app_nameW, cmd_lineW, process_attr, thread_attr,
+                               inherit, flags, env, cur_dirW, &infoW, info );
+done:
+    HeapFree( GetProcessHeap(), 0, app_nameW );
+    HeapFree( GetProcessHeap(), 0, cmd_lineW );
+    HeapFree( GetProcessHeap(), 0, cur_dirW );
+    RtlFreeUnicodeString( &desktopW );
+    RtlFreeUnicodeString( &titleW );
+    return ret;
+}
+
+
+/**********************************************************************
+ *       CreateProcessW          (KERNEL32.@)
+ */
+BOOL WINAPI DECLSPEC_HOTPATCH CreateProcessW( LPCWSTR app_name, LPWSTR cmd_line, LPSECURITY_ATTRIBUTES process_attr,
+                                              LPSECURITY_ATTRIBUTES thread_attr, BOOL inherit, DWORD flags,
+                                              LPVOID env, LPCWSTR cur_dir, LPSTARTUPINFOW startup_info,
+                                              LPPROCESS_INFORMATION info )
+{
+    return create_process_impl( app_name, cmd_line, process_attr, thread_attr,
+                                inherit, flags, env, cur_dir, startup_info, info);
 }
 
 
@@ -3116,24 +3139,18 @@ BOOL WINAPI SetProcessAffinityMask( HANDLE hProcess, DWORD_PTR affmask )
 /**********************************************************************
  *          GetProcessAffinityMask    (KERNEL32.@)
  */
-BOOL WINAPI GetProcessAffinityMask( HANDLE hProcess,
-                                    PDWORD_PTR lpProcessAffinityMask,
-                                    PDWORD_PTR lpSystemAffinityMask )
+BOOL WINAPI GetProcessAffinityMask( HANDLE hProcess, PDWORD_PTR process_mask, PDWORD_PTR system_mask )
 {
-    PROCESS_BASIC_INFORMATION   pbi;
-    NTSTATUS                    status;
+    NTSTATUS status = STATUS_SUCCESS;
 
-    status = NtQueryInformationProcess(hProcess,
-                                       ProcessBasicInformation,
-                                       &pbi, sizeof(pbi), NULL);
-    if (status)
+    if (system_mask) *system_mask = (1 << NtCurrentTeb()->Peb->NumberOfProcessors) - 1;
+    if (process_mask)
     {
-        SetLastError( RtlNtStatusToDosError(status) );
-        return FALSE;
+        if ((status = NtQueryInformationProcess( hProcess, ProcessAffinityMask,
+                                                 process_mask, sizeof(*process_mask), NULL )))
+            SetLastError( RtlNtStatusToDosError(status) );
     }
-    if (lpProcessAffinityMask) *lpProcessAffinityMask = pbi.AffinityMask;
-    if (lpSystemAffinityMask)  *lpSystemAffinityMask = (1 << NtCurrentTeb()->Peb->NumberOfProcessors) - 1;
-    return TRUE;
+    return !status;
 }
 
 
@@ -3214,6 +3231,14 @@ BOOL WINAPI SetProcessWorkingSetSize(HANDLE hProcess, SIZE_T minset,
         /* Swap the process out of physical RAM */
     }
     return TRUE;
+}
+
+/***********************************************************************
+ *           K32EmptyWorkingSet (KERNEL32.@)
+ */
+BOOL WINAPI K32EmptyWorkingSet(HANDLE hProcess)
+{
+    return SetProcessWorkingSetSize(hProcess, (SIZE_T)-1, (SIZE_T)-1);
 }
 
 /***********************************************************************
@@ -3415,6 +3440,146 @@ cleanup:
     RtlFreeUnicodeString(&nt_path);
     if (status) SetLastError( RtlNtStatusToDosError(status) );
     return !status;
+}
+
+/***********************************************************************
+ *           K32GetProcessImageFileNameA (KERNEL32.@)
+ */
+DWORD WINAPI K32GetProcessImageFileNameA( HANDLE process, LPSTR file, DWORD size )
+{
+    FIXME("(%p, %p, %d) stub\n", process, file, size );
+    return 0;
+}
+
+/***********************************************************************
+ *           K32GetProcessImageFileNameW (KERNEL32.@)
+ */
+DWORD WINAPI K32GetProcessImageFileNameW( HANDLE process, LPWSTR file, DWORD size )
+{
+    return QueryFullProcessImageNameW(process, PROCESS_NAME_NATIVE, file, &size) ? size : 0;
+}
+
+/***********************************************************************
+ *           K32EnumProcesses (KERNEL32.@)
+ */
+BOOL WINAPI K32EnumProcesses(DWORD *lpdwProcessIDs, DWORD cb, DWORD *lpcbUsed)
+{
+    SYSTEM_PROCESS_INFORMATION *spi;
+    ULONG size = 0x4000;
+    void *buf = NULL;
+    NTSTATUS status;
+
+    do {
+        size *= 2;
+        HeapFree(GetProcessHeap(), 0, buf);
+        buf = HeapAlloc(GetProcessHeap(), 0, size);
+        if (!buf)
+            return FALSE;
+
+        status = NtQuerySystemInformation(SystemProcessInformation, buf, size, NULL);
+    } while(status == STATUS_INFO_LENGTH_MISMATCH);
+
+    if (status != STATUS_SUCCESS)
+    {
+        HeapFree(GetProcessHeap(), 0, buf);
+        SetLastError(RtlNtStatusToDosError(status));
+        return FALSE;
+    }
+
+    spi = buf;
+
+    for (*lpcbUsed = 0; cb >= sizeof(DWORD); cb -= sizeof(DWORD))
+    {
+        *lpdwProcessIDs++ = HandleToUlong(spi->UniqueProcessId);
+        *lpcbUsed += sizeof(DWORD);
+
+        if (spi->NextEntryOffset == 0)
+            break;
+
+        spi = (SYSTEM_PROCESS_INFORMATION *)(((PCHAR)spi) + spi->NextEntryOffset);
+    }
+
+    HeapFree(GetProcessHeap(), 0, buf);
+    return TRUE;
+}
+
+/***********************************************************************
+ *           K32QueryWorkingSet (KERNEL32.@)
+ */
+BOOL WINAPI K32QueryWorkingSet( HANDLE process, LPVOID buffer, DWORD size )
+{
+    NTSTATUS status;
+
+    TRACE( "(%p, %p, %d)\n", process, buffer, size );
+
+    status = NtQueryVirtualMemory( process, NULL, MemoryWorkingSetList, buffer, size, NULL );
+
+    if (status)
+    {
+        SetLastError( RtlNtStatusToDosError( status ) );
+        return FALSE;
+    }
+    return TRUE;
+}
+
+/***********************************************************************
+ *           K32QueryWorkingSetEx (KERNEL32.@)
+ */
+BOOL WINAPI K32QueryWorkingSetEx( HANDLE process, LPVOID buffer, DWORD size )
+{
+    NTSTATUS status;
+
+    TRACE( "(%p, %p, %d)\n", process, buffer, size );
+
+    status = NtQueryVirtualMemory( process, NULL, MemoryWorkingSetList, buffer,  size, NULL );
+
+    if (status)
+    {
+        SetLastError( RtlNtStatusToDosError( status ) );
+        return FALSE;
+    }
+    return TRUE;
+}
+
+/***********************************************************************
+ *           K32GetProcessMemoryInfo (KERNEL32.@)
+ *
+ * Retrieve memory usage information for a given process
+ *
+ */
+BOOL WINAPI K32GetProcessMemoryInfo(HANDLE process,
+                                    PPROCESS_MEMORY_COUNTERS pmc, DWORD cb)
+{
+    NTSTATUS status;
+    VM_COUNTERS vmc;
+
+    if (cb < sizeof(PROCESS_MEMORY_COUNTERS))
+    {
+        SetLastError(ERROR_INSUFFICIENT_BUFFER);
+        return FALSE;
+    }
+
+    status = NtQueryInformationProcess(process, ProcessVmCounters,
+                                       &vmc, sizeof(vmc), NULL);
+
+    if (status)
+    {
+        SetLastError(RtlNtStatusToDosError(status));
+        return FALSE;
+    }
+
+    pmc->cb = sizeof(PROCESS_MEMORY_COUNTERS);
+    pmc->PageFaultCount = vmc.PageFaultCount;
+    pmc->PeakWorkingSetSize = vmc.PeakWorkingSetSize;
+    pmc->WorkingSetSize = vmc.WorkingSetSize;
+    pmc->QuotaPeakPagedPoolUsage = vmc.QuotaPeakPagedPoolUsage;
+    pmc->QuotaPagedPoolUsage = vmc.QuotaPagedPoolUsage;
+    pmc->QuotaPeakNonPagedPoolUsage = vmc.QuotaPeakNonPagedPoolUsage;
+    pmc->QuotaNonPagedPoolUsage = vmc.QuotaNonPagedPoolUsage;
+    pmc->PagefileUsage = vmc.PagefileUsage;
+    pmc->PeakPagefileUsage = vmc.PeakPagefileUsage;
+
+    return TRUE;
 }
 
 /***********************************************************************

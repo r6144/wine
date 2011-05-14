@@ -24,7 +24,7 @@
 # error You must include config.h to use this header
 #endif
 
-#if defined(HAVE_ALSA) && !defined(__ALSA_H)
+#ifndef __ALSA_H
 #define __ALSA_H
 
 #ifdef interface
@@ -42,14 +42,6 @@
 #ifdef HAVE_SYS_ERRNO_H
 #include <sys/errno.h>
 #endif
-
-#include "mmreg.h"
-#include "dsound.h"
-#include "dsdriver.h"
-
-#include "ks.h"
-#include "ksmedia.h"
-#include "ksguid.h"
 
 /* state diagram for waveOut writing:
  *

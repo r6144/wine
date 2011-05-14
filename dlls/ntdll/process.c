@@ -134,14 +134,12 @@ NTSTATUS WINAPI NtQueryInformationProcess(
     UNIMPLEMENTED_INFO_CLASS(ProcessEnableAlignmentFaultFixup);
     UNIMPLEMENTED_INFO_CLASS(ProcessPriorityClass);
     UNIMPLEMENTED_INFO_CLASS(ProcessWx86Information);
-    UNIMPLEMENTED_INFO_CLASS(ProcessAffinityMask);
     UNIMPLEMENTED_INFO_CLASS(ProcessPriorityBoost);
     UNIMPLEMENTED_INFO_CLASS(ProcessDeviceMap);
     UNIMPLEMENTED_INFO_CLASS(ProcessSessionInformation);
     UNIMPLEMENTED_INFO_CLASS(ProcessForegroundInformation);
     UNIMPLEMENTED_INFO_CLASS(ProcessLUIDDeviceMapsEnabled);
     UNIMPLEMENTED_INFO_CLASS(ProcessBreakOnTermination);
-    UNIMPLEMENTED_INFO_CLASS(ProcessDebugFlags);
     UNIMPLEMENTED_INFO_CLASS(ProcessHandleTracing);
 
     case ProcessBasicInformation:
@@ -314,6 +312,30 @@ NTSTATUS WINAPI NtQueryInformationProcess(
         else
             ret = STATUS_INFO_LENGTH_MISMATCH;
         break;
+    case ProcessDebugFlags:
+        len = sizeof(DWORD);
+        if (ProcessInformationLength == len)
+        {
+            if (!ProcessInformation)
+                ret = STATUS_ACCESS_VIOLATION;
+            else if (!ProcessHandle)
+                ret = STATUS_INVALID_HANDLE;
+            else
+            {
+                SERVER_START_REQ(get_process_info)
+                {
+                    req->handle = wine_server_obj_handle( ProcessHandle );
+                    if ((ret = wine_server_call( req )) == STATUS_SUCCESS)
+                    {
+                        *(DWORD *)ProcessInformation = !reply->debugger_present;
+                    }
+                }
+                SERVER_END_REQ;
+            }
+        }
+        else
+            ret = STATUS_INFO_LENGTH_MISMATCH;
+        break;
     case ProcessDefaultHardErrorMode:
         len = sizeof(process_error_mode);
         if (ProcessInformationLength == len)
@@ -362,6 +384,24 @@ NTSTATUS WINAPI NtQueryInformationProcess(
             ret = STATUS_INFO_LENGTH_MISMATCH;
         }
         break;
+
+    case ProcessAffinityMask:
+        len = sizeof(ULONG_PTR);
+        if (ProcessInformationLength == len)
+        {
+            const ULONG_PTR system_mask = ((ULONG_PTR)1 << NtCurrentTeb()->Peb->NumberOfProcessors) - 1;
+
+            SERVER_START_REQ(get_process_info)
+            {
+                req->handle = wine_server_obj_handle( ProcessHandle );
+                if (!(ret = wine_server_call( req )))
+                    *(ULONG_PTR *)ProcessInformation = reply->affinity & system_mask;
+            }
+            SERVER_END_REQ;
+        }
+        else ret = STATUS_INFO_LENGTH_MISMATCH;
+        break;
+
     case ProcessWow64Information:
         len = sizeof(DWORD);
         if (ProcessInformationLength == len)

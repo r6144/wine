@@ -178,7 +178,7 @@ static HRESULT STDMETHODCALLTYPE dxgi_device_CreateSurface(IWineDXGIDevice *ifac
     memset(surface, 0, surface_count * sizeof(*surface));
     for (i = 0; i < surface_count; ++i)
     {
-        IWineD3DSurface *wined3d_surface;
+        struct wined3d_surface *wined3d_surface;
         IUnknown *parent;
 
         hr = IWineD3DDeviceParent_CreateSurface(device_parent, NULL, desc->Width, desc->Height,
@@ -190,9 +190,9 @@ static HRESULT STDMETHODCALLTYPE dxgi_device_CreateSurface(IWineDXGIDevice *ifac
             goto fail;
         }
 
-        parent = IWineD3DSurface_GetParent(wined3d_surface);
+        parent = wined3d_surface_get_parent(wined3d_surface);
         hr = IUnknown_QueryInterface(parent, &IID_IDXGISurface, (void **)&surface[i]);
-        IWineD3DSurface_Release(wined3d_surface);
+        wined3d_surface_decref(wined3d_surface);
         if (FAILED(hr))
         {
             ERR("Surface should implement IDXGISurface\n");
@@ -282,7 +282,7 @@ static HRESULT STDMETHODCALLTYPE dxgi_device_create_surface(IWineDXGIDevice *ifa
 }
 
 static HRESULT STDMETHODCALLTYPE dxgi_device_create_swapchain(IWineDXGIDevice *iface,
-        WINED3DPRESENT_PARAMETERS *present_parameters, IWineD3DSwapChain **wined3d_swapchain)
+        WINED3DPRESENT_PARAMETERS *present_parameters, struct wined3d_swapchain **wined3d_swapchain)
 {
     struct dxgi_swapchain *object;
     HRESULT hr;
@@ -340,7 +340,7 @@ HRESULT dxgi_device_init(struct dxgi_device *device, struct dxgi_device_layer *l
     IWineD3DDeviceParent *wined3d_device_parent;
     IWineDXGIAdapter *wine_adapter;
     UINT adapter_ordinal;
-    IWineD3D *wined3d;
+    struct wined3d *wined3d;
     void *layer_base;
     HRESULT hr;
 
@@ -370,7 +370,7 @@ HRESULT dxgi_device_init(struct dxgi_device *device, struct dxgi_device_layer *l
     {
         WARN("This is not the adapter we're looking for, returning %#x.\n", hr);
         EnterCriticalSection(&dxgi_cs);
-        IWineD3D_Release(wined3d);
+        wined3d_decref(wined3d);
         LeaveCriticalSection(&dxgi_cs);
         goto fail;
     }
@@ -386,10 +386,10 @@ HRESULT dxgi_device_init(struct dxgi_device *device, struct dxgi_device_layer *l
 
     FIXME("Ignoring adapter type.\n");
     EnterCriticalSection(&dxgi_cs);
-    hr = IWineD3D_CreateDevice(wined3d, adapter_ordinal, WINED3DDEVTYPE_HAL, NULL, 0,
+    hr = wined3d_device_create(wined3d, adapter_ordinal, WINED3DDEVTYPE_HAL, NULL, 0,
             wined3d_device_parent, &device->wined3d_device);
     IWineD3DDeviceParent_Release(wined3d_device_parent);
-    IWineD3D_Release(wined3d);
+    wined3d_decref(wined3d);
     LeaveCriticalSection(&dxgi_cs);
     if (FAILED(hr))
     {

@@ -206,13 +206,13 @@ static void *wpp_open_mem(const char *filename, int type)
     {
         if(includes_capacity == 0)
         {
-            includes = HeapAlloc(GetProcessHeap(), 0, INCLUDES_INITIAL_CAPACITY);
+            includes = HeapAlloc(GetProcessHeap(), 0, INCLUDES_INITIAL_CAPACITY * sizeof(*includes));
             if(includes == NULL)
             {
                 ERR("Error allocating memory for the loaded includes structure\n");
                 goto error;
             }
-            includes_capacity = INCLUDES_INITIAL_CAPACITY;
+            includes_capacity = INCLUDES_INITIAL_CAPACITY * sizeof(*includes);
         }
         else
         {
@@ -306,6 +306,7 @@ static int wpp_close_output(void)
     if(!new_wpp_output) return 0;
     wpp_output = new_wpp_output;
     wpp_output[wpp_output_size]='\0';
+    wpp_output_size++;
     return 1;
 }
 
@@ -389,8 +390,8 @@ cleanup:
     return hr;
 }
 
-static HRESULT assemble_shader(const char *preprocShader, const char *preprocMessages,
-                               LPD3DBLOB* ppShader, LPD3DBLOB* ppErrorMsgs)
+static HRESULT assemble_shader(const char *preproc_shader,
+        ID3DBlob **shader_blob, ID3DBlob **error_messages)
 {
     struct bwriter_shader *shader;
     char *messages = NULL;
@@ -400,51 +401,43 @@ static HRESULT assemble_shader(const char *preprocShader, const char *preprocMes
     int size;
     char *pos;
 
-    shader = SlAssembleShader(preprocShader, &messages);
+    shader = SlAssembleShader(preproc_shader, &messages);
 
-    if(messages || preprocMessages)
+    if (messages)
     {
-        if(preprocMessages)
-        {
-            TRACE("Preprocessor messages:\n");
-            TRACE("%s", preprocMessages);
-        }
-        if(messages)
-        {
-            TRACE("Assembler messages:\n");
-            TRACE("%s", messages);
-        }
+        TRACE("Assembler messages:\n");
+        TRACE("%s", messages);
 
         TRACE("Shader source:\n");
-        TRACE("%s\n", debugstr_a(preprocShader));
+        TRACE("%s\n", debugstr_a(preproc_shader));
 
-        if(ppErrorMsgs)
+        if (error_messages)
         {
-            size = (messages ? strlen(messages) : 0) +
-                (preprocMessages ? strlen(preprocMessages) : 0) + 1;
+            const char *preproc_messages = *error_messages ? ID3D10Blob_GetBufferPointer(*error_messages) : NULL;
+
+            size = strlen(messages) + (preproc_messages ? strlen(preproc_messages) : 0) + 1;
             hr = D3DCreateBlob(size, &buffer);
-            if(FAILED(hr))
+            if (FAILED(hr))
             {
                 HeapFree(GetProcessHeap(), 0, messages);
-                if(shader) SlDeleteShader(shader);
+                if (shader) SlDeleteShader(shader);
                 return hr;
             }
             pos = ID3D10Blob_GetBufferPointer(buffer);
-            if(preprocMessages)
+            if (preproc_messages)
             {
-                CopyMemory(pos, preprocMessages, strlen(preprocMessages) + 1);
-                pos += strlen(preprocMessages);
+                CopyMemory(pos, preproc_messages, strlen(preproc_messages) + 1);
+                pos += strlen(preproc_messages);
             }
-            if(messages)
-                CopyMemory(pos, messages, strlen(messages) + 1);
+            CopyMemory(pos, messages, strlen(messages) + 1);
 
-            *ppErrorMsgs = buffer;
+            if (*error_messages) ID3D10Blob_Release(*error_messages);
+            *error_messages = buffer;
         }
-
         HeapFree(GetProcessHeap(), 0, messages);
     }
 
-    if(shader == NULL)
+    if (shader == NULL)
     {
         ERR("Asm reading failed\n");
         return D3DXERR_INVALIDDATA;
@@ -452,23 +445,23 @@ static HRESULT assemble_shader(const char *preprocShader, const char *preprocMes
 
     hr = SlWriteBytecode(shader, 9, &res);
     SlDeleteShader(shader);
-    if(FAILED(hr))
+    if (FAILED(hr))
     {
         ERR("SlWriteBytecode failed with 0x%08x\n", hr);
         return D3DXERR_INVALIDDATA;
     }
 
-    if(ppShader)
+    if (shader_blob)
     {
         size = HeapSize(GetProcessHeap(), 0, res);
         hr = D3DCreateBlob(size, &buffer);
-        if(FAILED(hr))
+        if (FAILED(hr))
         {
             HeapFree(GetProcessHeap(), 0, res);
             return hr;
         }
         CopyMemory(ID3D10Blob_GetBufferPointer(buffer), res, size);
-        *ppShader = buffer;
+        *shader_blob = buffer;
     }
 
     HeapFree(GetProcessHeap(), 0, res);
@@ -492,7 +485,7 @@ HRESULT WINAPI D3DAssemble(const void *data, SIZE_T datasize, const char *filena
 
     hr = preprocess_shader(data, datasize, defines, include, error_messages);
     if (SUCCEEDED(hr))
-        hr = assemble_shader(wpp_output, wpp_messages, shader, error_messages);
+        hr = assemble_shader(wpp_output, shader, error_messages);
 
     HeapFree(GetProcessHeap(), 0, wpp_output);
     LeaveCriticalSection(&wpp_mutex);

@@ -1578,7 +1578,7 @@ WINBASEAPI BOOL        WINAPI FreeEnvironmentStringsA(LPSTR);
 WINBASEAPI BOOL        WINAPI FreeEnvironmentStringsW(LPWSTR);
 #define                       FreeEnvironmentStrings WINELIB_NAME_AW(FreeEnvironmentStrings)
 WINBASEAPI BOOL        WINAPI FreeLibrary(HMODULE);
-WINBASEAPI VOID        WINAPI FreeLibraryAndExitThread(HINSTANCE,DWORD);
+WINBASEAPI VOID DECLSPEC_NORETURN WINAPI FreeLibraryAndExitThread(HINSTANCE,DWORD);
 #define                       FreeModule(handle) FreeLibrary(handle)
 #define                       FreeProcInstance(proc) /*nothing*/
 WINBASEAPI BOOL        WINAPI FreeResource(HGLOBAL);
@@ -1775,6 +1775,7 @@ WINBASEAPI DWORD       WINAPI GetTempPathA(DWORD,LPSTR);
 WINBASEAPI DWORD       WINAPI GetTempPathW(DWORD,LPWSTR);
 #define                       GetTempPath WINELIB_NAME_AW(GetTempPath)
 WINBASEAPI DWORD       WINAPI GetThreadId(HANDLE);
+WINBASEAPI BOOL        WINAPI GetThreadIOPendingFlag(HANDLE,PBOOL);
 WINBASEAPI DWORD       WINAPI GetTickCount(void);
 WINBASEAPI ULONGLONG   WINAPI GetTickCount64(void);
 WINBASEAPI DWORD       WINAPI GetTimeZoneInformation(LPTIME_ZONE_INFORMATION);

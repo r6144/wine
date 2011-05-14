@@ -23,6 +23,11 @@
 #include "config.h"
 
 #include <stdarg.h>
+#ifdef HAVE_LIBXML2
+# include <libxml/parser.h>
+# include <libxml/xmlerror.h>
+#endif
+
 #include "windef.h"
 #include "winbase.h"
 #include "winuser.h"
@@ -72,7 +77,8 @@ static HRESULT WINAPI domdoctype_QueryInterface(
     }
     else
     {
-        FIXME("interface %s not implemented\n", debugstr_guid(riid));
+        TRACE("interface %s not implemented\n", debugstr_guid(riid));
+        *ppvObject = NULL;
         return E_NOINTERFACE;
     }
 
@@ -85,9 +91,7 @@ static ULONG WINAPI domdoctype_AddRef(
 {
     domdoctype *This = impl_from_IXMLDOMDocumentType( iface );
     LONG ref = InterlockedIncrement(&This->ref);
-
-    TRACE("(%p) ref=%d\n", This, ref);
-
+    TRACE("(%p)->(%d)\n", This, ref);
     return ref;
 }
 
@@ -97,7 +101,7 @@ static ULONG WINAPI domdoctype_Release(
     domdoctype *This = impl_from_IXMLDOMDocumentType( iface );
     ULONG ref = InterlockedDecrement(&This->ref);
 
-    TRACE("(%p) ref=%d\n", This, ref);
+    TRACE("(%p)->(%d)\n", This, ref);
 
     if(!ref) {
         destroy_xmlnode(&This->node);
@@ -207,7 +211,7 @@ static HRESULT WINAPI domdoctype_put_nodeValue(
     VARIANT value)
 {
     domdoctype *This = impl_from_IXMLDOMDocumentType( iface );
-    FIXME("(%p): stub\n", This);
+    FIXME("(%p)->(%s): stub\n", This, debugstr_variant(&value));
     return E_NOTIMPL;
 }
 
@@ -293,7 +297,7 @@ static HRESULT WINAPI domdoctype_insertBefore(
 {
     domdoctype *This = impl_from_IXMLDOMDocumentType( iface );
 
-    FIXME("(%p)->(%p x%d %p): stub\n", This, newNode, V_VT(&refChild), outOldNode);
+    FIXME("(%p)->(%p %s %p): stub\n", This, newNode, debugstr_variant(&refChild), outOldNode);
 
     return E_NOTIMPL;
 }
@@ -403,11 +407,11 @@ static HRESULT WINAPI domdoctype_get_definition(
 
 static HRESULT WINAPI domdoctype_get_nodeTypedValue(
     IXMLDOMDocumentType *iface,
-    VARIANT* var1)
+    VARIANT* v)
 {
     domdoctype *This = impl_from_IXMLDOMDocumentType( iface );
-    FIXME("(%p)->(%p): stub\n", This, var1);
-    return E_NOTIMPL;
+    TRACE("(%p)->(%p)\n", This, v);
+    return return_null_var(v);
 }
 
 static HRESULT WINAPI domdoctype_put_nodeTypedValue(
@@ -415,7 +419,7 @@ static HRESULT WINAPI domdoctype_put_nodeTypedValue(
     VARIANT value)
 {
     domdoctype *This = impl_from_IXMLDOMDocumentType( iface );
-    FIXME("(%p): stub\n", This);
+    FIXME("(%p)->(%s): stub\n", This, debugstr_variant(&value));
     return E_NOTIMPL;
 }
 
@@ -514,7 +518,7 @@ static HRESULT WINAPI domdoctype_transformNodeToObject(
     IXMLDOMNode* domNode, VARIANT var1)
 {
     domdoctype *This = impl_from_IXMLDOMDocumentType( iface );
-    FIXME("(%p)->(%p): stub\n", This, domNode);
+    FIXME("(%p)->(%p %s): stub\n", This, domNode, debugstr_variant(&var1));
     return E_NOTIMPL;
 }
 

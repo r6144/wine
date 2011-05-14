@@ -61,7 +61,8 @@ static ULONG STDMETHODCALLTYPE d3d10_texture2d_AddRef(ID3D10Texture2D *iface)
 
     TRACE("%p increasing refcount to %u\n", This, refcount);
 
-    if (refcount == 1 && This->wined3d_surface) IWineD3DSurface_AddRef(This->wined3d_surface);
+    if (refcount == 1 && This->wined3d_surface)
+        wined3d_surface_incref(This->wined3d_surface);
 
     return refcount;
 }
@@ -83,8 +84,10 @@ static ULONG STDMETHODCALLTYPE d3d10_texture2d_Release(ID3D10Texture2D *iface)
 
     if (!refcount)
     {
-        if (This->wined3d_surface) IWineD3DSurface_Release(This->wined3d_surface);
-        else d3d10_texture2d_wined3d_object_released(This);
+        if (This->wined3d_surface)
+            wined3d_surface_decref(This->wined3d_surface);
+        else
+            d3d10_texture2d_wined3d_object_released(This);
     }
 
     return refcount;
@@ -227,7 +230,7 @@ HRESULT d3d10_texture2d_init(struct d3d10_texture2d *texture, struct d3d10_devic
 
         FIXME("Implement DXGI<->wined3d usage conversion\n");
 
-        hr = IWineD3DDevice_CreateSurface(device->wined3d_device, desc->Width, desc->Height,
+        hr = wined3d_surface_create(device->wined3d_device, desc->Width, desc->Height,
                 wined3dformat_from_dxgi_format(desc->Format), FALSE, FALSE, 0, desc->Usage, WINED3DPOOL_DEFAULT,
                 desc->SampleDesc.Count > 1 ? desc->SampleDesc.Count : WINED3DMULTISAMPLE_NONE,
                 desc->SampleDesc.Quality, SURFACE_OPENGL, texture, &d3d10_texture2d_wined3d_parent_ops,
@@ -270,7 +273,8 @@ static ULONG STDMETHODCALLTYPE d3d10_texture3d_AddRef(ID3D10Texture3D *iface)
 
     TRACE("%p increasing refcount to %u.\n", texture, refcount);
 
-    if (refcount == 1) IWineD3DVolumeTexture_AddRef(texture->wined3d_texture);
+    if (refcount == 1)
+        wined3d_texture_incref(texture->wined3d_texture);
 
     return refcount;
 }
@@ -288,9 +292,7 @@ static ULONG STDMETHODCALLTYPE d3d10_texture3d_Release(ID3D10Texture3D *iface)
     TRACE("%p decreasing refcount to %u.\n", texture, refcount);
 
     if (!refcount)
-    {
-        IWineD3DVolumeTexture_Release(texture->wined3d_texture);
-    }
+        wined3d_texture_decref(texture->wined3d_texture);
 
     return refcount;
 }
@@ -346,40 +348,46 @@ static UINT STDMETHODCALLTYPE d3d10_texture3d_GetEvictionPriority(ID3D10Texture3
     return 0;
 }
 
-static HRESULT STDMETHODCALLTYPE d3d10_texture3d_Map(ID3D10Texture3D *iface, UINT sub_resource,
+static HRESULT STDMETHODCALLTYPE d3d10_texture3d_Map(ID3D10Texture3D *iface, UINT sub_resource_idx,
         D3D10_MAP map_type, UINT map_flags, D3D10_MAPPED_TEXTURE3D *mapped_texture)
 {
     struct d3d10_texture3d *texture = (struct d3d10_texture3d *)iface;
+    struct wined3d_resource *sub_resource;
     WINED3DLOCKED_BOX wined3d_map_desc;
     HRESULT hr;
 
-    TRACE("iface %p, sub_resource %u, map_type %u, map_flags %#x, mapped_texture %p.\n",
-            iface, sub_resource, map_type, map_flags, mapped_texture);
+    TRACE("iface %p, sub_resource_idx %u, map_type %u, map_flags %#x, mapped_texture %p.\n",
+            iface, sub_resource_idx, map_type, map_flags, mapped_texture);
 
     if (map_type != D3D10_MAP_READ_WRITE)
         FIXME("Ignoring map_type %#x.\n", map_type);
     if (map_flags)
         FIXME("Ignoring map_flags %#x.\n", map_flags);
 
-    hr = IWineD3DVolumeTexture_Map(texture->wined3d_texture, sub_resource, &wined3d_map_desc, NULL, 0);
-    if (FAILED(hr))
+    if (!(sub_resource = wined3d_texture_get_sub_resource(texture->wined3d_texture, sub_resource_idx)))
+        hr = E_INVALIDARG;
+    else if (SUCCEEDED(hr = wined3d_volume_map(wined3d_volume_from_resource(sub_resource),
+            &wined3d_map_desc, NULL, 0)))
     {
-        WARN("Failed to map texture, hr %#x.\n", hr);
-        return hr;
+        mapped_texture->pData = wined3d_map_desc.pBits;
+        mapped_texture->RowPitch = wined3d_map_desc.RowPitch;
+        mapped_texture->DepthPitch = wined3d_map_desc.SlicePitch;
     }
-
-    mapped_texture->pData = wined3d_map_desc.pBits;
-    mapped_texture->RowPitch = wined3d_map_desc.RowPitch;
-    mapped_texture->DepthPitch = wined3d_map_desc.SlicePitch;
 
     return hr;
 }
 
-static void STDMETHODCALLTYPE d3d10_texture3d_Unmap(ID3D10Texture3D *iface, UINT sub_resource)
+static void STDMETHODCALLTYPE d3d10_texture3d_Unmap(ID3D10Texture3D *iface, UINT sub_resource_idx)
 {
-    TRACE("iface %p, sub_resource %u.\n", iface, sub_resource);
+    struct d3d10_texture3d *texture = (struct d3d10_texture3d *)iface;
+    struct wined3d_resource *sub_resource;
 
-    IWineD3DVolumeTexture_Unmap(((struct d3d10_texture3d *)iface)->wined3d_texture, sub_resource);
+    TRACE("iface %p, sub_resource_idx %u.\n", iface, sub_resource_idx);
+
+    if (!(sub_resource = wined3d_texture_get_sub_resource(texture->wined3d_texture, sub_resource_idx)))
+        return;
+
+    wined3d_volume_unmap(wined3d_volume_from_resource(sub_resource));
 }
 
 static void STDMETHODCALLTYPE d3d10_texture3d_GetDesc(ID3D10Texture3D *iface, D3D10_TEXTURE3D_DESC *desc)
@@ -428,7 +436,7 @@ HRESULT d3d10_texture3d_init(struct d3d10_texture3d *texture, struct d3d10_devic
 
     FIXME("Implement DXGI<->wined3d usage conversion.\n");
 
-    hr = IWineD3DDevice_CreateVolumeTexture(device->wined3d_device, desc->Width, desc->Height, desc->Depth,
+    hr = wined3d_texture_create_3d(device->wined3d_device, desc->Width, desc->Height, desc->Depth,
             desc->MipLevels, desc->Usage, wined3dformat_from_dxgi_format(desc->Format), WINED3DPOOL_DEFAULT,
             texture, &d3d10_texture3d_wined3d_parent_ops, &texture->wined3d_texture);
     if (FAILED(hr))

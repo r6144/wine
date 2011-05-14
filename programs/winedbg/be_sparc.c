@@ -25,7 +25,15 @@
 static unsigned be_sparc_get_addr(HANDLE hThread, const CONTEXT* ctx,
                                  enum be_cpu_addr bca, ADDRESS64* addr)
 {
-    dbg_printf("not done for Sparc\n");
+    switch (bca)
+    {
+    case be_cpu_addr_pc:
+        return be_cpu_build_addr(hThread, ctx, addr, 0, ctx->pc);
+    case be_cpu_addr_stack:
+        return be_cpu_build_addr(hThread, ctx, addr, 0, ctx->o6);
+    case be_cpu_addr_frame:
+        return be_cpu_build_addr(hThread, ctx, addr, 0, ctx->i6);
+    }
     return FALSE;
 }
 
@@ -78,6 +86,11 @@ static unsigned be_sparc_is_func_call(const void* insn, ADDRESS64* callee)
     return FALSE;
 }
 
+static unsigned be_sparc_is_jump(const void* insn, ADDRESS64* jumpee)
+{
+    return FALSE;
+}
+
 static void be_sparc_disasm_one_insn(ADDRESS64* addr, int display)
 {
     dbg_printf("not done for Sparc\n");
@@ -112,8 +125,13 @@ static void be_sparc_clear_watchpoint(CONTEXT* ctx, unsigned idx)
 
 static int be_sparc_adjust_pc_for_break(CONTEXT* ctx, BOOL way)
 {
-    dbg_printf("not done for Sparc\n");
-    return 0;
+    if (way)
+    {
+        ctx->pc--;
+        return -1;
+    }
+    ctx->pc++;
+    return 1;
 }
 
 static int be_sparc_fetch_integer(const struct dbg_lvalue* lvalue, unsigned size,
@@ -146,6 +164,7 @@ struct backend_cpu be_sparc =
     be_sparc_is_function_return,
     be_sparc_is_break_insn,
     be_sparc_is_func_call,
+    be_sparc_is_jump,
     be_sparc_disasm_one_insn,
     be_sparc_insert_Xpoint,
     be_sparc_remove_Xpoint,

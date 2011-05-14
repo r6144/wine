@@ -26,30 +26,6 @@
 
 LANGUAGE LANG_DUTCH, SUBLANG_NEUTRAL
 
-STRINGTABLE
-{
-   IDS_CPL_TITLE, "Software"
-   IDS_CPL_DESC, "Hiermee installeert u nieuwe software, of verwijdert u bestaande software van uw computer."
-   IDS_TAB1_TITLE, "Programma's"
-
-   IDS_UNINSTALL_FAILED, "Het programma '%s' kan niet verwijderd worden van het systeem. Wilt u het verwijderen uit het register?"
-   IDS_NOT_SPECIFIED, "Niet gespecificeerd"
-
-   IDS_COLUMN_NAME, "Naam"
-   IDS_COLUMN_PUBLISHER, "Uitgever"
-   IDS_COLUMN_VERSION, "Versie"
-   IDS_INSTALL_FILTER, "Installatie-programma's\0*instal*.exe;*setup*.exe;*.msi\0Programma's (*.exe)\0*.exe\0Alle bestanden (*.*)\0*.*\0\0"
-
-   IDS_REMOVE, "&Verwijderen..."
-   IDS_MODIFY_REMOVE, "&Wijzigen/Verwijderen..."
-}
-
-STRINGTABLE
-{
-    IDS_DOWNLOADING   "Bezig met downloaden..."
-    IDS_INSTALLING    "Bezig met installeren..."
-}
-
 IDD_MAIN DIALOG 0, 0, 320, 220
 STYLE DS_MODALFRAME | DS_3DLOOK | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
 CAPTION "Installeren/Verwijderen"

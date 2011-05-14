@@ -337,10 +337,10 @@ static BOOL is_guid(parse_buffer* buf)
   DWORD tab[10];
   int ret;
 
-  if (*buf->buffer != '<')
+  if (buf->rem_bytes < 38 || *buf->buffer != '<')
     return FALSE;
   tmp[0] = '<';
-  while (*(buf->buffer+pos) != '>')
+  while (pos < sizeof(tmp) - 2 && *(buf->buffer+pos) != '>')
   {
     tmp[pos] = *(buf->buffer+pos);
     pos++;
@@ -381,17 +381,19 @@ static BOOL is_guid(parse_buffer* buf)
 
 static BOOL is_name(parse_buffer* buf)
 {
-  char tmp[50];
+  char tmp[512];
   DWORD pos = 0;
   char c;
   BOOL error = 0;
-  while (!is_separator(c = *(buf->buffer+pos)))
+  while (pos < buf->rem_bytes && !is_separator(c = *(buf->buffer+pos)))
   {
     if (!(((c >= 'a') && (c <= 'z')) || ((c >= 'A') && (c <= 'Z')) || ((c >= '0') && (c <= '9')) || (c == '_') || (c == '-')))
       error = 1;
-    tmp[pos++] = c;
+    if (pos < sizeof(tmp))
+        tmp[pos] = c;
+    pos++;
   }
-  tmp[pos] = 0;
+  tmp[min(pos, sizeof(tmp) - 1)] = 0;
 
   if (error)
   {
@@ -410,21 +412,23 @@ static BOOL is_name(parse_buffer* buf)
 
 static BOOL is_float(parse_buffer* buf)
 {
-  char tmp[50];
+  char tmp[512];
   DWORD pos = 0;
   char c;
   float decimal;
   BOOL dot = 0;
 
-  while (!is_separator(c = *(buf->buffer+pos)))
+  while (pos < buf->rem_bytes && !is_separator(c = *(buf->buffer+pos)))
   {
     if (!((!pos && (c == '-')) || ((c >= '0') && (c <= '9')) || (!dot && (c == '.'))))
       return FALSE;
     if (c == '.')
       dot = TRUE;
-    tmp[pos++] = c;
+    if (pos < sizeof(tmp))
+        tmp[pos] = c;
+    pos++;
   }
-  tmp[pos] = 0;
+  tmp[min(pos, sizeof(tmp) - 1)] = 0;
 
   buf->buffer += pos;
   buf->rem_bytes -= pos;
@@ -440,18 +444,20 @@ static BOOL is_float(parse_buffer* buf)
 
 static BOOL is_integer(parse_buffer* buf)
 {
-  char tmp[50];
+  char tmp[512];
   DWORD pos = 0;
   char c;
   DWORD integer;
 
-  while (!is_separator(c = *(buf->buffer+pos)))
+  while (pos < buf->rem_bytes && !is_separator(c = *(buf->buffer+pos)))
   {
     if (!((c >= '0') && (c <= '9')))
       return FALSE;
-    tmp[pos++] = c;
+    if (pos < sizeof(tmp))
+        tmp[pos] = c;
+    pos++;
   }
-  tmp[pos] = 0;
+  tmp[min(pos, sizeof(tmp) - 1)] = 0;
 
   buf->buffer += pos;
   buf->rem_bytes -= pos;
@@ -467,7 +473,7 @@ static BOOL is_integer(parse_buffer* buf)
 
 static BOOL is_string(parse_buffer* buf)
 {
-  char tmp[100];
+  char tmp[512];
   DWORD pos = 0;
   char c;
   BOOL ok = 0;
@@ -475,16 +481,18 @@ static BOOL is_string(parse_buffer* buf)
   if (*buf->buffer != '"')
     return FALSE;
 
-  while (!is_separator(c = *(buf->buffer+pos+1)) && (pos < 99))
+  while (pos < buf->rem_bytes && !is_operator(c = *(buf->buffer+pos+1)))
   {
     if (c == '"')
     {
       ok = 1;
       break;
     }
-    tmp[pos++] = c;
+    if (pos < sizeof(tmp))
+        tmp[pos] = c;
+    pos++;
   }
-  tmp[pos] = 0;
+  tmp[min(pos, sizeof(tmp) - 1)] = 0;
 
   if (!ok)
   {
@@ -1161,7 +1169,7 @@ static BOOL parse_object_members_list(parse_buffer * buf)
       }
     }
 
-    if (nb_elems && buf->txt && (check_TOKEN(buf) != TOKEN_CBRACE))
+    if (nb_elems && buf->txt && (check_TOKEN(buf) != TOKEN_CBRACE) && (check_TOKEN(buf) != TOKEN_NAME))
     {
       token = get_TOKEN(buf);
       if ((token != TOKEN_SEMICOLON) && (token != TOKEN_COMMA))
@@ -1221,6 +1229,7 @@ _exit:
 
         buf->pxo->childs[buf->pxo->nb_childs] = &buf->pxo_tab[buf->pxo->root->nb_subobjects++];
         buf->pxo->childs[buf->pxo->nb_childs]->ptarget = &(buf->pxo_globals[i])[j];
+        buf->pxo->childs[buf->pxo->nb_childs]->binary = FALSE;
         buf->pxo->nb_childs++;
       }
       else if (check_TOKEN(buf) == TOKEN_NAME)
@@ -1266,6 +1275,7 @@ BOOL parse_object(parse_buffer * buf)
 
   buf->pxo->pos_data = buf->cur_pos_data;
   buf->pxo->ptarget = NULL;
+  buf->pxo->binary = FALSE;
   buf->pxo->root = buf->pxo_tab;
 
   if (get_TOKEN(buf) != TOKEN_NAME)

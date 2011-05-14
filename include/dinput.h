@@ -16,8 +16,8 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
-#ifndef __WINE_DINPUT_H
-#define __WINE_DINPUT_H
+#ifndef __DINPUT_INCLUDED__
+#define __DINPUT_INCLUDED__
 
 #define COM_NO_WINDOWS_H
 #include <objbase.h>
@@ -764,6 +764,7 @@ typedef const DIPROPSTRING *LPCDIPROPSTRING;
 #define DIPROP_CALIBRATION	MAKEDIPROP(11)
 #define DIPROP_GUIDANDPATH	MAKEDIPROP(12)
 #define DIPROP_KEYNAME          MAKEDIPROP(20)
+#define DIPROP_VIDPID           MAKEDIPROP(24)
 
 typedef struct DIDEVCAPS_DX3 {
     DWORD	dwSize;
@@ -2297,4 +2298,4 @@ HRESULT WINAPI DirectInputCreateEx(HINSTANCE,DWORD,REFIID,LPVOID *,LPUNKNOWN);
 };
 #endif
 
-#endif /* __WINE_DINPUT_H */
+#endif /* __DINPUT_INCLUDED__ */

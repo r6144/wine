@@ -1,0 +1,65 @@
+/*
+ * WineMine resources
+ *
+ * Copyright 2000 Joshua Thielen
+ * Copyright 2003 Marcelo Duarte
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
+ */
+
+#include "resource.h"
+
+LANGUAGE LANG_ENGLISH, SUBLANG_DEFAULT
+
+STRINGTABLE {
+     IDS_APPNAME, "WineMine"
+     IDS_NOBODY,  "Nobody"
+     IDS_ABOUT,   "Copyright 2000 Joshua Thielen"
+}
+
+MENU_WINEMINE MENU
+{
+    POPUP "&Game" {
+        MENUITEM "&New\tF2",       IDM_NEW
+        MENUITEM SEPARATOR
+        MENUITEM "Question &Marks",IDM_MARKQ
+        MENUITEM SEPARATOR
+        MENUITEM "&Beginner",      IDM_BEGINNER
+        MENUITEM "&Advanced",      IDM_ADVANCED
+        MENUITEM "&Expert",        IDM_EXPERT
+        MENUITEM "&Custom...",     IDM_CUSTOM
+        MENUITEM SEPARATOR
+        MENUITEM "&Fastest Times", IDM_TIMES
+        MENUITEM SEPARATOR
+        MENUITEM "E&xit\tAlt+X",   IDM_EXIT
+    }
+    POPUP "&Help" {
+        MENUITEM "&About WineMine",   IDM_ABOUT
+    }
+}
+
+LANGUAGE LANG_NEUTRAL,SUBLANG_NEUTRAL
+
+/* @makedep: winemine.ico */
+WINEMINE ICON winemine.ico
+
+/* @makedep: faces.bmp */
+FACES BITMAP faces.bmp
+
+/* @makedep: leds.bmp */
+LEDS BITMAP leds.bmp
+
+/* @makedep: mines.bmp */
+MINES BITMAP mines.bmp

@@ -25,7 +25,7 @@ WINE_DEFAULT_DEBUG_CHANNEL(winedbg);
 
 #ifdef __i386__
 
-  /* debugger/db_disasm.c */
+  /* db_disasm.c */
 extern void             be_i386_disasm_one_insn(ADDRESS64* addr, int display);
 
 #define STEP_FLAG 0x00000100 /* single step flag */
@@ -145,7 +145,7 @@ static void be_i386_all_print_context(HANDLE hThread, const CONTEXT* ctx)
                (ctx->FloatSave.StatusWord & 0x00000200) >> 9,
                (ctx->FloatSave.StatusWord & 0x00000100) >> 8);
 
-    /* Now pull out hte 3 bit of the TOP stack pointer */
+    /* Now pull out the 3 bit of the TOP stack pointer */
     dbg_printf(" TOP:%01x", (unsigned int) (ctx->FloatSave.StatusWord & 0x00003800) >> 11);
 
     /* Lets analyse the error bits and indicate the status  
@@ -387,6 +387,7 @@ static BOOL fetch_value(const char* addr, unsigned sz, int* value)
         if (!dbg_read_memory(addr, &value16, sizeof(value16)))
             return FALSE;
         *value = value16;
+        break;
     case 32:
         if (!dbg_read_memory(addr, value, sizeof(*value)))
             return FALSE;
@@ -537,6 +538,42 @@ static unsigned be_i386_is_func_call(const void* insn, ADDRESS64* callee)
     default:
         return FALSE;
     }
+}
+
+static unsigned be_i386_is_jump(const void* insn, ADDRESS64* jumpee)
+{
+    BYTE                ch;
+    int                 delta;
+    unsigned            operand_size;
+    ADDRESS_MODE        cs_addr_mode;
+
+    cs_addr_mode = get_selector_type(dbg_curr_thread->handle, &dbg_context,
+                                     dbg_context.SegCs);
+    operand_size = get_size(cs_addr_mode);
+
+    /* get operand_size (also getting rid of the various prefixes */
+    do
+    {
+        if (!dbg_read_memory(insn, &ch, sizeof(ch))) return FALSE;
+        if (ch == 0x66)
+        {
+            operand_size = 48 - operand_size; /* 16 => 32, 32 => 16 */
+            insn = (const char*)insn + 1;
+        }
+    } while (ch == 0x66 || ch == 0x67);
+
+    switch (ch)
+    {
+    case 0xe9: /* jmp near */
+        jumpee->Mode = cs_addr_mode;
+        if (!fetch_value((const char*)insn + 1, operand_size, &delta))
+            return FALSE;
+        jumpee->Segment = dbg_context.SegCs;
+        jumpee->Offset = (DWORD)insn + 1 + (operand_size / 8) + delta;
+        return TRUE;
+    default: WINE_FIXME("unknown %x\n", ch); return FALSE;
+    }
+    return FALSE;
 }
 
 #define DR7_CONTROL_SHIFT	16
@@ -751,6 +788,7 @@ struct backend_cpu be_i386 =
     be_i386_is_function_return,
     be_i386_is_break_insn,
     be_i386_is_func_call,
+    be_i386_is_jump,
     be_i386_disasm_one_insn,
     be_i386_insert_Xpoint,
     be_i386_remove_Xpoint,

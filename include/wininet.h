@@ -591,9 +591,13 @@ BOOLAPI InternetUnlockRequestFile(HANDLE);
 #define INTERNET_OPTION_CODEPAGE_PATH           100
 #define INTERNET_OPTION_CODEPAGE_EXTRA          101
 #define INTERNET_OPTION_IDN                     102
+#define INTERNET_OPTION_MAX_CONNS_PER_PROXY     103
+#define INTERNET_OPTION_SUPPRESS_SERVER_AUTH    104
+#define INTERNET_OPTION_SERVER_CERT_CHAIN_CONTEXT 105
+
 
 #define INTERNET_FIRST_OPTION                   INTERNET_OPTION_CALLBACK
-#define INTERNET_LAST_OPTION                    INTERNET_OPTION_DATAFILE_EXT
+#define INTERNET_LAST_OPTION                    INTERNET_OPTION_SERVER_CERT_CHAIN_CONTEXT
 
 #define INTERNET_PRIORITY_FOREGROUND            1000
 #define INTERNET_HANDLE_TYPE_INTERNET           1
@@ -1655,6 +1659,16 @@ BOOLAPI FindCloseUrlCache(HANDLE);
 BOOLAPI DeleteUrlCacheEntryA(LPCSTR);
 BOOLAPI DeleteUrlCacheEntryW(LPCWSTR);
 #define DeleteUrlCacheEntry  WINELIB_NAME_AW(DeleteUrlCacheEntry)
+
+/* FCS_ flags and FreeUrlCacheSpace are no longer documented */
+#define FCS_PERCENT_CACHE_SPACE  0  /* guessed value */
+#define FCS_PERCENT_DISK_SPACE   1  /* guessed value */
+#define FCS_ABSOLUTE_SIZE        2  /* guessed value */
+
+BOOLAPI FreeUrlCacheSpaceA(LPCSTR ,DWORD ,DWORD);
+BOOLAPI FreeUrlCacheSpaceW(LPCWSTR ,DWORD ,DWORD);
+#define FreeUrlCacheSpace  WINELIB_NAME_AW(FreeUrlCacheSpace)
+
 
 INTERNETAPI DWORD WINAPI InternetDialA(HWND ,LPSTR ,DWORD ,DWORD_PTR* ,DWORD);
 INTERNETAPI DWORD WINAPI InternetDialW(HWND ,LPWSTR ,DWORD ,DWORD_PTR* ,DWORD);

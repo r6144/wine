@@ -465,7 +465,7 @@ static LRESULT WAVE_mciOpenFile(WINE_MCIWAVE* wmw, LPCWSTR filename)
     fn = HeapAlloc(GetProcessHeap(), 0, (lstrlenW(filename) + 1) * sizeof(WCHAR));
     if (!fn) return MCIERR_OUT_OF_MEMORY;
     strcpyW(fn, filename);
-    HeapFree(GetProcessHeap(), 0, (void*)wmw->lpFileName);
+    HeapFree(GetProcessHeap(), 0, wmw->lpFileName);
     wmw->lpFileName = fn;
 
     if (strlenW(filename) > 0) {
@@ -568,6 +568,8 @@ static LRESULT WAVE_mciOpen(MCIDEVICEID wDevID, DWORD dwFlags, LPMCI_WAVE_OPEN_P
 	if (wmw->hFile != 0)
 	    mmioClose(wmw->hFile, 0);
 	wmw->hFile = 0;
+	HeapFree(GetProcessHeap(), 0, wmw->lpFileName);
+	wmw->lpFileName = NULL;
     }
     return dwRet;
 }
@@ -680,7 +682,7 @@ static DWORD WAVE_mciClose(MCIDEVICEID wDevID, DWORD dwFlags, LPMCI_GENERIC_PARM
     if (wmw->lpWaveFormat != &wmw->wfxRef)
 	HeapFree(GetProcessHeap(), 0, wmw->lpWaveFormat);
     wmw->lpWaveFormat = &wmw->wfxRef;
-    HeapFree(GetProcessHeap(), 0, (void*)wmw->lpFileName);
+    HeapFree(GetProcessHeap(), 0, wmw->lpFileName);
     wmw->lpFileName = NULL;
 
     if ((dwFlags & MCI_NOTIFY) && lpParms) {
@@ -754,8 +756,8 @@ static DWORD WAVE_mciPlay(MCIDEVICEID wDevID, DWORD_PTR dwFlags, DWORD_PTR pmt, 
 	return MCIERR_FILE_NOT_FOUND;
     }
 
-    if (wmw->dwStatus == MCI_MODE_PAUSE && !wmw->fInput) {
-	/* FIXME: parameters (start/end) in lpParams may not be used */
+    if (wmw->dwStatus == MCI_MODE_PAUSE && !wmw->fInput && !(dwFlags & (MCI_FROM | MCI_TO))) {
+	/* FIXME: notification is different with Resume than Play */
 	return WAVE_mciResume(wDevID, dwFlags, (LPMCI_GENERIC_PARMS)lpParms);
     }
 
@@ -763,8 +765,12 @@ static DWORD WAVE_mciPlay(MCIDEVICEID wDevID, DWORD_PTR dwFlags, DWORD_PTR pmt, 
      * We have to set MCI_MODE_PLAY before we do this so that the app can spin
      * on MCI_STATUS, so we have to allow it here if we're not going to start this thread.
      */
-    if ((wmw->dwStatus != MCI_MODE_STOP) && ((wmw->dwStatus != MCI_MODE_PLAY) && (dwFlags & MCI_WAIT))) {
-	return MCIERR_INTERNAL;
+    if ( !(wmw->dwStatus == MCI_MODE_STOP) &&
+	!((wmw->dwStatus == MCI_MODE_PLAY) && (dwFlags & MCI_WAIT) && !wmw->hWave)) {
+	/* FIXME: Check FROM/TO parameters first. */
+	/* FIXME: Play; Play [notify|wait] must hook into the running player. */
+	dwRet = WAVE_mciStop(wDevID, MCI_WAIT, NULL);
+	if (dwRet) return dwRet;
     }
 
     if (wmw->lpWaveFormat->wFormatTag == WAVE_FORMAT_PCM) {
@@ -1009,7 +1015,8 @@ static DWORD WAVE_mciRecord(MCIDEVICEID wDevID, DWORD_PTR dwFlags, DWORD_PTR pmt
      * We have to set MCI_MODE_RECORD before we do this so that the app can spin
      * on MCI_STATUS, so we have to allow it here if we're not going to start this thread.
      */
-    if ((wmw->dwStatus != MCI_MODE_STOP) && ((wmw->dwStatus != MCI_MODE_RECORD) && (dwFlags & MCI_WAIT))) {
+    if ( !(wmw->dwStatus == MCI_MODE_STOP) &&
+	!((wmw->dwStatus == MCI_MODE_RECORD) && (dwFlags & MCI_WAIT) && !wmw->hWave)) {
 	return MCIERR_INTERNAL;
     }
 
@@ -1025,7 +1032,7 @@ static DWORD WAVE_mciRecord(MCIDEVICEID wDevID, DWORD_PTR dwFlags, DWORD_PTR pmt
      * we don't modify the wave part of an existing file (ie. we always erase an
      * existing content, we don't overwrite)
      */
-    HeapFree(GetProcessHeap(), 0, (void*)wmw->lpFileName);
+    HeapFree(GetProcessHeap(), 0, wmw->lpFileName);
     dwRet = create_tmp_file(&wmw->hFile, (WCHAR**)&wmw->lpFileName);
     if (dwRet != 0) return dwRet;
 

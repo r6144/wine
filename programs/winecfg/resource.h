@@ -151,7 +151,7 @@
 /* graphics */
 #define IDC_ENABLE_MANAGED              1100
 #define IDC_ENABLE_DECORATED            1101
-#define IDC_DX_MOUSE_GRAB               1102
+#define IDC_FULLSCREEN_GRAB             1102
 #define IDC_USE_TAKE_FOCUS              1103
 #define IDC_DOUBLE_BUFFER               1104
 #define IDC_D3D_VSHADER_MODE            1105
@@ -186,7 +186,7 @@
 #define IDS_ACCEL_BASIC                 8302
 #define IDS_ACCEL_EMULATION             8303
 #define IDS_DRIVER_ALSA                 8304
-#define IDS_DRIVER_PULSE                8305
+
 #define IDS_DRIVER_ESOUND               8306
 #define IDS_DRIVER_OSS                  8307
 #define IDS_DRIVER_JACK                 8308

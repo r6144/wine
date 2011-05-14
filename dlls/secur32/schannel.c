@@ -16,18 +16,12 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  *
  * This file implements the schannel provider, or, the SSL/TLS implementations.
- * FIXME: It should be rather obvious that this file is empty of any
- * implementation.
  */
 #include "config.h"
 #include "wine/port.h"
 
 #include <stdarg.h>
 #include <errno.h>
-#include <limits.h>
-#ifdef SONAME_LIBGNUTLS
-#include <gnutls/gnutls.h>
-#endif
 
 #include "windef.h"
 #include "winbase.h"
@@ -36,42 +30,10 @@
 #include "schannel.h"
 #include "secur32_priv.h"
 #include "wine/debug.h"
-#include "wine/library.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(secur32);
 
-#ifdef SONAME_LIBGNUTLS
-
-static void *libgnutls_handle;
-#define MAKE_FUNCPTR(f) static typeof(f) * p##f
-MAKE_FUNCPTR(gnutls_alert_get);
-MAKE_FUNCPTR(gnutls_alert_get_name);
-MAKE_FUNCPTR(gnutls_certificate_allocate_credentials);
-MAKE_FUNCPTR(gnutls_certificate_free_credentials);
-MAKE_FUNCPTR(gnutls_certificate_get_peers);
-MAKE_FUNCPTR(gnutls_cipher_get);
-MAKE_FUNCPTR(gnutls_cipher_get_key_size);
-MAKE_FUNCPTR(gnutls_credentials_set);
-MAKE_FUNCPTR(gnutls_deinit);
-MAKE_FUNCPTR(gnutls_global_deinit);
-MAKE_FUNCPTR(gnutls_global_init);
-MAKE_FUNCPTR(gnutls_global_set_log_function);
-MAKE_FUNCPTR(gnutls_global_set_log_level);
-MAKE_FUNCPTR(gnutls_handshake);
-MAKE_FUNCPTR(gnutls_init);
-MAKE_FUNCPTR(gnutls_kx_get);
-MAKE_FUNCPTR(gnutls_mac_get);
-MAKE_FUNCPTR(gnutls_mac_get_key_size);
-MAKE_FUNCPTR(gnutls_perror);
-MAKE_FUNCPTR(gnutls_protocol_get_version);
-MAKE_FUNCPTR(gnutls_set_default_priority);
-MAKE_FUNCPTR(gnutls_record_recv);
-MAKE_FUNCPTR(gnutls_record_send);
-MAKE_FUNCPTR(gnutls_transport_set_errno);
-MAKE_FUNCPTR(gnutls_transport_set_ptr);
-MAKE_FUNCPTR(gnutls_transport_set_pull_function);
-MAKE_FUNCPTR(gnutls_transport_set_push_function);
-#undef MAKE_FUNCPTR
+#if defined(SONAME_LIBGNUTLS) || defined (HAVE_SECURITY_SECURITY_H)
 
 #define SCHAN_INVALID_HANDLE ~0UL
 
@@ -91,16 +53,14 @@ struct schan_handle
 struct schan_credentials
 {
     ULONG credential_use;
-    gnutls_certificate_credentials credentials;
+    schan_imp_certificate_credentials credentials;
 };
 
 struct schan_context
 {
-    gnutls_session_t session;
+    schan_imp_session session;
     ULONG req_ctx_attr;
 };
-
-struct schan_transport;
 
 struct schan_buffers
 {
@@ -364,7 +324,6 @@ static SECURITY_STATUS schan_AcquireClientCredentials(const SCHANNEL_CRED *schan
     if (st == SEC_E_OK)
     {
         ULONG_PTR handle;
-        int ret;
 
         creds = HeapAlloc(GetProcessHeap(), 0, sizeof(*creds));
         if (!creds) return SEC_E_INSUFFICIENT_MEMORY;
@@ -373,10 +332,8 @@ static SECURITY_STATUS schan_AcquireClientCredentials(const SCHANNEL_CRED *schan
         if (handle == SCHAN_INVALID_HANDLE) goto fail;
 
         creds->credential_use = SECPKG_CRED_OUTBOUND;
-        ret = pgnutls_certificate_allocate_credentials(&creds->credentials);
-        if (ret != GNUTLS_E_SUCCESS)
+        if (!schan_imp_allocate_certificate_credentials(&creds->credentials))
         {
-            pgnutls_perror(ret);
             schan_free_handle(handle, SCHAN_HANDLE_CRED);
             goto fail;
         }
@@ -483,7 +440,7 @@ static SECURITY_STATUS SEC_ENTRY schan_FreeCredentialsHandle(
     if (!creds) return SEC_E_INVALID_HANDLE;
 
     if (creds->credential_use == SECPKG_CRED_OUTBOUND)
-        pgnutls_certificate_free_credentials(creds->credentials);
+        schan_imp_free_certificate_credentials(creds->credentials);
     HeapFree(GetProcessHeap(), 0, creds);
 
     return SEC_E_OK;
@@ -587,58 +544,96 @@ static char *schan_get_buffer(const struct schan_transport *t, struct schan_buff
     return (char *)buffer->pvBuffer + s->offset;
 }
 
-static ssize_t schan_pull(gnutls_transport_ptr_t transport, void *buff, size_t buff_len)
+/* schan_pull
+ *      Read data from the transport input buffer.
+ *
+ * t - The session transport object.
+ * buff - The buffer into which to store the read data.  Must be at least
+ *        *buff_len bytes in length.
+ * buff_len - On input, *buff_len is the desired length to read.  On successful
+ *            return, *buff_len is the number of bytes actually read.
+ *
+ * Returns:
+ *  0 on success, in which case:
+ *      *buff_len == 0 indicates end of file.
+ *      *buff_len > 0 indicates that some data was read.  May be less than
+ *          what was requested, in which case the caller should call again if/
+ *          when they want more.
+ *  EAGAIN when no data could be read without blocking
+ *  another errno-style error value on failure
+ *
+ */
+int schan_pull(struct schan_transport *t, void *buff, size_t *buff_len)
 {
-    struct schan_transport *t = transport;
     char *b;
+    size_t local_len = *buff_len;
 
-    TRACE("Pull %zu bytes\n", buff_len);
+    TRACE("Pull %zu bytes\n", local_len);
 
-    b = schan_get_buffer(t, &t->in, &buff_len);
+    *buff_len = 0;
+
+    b = schan_get_buffer(t, &t->in, &local_len);
     if (!b)
+        return EAGAIN;
+
+    if (t->in.limit != 0 && t->in.offset + local_len >= t->in.limit)
     {
-        pgnutls_transport_set_errno(t->ctx->session, EAGAIN);
-        return -1;
+        local_len = t->in.limit - t->in.offset;
+        if (local_len == 0)
+            return EAGAIN;
     }
 
-    if (t->in.limit != 0 && t->in.offset + buff_len >= t->in.limit)
-    {
-        buff_len = t->in.limit - t->in.offset;
-        if (buff_len == 0)
-        {
-            pgnutls_transport_set_errno(t->ctx->session, EAGAIN);
-            return -1;
-        }
-    }
+    memcpy(buff, b, local_len);
+    t->in.offset += local_len;
 
-    memcpy(buff, b, buff_len);
-    t->in.offset += buff_len;
+    TRACE("Read %zu bytes\n", local_len);
 
-    TRACE("Read %zu bytes\n", buff_len);
-
-    return buff_len;
+    *buff_len = local_len;
+    return 0;
 }
 
-static ssize_t schan_push(gnutls_transport_ptr_t transport, const void *buff, size_t buff_len)
+/* schan_push
+ *      Write data to the transport output buffer.
+ *
+ * t - The session transport object.
+ * buff - The buffer of data to write.  Must be at least *buff_len bytes in length.
+ * buff_len - On input, *buff_len is the desired length to write.  On successful
+ *            return, *buff_len is the number of bytes actually written.
+ *
+ * Returns:
+ *  0 on success
+ *      *buff_len will be > 0 indicating how much data was written.  May be less
+ *          than what was requested, in which case the caller should call again
+            if/when they want to write more.
+ *  EAGAIN when no data could be written without blocking
+ *  another errno-style error value on failure
+ *
+ */
+int schan_push(struct schan_transport *t, const void *buff, size_t *buff_len)
 {
-    struct schan_transport *t = transport;
     char *b;
+    size_t local_len = *buff_len;
 
-    TRACE("Push %zu bytes\n", buff_len);
+    TRACE("Push %zu bytes\n", local_len);
 
-    b = schan_get_buffer(t, &t->out, &buff_len);
+    *buff_len = 0;
+
+    b = schan_get_buffer(t, &t->out, &local_len);
     if (!b)
-    {
-        pgnutls_transport_set_errno(t->ctx->session, EAGAIN);
-        return -1;
-    }
+        return EAGAIN;
 
-    memcpy(b, buff, buff_len);
-    t->out.offset += buff_len;
+    memcpy(b, buff, local_len);
+    t->out.offset += local_len;
 
-    TRACE("Wrote %zu bytes\n", buff_len);
+    TRACE("Wrote %zu bytes\n", local_len);
 
-    return buff_len;
+    *buff_len = local_len;
+    return 0;
+}
+
+schan_imp_session schan_session_for_transport(struct schan_transport* t)
+{
+    return t->ctx->session;
 }
 
 static int schan_init_sec_ctx_get_next_buffer(const struct schan_transport *t, struct schan_buffers *s)
@@ -691,7 +686,7 @@ static SECURITY_STATUS SEC_ENTRY schan_InitializeSecurityContextW(
     struct schan_buffers *out_buffers;
     struct schan_credentials *cred;
     struct schan_transport transport;
-    int err;
+    SECURITY_STATUS ret;
 
     TRACE("%p %p %s 0x%08x %d %d %p %d %p %p %p %p\n", phCredential, phContext,
      debugstr_w(pszTargetName), fContextReq, Reserved1, TargetDataRep, pInput,
@@ -725,37 +720,12 @@ static SECURITY_STATUS SEC_ENTRY schan_InitializeSecurityContextW(
             return SEC_E_INTERNAL_ERROR;
         }
 
-        err = pgnutls_init(&ctx->session, GNUTLS_CLIENT);
-        if (err != GNUTLS_E_SUCCESS)
+        if (!schan_imp_create_session(&ctx->session, FALSE, cred->credentials))
         {
-            pgnutls_perror(err);
             schan_free_handle(handle, SCHAN_HANDLE_CTX);
             HeapFree(GetProcessHeap(), 0, ctx);
             return SEC_E_INTERNAL_ERROR;
         }
-
-        /* FIXME: We should be using the information from the credentials here. */
-        FIXME("Using hardcoded \"NORMAL\" priority\n");
-        err = pgnutls_set_default_priority(ctx->session);
-        if (err != GNUTLS_E_SUCCESS)
-        {
-            pgnutls_perror(err);
-            pgnutls_deinit(ctx->session);
-            schan_free_handle(handle, SCHAN_HANDLE_CTX);
-            HeapFree(GetProcessHeap(), 0, ctx);
-        }
-
-        err = pgnutls_credentials_set(ctx->session, GNUTLS_CRD_CERTIFICATE, cred->credentials);
-        if (err != GNUTLS_E_SUCCESS)
-        {
-            pgnutls_perror(err);
-            pgnutls_deinit(ctx->session);
-            schan_free_handle(handle, SCHAN_HANDLE_CTX);
-            HeapFree(GetProcessHeap(), 0, ctx);
-        }
-
-        pgnutls_transport_set_pull_function(ctx->session, schan_pull);
-        pgnutls_transport_set_push_function(ctx->session, schan_push);
 
         phNewContext->dwLower = handle;
         phNewContext->dwUpper = 0;
@@ -770,10 +740,10 @@ static SECURITY_STATUS SEC_ENTRY schan_InitializeSecurityContextW(
     transport.ctx = ctx;
     init_schan_buffers(&transport.in, pInput, schan_init_sec_ctx_get_next_buffer);
     init_schan_buffers(&transport.out, pOutput, schan_init_sec_ctx_get_next_buffer);
-    pgnutls_transport_set_ptr(ctx->session, &transport);
+    schan_imp_set_session_transport(ctx->session, &transport);
 
     /* Perform the TLS handshake */
-    err = pgnutls_handshake(ctx->session);
+    ret = schan_imp_handshake(ctx->session);
 
     if(transport.in.offset && transport.in.offset != pInput->pBuffers[0].cbBuffer) {
         if(pInput->cBuffers<2 || pInput->pBuffers[1].BufferType!=SECBUFFER_EMPTY)
@@ -794,29 +764,7 @@ static SECURITY_STATUS SEC_ENTRY schan_InitializeSecurityContextW(
     if (ctx->req_ctx_attr & ISC_REQ_ALLOCATE_MEMORY)
         *pfContextAttr |= ISC_RET_ALLOCATED_MEMORY;
 
-    switch(err)
-    {
-        case GNUTLS_E_SUCCESS:
-            TRACE("Handshake completed\n");
-            return SEC_E_OK;
-
-        case GNUTLS_E_AGAIN:
-            TRACE("Continue...\n");
-            return SEC_I_CONTINUE_NEEDED;
-
-        case GNUTLS_E_WARNING_ALERT_RECEIVED:
-        case GNUTLS_E_FATAL_ALERT_RECEIVED:
-        {
-            gnutls_alert_description_t alert = pgnutls_alert_get(ctx->session);
-            const char *alert_name = pgnutls_alert_get_name(alert);
-            WARN("ALERT: %d %s\n", alert, alert_name);
-            return SEC_E_INTERNAL_ERROR;
-        }
-
-        default:
-            pgnutls_perror(err);
-            return SEC_E_INTERNAL_ERROR;
-    }
+    return ret;
 }
 
 /***********************************************************************
@@ -851,102 +799,6 @@ static SECURITY_STATUS SEC_ENTRY schan_InitializeSecurityContextA(
     return ret;
 }
 
-static unsigned int schannel_get_cipher_block_size(gnutls_cipher_algorithm_t cipher)
-{
-    const struct
-    {
-        gnutls_cipher_algorithm_t cipher;
-        unsigned int block_size;
-    }
-    algorithms[] =
-    {
-        {GNUTLS_CIPHER_3DES_CBC, 8},
-        {GNUTLS_CIPHER_AES_128_CBC, 16},
-        {GNUTLS_CIPHER_AES_256_CBC, 16},
-        {GNUTLS_CIPHER_ARCFOUR_128, 1},
-        {GNUTLS_CIPHER_ARCFOUR_40, 1},
-        {GNUTLS_CIPHER_DES_CBC, 8},
-        {GNUTLS_CIPHER_NULL, 1},
-        {GNUTLS_CIPHER_RC2_40_CBC, 8},
-    };
-    unsigned int i;
-
-    for (i = 0; i < sizeof(algorithms) / sizeof(*algorithms); ++i)
-    {
-        if (algorithms[i].cipher == cipher)
-            return algorithms[i].block_size;
-    }
-
-    FIXME("Unknown cipher %#x, returning 1\n", cipher);
-
-    return 1;
-}
-
-static DWORD schannel_get_protocol(gnutls_protocol_t proto)
-{
-    /* FIXME: currently schannel only implements client connections, but
-     * there's no reason it couldn't be used for servers as well.  The
-     * context doesn't tell us which it is, so assume client for now.
-     */
-    switch (proto)
-    {
-    case GNUTLS_SSL3: return SP_PROT_SSL3_CLIENT;
-    case GNUTLS_TLS1_0: return SP_PROT_TLS1_CLIENT;
-    default:
-        FIXME("unknown protocol %d\n", proto);
-        return 0;
-    }
-}
-
-static ALG_ID schannel_get_cipher_algid(gnutls_cipher_algorithm_t cipher)
-{
-    switch (cipher)
-    {
-    case GNUTLS_CIPHER_UNKNOWN:
-    case GNUTLS_CIPHER_NULL: return 0;
-    case GNUTLS_CIPHER_ARCFOUR_40:
-    case GNUTLS_CIPHER_ARCFOUR_128: return CALG_RC4;
-    case GNUTLS_CIPHER_DES_CBC:
-    case GNUTLS_CIPHER_3DES_CBC: return CALG_DES;
-    case GNUTLS_CIPHER_AES_128_CBC:
-    case GNUTLS_CIPHER_AES_256_CBC: return CALG_AES;
-    case GNUTLS_CIPHER_RC2_40_CBC: return CALG_RC2;
-    default:
-        FIXME("unknown algorithm %d\n", cipher);
-        return 0;
-    }
-}
-
-static ALG_ID schannel_get_mac_algid(gnutls_mac_algorithm_t mac)
-{
-    switch (mac)
-    {
-    case GNUTLS_MAC_UNKNOWN:
-    case GNUTLS_MAC_NULL: return 0;
-    case GNUTLS_MAC_MD5: return CALG_MD5;
-    case GNUTLS_MAC_SHA1:
-    case GNUTLS_MAC_SHA256:
-    case GNUTLS_MAC_SHA384:
-    case GNUTLS_MAC_SHA512: return CALG_SHA;
-    default:
-        FIXME("unknown algorithm %d\n", mac);
-        return 0;
-    }
-}
-
-static ALG_ID schannel_get_kx_algid(gnutls_kx_algorithm_t kx)
-{
-    switch (kx)
-    {
-        case GNUTLS_KX_RSA: return CALG_RSA_KEYX;
-        case GNUTLS_KX_DHE_DSS:
-        case GNUTLS_KX_DHE_RSA: return CALG_DH_EPHEM;
-    default:
-        FIXME("unknown algorithm %d\n", kx);
-        return 0;
-    }
-}
-
 static SECURITY_STATUS SEC_ENTRY schan_QueryContextAttributesW(
         PCtxtHandle context_handle, ULONG attribute, PVOID buffer)
 {
@@ -962,59 +814,35 @@ static SECURITY_STATUS SEC_ENTRY schan_QueryContextAttributesW(
     {
         case SECPKG_ATTR_STREAM_SIZES:
         {
-            SecPkgContext_StreamSizes *stream_sizes = buffer;
-            gnutls_mac_algorithm_t mac = pgnutls_mac_get(ctx->session);
-            size_t mac_size = pgnutls_mac_get_key_size(mac);
-            gnutls_cipher_algorithm_t cipher = pgnutls_cipher_get(ctx->session);
-            unsigned int block_size = schannel_get_cipher_block_size(cipher);
+            SecPkgContext_ConnectionInfo info;
+            SECURITY_STATUS status = schan_imp_get_connection_info(ctx->session, &info);
+            if (status == SEC_E_OK)
+            {
+                SecPkgContext_StreamSizes *stream_sizes = buffer;
+                size_t mac_size = info.dwHashStrength;
+                unsigned int block_size = schan_imp_get_session_cipher_block_size(ctx->session);
 
-            TRACE("Using %zu mac bytes, block size %u\n", mac_size, block_size);
+                TRACE("Using %zu mac bytes, block size %u\n", mac_size, block_size);
 
-            /* These are defined by the TLS RFC */
-            stream_sizes->cbHeader = 5;
-            stream_sizes->cbTrailer = mac_size + 256; /* Max 255 bytes padding + 1 for padding size */
-            stream_sizes->cbMaximumMessage = 1 << 14;
-            stream_sizes->cbBuffers = 4;
-            stream_sizes->cbBlockSize = block_size;
-            return SEC_E_OK;
+                /* These are defined by the TLS RFC */
+                stream_sizes->cbHeader = 5;
+                stream_sizes->cbTrailer = mac_size + 256; /* Max 255 bytes padding + 1 for padding size */
+                stream_sizes->cbMaximumMessage = 1 << 14;
+                stream_sizes->cbBuffers = 4;
+                stream_sizes->cbBlockSize = block_size;
+            }
+
+            return status;
         }
         case SECPKG_ATTR_REMOTE_CERT_CONTEXT:
         {
-            unsigned int list_size;
-            const gnutls_datum_t *datum;
-
-            datum = pgnutls_certificate_get_peers(ctx->session, &list_size);
-            if (datum)
-            {
-                PCCERT_CONTEXT *cert = buffer;
-
-                *cert = CertCreateCertificateContext(X509_ASN_ENCODING,
-                        datum->data, datum->size);
-                if (!*cert)
-                    return GetLastError();
-                else
-                    return SEC_E_OK;
-            }
-            else
-                return SEC_E_INTERNAL_ERROR;
+            PCCERT_CONTEXT *cert = buffer;
+            return schan_imp_get_session_peer_certificate(ctx->session, cert);
         }
         case SECPKG_ATTR_CONNECTION_INFO:
         {
             SecPkgContext_ConnectionInfo *info = buffer;
-            gnutls_protocol_t proto = pgnutls_protocol_get_version(ctx->session);
-            gnutls_cipher_algorithm_t alg = pgnutls_cipher_get(ctx->session);
-            gnutls_mac_algorithm_t mac = pgnutls_mac_get(ctx->session);
-            gnutls_kx_algorithm_t kx = pgnutls_kx_get(ctx->session);
-
-            info->dwProtocol = schannel_get_protocol(proto);
-            info->aiCipher = schannel_get_cipher_algid(alg);
-            info->dwCipherStrength = pgnutls_cipher_get_key_size(alg);
-            info->aiHash = schannel_get_mac_algid(mac);
-            info->dwHashStrength = pgnutls_mac_get_key_size(mac);
-            info->aiExch = schannel_get_kx_algid(kx);
-            /* FIXME: info->dwExchStrength? */
-            info->dwExchStrength = 0;
-            return SEC_E_OK;
+            return schan_imp_get_connection_info(ctx->session, info);
         }
 
         default:
@@ -1099,7 +927,6 @@ static SECURITY_STATUS SEC_ENTRY schan_EncryptMessage(PCtxtHandle context_handle
     SIZE_T data_size;
     char *data;
     ssize_t sent = 0;
-    ssize_t ret;
     int idx;
 
     TRACE("context_handle %p, quality %d, message %p, message_seq_no %d\n",
@@ -1128,23 +955,22 @@ static SECURITY_STATUS SEC_ENTRY schan_EncryptMessage(PCtxtHandle context_handle
         init_schan_buffers(&transport.out, message, schan_encrypt_message_get_next_buffer);
     else
         init_schan_buffers(&transport.out, message, schan_encrypt_message_get_next_buffer_token);
-    pgnutls_transport_set_ptr(ctx->session, &transport);
+    schan_imp_set_session_transport(ctx->session, &transport);
 
     while (sent < data_size)
     {
-        ret = pgnutls_record_send(ctx->session, data + sent, data_size - sent);
-        if (ret < 0)
+        size_t length = data_size - sent;
+        SECURITY_STATUS status = schan_imp_send(ctx->session, data + sent, &length);
+        if (status == SEC_I_CONTINUE_NEEDED)
+            break;
+        else if (status != SEC_E_OK)
         {
-            if (ret != GNUTLS_E_AGAIN)
-            {
-                pgnutls_perror(ret);
-                HeapFree(GetProcessHeap(), 0, data);
-                ERR("Returning SEC_E_INTERNAL_ERROR\n");
-                return SEC_E_INTERNAL_ERROR;
-            }
-            else break;
+            HeapFree(GetProcessHeap(), 0, data);
+            ERR("Returning %d\n", status);
+            return status;
         }
-        sent += ret;
+
+        sent += length;
     }
 
     TRACE("Sent %zd bytes\n", sent);
@@ -1230,7 +1056,6 @@ static SECURITY_STATUS SEC_ENTRY schan_DecryptMessage(PCtxtHandle context_handle
     char *data;
     unsigned expected_size;
     ssize_t received = 0;
-    ssize_t ret;
     int idx;
     unsigned char *buf_ptr;
 
@@ -1272,36 +1097,32 @@ static SECURITY_STATUS SEC_ENTRY schan_DecryptMessage(PCtxtHandle context_handle
     init_schan_buffers(&transport.in, message, schan_decrypt_message_get_next_buffer);
     transport.in.limit = expected_size;
     init_schan_buffers(&transport.out, NULL, NULL);
-    pgnutls_transport_set_ptr(ctx->session, (gnutls_transport_ptr_t)&transport);
+    schan_imp_set_session_transport(ctx->session, &transport);
 
     while (received < data_size)
     {
-        ret = pgnutls_record_recv(ctx->session, data + received, data_size - received);
-        if (ret < 0)
+        size_t length = data_size - received;
+        SECURITY_STATUS status = schan_imp_recv(ctx->session, data + received, &length);
+        if (status == SEC_I_CONTINUE_NEEDED)
         {
-            if (ret == GNUTLS_E_AGAIN)
+            if (!received)
             {
-                if (!received)
-                {
-                    pgnutls_perror(ret);
-                    HeapFree(GetProcessHeap(), 0, data);
-                    TRACE("Returning SEC_E_INCOMPLETE_MESSAGE\n");
-                    return SEC_E_INCOMPLETE_MESSAGE;
-                }
-                break;
-            }
-            else
-            {
-                pgnutls_perror(ret);
                 HeapFree(GetProcessHeap(), 0, data);
-                ERR("Returning SEC_E_INTERNAL_ERROR\n");
-                return SEC_E_INTERNAL_ERROR;
+                TRACE("Returning SEC_E_INCOMPLETE_MESSAGE\n");
+                return SEC_E_INCOMPLETE_MESSAGE;
             }
+            break;
         }
-        else if (!ret)
+        else if (status != SEC_E_OK)
+        {
+            HeapFree(GetProcessHeap(), 0, data);
+            ERR("Returning %d\n", status);
+            return status;
+        }
+        else if (!length)
             break;
 
-        received += ret;
+        received += length;
     }
 
     TRACE("Received %zd bytes\n", received);
@@ -1336,15 +1157,10 @@ static SECURITY_STATUS SEC_ENTRY schan_DeleteSecurityContext(PCtxtHandle context
     ctx = schan_free_handle(context_handle->dwLower, SCHAN_HANDLE_CTX);
     if (!ctx) return SEC_E_INVALID_HANDLE;
 
-    pgnutls_deinit(ctx->session);
+    schan_imp_dispose_session(ctx->session);
     HeapFree(GetProcessHeap(), 0, ctx);
 
     return SEC_E_OK;
-}
-
-static void schan_gnutls_log(int level, const char *msg)
-{
-    TRACE("<%d> %s", level, msg);
 }
 
 static const SecurityFunctionTableA schanTableA = {
@@ -1438,63 +1254,9 @@ void SECUR32_initSchannelSP(void)
             (SEC_WCHAR *)schannelComment },
     };
     SecureProvider *provider;
-    int ret;
 
-    libgnutls_handle = wine_dlopen(SONAME_LIBGNUTLS, RTLD_NOW, NULL, 0);
-    if (!libgnutls_handle)
-    {
-        WARN("Failed to load libgnutls.\n");
+    if (!schan_imp_init())
         return;
-    }
-
-#define LOAD_FUNCPTR(f) \
-    if (!(p##f = wine_dlsym(libgnutls_handle, #f, NULL, 0))) \
-    { \
-        ERR("Failed to load %s\n", #f); \
-        goto fail; \
-    }
-
-    LOAD_FUNCPTR(gnutls_alert_get)
-    LOAD_FUNCPTR(gnutls_alert_get_name)
-    LOAD_FUNCPTR(gnutls_certificate_allocate_credentials)
-    LOAD_FUNCPTR(gnutls_certificate_free_credentials)
-    LOAD_FUNCPTR(gnutls_certificate_get_peers)
-    LOAD_FUNCPTR(gnutls_cipher_get)
-    LOAD_FUNCPTR(gnutls_cipher_get_key_size)
-    LOAD_FUNCPTR(gnutls_credentials_set)
-    LOAD_FUNCPTR(gnutls_deinit)
-    LOAD_FUNCPTR(gnutls_global_deinit)
-    LOAD_FUNCPTR(gnutls_global_init)
-    LOAD_FUNCPTR(gnutls_global_set_log_function)
-    LOAD_FUNCPTR(gnutls_global_set_log_level)
-    LOAD_FUNCPTR(gnutls_handshake)
-    LOAD_FUNCPTR(gnutls_init)
-    LOAD_FUNCPTR(gnutls_kx_get)
-    LOAD_FUNCPTR(gnutls_mac_get)
-    LOAD_FUNCPTR(gnutls_mac_get_key_size)
-    LOAD_FUNCPTR(gnutls_perror)
-    LOAD_FUNCPTR(gnutls_protocol_get_version)
-    LOAD_FUNCPTR(gnutls_set_default_priority)
-    LOAD_FUNCPTR(gnutls_record_recv);
-    LOAD_FUNCPTR(gnutls_record_send);
-    LOAD_FUNCPTR(gnutls_transport_set_errno)
-    LOAD_FUNCPTR(gnutls_transport_set_ptr)
-    LOAD_FUNCPTR(gnutls_transport_set_pull_function)
-    LOAD_FUNCPTR(gnutls_transport_set_push_function)
-#undef LOAD_FUNCPTR
-
-    ret = pgnutls_global_init();
-    if (ret != GNUTLS_E_SUCCESS)
-    {
-        pgnutls_perror(ret);
-        goto fail;
-    }
-
-    if (TRACE_ON(secur32))
-    {
-        pgnutls_global_set_log_level(4);
-        pgnutls_global_set_log_function(schan_gnutls_log);
-    }
 
     schan_handle_table = HeapAlloc(GetProcessHeap(), 0, 64 * sizeof(*schan_handle_table));
     if (!schan_handle_table)
@@ -1518,8 +1280,7 @@ void SECUR32_initSchannelSP(void)
 fail:
     HeapFree(GetProcessHeap(), 0, schan_handle_table);
     schan_handle_table = NULL;
-    wine_dlclose(libgnutls_handle, NULL, 0);
-    libgnutls_handle = NULL;
+    schan_imp_deinit();
     return;
 }
 
@@ -1527,16 +1288,16 @@ void SECUR32_deinitSchannelSP(void)
 {
     SIZE_T i = schan_handle_count;
 
-    if (!libgnutls_handle) return;
+    if (!schan_handle_table) return;
 
     /* deinitialized sessions first because a pointer to the credentials
-     * are stored for the session by calling gnutls_credentials_set. */
+     * may be stored for the session. */
     while (i--)
     {
         if (schan_handle_table[i].type == SCHAN_HANDLE_CTX)
         {
             struct schan_context *ctx = schan_free_handle(i, SCHAN_HANDLE_CTX);
-            pgnutls_deinit(ctx->session);
+            schan_imp_dispose_session(ctx->session);
             HeapFree(GetProcessHeap(), 0, ctx);
         }
     }
@@ -1547,22 +1308,21 @@ void SECUR32_deinitSchannelSP(void)
         {
             struct schan_credentials *cred;
             cred = schan_free_handle(i, SCHAN_HANDLE_CRED);
-            pgnutls_certificate_free_credentials(cred->credentials);
+            schan_imp_free_certificate_credentials(cred->credentials);
             HeapFree(GetProcessHeap(), 0, cred);
         }
     }
     HeapFree(GetProcessHeap(), 0, schan_handle_table);
-    pgnutls_global_deinit();
-    wine_dlclose(libgnutls_handle, NULL, 0);
+    schan_imp_deinit();
 }
 
-#else /* SONAME_LIBGNUTLS */
+#else /* SONAME_LIBGNUTLS || HAVE_SECURITY_SECURITY_H */
 
 void SECUR32_initSchannelSP(void)
 {
-    ERR("libgnutls not found, SSL connections will fail\n");
+    ERR("TLS library not found, SSL connections will fail\n");
 }
 
 void SECUR32_deinitSchannelSP(void) {}
 
-#endif /* SONAME_LIBGNUTLS */
+#endif /* SONAME_LIBGNUTLS || HAVE_SECURITY_SECURITY_H */

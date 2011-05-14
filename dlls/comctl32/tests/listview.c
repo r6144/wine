@@ -3,7 +3,7 @@
  *
  * Copyright 2006 Mike McCormack for CodeWeavers
  * Copyright 2007 George Gov
- * Copyright 2009 Nikolay Sivov
+ * Copyright 2009-2011 Nikolay Sivov
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -61,6 +61,8 @@ static BOOL g_is_below_5;
 static LVITEMA g_itema;
 /* alter notification code A->W */
 static BOOL g_disp_A_to_W;
+/* dispinfo data sent with LVN_LVN_ENDLABELEDIT */
+static NMLVDISPINFO g_editbox_disp_info;
 
 static HWND subclass_editbox(HWND hwndListview);
 
@@ -303,6 +305,13 @@ static const struct message listview_destroy[] = {
     { 0 }
 };
 
+static const struct message listview_header_changed_seq[] = {
+    { LVM_SETCOLUMNA, sent },
+    { WM_NOTIFY, sent|id|defwinproc, 0, 0, LISTVIEW_ID },
+    { WM_NOTIFY, sent|id|defwinproc, 0, 0, LISTVIEW_ID },
+    { 0 }
+};
+
 static LRESULT WINAPI parent_wnd_proc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
     static LONG defwndproc_counter = 0;
@@ -340,17 +349,35 @@ static LRESULT WINAPI parent_wnd_proc(HWND hwnd, UINT message, WPARAM wParam, LP
           switch (((NMHDR*)lParam)->code)
           {
           case LVN_BEGINLABELEDIT:
+          {
+              HWND edit = NULL;
+
               /* subclass edit box */
               if (!blockEdit)
-                  subclass_editbox(((NMHDR*)lParam)->hwndFrom);
+                  edit = subclass_editbox(((NMHDR*)lParam)->hwndFrom);
+
+              if (edit)
+              {
+                  INT len = SendMessageA(edit, EM_GETLIMITTEXT, 0, 0);
+                  ok(len == 259 || broken(len == 260) /* includes NULL in NT4 */,
+                      "text limit %d, expected 259\n", len);
+              }
 
               return blockEdit;
-
+          }
           case LVN_ENDLABELEDIT:
               {
+              HWND edit;
+
               /* always accept new item text */
               NMLVDISPINFO *di = (NMLVDISPINFO*)lParam;
+              g_editbox_disp_info = *di;
               trace("LVN_ENDLABELEDIT: text=%s\n", di->item.pszText);
+
+              /* edit control still available from this notification */
+              edit = (HWND)SendMessageA(((NMHDR*)lParam)->hwndFrom, LVM_GETEDITCONTROL, 0, 0);
+              ok(IsWindow(edit), "expected valid edit control handle\n");
+
               return TRUE;
               }
           case LVN_BEGINSCROLL:
@@ -381,6 +408,13 @@ static LRESULT WINAPI parent_wnd_proc(HWND hwnd, UINT message, WPARAM wParam, LP
                       dispinfo->hdr.code = LVN_GETDISPINFOW;
                       memcpy(dispinfo->item.pszText, testW, sizeof(testW));
                   }
+
+                  /* test control buffer size for text, 10 used to mask cases when control
+                     is using caller buffer to process LVM_GETITEM for example */
+                  if (dispinfo->item.mask & LVIF_TEXT && dispinfo->item.cchTextMax > 10)
+                      ok(dispinfo->item.cchTextMax == 260 ||
+                         broken(dispinfo->item.cchTextMax == 264) /* NT4 reports aligned size */,
+                      "buffer size %d\n", dispinfo->item.cchTextMax);
               }
               break;
           case NM_HOVER:
@@ -634,7 +668,6 @@ static void test_lvm_hittest_(HWND hwnd, INT x, INT y, INT item, UINT flags, UIN
     lpht.pt.y = y;
     lpht.iSubItem = 10;
 
-    trace("hittesting pt=(%d,%d)\n", lpht.pt.x, lpht.pt.y);
     ret = SendMessage(hwnd, LVM_HITTEST, 0, (LPARAM)&lpht);
 
     if (todo_item)
@@ -677,7 +710,6 @@ static void test_lvm_subitemhittest_(HWND hwnd, INT x, INT y, INT item, INT subi
     lpht.pt.x = x;
     lpht.pt.y = y;
 
-    trace("subhittesting pt=(%d,%d)\n", lpht.pt.x, lpht.pt.y);
     ret = SendMessage(hwnd, LVM_SUBITEMHITTEST, 0, (LPARAM)&lpht);
 
     if (todo_item)
@@ -766,6 +798,7 @@ static void test_images(void)
     memset(&r1, 0, sizeof r1);
     r1.left = LVIR_ICON;
     r = SendMessage(hwnd, LVM_GETITEMRECT, 0, (LPARAM) &r1);
+    expect(1, r);
 
     r = SendMessage(hwnd, LVM_DELETEALLITEMS, 0, 0);
     ok(r == TRUE, "should not fail\n");
@@ -778,6 +811,7 @@ static void test_images(void)
     memset(&r2, 0, sizeof r2);
     r2.left = LVIR_ICON;
     r = SendMessage(hwnd, LVM_GETITEMRECT, 0, (LPARAM) &r2);
+    expect(1, r);
 
     ok(!memcmp(&r1, &r2, sizeof r1), "rectangle should be the same\n");
 
@@ -805,12 +839,13 @@ static void test_checkboxes(void)
     item.iSubItem = 0;
     item.pszText = text;
     r = SendMessage(hwnd, LVM_INSERTITEMA, 0, (LPARAM) &item);
-    ok(r == 0, "ret %d\n", r);
+    expect(0, r);
 
     item.iItem = 0;
     item.mask = LVIF_STATE;
     item.stateMask = 0xffff;
     r = SendMessage(hwnd, LVM_GETITEMA, 0, (LPARAM) &item);
+    expect(1, r);
     ok(item.state == 0xfccc, "state %x\n", item.state);
 
     /* Don't set LVIF_STATE */
@@ -821,22 +856,24 @@ static void test_checkboxes(void)
     item.iSubItem = 0;
     item.pszText = text;
     r = SendMessage(hwnd, LVM_INSERTITEMA, 0, (LPARAM) &item);
-    ok(r == 1, "ret %d\n", r);
+    expect(1, r);
 
     item.iItem = 1;
     item.mask = LVIF_STATE;
     item.stateMask = 0xffff;
     r = SendMessage(hwnd, LVM_GETITEMA, 0, (LPARAM) &item);
+    expect(1, r);
     ok(item.state == 0, "state %x\n", item.state);
 
     r = SendMessage(hwnd, LVM_SETEXTENDEDLISTVIEWSTYLE, LVS_EX_CHECKBOXES, LVS_EX_CHECKBOXES);
-    ok(r == 0, "should return zero\n");
+    expect(0, r);
 
     /* Having turned on checkboxes, check that all existing items are set to 0x1000 (unchecked) */
     item.iItem = 0;
     item.mask = LVIF_STATE;
     item.stateMask = 0xffff;
     r = SendMessage(hwnd, LVM_GETITEMA, 0, (LPARAM) &item);
+    expect(1, r);
     if (item.state != 0x1ccc)
     {
         win_skip("LVS_EX_CHECKBOXES style is unavailable. Skipping.\n");
@@ -850,12 +887,13 @@ static void test_checkboxes(void)
     item.state = 0;
     item.pszText = text2;
     r = SendMessage(hwnd, LVM_INSERTITEMA, 0, (LPARAM) &item);
-    ok(r == 2, "ret %d\n", r);
+    expect(2, r);
 
     item.iItem = 2;
     item.mask = LVIF_STATE;
     item.stateMask = 0xffff;
     r = SendMessage(hwnd, LVM_GETITEMA, 0, (LPARAM) &item);
+    expect(1, r);
     ok(item.state == 0x1000, "state %x\n", item.state);
 
     /* Add a further item this time specifying a state and still its state goes to 0x1000 */
@@ -865,12 +903,13 @@ static void test_checkboxes(void)
     item.state = 0x2aaa;
     item.pszText = text3;
     r = SendMessage(hwnd, LVM_INSERTITEMA, 0, (LPARAM) &item);
-    ok(r == 3, "ret %d\n", r);
+    expect(3, r);
 
     item.iItem = 3;
     item.mask = LVIF_STATE;
     item.stateMask = 0xffff;
     r = SendMessage(hwnd, LVM_GETITEMA, 0, (LPARAM) &item);
+    expect(1, r);
     ok(item.state == 0x1aaa, "state %x\n", item.state);
 
     /* Set an item's state to checked */
@@ -879,11 +918,13 @@ static void test_checkboxes(void)
     item.stateMask = 0xf000;
     item.state = 0x2000;
     r = SendMessage(hwnd, LVM_SETITEMA, 0, (LPARAM) &item);
+    expect(1, r);
 
     item.iItem = 3;
     item.mask = LVIF_STATE;
     item.stateMask = 0xffff;
     r = SendMessage(hwnd, LVM_GETITEMA, 0, (LPARAM) &item);
+    expect(1, r);
     ok(item.state == 0x2aaa, "state %x\n", item.state);
 
     /* Check that only the bits we asked for are returned,
@@ -894,6 +935,7 @@ static void test_checkboxes(void)
     item.stateMask = 0xf000;
     item.state = 0xffff;
     r = SendMessage(hwnd, LVM_GETITEMA, 0, (LPARAM) &item);
+    expect(1, r);
     ok(item.state == 0x2000, "state %x\n", item.state);
 
     /* Set the style again and check that doesn't change an item's state */
@@ -904,6 +946,7 @@ static void test_checkboxes(void)
     item.mask = LVIF_STATE;
     item.stateMask = 0xffff;
     r = SendMessage(hwnd, LVM_GETITEMA, 0, (LPARAM) &item);
+    expect(1, r);
     ok(item.state == 0x2aaa, "state %x\n", item.state);
 
     /* Unsetting the checkbox extended style doesn't change an item's state */
@@ -914,16 +957,18 @@ static void test_checkboxes(void)
     item.mask = LVIF_STATE;
     item.stateMask = 0xffff;
     r = SendMessage(hwnd, LVM_GETITEMA, 0, (LPARAM) &item);
+    expect(1, r);
     ok(item.state == 0x2aaa, "state %x\n", item.state);
 
     /* Now setting the style again will change an item's state */
     r = SendMessage(hwnd, LVM_SETEXTENDEDLISTVIEWSTYLE, LVS_EX_CHECKBOXES, LVS_EX_CHECKBOXES);
-    ok(r == 0, "ret %x\n", r);
+    expect(0, r);
 
     item.iItem = 3;
     item.mask = LVIF_STATE;
     item.stateMask = 0xffff;
     r = SendMessage(hwnd, LVM_GETITEMA, 0, (LPARAM) &item);
+    expect(1, r);
     ok(item.state == 0x1aaa, "state %x\n", item.state);
 
     /* Toggle checkbox tests (bug 9934) */
@@ -940,6 +985,7 @@ static void test_checkboxes(void)
     item.mask = LVIF_STATE;
     item.stateMask = 0xffff;
     r = SendMessage(hwnd, LVM_GETITEMA, 0, (LPARAM) &item);
+    expect(1, r);
     ok(item.state == 0x1aab, "state %x\n", item.state);
 
     r = SendMessage(hwnd, WM_KEYDOWN, VK_SPACE, 0);
@@ -951,6 +997,7 @@ static void test_checkboxes(void)
     item.mask = LVIF_STATE;
     item.stateMask = 0xffff;
     r = SendMessage(hwnd, LVM_GETITEMA, 0, (LPARAM) &item);
+    expect(1, r);
     ok(item.state == 0x2aab, "state %x\n", item.state);
 
     r = SendMessage(hwnd, WM_KEYDOWN, VK_SPACE, 0);
@@ -962,6 +1009,7 @@ static void test_checkboxes(void)
     item.mask = LVIF_STATE;
     item.stateMask = 0xffff;
     r = SendMessage(hwnd, LVM_GETITEMA, 0, (LPARAM) &item);
+    expect(1, r);
     ok(item.state == 0x1aab, "state %x\n", item.state);
 
     DestroyWindow(hwnd);
@@ -1000,10 +1048,11 @@ static void insert_item(HWND hwnd, int idx)
 static void test_items(void)
 {
     const LPARAM lparamTest = 0x42;
+    static CHAR text[] = "Text";
+    char buffA[5];
     HWND hwnd;
     LVITEMA item;
     DWORD r;
-    static CHAR text[] = "Text";
 
     hwnd = CreateWindowEx(0, "SysListView32", "foo", LVS_REPORT,
                 10, 10, 100, 200, hwndparent, NULL, NULL, NULL);
@@ -1026,7 +1075,7 @@ static void test_items(void)
     item.iItem = 0;
     item.iSubItem = 0;
     r = SendMessage(hwnd, LVM_INSERTITEMA, 0, (LPARAM) &item);
-    ok(r == 0, "ret %d\n", r);
+    expect(0, r);
     /* get */
     memset (&item, 0xcc, sizeof (item));
     item.mask = LVIF_STATE;
@@ -1035,7 +1084,7 @@ static void test_items(void)
     item.iItem = 0;
     item.iSubItem = 0;
     r = SendMessage(hwnd, LVM_GETITEMA, 0, (LPARAM) &item);
-    ok(r != 0, "ret %d\n", r);
+    expect(1, r);
     ok(item.state & LVIS_SELECTED, "Expected LVIS_SELECTED\n");
     SendMessage(hwnd, LVM_DELETEITEM, 0, 0);
 
@@ -1048,7 +1097,7 @@ static void test_items(void)
     item.iItem = 0;
     item.iSubItem = 0;
     r = SendMessage(hwnd, LVM_INSERTITEMA, 0, (LPARAM) &item);
-    ok(r == 0, "ret %d\n", r);
+    expect(0, r);
     /* get */
     memset (&item, 0xcc, sizeof (item));
     item.mask = LVIF_STATE;
@@ -1057,7 +1106,7 @@ static void test_items(void)
     item.iItem = 0;
     item.iSubItem = 0;
     r = SendMessage(hwnd, LVM_GETITEMA, 0, (LPARAM) &item);
-    ok(r != 0, "ret %d\n", r);
+    expect(1, r);
     ok(item.state & LVIS_FOCUSED, "Expected LVIS_FOCUSED\n");
     SendMessage(hwnd, LVM_DELETEITEM, 0, 0);
 
@@ -1070,7 +1119,7 @@ static void test_items(void)
     item.iItem = 0;
     item.iSubItem = 0;
     r = SendMessage(hwnd, LVM_INSERTITEMA, 0, (LPARAM) &item);
-    ok(r == 0, "ret %d\n", r);
+    expect(0, r);
     /* get */
     memset (&item, 0xcc, sizeof (item));
     item.mask = LVIF_STATE;
@@ -1079,7 +1128,7 @@ static void test_items(void)
     item.iItem = 0;
     item.iSubItem = 0;
     r = SendMessage(hwnd, LVM_GETITEMA, 0, (LPARAM) &item);
-    ok(r != 0, "ret %d\n", r);
+    expect(1, r);
     ok(item.state & LVIS_CUT, "Expected LVIS_CUT\n");
     SendMessage(hwnd, LVM_DELETEITEM, 0, 0);
 
@@ -1090,7 +1139,7 @@ static void test_items(void)
     item.iSubItem = 0;
     item.lParam = lparamTest;
     r = SendMessage(hwnd, LVM_INSERTITEMA, 0, (LPARAM) &item);
-    ok(r == 0, "ret %d\n", r);
+    expect(0, r);
 
     /* Test getting of the param */
     memset (&item, 0xcc, sizeof (item));
@@ -1098,7 +1147,7 @@ static void test_items(void)
     item.iItem = 0;
     item.iSubItem = 0;
     r = SendMessage(hwnd, LVM_GETITEMA, 0, (LPARAM) &item);
-    ok(r != 0, "ret %d\n", r);
+    expect(1, r);
     ok(item.lParam == lparamTest, "got lParam %lx, expected %lx\n", item.lParam, lparamTest);
 
     /* Set up a subitem */
@@ -1108,7 +1157,56 @@ static void test_items(void)
     item.iSubItem = 1;
     item.pszText = text;
     r = SendMessage(hwnd, LVM_SETITEMA, 0, (LPARAM) &item);
-    ok(r != 0, "ret %d\n", r);
+    expect(1, r);
+
+    item.mask = LVIF_TEXT;
+    item.iItem = 0;
+    item.iSubItem = 1;
+    item.pszText = buffA;
+    item.cchTextMax = sizeof(buffA);
+    r = SendMessage(hwnd, LVM_GETITEMA, 0, (LPARAM) &item);
+    expect(1, r);
+    ok(!memcmp(item.pszText, text, sizeof(text)), "got text %s, expected %s\n", item.pszText, text);
+
+    /* set up with extra flag */
+    /* 1. reset subitem text */
+    item.mask = LVIF_TEXT;
+    item.iItem = 0;
+    item.iSubItem = 1;
+    item.pszText = NULL;
+    r = SendMessage(hwnd, LVM_SETITEMA, 0, (LPARAM) &item);
+    expect(1, r);
+
+    item.mask = LVIF_TEXT;
+    item.iItem = 0;
+    item.iSubItem = 1;
+    item.pszText = buffA;
+    buffA[0] = 'a';
+    item.cchTextMax = sizeof(buffA);
+    r = SendMessage(hwnd, LVM_GETITEMA, 0, (LPARAM) &item);
+    expect(1, r);
+    ok(item.pszText[0] == 0, "got %p\n", item.pszText);
+
+    /* 2. set new text with extra flag specified */
+    item.mask = LVIF_TEXT | LVIF_DI_SETITEM;
+    item.iItem = 0;
+    item.iSubItem = 1;
+    item.pszText = text;
+    r = SendMessage(hwnd, LVM_SETITEMA, 0, (LPARAM) &item);
+    ok(r == 1 || broken(r == 0) /* NT4 */, "ret %d\n", r);
+
+    if (r == 1)
+    {
+        item.mask = LVIF_TEXT;
+        item.iItem = 0;
+        item.iSubItem = 1;
+        item.pszText = buffA;
+        buffA[0] = 'a';
+        item.cchTextMax = sizeof(buffA);
+        r = SendMessage(hwnd, LVM_GETITEMA, 0, (LPARAM) &item);
+        expect(1, r);
+        ok(!memcmp(item.pszText, text, sizeof(text)), "got %s, expected %s\n", item.pszText, text);
+    }
 
     /* Query param from subitem: returns main item param */
     memset (&item, 0xcc, sizeof (item));
@@ -1116,7 +1214,7 @@ static void test_items(void)
     item.iItem = 0;
     item.iSubItem = 1;
     r = SendMessage(hwnd, LVM_GETITEMA, 0, (LPARAM) &item);
-    ok(r != 0, "ret %d\n", r);
+    expect(1, r);
     ok(item.lParam == lparamTest, "got lParam %lx, expected %lx\n", item.lParam, lparamTest);
 
     /* Set up param on first subitem: no effect */
@@ -1126,7 +1224,7 @@ static void test_items(void)
     item.iSubItem = 1;
     item.lParam = lparamTest+1;
     r = SendMessage(hwnd, LVM_SETITEMA, 0, (LPARAM) &item);
-    ok(r == 0, "ret %d\n", r);
+    expect(0, r);
 
     /* Query param from subitem again: should still return main item param */
     memset (&item, 0xcc, sizeof (item));
@@ -1134,7 +1232,7 @@ static void test_items(void)
     item.iItem = 0;
     item.iSubItem = 1;
     r = SendMessage(hwnd, LVM_GETITEMA, 0, (LPARAM) &item);
-    ok(r != 0, "ret %d\n", r);
+    expect(1, r);
     ok(item.lParam == lparamTest, "got lParam %lx, expected %lx\n", item.lParam, lparamTest);
 
     /**** Some tests of state highlighting ****/
@@ -1145,11 +1243,11 @@ static void test_items(void)
     item.state = LVIS_SELECTED;
     item.stateMask = LVIS_SELECTED | LVIS_DROPHILITED;
     r = SendMessage(hwnd, LVM_SETITEM, 0, (LPARAM) &item);
-    ok(r != 0, "ret %d\n", r);
+    expect(1, r);
     item.iSubItem = 1;
     item.state = LVIS_DROPHILITED;
     r = SendMessage(hwnd, LVM_SETITEM, 0, (LPARAM) &item);
-    ok(r != 0, "ret %d\n", r);
+    expect(1, r);
 
     memset (&item, 0xcc, sizeof (item));
     item.mask = LVIF_STATE;
@@ -1157,11 +1255,11 @@ static void test_items(void)
     item.iSubItem = 0;
     item.stateMask = -1;
     r = SendMessage(hwnd, LVM_GETITEM, 0, (LPARAM) &item);
-    ok(r != 0, "ret %d\n", r);
+    expect(1, r);
     ok(item.state == LVIS_SELECTED, "got state %x, expected %x\n", item.state, LVIS_SELECTED);
     item.iSubItem = 1;
     r = SendMessage(hwnd, LVM_GETITEM, 0, (LPARAM) &item);
-    ok(r != 0, "ret %d\n", r);
+    expect(1, r);
     todo_wine ok(item.state == LVIS_DROPHILITED, "got state %x, expected %x\n", item.state, LVIS_DROPHILITED);
 
     /* some notnull but meaningless masks */
@@ -1170,13 +1268,13 @@ static void test_items(void)
     item.iItem = 0;
     item.iSubItem = 0;
     r = SendMessage(hwnd, LVM_GETITEMA, 0, (LPARAM) &item);
-    ok(r != 0, "ret %d\n", r);
+    expect(1, r);
     memset (&item, 0, sizeof(item));
     item.mask = LVIF_DI_SETITEM;
     item.iItem = 0;
     item.iSubItem = 0;
     r = SendMessage(hwnd, LVM_GETITEMA, 0, (LPARAM) &item);
-    ok(r != 0, "ret %d\n", r);
+    expect(1, r);
 
     /* set text to callback value already having it */
     r = SendMessage(hwnd, LVM_DELETEALLITEMS, 0, 0);
@@ -1186,7 +1284,7 @@ static void test_items(void)
     item.pszText = LPSTR_TEXTCALLBACK;
     item.iItem = 0;
     r = SendMessage(hwnd, LVM_INSERTITEMA, 0, (LPARAM) &item);
-    ok(r == 0, "ret %d\n", r);
+    expect(0, r);
     memset (&item, 0, sizeof (item));
 
     flush_sequences(sequences, NUM_MSG_SEQUENCES);
@@ -1235,16 +1333,16 @@ static void test_columns(void)
     column.mask = LVCF_WIDTH;
     column.cx = 100;
     rc = SendMessageA(hwnd, LVM_INSERTCOLUMNA, 0, (LPARAM)&column);
-    ok(rc == 0, "Inserting column failed with %d\n", rc);
+    expect(0, rc);
 
     column.cx = 200;
     rc = SendMessageA(hwnd, LVM_INSERTCOLUMNA, 1, (LPARAM)&column);
-    ok(rc == 1, "Inserting column failed with %d\n", rc);
+    expect(1, rc);
 
     flush_sequences(sequences, NUM_MSG_SEQUENCES);
 
     rc = SendMessageA(hwnd, LVM_GETCOLUMNORDERARRAY, 2, (LPARAM)&order);
-    ok(rc == 1, "Expected LVM_GETCOLUMNORDERARRAY to succeed\n");
+    expect(1, rc);
     ok(order[0] == 0, "Expected order 0, got %d\n", order[0]);
     ok(order[1] == 1, "Expected order 1, got %d\n", order[1]);
 
@@ -1262,7 +1360,7 @@ static void test_columns(void)
     item.mask = LVIF_TEXT;
     memset(&g_itema, 0, sizeof(g_itema));
     rc = SendMessageA(hwnd, LVM_GETITEMA, 0, (LPARAM)&item);
-    ok(rc == 1, "got %d\n", rc);
+    expect(1, rc);
     ok(g_itema.iSubItem == 1, "got %d\n", g_itema.iSubItem);
 
     ok_sequence(sequences, PARENT_SEQ_INDEX, single_getdispinfo_parent_seq,
@@ -1335,7 +1433,7 @@ static void test_create(void)
     col.mask = LVCF_WIDTH;
     col.cx = 100;
     r = SendMessage(hList, LVM_INSERTCOLUMN, 0, (LPARAM)&col);
-    ok(r == 0, "Expected 0 column's inserted\n");
+    expect(0, r);
     hHeader = (HWND)SendMessage(hList, LVM_GETHEADER, 0, 0);
     ok(IsWindow(hHeader), "Header should be created\n");
     ok(hHeader == GetDlgItem(hList, 0), "Expected header as dialog item\n");
@@ -1353,7 +1451,7 @@ static void test_create(void)
     col.mask = LVCF_WIDTH;
     col.cx = 100;
     r = SendMessage(hList, LVM_INSERTCOLUMN, 0, (LPARAM)&col);
-    ok(r == 0, "Expected 0 column's inserted\n");
+    expect(0, r);
     hHeader = (HWND)SendMessage(hList, LVM_GETHEADER, 0, 0);
     ok(IsWindow(hHeader), "Header should be created\n");
     ok(hHeader == GetDlgItem(hList, 0), "Expected header as dialog item\n");
@@ -1401,7 +1499,7 @@ static void test_create(void)
     col.mask = LVCF_WIDTH;
     col.cx = 100;
     r = SendMessage(hList, LVM_INSERTCOLUMN, 0, (LPARAM)&col);
-    ok(r == 0, "Expected 0 column's inserted\n");
+    expect(0, r);
     hHeader = (HWND)SendMessage(hList, LVM_GETHEADER, 0, 0);
     ok(IsWindow(hHeader), "Header should be created\n");
     ok(hHeader == GetDlgItem(hList, 0), "Expected header as dialog item\n");
@@ -1460,11 +1558,11 @@ static void test_create(void)
     rect.top  = 1;
     rect.right = rect.bottom = -10;
     r = SendMessage(hList, LVM_GETSUBITEMRECT, -1, (LPARAM)&rect);
-    ok(r != 0, "Expected not-null LRESULT\n");
+    expect(1, r);
 
     hHeader = (HWND)SendMessage(hList, LVM_GETHEADER, 0, 0);
     ok(!IsWindow(hHeader), "Header shouldn't be created\n");
-    ok(NULL == GetDlgItem(hList, 0), "NULL dialog item expected\n");
+    ok(GetDlgItem(hList, 0) == NULL, "NULL dialog item expected\n");
 
     DestroyWindow(hList);
 
@@ -1488,7 +1586,6 @@ static void test_redraw(void)
 
     flush_sequences(sequences, NUM_MSG_SEQUENCES);
 
-    trace("invalidate & update\n");
     InvalidateRect(hwnd, NULL, TRUE);
     UpdateWindow(hwnd);
     ok_sequence(sequences, LISTVIEW_SEQ_INDEX, redraw_listview_seq, "redraw listview", FALSE);
@@ -1504,7 +1601,7 @@ static void test_redraw(void)
 
     flush_sequences(sequences, NUM_MSG_SEQUENCES);
     r = SendMessageA(hwnd, WM_ERASEBKGND, (WPARAM)hdc, 0);
-    ok(r != 0, "Expected not zero result\n");
+    ok(r == 1, "Expected not zero result\n");
     ok_sequence(sequences, PARENT_FULL_SEQ_INDEX, forward_erasebkgnd_parent_seq,
                 "forward WM_ERASEBKGND on CLR_NONE", FALSE);
 
@@ -1513,7 +1610,7 @@ static void test_redraw(void)
 
     flush_sequences(sequences, NUM_MSG_SEQUENCES);
     r = SendMessageA(hwnd, WM_ERASEBKGND, (WPARAM)hdc, 0);
-    ok(r != 0, "Expected not zero result\n");
+    expect(1, r);
     ok_sequence(sequences, PARENT_FULL_SEQ_INDEX, empty_seq,
                 "don't forward WM_ERASEBKGND on non-CLR_NONE", FALSE);
 
@@ -1525,7 +1622,7 @@ static void test_redraw(void)
 
     flush_sequences(sequences, NUM_MSG_SEQUENCES);
     r = SendMessageA(hwnd, WM_ERASEBKGND, (WPARAM)hdc, 0);
-    ok(r != 0, "Expected not zero result\n");
+    expect(1, r);
     ok_sequence(sequences, PARENT_FULL_SEQ_INDEX, forward_erasebkgnd_parent_seq,
                 "forward WM_ERASEBKGND on CLR_NONE", FALSE);
 
@@ -1534,7 +1631,7 @@ static void test_redraw(void)
 
     flush_sequences(sequences, NUM_MSG_SEQUENCES);
     r = SendMessageA(hwnd, WM_ERASEBKGND, (WPARAM)hdc, 0);
-    todo_wine ok(r != 0, "Expected not zero result\n");
+    todo_wine expect(1, r);
     ok_sequence(sequences, PARENT_FULL_SEQ_INDEX, empty_seq,
                 "don't forward WM_ERASEBKGND on non-CLR_NONE", FALSE);
 
@@ -1622,8 +1719,6 @@ static void test_icon_spacing(void)
 
     flush_sequences(sequences, NUM_MSG_SEQUENCES);
 
-    trace("test icon spacing\n");
-
     r = SendMessage(hwnd, LVM_SETICONSPACING, 0, MAKELPARAM(20, 30));
     ok(r == MAKELONG(w, h) ||
        broken(r == MAKELONG(w, w)), /* win98 */
@@ -1664,7 +1759,6 @@ static void test_color(void)
 
     flush_sequences(sequences, NUM_MSG_SEQUENCES);
 
-    trace("test color seq\n");
     for (i = 0; i < 4; i++)
     {
         color = colors[i];
@@ -1727,8 +1821,6 @@ static void test_item_count(void)
     MoveWindow(hwnd, 0, 0, rect.right - rect.left, 5 * height, FALSE);
 
     flush_sequences(sequences, NUM_MSG_SEQUENCES);
-
-    trace("test item count\n");
 
     r = SendMessage(hwnd, LVM_GETITEMCOUNT, 0, 0);
     expect(0, r);
@@ -1818,8 +1910,6 @@ static void test_item_position(void)
 
     flush_sequences(sequences, NUM_MSG_SEQUENCES);
 
-    trace("test item position\n");
-
     /* [item0] */
     item0.mask = LVIF_TEXT;
     item0.iItem = 0;
@@ -1881,7 +1971,7 @@ static void test_getorigin(void)
     hwnd = create_listview_control(LVS_ICON);
     ok(hwnd != NULL, "failed to create a listview window\n");
     flush_sequences(sequences, NUM_MSG_SEQUENCES);
-    trace("test get origin results\n");
+
     r = SendMessage(hwnd, LVM_GETORIGIN, 0, (LPARAM)&position);
     expect(TRUE, r);
     flush_sequences(sequences, NUM_MSG_SEQUENCES);
@@ -1890,7 +1980,7 @@ static void test_getorigin(void)
     hwnd = create_listview_control(LVS_SMALLICON);
     ok(hwnd != NULL, "failed to create a listview window\n");
     flush_sequences(sequences, NUM_MSG_SEQUENCES);
-    trace("test get origin results\n");
+
     r = SendMessage(hwnd, LVM_GETORIGIN, 0, (LPARAM)&position);
     expect(TRUE, r);
     flush_sequences(sequences, NUM_MSG_SEQUENCES);
@@ -1899,7 +1989,7 @@ static void test_getorigin(void)
     hwnd = create_listview_control(LVS_LIST);
     ok(hwnd != NULL, "failed to create a listview window\n");
     flush_sequences(sequences, NUM_MSG_SEQUENCES);
-    trace("test get origin results\n");
+
     r = SendMessage(hwnd, LVM_GETORIGIN, 0, (LPARAM)&position);
     expect(FALSE, r);
     flush_sequences(sequences, NUM_MSG_SEQUENCES);
@@ -1908,12 +1998,11 @@ static void test_getorigin(void)
     hwnd = create_listview_control(LVS_REPORT);
     ok(hwnd != NULL, "failed to create a listview window\n");
     flush_sequences(sequences, NUM_MSG_SEQUENCES);
-    trace("test get origin results\n");
+
     r = SendMessage(hwnd, LVM_GETORIGIN, 0, (LPARAM)&position);
     expect(FALSE, r);
     flush_sequences(sequences, NUM_MSG_SEQUENCES);
     DestroyWindow(hwnd);
-
 }
 
 static void test_multiselect(void)
@@ -2127,8 +2216,8 @@ static void test_subitem_rect(void)
     rect.top  = 1;
     rect.right = rect.bottom = 0;
     r = SendMessage(hwnd, LVM_GETSUBITEMRECT, -1, (LPARAM)&rect);
+    expect(1, r);
 
-    ok(r != 0, "Expected not-null LRESULT\n");
     expect(100, rect.left);
     expect(250, rect.right);
 todo_wine
@@ -2138,8 +2227,8 @@ todo_wine
     rect.top  = 2;
     rect.right = rect.bottom = 0;
     r = SendMessage(hwnd, LVM_GETSUBITEMRECT, -1, (LPARAM)&rect);
+    expect(1, r);
 
-    ok(r != 0, "Expected not-null LRESULT\n");
     expect(250, rect.left);
     expect(450, rect.right);
 todo_wine
@@ -2152,7 +2241,7 @@ todo_wine
     rect.top  = 1;
     rect.right = rect.bottom = 0;
     r = SendMessage(hwnd, LVM_GETSUBITEMRECT, 0, (LPARAM)&rect);
-    ok(r != 0, "Expected not-null LRESULT\n");
+    expect(1, r);
     expect(100, rect.left);
     expect(250, rect.right);
 
@@ -2160,7 +2249,7 @@ todo_wine
     rect.top  = 1;
     rect.right = rect.bottom = 0;
     r = SendMessage(hwnd, LVM_GETSUBITEMRECT, 0, (LPARAM)&rect);
-    ok(r != 0, "Expected not-null LRESULT\n");
+    expect(1, r);
     /* no icon attached - zero width rectangle, with no left padding */
     expect(100, rect.left);
     expect(100, rect.right);
@@ -2169,7 +2258,7 @@ todo_wine
     rect.top  = 1;
     rect.right = rect.bottom = 0;
     r = SendMessage(hwnd, LVM_GETSUBITEMRECT, 0, (LPARAM)&rect);
-    ok(r != 0, "Expected not-null LRESULT\n");
+    expect(1, r);
     /* same as full LVIR_BOUNDS */
     expect(100, rect.left);
     expect(250, rect.right);
@@ -2180,7 +2269,7 @@ todo_wine
     rect.top  = 1;
     rect.right = rect.bottom = 0;
     r = SendMessage(hwnd, LVM_GETSUBITEMRECT, 0, (LPARAM)&rect);
-    ok(r != 0, "Expected not-null LRESULT\n");
+    expect(1, r);
     expect(90, rect.left);
     expect(240, rect.right);
 
@@ -2214,21 +2303,21 @@ todo_wine
     rect.top  = 0;
     rect.right = rect.bottom = -1;
     r = SendMessage(hwnd, LVM_GETSUBITEMRECT, 2, (LPARAM)&rect);
-    ok(r == FALSE, "got %d\n", r);
+    expect(FALSE, r);
 
     /* for subitems rectangle is calculated even if there's no item added */
     rect.left = LVIR_BOUNDS;
     rect.top  = 1;
     rect.right = rect.bottom = -1;
     r = SendMessage(hwnd, LVM_GETSUBITEMRECT, 1, (LPARAM)&rect);
-    ok(r == TRUE, "got %d\n", r);
+    expect(TRUE, r);
 
     rect2.left = LVIR_BOUNDS;
     rect2.top  = 1;
     rect2.right = rect2.bottom = -1;
     r = SendMessage(hwnd, LVM_GETSUBITEMRECT, 2, (LPARAM)&rect2);
 todo_wine {
-    ok(r == TRUE, "got %d\n", r);
+    expect(TRUE, r);
     expect(rect.right, rect2.right);
     expect(rect.left, rect2.left);
     expect(rect.bottom, rect2.top);
@@ -2243,7 +2332,7 @@ todo_wine {
     rect.top  = 0;
     rect.right = rect.bottom = -1;
     r = SendMessage(hwnd, LVM_GETSUBITEMRECT, 0, (LPARAM)&rect);
-    ok(r == TRUE, "got %d\n", r);
+    expect(TRUE, r);
     expect(0, rect.left);
     expect(600, rect.right);
 
@@ -2251,7 +2340,7 @@ todo_wine {
     rect.top  = 1;
     rect.right = rect.bottom = -1;
     r = SendMessage(hwnd, LVM_GETSUBITEMRECT, 0, (LPARAM)&rect);
-    ok(r == TRUE, "got %d\n", r);
+    expect(TRUE, r);
     expect(0, rect.left);
     expect(200, rect.right);
 
@@ -2259,7 +2348,7 @@ todo_wine {
     rect2.top  = 1;
     rect2.right = rect2.bottom = -1;
     r = SendMessage(hwnd, LVM_GETSUBITEMRECT, 1, (LPARAM)&rect2);
-    ok(r == TRUE, "got %d\n", r);
+    expect(TRUE, r);
     expect(0, rect2.left);
     expect(200, rect2.right);
     /* items are of the same height */
@@ -2271,7 +2360,7 @@ todo_wine {
     rect.top  = 2;
     rect.right = rect.bottom = -1;
     r = SendMessage(hwnd, LVM_GETSUBITEMRECT, 0, (LPARAM)&rect);
-    ok(r == TRUE, "got %d\n", r);
+    expect(TRUE, r);
     expect(300, rect.left);
     expect(600, rect.right);
 
@@ -2284,7 +2373,7 @@ todo_wine {
     rect.top  = 1;
     rect.right = rect.bottom = -10;
     r = SendMessage(hwnd, LVM_GETSUBITEMRECT, -1, (LPARAM)&rect);
-    ok(r == 0, "Expected not-null LRESULT\n");
+    expect(0, r);
     /* rect is unchanged */
     expect(0, rect.left);
     expect(-10, rect.right);
@@ -2550,7 +2639,7 @@ static void test_ownerdata(void)
     hwnd = create_listview_control(LVS_OWNERDATA | LVS_REPORT);
     ok(hwnd != NULL, "failed to create a listview window\n");
     res = SendMessageA(hwnd, LVM_SETITEMCOUNT, 1, 0);
-    ok(res != 0, "Expected LVM_SETITEMCOUNT to succeed\n");
+    expect(1, res);
     res = SendMessageA(hwnd, LVM_GETSELECTEDCOUNT, 0, 0);
     expect(0, res);
     memset(&item, 0, sizeof(item));
@@ -2568,7 +2657,7 @@ static void test_ownerdata(void)
     hwnd = create_listview_control(LVS_OWNERDATA | LVS_REPORT);
     ok(hwnd != NULL, "failed to create a listview window\n");
     res = SendMessageA(hwnd, LVM_SETITEMCOUNT, 1, 0);
-    ok(res != 0, "Expected LVM_SETITEMCOUNT to succeed\n");
+    expect(1, res);
     res = SendMessageA(hwnd, LVM_GETITEMCOUNT, 0, 0);
     expect(1, res);
     memset(&item, 0, sizeof(item));
@@ -2584,7 +2673,7 @@ static void test_ownerdata(void)
     hwnd = create_listview_control(LVS_OWNERDATA | LVS_REPORT);
     ok(hwnd != NULL, "failed to create a listview window\n");
     res = SendMessageA(hwnd, LVM_SETITEMCOUNT, 20, 0);
-    ok(res != 0, "Expected LVM_SETITEMCOUNT to succeed\n");
+    expect(1, res);
 
     flush_sequences(sequences, NUM_MSG_SEQUENCES);
 
@@ -2727,7 +2816,7 @@ static void test_ownerdata(void)
     hwnd = create_listview_control(LVS_OWNERDATA | LVS_REPORT);
     ok(hwnd != NULL, "failed to create a listview window\n");
     res = SendMessageA(hwnd, LVM_SETITEMCOUNT, 1, 0);
-    ok(res != 0, "Expected LVM_SETITEMCOUNT to succeed\n");
+    expect(1, res);
 
     flush_sequences(sequences, NUM_MSG_SEQUENCES);
 
@@ -3002,7 +3091,7 @@ static void test_hittest(void)
     static CHAR text[] = "1234567890ABCDEFGHIJKLMNOPQRST";
     POINT pos;
     INT x, y, i;
-    WORD horiz, vert;
+    WORD vert;
     HIMAGELIST himl, himl2;
     HBITMAP hbmp;
 
@@ -3028,10 +3117,10 @@ static void test_hittest(void)
     memset(&bounds, 0, sizeof(bounds));
     bounds.left = LVIR_BOUNDS;
     r = SendMessage(hwnd, LVM_GETITEMRECT, 0, (LPARAM)&bounds);
+    expect(1, r);
     ok(bounds.bottom - bounds.top > 0, "Expected non zero item height\n");
     ok(bounds.right - bounds.left > 0, "Expected non zero item width\n");
     r = SendMessage(hwnd, LVM_GETITEMSPACING, TRUE, 0);
-    horiz = LOWORD(r);
     vert = HIWORD(r);
     ok(bounds.bottom - bounds.top == vert,
         "Vertical spacing inconsistent (%d != %d)\n", bounds.bottom - bounds.top, vert);
@@ -3125,7 +3214,7 @@ static void test_hittest(void)
     ok(r == 1, "should be one\n");
 
     r = SendMessage(hwnd, LVM_SETIMAGELIST, LVSIL_STATE, (LPARAM)himl);
-    ok(r == 0, "should return zero\n");
+    expect(0, r);
 
     item.mask = LVIF_IMAGE;
     item.iImage = 0;
@@ -3161,7 +3250,7 @@ static void test_hittest(void)
     ok(himl2 == himl, "should return handle\n");
 
     r = SendMessage(hwnd, LVM_SETIMAGELIST, LVSIL_SMALL, (LPARAM)himl);
-    ok(r == 0, "should return zero\n");
+    expect(0, r);
     /* on item icon */
     x = pos.x + 8;
     y = pos.y + (bounds.bottom - bounds.top) / 2;
@@ -3286,7 +3375,7 @@ static void test_columnscreation(void)
 static void test_getitemrect(void)
 {
     HWND hwnd;
-    HIMAGELIST himl;
+    HIMAGELIST himl, himl_ret;
     HBITMAP hbm;
     RECT rect;
     DWORD r;
@@ -3309,7 +3398,7 @@ static void test_getitemrect(void)
     expect(0, rect.left);
     expect(0, rect.top);
     hdc = GetDC(hwnd);
-    todo_wine expect(GetDeviceCaps(hdc, LOGPIXELSX), rect.right);
+    todo_wine expect(((GetDeviceCaps(hdc, LOGPIXELSX) + 15) / 16) * 16, rect.right);
     ReleaseDC(hwnd, hdc);
     DestroyWindow(hwnd);
 
@@ -3414,14 +3503,14 @@ static void test_getitemrect(void)
     hbm = CreateBitmap(16, 16, 1, 1, NULL);
     ok(hbm != NULL, "failed to create bitmap\n");
     r = ImageList_Add(himl, hbm, 0);
-    ok(r == 0, "should be zero\n");
+    expect(0, r);
     hbm = CreateBitmap(16, 16, 1, 1, NULL);
     ok(hbm != NULL, "failed to create bitmap\n");
     r = ImageList_Add(himl, hbm, 0);
-    ok(r == 1, "should be one\n");
+    expect(1, r);
 
     r = SendMessage(hwnd, LVM_SETIMAGELIST, LVSIL_STATE, (LPARAM)himl);
-    ok(r == 0, "should return zero\n");
+    expect(0, r);
 
     item.mask = LVIF_STATE;
     item.state = INDEXTOSTATEIMAGEMASK(1);
@@ -3448,11 +3537,11 @@ static void test_getitemrect(void)
     expect(18, rect.left);
     expect(50, rect.right);
 
-    r = SendMessage(hwnd, LVM_SETIMAGELIST, LVSIL_STATE, 0);
-    ok(r != 0, "should return current list handle\n");
+    himl_ret = (HIMAGELIST)SendMessage(hwnd, LVM_SETIMAGELIST, LVSIL_STATE, 0);
+    ok(himl_ret == himl, "got %p, expected %p\n", himl_ret, himl);
 
     r = SendMessage(hwnd, LVM_SETIMAGELIST, LVSIL_SMALL, (LPARAM)himl);
-    ok(r == 0, "should return zero\n");
+    expect(0, r);
 
     item.mask = LVIF_STATE | LVIF_IMAGE;
     item.iImage = 1;
@@ -3540,6 +3629,7 @@ static void test_editbox(void)
 {
     static CHAR testitemA[]  = "testitem";
     static CHAR testitem1A[] = "testitem_quitelongname";
+    static CHAR testitem2A[] = "testITEM_quitelongname";
     static CHAR buffer[25];
     HWND hwnd, hwndedit, hwndedit2, header;
     LVITEMA item;
@@ -3636,8 +3726,11 @@ static void test_editbox(void)
     /* modify edit and notify control that it lost focus */
     r = SendMessage(hwndedit, WM_SETTEXT, 0, (LPARAM)testitem1A);
     expect(TRUE, r);
+    g_editbox_disp_info.item.pszText = NULL;
     r = SendMessage(hwnd, WM_COMMAND, MAKEWPARAM(0, EN_KILLFOCUS), (LPARAM)hwndedit);
     expect(0, r);
+    ok(g_editbox_disp_info.item.pszText != NULL, "expected notification with not null text\n");
+
     memset(&item, 0, sizeof(item));
     item.pszText = buffer;
     item.cchTextMax = sizeof(buffer);
@@ -3647,6 +3740,29 @@ static void test_editbox(void)
     expect(lstrlen(item.pszText), r);
     ok(strcmp(buffer, testitem1A) == 0, "Expected item text to change\n");
     ok(!IsWindow(hwndedit), "Expected Edit window to be freed\n");
+
+    /* change item name to differ in casing only */
+    SetFocus(hwnd);
+    hwndedit = (HWND)SendMessage(hwnd, LVM_EDITLABEL, 0, 0);
+    ok(IsWindow(hwndedit), "Expected Edit window to be created\n");
+    /* modify edit and notify control that it lost focus */
+    r = SendMessage(hwndedit, WM_SETTEXT, 0, (LPARAM)testitem2A);
+    expect(TRUE, r);
+    g_editbox_disp_info.item.pszText = NULL;
+    r = SendMessage(hwnd, WM_COMMAND, MAKEWPARAM(0, EN_KILLFOCUS), (LPARAM)hwndedit);
+    expect(0, r);
+    ok(g_editbox_disp_info.item.pszText != NULL, "got %p\n", g_editbox_disp_info.item.pszText);
+
+    memset(&item, 0, sizeof(item));
+    item.pszText = buffer;
+    item.cchTextMax = sizeof(buffer);
+    item.iItem = 0;
+    item.iSubItem = 0;
+    r = SendMessage(hwnd, LVM_GETITEMTEXTA, 0, (LPARAM)&item);
+    expect(lstrlen(item.pszText), r);
+    ok(strcmp(buffer, testitem2A) == 0, "got %s, expected %s\n", buffer, testitem2A);
+    ok(!IsWindow(hwndedit), "Expected Edit window to be freed\n");
+
     /* end edit without saving */
     SetFocus(hwnd);
     hwndedit = (HWND)SendMessage(hwnd, LVM_EDITLABEL, 0, 0);
@@ -3671,7 +3787,7 @@ static void test_editbox(void)
     item.iSubItem = 0;
     r = SendMessage(hwnd, LVM_GETITEMTEXTA, 0, (LPARAM)&item);
     expect(lstrlen(item.pszText), r);
-    ok(strcmp(buffer, testitem1A) == 0, "Expected item text to change\n");
+    ok(strcmp(buffer, testitem2A) == 0, "Expected item text to change\n");
 
     /* LVM_EDITLABEL with -1 destroys current edit */
     hwndedit = (HWND)SendMessage(hwnd, LVM_GETEDITCONTROL, 0, 0);
@@ -3715,7 +3831,7 @@ static void test_editbox(void)
     ok_sequence(sequences, EDITBOX_SEQ_INDEX, editbox_create_pos,
                 "edit box create - sizing", FALSE);
 
-    /* WM_COMMAND with EN_KILLFOCUS isn't forwared to parent */
+    /* WM_COMMAND with EN_KILLFOCUS isn't forwarded to parent */
     SetFocus(hwnd);
     hwndedit = (HWND)SendMessage(hwnd, LVM_EDITLABEL, 0, 0);
     ok(IsWindow(hwndedit), "Expected Edit window to be created\n");
@@ -3995,7 +4111,7 @@ static void test_canceleditlabel(void)
     hwndedit = (HWND)SendMessage(hwnd, LVM_EDITLABEL, 0, 0);
     ok(IsWindow(hwndedit), "Expected edit control to be created\n");
     ret = SetWindowText(hwndedit, test1);
-    ok(ret != 0, "Expected edit text to change\n");
+    expect(1, ret);
     ret = SendMessage(hwnd, LVM_CANCELEDITLABEL, 0, 0);
     expect(TRUE, ret);
     ok(!IsWindow(hwndedit), "Expected edit control to be destroyed\n");
@@ -4163,7 +4279,7 @@ static void test_getcolumnwidth(void)
     SendMessage(hwnd, LVM_INSERTITEMA, 0, (LPARAM)&itema);
     ret = SendMessage(hwnd, LVM_GETCOLUMNWIDTH, 0, 0);
     hdc = GetDC(hwnd);
-    todo_wine expect(GetDeviceCaps(hdc, LOGPIXELSX), ret);
+    todo_wine expect(((GetDeviceCaps(hdc, LOGPIXELSX) + 15) / 16) * 16, ret);
     ReleaseDC(hwnd, hdc);
     DestroyWindow(hwnd);
 }
@@ -4286,37 +4402,37 @@ static void test_approximate_viewrect(void)
     }
 
     ret = SendMessage(hwnd, LVM_APPROXIMATEVIEWRECT, 11, MAKELPARAM(100,100));
-    ok(MAKELONG(77,827)==ret,"Incorrect Approximate rect\n");
+    expect(MAKELONG(77,827), ret);
 
     ret = SendMessage(hwnd, LVM_SETICONSPACING, 0, MAKELPARAM(50, 50));
     ret = SendMessage(hwnd, LVM_APPROXIMATEVIEWRECT, 11, MAKELPARAM(100,100));
-    ok(MAKELONG(102,302)==ret,"Incorrect Approximate rect\n");
+    expect(MAKELONG(102,302), ret);
 
     ret = SendMessage(hwnd, LVM_APPROXIMATEVIEWRECT, -1, MAKELPARAM(100,100));
-    ok(MAKELONG(52,52)==ret,"Incorrect Approximate rect\n");
+    expect(MAKELONG(52,52), ret);
 
     itema.pszText = test;
     ret = SendMessage(hwnd, LVM_SETITEMTEXT, 0, (LPARAM)&itema);
     expect(TRUE, ret);
     ret = SendMessage(hwnd, LVM_APPROXIMATEVIEWRECT, -1, MAKELPARAM(100,100));
-    ok(MAKELONG(52,52)==ret,"Incorrect Approximate rect\n");
+    expect(MAKELONG(52,52), ret);
 
     ret = SendMessage(hwnd, LVM_APPROXIMATEVIEWRECT, 0, MAKELPARAM(100,100));
-    ok(MAKELONG(52,2)==ret,"Incorrect Approximate rect\n");
+    expect(MAKELONG(52,2), ret);
     ret = SendMessage(hwnd, LVM_APPROXIMATEVIEWRECT, 1, MAKELPARAM(100,100));
-    ok(MAKELONG(52,52)==ret,"Incorrect Approximate rect\n");
+    expect(MAKELONG(52,52), ret);
     ret = SendMessage(hwnd, LVM_APPROXIMATEVIEWRECT, 2, MAKELPARAM(100,100));
-    ok(MAKELONG(102,52)==ret,"Incorrect Approximate rect\n");
+    expect(MAKELONG(102,52), ret);
     ret = SendMessage(hwnd, LVM_APPROXIMATEVIEWRECT, 3, MAKELPARAM(100,100));
-    ok(MAKELONG(102,102)==ret,"Incorrect Approximate rect\n");
+    expect(MAKELONG(102,102), ret);
     ret = SendMessage(hwnd, LVM_APPROXIMATEVIEWRECT, 4, MAKELPARAM(100,100));
-    ok(MAKELONG(102,102)==ret,"Incorrect Approximate rect\n");
+    expect(MAKELONG(102,102), ret);
     ret = SendMessage(hwnd, LVM_APPROXIMATEVIEWRECT, 5, MAKELPARAM(100,100));
-    ok(MAKELONG(102,152)==ret,"Incorrect Approximate rect\n");
+    expect(MAKELONG(102,152), ret);
     ret = SendMessage(hwnd, LVM_APPROXIMATEVIEWRECT, 6, MAKELPARAM(100,100));
-    ok(MAKELONG(102,152)==ret,"Incorrect Approximate rect\n");
+    expect(MAKELONG(102,152), ret);
     ret = SendMessage(hwnd, LVM_APPROXIMATEVIEWRECT, 7, MAKELPARAM(160,100));
-    ok(MAKELONG(152,152)==ret,"Incorrect Approximate rect\n");
+    expect(MAKELONG(152,152), ret);
 
     DestroyWindow(hwnd);
 }
@@ -4485,31 +4601,48 @@ static void test_destroynotify(void)
 
 static void test_header_notification(void)
 {
+    static char textA[] = "newtext";
     HWND list, header;
     HDITEMA item;
     NMHEADER nmh;
     LVCOLUMNA col;
-    LRESULT ret;
+    DWORD ret;
+    BOOL r;
 
     list = create_listview_control(LVS_REPORT);
-    ok(list != 0, "failed to create listview window\n");
+    ok(list != NULL, "failed to create listview window\n");
 
     memset(&col, 0, sizeof(col));
     col.mask = LVCF_WIDTH;
     col.cx = 100;
     ret = SendMessage(list, LVM_INSERTCOLUMNA, 0, (LPARAM)&col);
-    ok(!ret, "expected 0, got %ld\n", ret);
+    expect(0, ret);
+
+    /* check list parent notification after header item changed,
+       this test should be placed before header subclassing to avoid
+       Listview -> Header messages to be logged */
+    flush_sequences(sequences, NUM_MSG_SEQUENCES);
+
+    col.mask = LVCF_TEXT;
+    col.pszText = textA;
+    r = SendMessage(list, LVM_SETCOLUMNA, 0, (LPARAM)&col);
+    expect(TRUE, r);
+
+    ok_sequence(sequences, LISTVIEW_SEQ_INDEX, listview_header_changed_seq,
+                "header notify, listview", FALSE);
+    ok_sequence(sequences, PARENT_SEQ_INDEX, empty_seq,
+                "header notify, parent", FALSE);
 
     header = subclass_header(list);
 
     ret = SendMessage(header, HDM_GETITEMCOUNT, 0, 0);
-    ok(ret == 1, "expected header item count 1, got %ld\n", ret);
+    expect(1, ret);
 
     memset(&item, 0, sizeof(item));
     item.mask = HDI_WIDTH;
     ret = SendMessage(header, HDM_GETITEMA, 0, (LPARAM)&item);
-    ok(ret, "HDM_GETITEM failed\n");
-    ok(item.cxy == 100, "expected 100, got %d\n", item.cxy);
+    expect(1, ret);
+    expect(100, item.cxy);
 
     nmh.hdr.hwndFrom = header;
     nmh.hdr.idFrom = GetWindowLongPtr(header, GWLP_ID);
@@ -4520,7 +4653,7 @@ static void test_header_notification(void)
     item.cxy = 50;
     nmh.pitem = &item;
     ret = SendMessage(list, WM_NOTIFY, 0, (LPARAM)&nmh);
-    ok(!ret, "WM_NOTIFY/HDN_ITEMCHANGED failed\n");
+    expect(0, ret);
 
     DestroyWindow(list);
 }
@@ -4532,7 +4665,7 @@ static void test_createdragimage(void)
     HWND list;
 
     list = create_listview_control(LVS_ICON);
-    ok(list != 0, "failed to create listview window\n");
+    ok(list != NULL, "failed to create listview window\n");
 
     insert_item(list, 0);
 
@@ -4553,17 +4686,17 @@ static void test_dispinfo(void)
     WCHAR buff[10];
     LVITEMA item;
     HWND hwnd;
-    INT ret;
+    DWORD ret;
 
     hwnd = create_listview_control(LVS_ICON);
-    ok(hwnd != 0, "failed to create listview window\n");
+    ok(hwnd != NULL, "failed to create listview window\n");
 
     insert_item(hwnd, 0);
 
     memset(&item, 0, sizeof(item));
     item.pszText = LPSTR_TEXTCALLBACKA;
     ret = SendMessageA(hwnd, LVM_SETITEMTEXTA, 0, (LPARAM)&item);
-    ok(ret, "got %d\n", ret);
+    expect(1, ret);
 
     g_disp_A_to_W = TRUE;
     item.pszText = (char*)buff;
@@ -4574,6 +4707,42 @@ static void test_dispinfo(void)
 
     ok(memcmp(item.pszText, testA, sizeof(testA)) == 0,
         "got %s, expected %s\n", item.pszText, testA);
+
+    DestroyWindow(hwnd);
+}
+
+static void test_LVM_SETITEMTEXT(void)
+{
+    static char testA[] = "TEST";
+    LVITEMA item;
+    HWND hwnd;
+    DWORD ret;
+
+    hwnd = create_listview_control(LVS_ICON);
+    ok(hwnd != NULL, "failed to create listview window\n");
+
+    insert_item(hwnd, 0);
+
+    /* null item pointer */
+    ret = SendMessage(hwnd, LVM_SETITEMTEXTA, 0, 0);
+    expect(FALSE, ret);
+
+    ret = SendMessage(hwnd, LVM_SETITEMTEXTW, 0, 0);
+    expect(FALSE, ret);
+
+    /* index out of bounds */
+    item.pszText = testA;
+    item.cchTextMax = 0; /* ignored */
+    item.iSubItem = 0;
+
+    ret = SendMessageA(hwnd, LVM_SETITEMTEXTA, 1, (LPARAM)&item);
+    expect(FALSE, ret);
+
+    ret = SendMessageA(hwnd, LVM_SETITEMTEXTA, -1, (LPARAM)&item);
+    expect(FALSE, ret);
+
+    ret = SendMessageA(hwnd, LVM_SETITEMTEXTA, 0, (LPARAM)&item);
+    expect(TRUE, ret);
 
     DestroyWindow(hwnd);
 }
@@ -4642,6 +4811,7 @@ START_TEST(listview)
     test_destroynotify();
     test_createdragimage();
     test_dispinfo();
+    test_LVM_SETITEMTEXT();
 
     if (!load_v6_module(&ctx_cookie, &hCtx))
     {

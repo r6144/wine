@@ -10,6 +10,7 @@ C_SRCS = \
 	editor.c \
 	hlink.c \
 	htmlanchor.c \
+	htmlattr.c \
 	htmlbody.c \
 	htmlcomment.c \
 	htmlcurstyle.c \
@@ -74,12 +75,10 @@ C_SRCS = \
 	view.c
 
 RC_SRCS = \
-	Bg.rc \
 	Da.rc \
 	De.rc \
 	En.rc \
 	Es.rc \
-	Fi.rc \
 	Fr.rc \
 	He.rc \
 	Hu.rc \
@@ -96,10 +95,11 @@ RC_SRCS = \
 	Si.rc \
 	Sr.rc \
 	Sv.rc \
-	Tr.rc \
 	Uk.rc \
 	Zh.rc \
-	rsrc.rc
+	mshtml.rc
+
+PO_SRCS = mshtml.rc
 
 IDL_H_SRCS = nsiface.idl
 

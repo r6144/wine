@@ -37,6 +37,7 @@
 #include "winbase.h"
 #include "winternl.h"
 #include "kernel_private.h"
+#include "psapi.h"
 
 #include "wine/exception.h"
 #include "wine/debug.h"
@@ -856,7 +857,7 @@ static HMODULE load_library( const UNICODE_STRING *libname, DWORD flags )
         LOAD_LIBRARY_REQUIRE_SIGNED_TARGET;
 
     if( flags & unsupported_flags)
-        FIXME("unsupported flag(s) used (flags: 0x%08x)\n", flags & ~unsupported_flags);
+        FIXME("unsupported flag(s) used (flags: 0x%08x)\n", flags);
 
     load_path = MODULE_get_dll_load_path( flags & LOAD_WITH_ALTERED_SEARCH_PATH ? libname->Buffer : NULL );
 
@@ -1073,6 +1074,238 @@ FARPROC WINAPI DelayLoadFailureHook( LPCSTR name, LPCSTR function )
     return NULL;
 }
 
+typedef struct {
+    HANDLE process;
+    PLIST_ENTRY head, current;
+    LDR_MODULE ldr_module;
+} MODULE_ITERATOR;
+
+static BOOL init_module_iterator(MODULE_ITERATOR *iter, HANDLE process)
+{
+    PROCESS_BASIC_INFORMATION pbi;
+    PPEB_LDR_DATA ldr_data;
+    NTSTATUS status;
+
+    /* Get address of PEB */
+    status = NtQueryInformationProcess(process, ProcessBasicInformation,
+                                       &pbi, sizeof(pbi), NULL);
+    if (status != STATUS_SUCCESS)
+    {
+        SetLastError(RtlNtStatusToDosError(status));
+        return FALSE;
+    }
+
+    /* Read address of LdrData from PEB */
+    if (!ReadProcessMemory(process, &pbi.PebBaseAddress->LdrData,
+                           &ldr_data, sizeof(ldr_data), NULL))
+        return FALSE;
+
+    /* Read address of first module from LdrData */
+    if (!ReadProcessMemory(process,
+                           &ldr_data->InLoadOrderModuleList.Flink,
+                           &iter->current, sizeof(iter->current), NULL))
+        return FALSE;
+
+    iter->head = &ldr_data->InLoadOrderModuleList;
+    iter->process = process;
+
+    return TRUE;
+}
+
+static int module_iterator_next(MODULE_ITERATOR *iter)
+{
+    if (iter->current == iter->head)
+        return 0;
+
+    if (!ReadProcessMemory(iter->process,
+                           CONTAINING_RECORD(iter->current, LDR_MODULE, InLoadOrderModuleList),
+                           &iter->ldr_module, sizeof(iter->ldr_module), NULL))
+         return -1;
+
+    iter->current = iter->ldr_module.InLoadOrderModuleList.Flink;
+    return 1;
+}
+
+static BOOL get_ldr_module(HANDLE process, HMODULE module, LDR_MODULE *ldr_module)
+{
+    MODULE_ITERATOR iter;
+    INT ret;
+
+    if (!init_module_iterator(&iter, process))
+        return FALSE;
+
+    while ((ret = module_iterator_next(&iter)) > 0)
+        /* When hModule is NULL we return the process image - which will be
+         * the first module since our iterator uses InLoadOrderModuleList */
+        if (!module || module == iter.ldr_module.BaseAddress)
+        {
+            *ldr_module = iter.ldr_module;
+            return TRUE;
+        }
+
+    if (ret == 0)
+        SetLastError(ERROR_INVALID_HANDLE);
+
+    return FALSE;
+}
+
+/***********************************************************************
+ *           K32EnumProcessModules (KERNEL32.@)
+ *
+ * NOTES
+ *  Returned list is in load order.
+ */
+BOOL WINAPI K32EnumProcessModules(HANDLE process, HMODULE *lphModule,
+                                  DWORD cb, DWORD *needed)
+{
+    MODULE_ITERATOR iter;
+    INT ret;
+
+    if (!init_module_iterator(&iter, process))
+        return FALSE;
+
+    *needed = 0;
+
+    while ((ret = module_iterator_next(&iter)) > 0)
+    {
+        if (cb >= sizeof(HMODULE))
+        {
+            *lphModule++ = iter.ldr_module.BaseAddress;
+            cb -= sizeof(HMODULE);
+        }
+        *needed += sizeof(HMODULE);
+    }
+
+    return ret == 0;
+}
+
+/***********************************************************************
+ *           K32GetModuleBaseNameW (KERNEL32.@)
+ */
+DWORD WINAPI K32GetModuleBaseNameW(HANDLE process, HMODULE module,
+                                   LPWSTR base_name, DWORD size)
+{
+    LDR_MODULE ldr_module;
+
+    if (!get_ldr_module(process, module, &ldr_module))
+        return 0;
+
+    size = min(ldr_module.BaseDllName.Length / sizeof(WCHAR), size);
+    if (!ReadProcessMemory(process, ldr_module.BaseDllName.Buffer,
+                           base_name, size * sizeof(WCHAR), NULL))
+        return 0;
+
+    base_name[size] = 0;
+    return size;
+}
+
+/***********************************************************************
+ *           K32GetModuleBaseNameA (KERNEL32.@)
+ */
+DWORD WINAPI K32GetModuleBaseNameA(HANDLE process, HMODULE module,
+                                   LPSTR base_name, DWORD size)
+{
+    WCHAR *base_name_w;
+    DWORD len, ret = 0;
+
+    if(!base_name || !size) {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+
+    base_name_w = HeapAlloc(GetProcessHeap(), 0, sizeof(WCHAR) * size);
+    if(!base_name_w)
+        return 0;
+
+    len = K32GetModuleBaseNameW(process, module, base_name_w, size);
+    TRACE("%d, %s\n", len, debugstr_w(base_name_w));
+    if (len)
+    {
+        ret = WideCharToMultiByte(CP_ACP, 0, base_name_w, len,
+                                  base_name, size, NULL, NULL);
+        if (ret < size) base_name[ret] = 0;
+    }
+    HeapFree(GetProcessHeap(), 0, base_name_w);
+    return ret;
+}
+
+/***********************************************************************
+ *           K32GetModuleFileNameExW (KERNEL32.@)
+ */
+DWORD WINAPI K32GetModuleFileNameExW(HANDLE process, HMODULE module,
+                                     LPWSTR file_name, DWORD size)
+{
+    LDR_MODULE ldr_module;
+
+    if(!get_ldr_module(process, module, &ldr_module))
+        return 0;
+
+    size = min(ldr_module.FullDllName.Length / sizeof(WCHAR), size);
+    if (!ReadProcessMemory(process, ldr_module.FullDllName.Buffer,
+                           file_name, size * sizeof(WCHAR), NULL))
+        return 0;
+
+    file_name[size] = 0;
+    return size;
+}
+
+/***********************************************************************
+ *           K32GetModuleFileNameExA (KERNEL32.@)
+ */
+DWORD WINAPI K32GetModuleFileNameExA(HANDLE process, HMODULE module,
+                                     LPSTR file_name, DWORD size)
+{
+    WCHAR *ptr;
+
+    TRACE("(hProcess=%p, hModule=%p, %p, %d)\n", process, module, file_name, size);
+
+    if (!file_name || !size) return 0;
+
+    if ( process == GetCurrentProcess() )
+    {
+        DWORD len = GetModuleFileNameA( module, file_name, size );
+        if (size) file_name[size - 1] = '\0';
+        return len;
+    }
+
+    if (!(ptr = HeapAlloc(GetProcessHeap(), 0, size * sizeof(WCHAR)))) return 0;
+
+    if (!K32GetModuleFileNameExW(process, module, ptr, size))
+    {
+        file_name[0] = '\0';
+    }
+    else
+    {
+        if (!WideCharToMultiByte( CP_ACP, 0, ptr, -1, file_name, size, NULL, NULL ))
+            file_name[size - 1] = 0;
+    }
+
+    HeapFree(GetProcessHeap(), 0, ptr);
+    return strlen(file_name);
+}
+
+/***********************************************************************
+ *           K32GetModuleInformation (KERNEL32.@)
+ */
+BOOL WINAPI K32GetModuleInformation(HANDLE process, HMODULE module,
+                                    MODULEINFO *modinfo, DWORD cb)
+{
+    LDR_MODULE ldr_module;
+
+    if (cb < sizeof(MODULEINFO))
+    {
+        SetLastError(ERROR_INSUFFICIENT_BUFFER);
+        return FALSE;
+    }
+
+    if (!get_ldr_module(process, module, &ldr_module))
+        return FALSE;
+
+    modinfo->lpBaseOfDll = ldr_module.BaseAddress;
+    modinfo->SizeOfImage = ldr_module.SizeOfImage;
+    modinfo->EntryPoint  = ldr_module.EntryPoint;
+    return TRUE;
+}
 
 #ifdef __i386__
 

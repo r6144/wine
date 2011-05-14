@@ -79,7 +79,7 @@ struct dxgi_factory
 {
     const struct IWineDXGIFactoryVtbl *vtbl;
     LONG refcount;
-    IWineD3D *wined3d;
+    struct wined3d *wined3d;
     UINT adapter_count;
     IDXGIAdapter **adapters;
 };
@@ -126,7 +126,7 @@ struct dxgi_swapchain
 {
     const struct IDXGISwapChainVtbl *vtbl;
     LONG refcount;
-    IWineD3DSwapChain *wined3d_swapchain;
+    struct wined3d_swapchain *wined3d_swapchain;
 };
 
 HRESULT dxgi_swapchain_init(struct dxgi_swapchain *swapchain, struct dxgi_device *device,

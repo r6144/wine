@@ -23,6 +23,11 @@
 #include "config.h"
 
 #include <stdarg.h>
+#ifdef HAVE_LIBXML2
+# include <libxml/parser.h>
+# include <libxml/xmlerror.h>
+#endif
+
 #include "windef.h"
 #include "winbase.h"
 #include "winuser.h"
@@ -90,6 +95,7 @@ static HRESULT WINAPI xmldoc_QueryInterface(IXMLDocument *iface, REFIID riid, vo
     else
     {
         FIXME("interface %s not implemented\n", debugstr_guid(riid));
+        *ppvObject = NULL;
         return E_NOINTERFACE;
     }
 
@@ -237,7 +243,7 @@ static HRESULT WINAPI xmldoc_get_URL(IXMLDocument *iface, BSTR *p)
 }
 
 typedef struct {
-    const struct IBindStatusCallbackVtbl *lpVtbl;
+    IBindStatusCallback IBindStatusCallback_iface;
 } bsc;
 
 static HRESULT WINAPI bsc_QueryInterface(
@@ -352,7 +358,7 @@ static const struct IBindStatusCallbackVtbl bsc_vtbl =
     bsc_OnObjectAvailable
 };
 
-static bsc xmldoc_bsc = { &bsc_vtbl };
+static bsc xmldoc_bsc = { { &bsc_vtbl } };
 
 static HRESULT WINAPI xmldoc_put_URL(IXMLDocument *iface, BSTR p)
 {
@@ -392,7 +398,7 @@ static HRESULT WINAPI xmldoc_put_URL(IXMLDocument *iface, BSTR p)
     if (FAILED(hr))
         return hr;
 
-    CreateAsyncBindCtx(0, (IBindStatusCallback *)&xmldoc_bsc, 0, &bctx);
+    CreateAsyncBindCtx(0, &xmldoc_bsc.IBindStatusCallback_iface, 0, &bctx);
 
     hr = IMoniker_BindToStorage(moniker, bctx, NULL, &IID_IStream, (LPVOID *)&stream);
     IBindCtx_Release(bctx);
@@ -503,7 +509,8 @@ static HRESULT WINAPI xmldoc_createElement(IXMLDocument *iface, VARIANT vType,
     xmlNodePtr node;
     static const xmlChar empty[] = "\0";
 
-    TRACE("(%p, %p)\n", iface, ppElem);
+    TRACE("(%p)->(%s %s %p)\n", iface, debugstr_variant(&vType),
+        debugstr_variant(&var1), ppElem);
 
     if (!ppElem)
         return E_INVALIDARG;

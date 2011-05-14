@@ -21,6 +21,11 @@
 #include "config.h"
 
 #include <stdarg.h>
+#ifdef HAVE_LIBXML2
+# include <libxml/parser.h>
+# include <libxml/xmlerror.h>
+#endif
+
 #include "windef.h"
 #include "winbase.h"
 #include "winuser.h"
@@ -39,8 +44,6 @@
 #include "msxml_private.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(msxml);
-
-#define DISPATCHEX(x)  ((IDispatchEx*)  &(x)->lpIDispatchExVtbl)
 
 typedef struct {
     DISPID id;
@@ -81,6 +84,7 @@ static REFIID tid_ids[] = {
     &IID_IXMLDOMDocument,
     &IID_IXMLDOMDocument2,
     &IID_IXMLDOMDocumentFragment,
+    &IID_IXMLDOMDocumentType,
     &IID_IXMLDOMElement,
     &IID_IXMLDOMEntityReference,
     &IID_IXMLDOMImplementation,
@@ -95,6 +99,8 @@ static REFIID tid_ids[] = {
     &IID_IXMLElement,
     &IID_IXMLDOMDocument,
     &IID_IXMLHTTPRequest,
+    &IID_IXSLProcessor,
+    &IID_IXSLTemplate,
     &IID_IVBSAXAttributes,
     &IID_IVBSAXContentHandler,
     &IID_IVBSAXDeclHandler,
@@ -128,16 +134,16 @@ HRESULT get_typeinfo(enum tid_t tid, ITypeInfo **typeinfo)
     }
 
     if(!typeinfos[tid]) {
-        ITypeInfo *typeinfo;
+        ITypeInfo *ti;
 
-        hres = ITypeLib_GetTypeInfoOfGuid(typelib, tid_ids[tid], &typeinfo);
+        hres = ITypeLib_GetTypeInfoOfGuid(typelib, tid_ids[tid], &ti);
         if(FAILED(hres)) {
             ERR("GetTypeInfoOfGuid failed: %08x\n", hres);
             return hres;
         }
 
-        if(InterlockedCompareExchangePointer((void**)(typeinfos+tid), typeinfo, NULL))
-            ITypeInfo_Release(typeinfo);
+        if(InterlockedCompareExchangePointer((void**)(typeinfos+tid), ti, NULL))
+            ITypeInfo_Release(ti);
     }
 
     *typeinfo = typeinfos[tid];
@@ -303,7 +309,7 @@ static inline BOOL is_dynamic_dispid(DISPID id)
 
 static inline DispatchEx *impl_from_IDispatchEx(IDispatchEx *iface)
 {
-    return (DispatchEx*)((char*)iface - FIELD_OFFSET(DispatchEx, lpIDispatchExVtbl));
+    return CONTAINING_RECORD(iface, DispatchEx, IDispatchEx_iface);
 }
 
 static HRESULT WINAPI DispatchEx_QueryInterface(IDispatchEx *iface, REFIID riid, void **ppv)
@@ -359,7 +365,7 @@ static HRESULT WINAPI DispatchEx_GetIDsOfNames(IDispatchEx *iface, REFIID riid,
           lcid, rgDispId);
 
     for(i=0; i < cNames; i++) {
-        hres = IDispatchEx_GetDispID(DISPATCHEX(This), rgszNames[i], 0, rgDispId+i);
+        hres = IDispatchEx_GetDispID(&This->IDispatchEx_iface, rgszNames[i], 0, rgDispId+i);
         if(FAILED(hres))
             return hres;
     }
@@ -376,7 +382,7 @@ static HRESULT WINAPI DispatchEx_Invoke(IDispatchEx *iface, DISPID dispIdMember,
     TRACE("(%p)->(%d %s %d %d %p %p %p %p)\n", This, dispIdMember, debugstr_guid(riid),
           lcid, wFlags, pDispParams, pVarResult, pExcepInfo, puArgErr);
 
-    return IDispatchEx_InvokeEx(DISPATCHEX(This), dispIdMember, lcid, wFlags,
+    return IDispatchEx_InvokeEx(&This->IDispatchEx_iface, dispIdMember, lcid, wFlags,
                                 pDispParams, pVarResult, pExcepInfo, NULL);
 }
 
@@ -627,10 +633,10 @@ BOOL dispex_query_interface(DispatchEx *This, REFIID riid, void **ppv)
 
     if(IsEqualGUID(&IID_IDispatch, riid)) {
         TRACE("(%p)->(IID_IDispatch %p)\n", This, ppv);
-        *ppv = DISPATCHEX(This);
+        *ppv = &This->IDispatchEx_iface;
     }else if(IsEqualGUID(&IID_IDispatchEx, riid)) {
         TRACE("(%p)->(IID_IDispatchEx %p)\n", This, ppv);
-        *ppv = DISPATCHEX(This);
+        *ppv = &This->IDispatchEx_iface;
     }else if(IsEqualGUID(&IID_UndocumentedScriptIface, riid)) {
         TRACE("(%p)->(IID_UndocumentedScriptIface %p) returning NULL\n", This, ppv);
         *ppv = NULL;
@@ -648,7 +654,7 @@ BOOL dispex_query_interface(DispatchEx *This, REFIID riid, void **ppv)
 
 void init_dispex(DispatchEx *dispex, IUnknown *outer, dispex_static_data_t *data)
 {
-    dispex->lpIDispatchExVtbl = &DispatchExVtbl;
+    dispex->IDispatchEx_iface.lpVtbl = &DispatchExVtbl;
     dispex->outer = outer;
     dispex->data = data;
 }

@@ -1767,12 +1767,8 @@ static void test_proxybuffer(REFIID riid)
     refs = IUnknown_Release(&pUnkOuter->IUnknown_iface);
     ok(refs == 1, "Ref count of outer unknown should have been 1 instead of %d\n", refs);
 
-    refs = IPSFactoryBuffer_Release(psfb);
-    if (0)
-    {
-    /* not reliable on native. maybe it leaks references! */
-    ok(refs == 0, "Ref-count leak of %d on IPSFactoryBuffer\n", refs);
-    }
+    /* Not checking return, unreliable on native. Maybe it leaks references? */
+    IPSFactoryBuffer_Release(psfb);
 
     refs = IUnknown_Release((IUnknown *)lpvtbl);
     ok(refs == 0, "Ref-count leak of %d on IRpcProxyBuffer\n", refs);
@@ -1800,12 +1796,8 @@ static void test_stubbuffer(REFIID riid)
     hr = IPSFactoryBuffer_CreateStub(psfb, riid, (IUnknown*)&Test_ClassFactory, &stub);
     ok_ole_success(hr, IPSFactoryBuffer_CreateStub);
 
-    refs = IPSFactoryBuffer_Release(psfb);
-    if (0)
-    {
-    /* not reliable on native. maybe it leaks references */
-    ok(refs == 0, "Ref-count leak of %d on IPSFactoryBuffer\n", refs);
-    }
+    /* Not checking return, unreliable on native. Maybe it leaks references? */
+    IPSFactoryBuffer_Release(psfb);
 
     ok_more_than_one_lock();
 
@@ -1916,6 +1908,7 @@ static LRESULT CALLBACK window_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM l
         * WM_QUIT message doesn't stop the call from succeeding */
         PostMessage(hwnd, WM_QUIT, 0, 0);
         hr = IClassFactory_CreateInstance(proxy, NULL, &IID_IUnknown, (void **)&object);
+	ok(hr == S_FALSE, "IClassFactory_CreateInstance returned 0x%08x, expected S_FALSE\n", hr);
 
         IClassFactory_Release(proxy);
 
@@ -2644,6 +2637,7 @@ static HANDLE create_target_process(const char *arg)
 {
     char **argv;
     char cmdline[MAX_PATH];
+    BOOL ret;
     PROCESS_INFORMATION pi;
     STARTUPINFO si = { 0 };
     si.cb = sizeof(si);
@@ -2652,8 +2646,8 @@ static HANDLE create_target_process(const char *arg)
     pi.hProcess = NULL;
     winetest_get_mainargs( &argv );
     sprintf(cmdline, "%s %s %s", argv[0], argv[1], arg);
-    ok(CreateProcess(argv[0], cmdline, NULL, NULL, FALSE, 0, NULL, NULL,
-                     &si, &pi) != 0, "CreateProcess failed with error: %u\n", GetLastError());
+    ret = CreateProcess(argv[0], cmdline, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi);
+    ok(ret, "CreateProcess failed with error: %u\n", GetLastError());
     if (pi.hThread) CloseHandle(pi.hThread);
     return pi.hProcess;
 }

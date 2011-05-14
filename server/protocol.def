@@ -145,7 +145,7 @@ typedef union
 /* supported CPU types */
 enum cpu_type
 {
-    CPU_x86, CPU_x86_64, CPU_ALPHA, CPU_POWERPC, CPU_ARM, CPU_SPARC
+    CPU_x86, CPU_x86_64, CPU_POWERPC, CPU_ARM, CPU_SPARC
 };
 typedef int cpu_type_t;
 
@@ -159,8 +159,6 @@ typedef struct
         struct { unsigned int eip, ebp, esp, eflags, cs, ss; } i386_regs;
         struct { unsigned __int64 rip, rbp, rsp;
                  unsigned int cs, ss, flags, __pad; } x86_64_regs;
-        struct { unsigned __int64 fir;
-                 unsigned int psr, __pad; } alpha_regs;
         struct { unsigned int iar, msr, ctr, lr, dar, dsisr, trap, __pad; } powerpc_regs;
         struct { unsigned int sp, lr, pc, cpsr; } arm_regs;
         struct { unsigned int psr, pc, npc, y, wim, tbr; } sparc_regs;
@@ -170,8 +168,6 @@ typedef struct
         struct { unsigned int eax, ebx, ecx, edx, esi, edi; } i386_regs;
         struct { unsigned __int64 rax,rbx, rcx, rdx, rsi, rdi,
                                   r8, r9, r10, r11, r12, r13, r14, r15; } x86_64_regs;
-        struct { unsigned __int64 v0, t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12,
-                                  s0, s1, s2, s3, s4, s5, s6, a0, a1, a2, a3, a4, a5, at; } alpha_regs;
         struct { unsigned int gpr[32], cr, xer; } powerpc_regs;
         struct { unsigned int r[13]; } arm_regs;
         struct { unsigned int g[8], o[8], l[8], i[8]; } sparc_regs;
@@ -186,7 +182,6 @@ typedef struct
         struct { unsigned int ctrl, status, tag, err_off, err_sel, data_off, data_sel, cr0npx;
                  unsigned char regs[80]; } i386_regs;
         struct { struct { unsigned __int64 low, high; } fpregs[32]; } x86_64_regs;
-        struct { unsigned __int64 f[32], fpcr, softfpcr; } alpha_regs;
         struct { double fpr[32], fpscr; } powerpc_regs;
     } fp;  /* selected by SERVER_CTX_FLOATING_POINT */
     union
@@ -299,7 +294,7 @@ struct hardware_msg_data
     int             x;         /* x position */
     int             y;         /* y position */
     unsigned int    hw_id;     /* unique id */
-    int             __pad;
+    unsigned int    flags;     /* hook flags */
 };
 
 struct callback_msg_data
@@ -319,6 +314,36 @@ struct winevent_msg_data
 
 typedef union
 {
+    int type;
+    struct
+    {
+        int            type;    /* INPUT_KEYBOARD */
+        unsigned short vkey;    /* virtual key code */
+        unsigned short scan;    /* scan code */
+        unsigned int   flags;   /* event flags */
+        unsigned int   time;    /* event time */
+        lparam_t       info;    /* extra info */
+    } kbd;
+    struct
+    {
+        int            type;    /* INPUT_MOUSE */
+        int            x;       /* coordinates */
+        int            y;
+        unsigned int   data;    /* mouse data */
+        unsigned int   flags;   /* event flags */
+        unsigned int   time;    /* event time */
+        lparam_t       info;    /* extra info */
+    } mouse;
+    struct
+    {
+        int            type;    /* INPUT_HARDWARE */
+        unsigned int   msg;     /* message code */
+        lparam_t       lparam;  /* message param */
+    } hw;
+} hw_input_t;
+
+typedef union
+{
     unsigned char            bytes[1];   /* raw data for sent messages */
     struct hardware_msg_data hardware;
     struct callback_msg_data callback;
@@ -331,6 +356,14 @@ typedef struct
     WCHAR          ch;
     unsigned short attr;
 } char_info_t;
+
+/* structure returned in filesystem events */
+struct filesystem_event
+{
+    int         action;
+    data_size_t len;
+    char        name[1];
+};
 
 typedef struct
 {
@@ -769,7 +802,7 @@ typedef union
 
 /* Notify the server that a dll has been loaded */
 @REQ(load_dll)
-    obj_handle_t handle;       /* file handle */
+    obj_handle_t mapping;      /* file mapping handle */
     mod_handle_t base;         /* base address */
     client_ptr_t name;         /* ptr to ptr to name (in process addr space) */
     data_size_t  size;         /* dll size */
@@ -1448,8 +1481,7 @@ enum char_info_mode
 @REQ(read_change)
     obj_handle_t handle;
 @REPLY
-    int          action;        /* type of change */
-    VARARG(name,string);        /* name of directory entry that changed */
+    VARARG(events,filesystem_event);  /* collected filesystem events */
 @END
 
 
@@ -1831,7 +1863,7 @@ enum char_info_mode
 @REQ(get_thread_context)
     obj_handle_t handle;       /* thread handle */
     unsigned int flags;        /* context flags */
-    int          suspend;      /* if getting context during suspend */
+    int          suspend;      /* suspend the thread if needed */
 @REPLY
     int          self;         /* was it a handle to the current thread? */
     VARARG(context,context);   /* thread context */
@@ -1841,7 +1873,7 @@ enum char_info_mode
 /* Set the current context of a thread */
 @REQ(set_thread_context)
     obj_handle_t handle;       /* thread handle */
-    int          suspend;      /* if setting context during suspend */
+    int          suspend;      /* suspend the thread if needed */
     VARARG(context,context);   /* thread context */
 @REPLY
     int          self;         /* was it a handle to the current thread? */
@@ -1987,26 +2019,21 @@ enum message_type
     MSG_OTHER_PROCESS,  /* sent from other process, may include vararg data, always Unicode */
     MSG_POSTED,         /* posted message (from PostMessageW), always Unicode */
     MSG_HARDWARE,       /* hardware message */
-    MSG_WINEVENT        /* winevent message */
+    MSG_WINEVENT,       /* winevent message */
+    MSG_HOOK_LL         /* low-level hardware hook */
 };
 #define SEND_MSG_ABORT_IF_HUNG  0x01
 
 
 /* Send a hardware message to a thread queue */
 @REQ(send_hardware_message)
-    thread_id_t     id;        /* thread id */
     user_handle_t   win;       /* window handle */
-    unsigned int    msg;       /* message code */
-    lparam_t        wparam;    /* parameters */
-    lparam_t        lparam;    /* parameters */
-    lparam_t        info;      /* extra info */
-    int             x;         /* x position */
-    int             y;         /* y position */
-    unsigned int    time;      /* message time */
+    hw_input_t      input;     /* input data */
+    unsigned int    flags;     /* flags (see below) */
 @REPLY
-    user_handle_t   cursor;    /* current cursor for the target thread input */
-    int             count;     /* current cursor count */
+    int             wait;      /* do we need to wait for a reply? */
 @END
+#define SEND_HWMSG_INJECTED    0x01
 
 
 /* Get a message from the current queue */
@@ -3283,9 +3310,34 @@ enum coords_relative
     unsigned int   flags;         /* flags for fields to set (see below) */
     user_handle_t  handle;        /* handle to the cursor */
     int            show_count;    /* show count increment/decrement */
+    int            x;             /* cursor position */
+    int            y;
+    rectangle_t    clip;          /* cursor clip rectangle */
+    unsigned int   clip_msg;      /* message to post on cursor clip changes */
 @REPLY
     user_handle_t  prev_handle;   /* previous handle */
     int            prev_count;    /* previous show count */
+    int            prev_x;        /* previous position */
+    int            prev_y;
+    int            new_x;         /* new position */
+    int            new_y;
+    rectangle_t    new_clip;      /* new clip rectangle */
+    unsigned int   last_change;   /* time of last position change */
 @END
 #define SET_CURSOR_HANDLE 0x01
 #define SET_CURSOR_COUNT  0x02
+#define SET_CURSOR_POS    0x04
+#define SET_CURSOR_CLIP   0x08
+
+
+/* Retrieve the suspended context of a thread */
+@REQ(get_suspend_context)
+@REPLY
+    VARARG(context,context);   /* thread context */
+@END
+
+
+/* Store the suspend context of a thread */
+@REQ(set_suspend_context)
+    VARARG(context,context);   /* thread context */
+@END

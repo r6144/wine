@@ -208,17 +208,16 @@ typedef struct {
 
 static rbsize_result_t rbsize_init(int cleft, int ctop, int cright, int cbottom, int cyBarHeight, int nRows, int nBands)
 {
-    rbsize_result_t *temp;
+    rbsize_result_t ret;
 
-    temp = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(rbsize_result_t));
-    SetRect(&temp->rcClient, cleft, ctop, cright, cbottom);
-    temp->cyBarHeight = cyBarHeight;
-    temp->nRows = 0;
-    temp->cyRowHeights = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, nRows*sizeof(int));
-    temp->nBands = 0;
-    temp->bands = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, nBands*sizeof(rbband_result_t));
+    SetRect(&ret.rcClient, cleft, ctop, cright, cbottom);
+    ret.cyBarHeight = cyBarHeight;
+    ret.nRows = 0;
+    ret.cyRowHeights = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, nRows*sizeof(int));
+    ret.nBands = 0;
+    ret.bands = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, nBands*sizeof(rbband_result_t));
 
-    return *temp;
+    return ret;
 }
 
 static void rbsize_add_row(rbsize_result_t *rbsr, int rowHeight) {
@@ -234,7 +233,7 @@ static void rbsize_add_band(rbsize_result_t *rbsr, int left, int top, int right,
     rbsr->nBands++;
 }
 
-static rbsize_result_t *rbsize_results = NULL;
+static rbsize_result_t *rbsize_results;
 
 #define rbsize_results_num 27
 
@@ -925,7 +924,7 @@ static void expect_band_content_(int line, HWND hRebar, UINT uBand, INT fStyle, 
     expect_eq(line, rb.cyIntegral, cyIntegral, int, "%x");
     expect_eq(line, rb.cxIdeal, cxIdeal, int, "%d");
     expect_eq(line, rb.lParam, lParam, LPARAM, "%ld");
-    ok(rb.cxHeader == cxHeader || broken(rb.cxHeader == cxHeader_broken),
+    ok(rb.cxHeader == cxHeader || rb.cxHeader == cxHeader + 1 || broken(rb.cxHeader == cxHeader_broken),
         "expected %d for %d from line %d\n", cxHeader, rb.cxHeader, line);
 }
 

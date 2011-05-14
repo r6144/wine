@@ -36,6 +36,7 @@
 #include "winbase.h"
 #include "wincon.h"
 #include "winternl.h"
+#include "winuser.h"
 #include "winioctl.h"
 #include "file.h"
 #include "request.h"
@@ -112,7 +113,6 @@ static void dump_cpu_type( const char *prefix, const cpu_type_t *code )
 #define CASE(c) case CPU_##c: fprintf( stderr, "%s%s", prefix, #c ); break
         CASE(x86);
         CASE(x86_64);
-        CASE(ALPHA);
         CASE(POWERPC);
         CASE(SPARC);
         default: fprintf( stderr, "%s%u", prefix, *code ); break;
@@ -291,6 +291,34 @@ static void dump_async_data( const char *prefix, const async_data_t *data )
     dump_uint64( ",arg=", &data->arg );
     dump_uint64( ",cvalue=", &data->cvalue );
     fputc( '}', stderr );
+}
+
+static void dump_hw_input( const char *prefix, const hw_input_t *input )
+{
+    switch (input->type)
+    {
+    case INPUT_MOUSE:
+        fprintf( stderr, "%s{type=MOUSE,x=%d,y=%d,data=%08x,flags=%08x,time=%u",
+                 prefix, input->mouse.x, input->mouse.y, input->mouse.data, input->mouse.flags,
+                 input->mouse.time );
+        dump_uint64( ",info=", &input->mouse.info );
+        fputc( '}', stderr );
+        break;
+    case INPUT_KEYBOARD:
+        fprintf( stderr, "%s{type=KEYBOARD,vkey=%04hx,scan=%04hx,flags=%08x,time=%u",
+                 prefix, input->kbd.vkey, input->kbd.scan, input->kbd.flags, input->kbd.time );
+        dump_uint64( ",info=", &input->kbd.info );
+        fputc( '}', stderr );
+        break;
+    case INPUT_HARDWARE:
+        fprintf( stderr, "%s{type=HARDWARE,msg=%04x", prefix, input->hw.msg );
+        dump_uint64( ",lparam=", &input->hw.lparam );
+        fputc( '}', stderr );
+        break;
+    default:
+        fprintf( stderr, "%s{type=%04x}", prefix, input->type );
+        break;
+    }
 }
 
 static void dump_luid( const char *prefix, const luid_t *luid )
@@ -499,54 +527,6 @@ static void dump_varargs_context( const char *prefix, data_size_t size )
                          (unsigned int)ctx.fp.x86_64_regs.fpregs[i].high,
                          (unsigned int)(ctx.fp.x86_64_regs.fpregs[i].low >> 32),
                          (unsigned int)ctx.fp.x86_64_regs.fpregs[i].low );
-        }
-        break;
-    case CPU_ALPHA:
-        if (ctx.flags & SERVER_CTX_CONTROL)
-        {
-            dump_uint64( ",fir=", &ctx.ctl.alpha_regs.fir );
-            fprintf( stderr, ",psr=%08x", ctx.ctl.alpha_regs.psr );
-        }
-        if (ctx.flags & SERVER_CTX_INTEGER)
-        {
-            dump_uint64( ",v0=",  &ctx.integer.alpha_regs.v0 );
-            dump_uint64( ",t0=",  &ctx.integer.alpha_regs.t0 );
-            dump_uint64( ",t1=",  &ctx.integer.alpha_regs.t1 );
-            dump_uint64( ",t2=",  &ctx.integer.alpha_regs.t2 );
-            dump_uint64( ",t3=",  &ctx.integer.alpha_regs.t3 );
-            dump_uint64( ",t4=",  &ctx.integer.alpha_regs.t4 );
-            dump_uint64( ",t5=",  &ctx.integer.alpha_regs.t5 );
-            dump_uint64( ",t6=",  &ctx.integer.alpha_regs.t6 );
-            dump_uint64( ",t7=",  &ctx.integer.alpha_regs.t7 );
-            dump_uint64( ",t8=",  &ctx.integer.alpha_regs.t8 );
-            dump_uint64( ",t9=",  &ctx.integer.alpha_regs.t9 );
-            dump_uint64( ",t10=", &ctx.integer.alpha_regs.t10 );
-            dump_uint64( ",t11=", &ctx.integer.alpha_regs.t11 );
-            dump_uint64( ",t12=", &ctx.integer.alpha_regs.t12 );
-            dump_uint64( ",s0=",  &ctx.integer.alpha_regs.s0 );
-            dump_uint64( ",s1=",  &ctx.integer.alpha_regs.s1 );
-            dump_uint64( ",s2=",  &ctx.integer.alpha_regs.s2 );
-            dump_uint64( ",s3=",  &ctx.integer.alpha_regs.s3 );
-            dump_uint64( ",s4=",  &ctx.integer.alpha_regs.s4 );
-            dump_uint64( ",s5=",  &ctx.integer.alpha_regs.s5 );
-            dump_uint64( ",s6=",  &ctx.integer.alpha_regs.s6 );
-            dump_uint64( ",a0=",  &ctx.integer.alpha_regs.a0 );
-            dump_uint64( ",a1=",  &ctx.integer.alpha_regs.a1 );
-            dump_uint64( ",a2=",  &ctx.integer.alpha_regs.a2 );
-            dump_uint64( ",a3=",  &ctx.integer.alpha_regs.a3 );
-            dump_uint64( ",a4=",  &ctx.integer.alpha_regs.a4 );
-            dump_uint64( ",a5=",  &ctx.integer.alpha_regs.a5 );
-            dump_uint64( ",at=",  &ctx.integer.alpha_regs.at );
-        }
-        if (ctx.flags & SERVER_CTX_FLOATING_POINT)
-        {
-            for (i = 0; i < 32; i++)
-            {
-                fprintf( stderr, ",f%u", i );
-                dump_uint64( "=", &ctx.fp.alpha_regs.f[i] );
-            }
-            dump_uint64( ",fpcr=", &ctx.fp.alpha_regs.fpcr );
-            dump_uint64( ",softfpcr=", &ctx.fp.alpha_regs.softfpcr );
         }
         break;
     case CPU_POWERPC:
@@ -991,6 +971,39 @@ static void dump_varargs_object_attributes( const char *prefix, data_size_t size
     fputc( '}', stderr );
 }
 
+static void dump_varargs_filesystem_event( const char *prefix, data_size_t size )
+{
+    static const char * const actions[] = {
+        NULL,
+        "ADDED",
+        "REMOVED",
+        "MODIFIED",
+        "RENAMED_OLD_NAME",
+        "RENAMED_NEW_NAME",
+        "ADDED_STREAM",
+        "REMOVED_STREAM",
+        "MODIFIED_STREAM"
+    };
+
+    fprintf( stderr,"%s{", prefix );
+    while (size)
+    {
+        const struct filesystem_event *event = cur_data;
+        data_size_t len = (offsetof( struct filesystem_event, name[event->len] ) + sizeof(int)-1)
+                           / sizeof(int) * sizeof(int);
+        if (size < len) break;
+        if (event->action < sizeof(actions)/sizeof(actions[0]) && actions[event->action])
+            fprintf( stderr, "{action=%s", actions[event->action] );
+        else
+            fprintf( stderr, "{action=%u", event->action );
+        fprintf( stderr, ",name=\"%.*s\"}", event->len, event->name );
+        size -= len;
+        remove_data( len );
+        if (size)fputc( ',', stderr );
+    }
+    fputc( '}', stderr );
+}
+
 typedef void (*dump_func)( const void *req );
 
 /* Everything below this line is generated automatically by tools/make_requests */
@@ -1201,7 +1214,7 @@ static void dump_resume_thread_reply( const struct resume_thread_reply *req )
 
 static void dump_load_dll_request( const struct load_dll_request *req )
 {
-    fprintf( stderr, " handle=%04x", req->handle );
+    fprintf( stderr, " mapping=%04x", req->mapping );
     dump_uint64( ", base=", &req->base );
     dump_uint64( ", name=", &req->name );
     fprintf( stderr, ", size=%u", req->size );
@@ -1865,8 +1878,7 @@ static void dump_read_change_request( const struct read_change_request *req )
 
 static void dump_read_change_reply( const struct read_change_reply *req )
 {
-    fprintf( stderr, " action=%d", req->action );
-    dump_varargs_string( ", name=", cur_size );
+    dump_varargs_filesystem_event( " events=", cur_size );
 }
 
 static void dump_create_mapping_request( const struct create_mapping_request *req )
@@ -2432,21 +2444,14 @@ static void dump_post_quit_message_request( const struct post_quit_message_reque
 
 static void dump_send_hardware_message_request( const struct send_hardware_message_request *req )
 {
-    fprintf( stderr, " id=%04x", req->id );
-    fprintf( stderr, ", win=%08x", req->win );
-    fprintf( stderr, ", msg=%08x", req->msg );
-    dump_uint64( ", wparam=", &req->wparam );
-    dump_uint64( ", lparam=", &req->lparam );
-    dump_uint64( ", info=", &req->info );
-    fprintf( stderr, ", x=%d", req->x );
-    fprintf( stderr, ", y=%d", req->y );
-    fprintf( stderr, ", time=%08x", req->time );
+    fprintf( stderr, " win=%08x", req->win );
+    dump_hw_input( ", input=", &req->input );
+    fprintf( stderr, ", flags=%08x", req->flags );
 }
 
 static void dump_send_hardware_message_reply( const struct send_hardware_message_reply *req )
 {
-    fprintf( stderr, " cursor=%08x", req->cursor );
-    fprintf( stderr, ", count=%d", req->count );
+    fprintf( stderr, " wait=%d", req->wait );
 }
 
 static void dump_get_message_request( const struct get_message_request *req )
@@ -3839,12 +3844,36 @@ static void dump_set_cursor_request( const struct set_cursor_request *req )
     fprintf( stderr, " flags=%08x", req->flags );
     fprintf( stderr, ", handle=%08x", req->handle );
     fprintf( stderr, ", show_count=%d", req->show_count );
+    fprintf( stderr, ", x=%d", req->x );
+    fprintf( stderr, ", y=%d", req->y );
+    dump_rectangle( ", clip=", &req->clip );
+    fprintf( stderr, ", clip_msg=%08x", req->clip_msg );
 }
 
 static void dump_set_cursor_reply( const struct set_cursor_reply *req )
 {
     fprintf( stderr, " prev_handle=%08x", req->prev_handle );
     fprintf( stderr, ", prev_count=%d", req->prev_count );
+    fprintf( stderr, ", prev_x=%d", req->prev_x );
+    fprintf( stderr, ", prev_y=%d", req->prev_y );
+    fprintf( stderr, ", new_x=%d", req->new_x );
+    fprintf( stderr, ", new_y=%d", req->new_y );
+    dump_rectangle( ", new_clip=", &req->new_clip );
+    fprintf( stderr, ", last_change=%08x", req->last_change );
+}
+
+static void dump_get_suspend_context_request( const struct get_suspend_context_request *req )
+{
+}
+
+static void dump_get_suspend_context_reply( const struct get_suspend_context_reply *req )
+{
+    dump_varargs_context( " context=", cur_size );
+}
+
+static void dump_set_suspend_context_request( const struct set_suspend_context_request *req )
+{
+    dump_varargs_context( " context=", cur_size );
 }
 
 static const dump_func req_dumpers[REQ_NB_REQUESTS] = {
@@ -4091,6 +4120,8 @@ static const dump_func req_dumpers[REQ_NB_REQUESTS] = {
     (dump_func)dump_alloc_user_handle_request,
     (dump_func)dump_free_user_handle_request,
     (dump_func)dump_set_cursor_request,
+    (dump_func)dump_get_suspend_context_request,
+    (dump_func)dump_set_suspend_context_request,
 };
 
 static const dump_func reply_dumpers[REQ_NB_REQUESTS] = {
@@ -4337,6 +4368,8 @@ static const dump_func reply_dumpers[REQ_NB_REQUESTS] = {
     (dump_func)dump_alloc_user_handle_reply,
     NULL,
     (dump_func)dump_set_cursor_reply,
+    (dump_func)dump_get_suspend_context_reply,
+    NULL,
 };
 
 static const char * const req_names[REQ_NB_REQUESTS] = {
@@ -4583,6 +4616,8 @@ static const char * const req_names[REQ_NB_REQUESTS] = {
     "alloc_user_handle",
     "free_user_handle",
     "set_cursor",
+    "get_suspend_context",
+    "set_suspend_context",
 };
 
 static const struct

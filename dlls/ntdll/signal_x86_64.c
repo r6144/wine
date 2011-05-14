@@ -100,6 +100,33 @@ typedef struct _SCOPE_TABLE
 } SCOPE_TABLE, *PSCOPE_TABLE;
 
 
+/* layering violation: the setjmp buffer is defined in msvcrt, but used by RtlUnwindEx */
+struct MSVCRT_JUMP_BUFFER
+{
+    ULONG64 Frame;
+    ULONG64 Rbx;
+    ULONG64 Rsp;
+    ULONG64 Rbp;
+    ULONG64 Rsi;
+    ULONG64 Rdi;
+    ULONG64 R12;
+    ULONG64 R13;
+    ULONG64 R14;
+    ULONG64 R15;
+    ULONG64 Rip;
+    ULONG64 Spare;
+    M128A   Xmm6;
+    M128A   Xmm7;
+    M128A   Xmm8;
+    M128A   Xmm9;
+    M128A   Xmm10;
+    M128A   Xmm11;
+    M128A   Xmm12;
+    M128A   Xmm13;
+    M128A   Xmm14;
+    M128A   Xmm15;
+};
+
 /***********************************************************************
  * signal context platform-specific definitions
  */
@@ -136,7 +163,7 @@ extern int arch_prctl(int func, void *ptr);
 
 #define FPU_sig(context)     ((XMM_SAVE_AREA32 *)((context)->uc_mcontext.fpregs))
 
-#elif defined(__FreeBSD__)
+#elif defined(__FreeBSD__) || defined (__FreeBSD_kernel__)
 #include <sys/ucontext.h>
 
 #define RAX_sig(context)     ((context)->uc_mcontext.mc_rax)
@@ -1459,24 +1486,109 @@ static void restore_context( const CONTEXT *context, ucontext_t *sigcontext )
 /***********************************************************************
  *		RtlCaptureContext (NTDLL.@)
  */
-void WINAPI __regs_RtlCaptureContext( CONTEXT *context, CONTEXT *regs )
-{
-    *context = *regs;
-}
-DEFINE_REGS_ENTRYPOINT( RtlCaptureContext, 1 )
-
+__ASM_GLOBAL_FUNC( RtlCaptureContext,
+                   "pushfq\n\t"
+                   __ASM_CFI(".cfi_adjust_cfa_offset 8\n\t")
+                   "movl $0x001000f,0x30(%rcx)\n\t" /* context->ContextFlags */
+                   "stmxcsr 0x34(%rcx)\n\t"         /* context->MxCsr */
+                   "movw %cs,0x38(%rcx)\n\t"        /* context->SegCs */
+                   "movw %ds,0x3a(%rcx)\n\t"        /* context->SegDs */
+                   "movw %es,0x3c(%rcx)\n\t"        /* context->SegEs */
+                   "movw %fs,0x3e(%rcx)\n\t"        /* context->SegFs */
+                   "movw %gs,0x40(%rcx)\n\t"        /* context->SegGs */
+                   "movw %ss,0x42(%rcx)\n\t"        /* context->SegSs */
+                   "popq 0x44(%rcx)\n\t"            /* context->Eflags */
+                   __ASM_CFI(".cfi_adjust_cfa_offset -8\n\t")
+                   "movq %rax,0x78(%rcx)\n\t"       /* context->Rax */
+                   "movq %rcx,0x80(%rcx)\n\t"       /* context->Rcx */
+                   "movq %rdx,0x88(%rcx)\n\t"       /* context->Rdx */
+                   "movq %rbx,0x90(%rcx)\n\t"       /* context->Rbx */
+                   "leaq 8(%rsp),%rax\n\t"
+                   "movq %rax,0x98(%rcx)\n\t"       /* context->Rsp */
+                   "movq %rbp,0xa0(%rcx)\n\t"       /* context->Rbp */
+                   "movq %rsi,0xa8(%rcx)\n\t"       /* context->Rsi */
+                   "movq %rdi,0xb0(%rcx)\n\t"       /* context->Rdi */
+                   "movq %r8,0xb8(%rcx)\n\t"        /* context->R8 */
+                   "movq %r9,0xc0(%rcx)\n\t"        /* context->R9 */
+                   "movq %r10,0xc8(%rcx)\n\t"       /* context->R10 */
+                   "movq %r11,0xd0(%rcx)\n\t"       /* context->R11 */
+                   "movq %r12,0xd8(%rcx)\n\t"       /* context->R12 */
+                   "movq %r13,0xe0(%rcx)\n\t"       /* context->R13 */
+                   "movq %r14,0xe8(%rcx)\n\t"       /* context->R14 */
+                   "movq %r15,0xf0(%rcx)\n\t"       /* context->R15 */
+                   "movq (%rsp),%rax\n\t"
+                   "movq %rax,0xf8(%rcx)\n\t"       /* context->Rip */
+                   "fxsave 0x100(%rcx)\n\t"         /* context->FtlSave */
+                   "movdqa %xmm0,0x1a0(%rcx)\n\t"   /* context->Xmm0 */
+                   "movdqa %xmm1,0x1b0(%rcx)\n\t"   /* context->Xmm1 */
+                   "movdqa %xmm2,0x1c0(%rcx)\n\t"   /* context->Xmm2 */
+                   "movdqa %xmm3,0x1d0(%rcx)\n\t"   /* context->Xmm3 */
+                   "movdqa %xmm4,0x1e0(%rcx)\n\t"   /* context->Xmm4 */
+                   "movdqa %xmm5,0x1f0(%rcx)\n\t"   /* context->Xmm5 */
+                   "movdqa %xmm6,0x200(%rcx)\n\t"   /* context->Xmm6 */
+                   "movdqa %xmm7,0x210(%rcx)\n\t"   /* context->Xmm7 */
+                   "movdqa %xmm8,0x220(%rcx)\n\t"   /* context->Xmm8 */
+                   "movdqa %xmm9,0x230(%rcx)\n\t"   /* context->Xmm9 */
+                   "movdqa %xmm10,0x240(%rcx)\n\t"  /* context->Xmm10 */
+                   "movdqa %xmm11,0x250(%rcx)\n\t"  /* context->Xmm11 */
+                   "movdqa %xmm12,0x260(%rcx)\n\t"  /* context->Xmm12 */
+                   "movdqa %xmm13,0x270(%rcx)\n\t"  /* context->Xmm13 */
+                   "movdqa %xmm14,0x280(%rcx)\n\t"  /* context->Xmm14 */
+                   "movdqa %xmm15,0x290(%rcx)\n\t"  /* context->Xmm15 */
+                   "ret" );
 
 /***********************************************************************
  *           set_cpu_context
  *
  * Set the new CPU context.
  */
-void set_cpu_context( const CONTEXT *context )
-{
-    extern void CDECL __wine_restore_regs( const CONTEXT * ) DECLSPEC_NORETURN;
-    __wine_restore_regs( context );
-}
-
+__ASM_GLOBAL_FUNC( set_cpu_context,
+                   "subq $40,%rsp\n\t"
+                   __ASM_CFI(".cfi_adjust_cfa_offset 40\n\t")
+                   "ldmxcsr 0x34(%rdi)\n\t"         /* context->MxCsr */
+                   "movw 0x38(%rdi),%ax\n\t"        /* context->SegCs */
+                   "movq %rax,8(%rsp)\n\t"
+                   "movw 0x42(%rdi),%ax\n\t"        /* context->SegSs */
+                   "movq %rax,32(%rsp)\n\t"
+                   "movq 0x44(%rdi),%rax\n\t"       /* context->Eflags */
+                   "movq %rax,16(%rsp)\n\t"
+                   "movq 0x80(%rdi),%rcx\n\t"       /* context->Rcx */
+                   "movq 0x88(%rdi),%rdx\n\t"       /* context->Rdx */
+                   "movq 0x90(%rdi),%rbx\n\t"       /* context->Rbx */
+                   "movq 0x98(%rdi),%rax\n\t"       /* context->Rsp */
+                   "movq %rax,24(%rsp)\n\t"
+                   "movq 0xa0(%rdi),%rbp\n\t"       /* context->Rbp */
+                   "movq 0xa8(%rdi),%rsi\n\t"       /* context->Rsi */
+                   "movq 0xb8(%rdi),%r8\n\t"        /* context->R8 */
+                   "movq 0xc0(%rdi),%r9\n\t"        /* context->R9 */
+                   "movq 0xc8(%rdi),%r10\n\t"       /* context->R10 */
+                   "movq 0xd0(%rdi),%r11\n\t"       /* context->R11 */
+                   "movq 0xd8(%rdi),%r12\n\t"       /* context->R12 */
+                   "movq 0xe0(%rdi),%r13\n\t"       /* context->R13 */
+                   "movq 0xe8(%rdi),%r14\n\t"       /* context->R14 */
+                   "movq 0xf0(%rdi),%r15\n\t"       /* context->R15 */
+                   "movq 0xf8(%rdi),%rax\n\t"       /* context->Rip */
+                   "movq %rax,(%rsp)\n\t"
+                   "fxrstor 0x100(%rdi)\n\t"        /* context->FtlSave */
+                   "movdqa 0x1a0(%rdi),%xmm0\n\t"   /* context->Xmm0 */
+                   "movdqa 0x1b0(%rdi),%xmm1\n\t"   /* context->Xmm1 */
+                   "movdqa 0x1c0(%rdi),%xmm2\n\t"   /* context->Xmm2 */
+                   "movdqa 0x1d0(%rdi),%xmm3\n\t"   /* context->Xmm3 */
+                   "movdqa 0x1e0(%rdi),%xmm4\n\t"   /* context->Xmm4 */
+                   "movdqa 0x1f0(%rdi),%xmm5\n\t"   /* context->Xmm5 */
+                   "movdqa 0x200(%rdi),%xmm6\n\t"   /* context->Xmm6 */
+                   "movdqa 0x210(%rdi),%xmm7\n\t"   /* context->Xmm7 */
+                   "movdqa 0x220(%rdi),%xmm8\n\t"   /* context->Xmm8 */
+                   "movdqa 0x230(%rdi),%xmm9\n\t"   /* context->Xmm9 */
+                   "movdqa 0x240(%rdi),%xmm10\n\t"  /* context->Xmm10 */
+                   "movdqa 0x250(%rdi),%xmm11\n\t"  /* context->Xmm11 */
+                   "movdqa 0x260(%rdi),%xmm12\n\t"  /* context->Xmm12 */
+                   "movdqa 0x270(%rdi),%xmm13\n\t"  /* context->Xmm13 */
+                   "movdqa 0x280(%rdi),%xmm14\n\t"  /* context->Xmm14 */
+                   "movdqa 0x290(%rdi),%xmm15\n\t"  /* context->Xmm15 */
+                   "movq 0x78(%rdi),%rax\n\t"       /* context->Rax */
+                   "movq 0xb0(%rdi),%rdi\n\t"       /* context->Rdi */
+                   "iretq" );
 
 /***********************************************************************
  *           copy_context
@@ -2335,7 +2447,7 @@ void signal_init_thread( TEB *teb )
 
 #if defined __linux__
     arch_prctl( ARCH_SET_GS, teb );
-#elif defined __FreeBSD__
+#elif defined (__FreeBSD__) || defined (__FreeBSD_kernel__)
     amd64_set_gsbase( teb );
 #else
 # error Please define setting %gs for your architecture
@@ -2772,8 +2884,8 @@ static void call_teb_unwind_handler( EXCEPTION_RECORD *rec, DISPATCHER_CONTEXT *
 /*******************************************************************
  *		RtlUnwindEx (NTDLL.@)
  */
-void WINAPI RtlUnwindEx( ULONG64 end_frame, ULONG64 target_ip, EXCEPTION_RECORD *rec,
-                         ULONG64 retval, CONTEXT *orig_context, UNWIND_HISTORY_TABLE *table )
+void WINAPI RtlUnwindEx( PVOID end_frame, PVOID target_ip, EXCEPTION_RECORD *rec,
+                         PVOID retval, CONTEXT *orig_context, UNWIND_HISTORY_TABLE *table )
 {
     EXCEPTION_REGISTRATION_RECORD *teb_frame = NtCurrentTeb()->Tib.ExceptionList;
     EXCEPTION_RECORD record;
@@ -2782,6 +2894,8 @@ void WINAPI RtlUnwindEx( ULONG64 end_frame, ULONG64 target_ip, EXCEPTION_RECORD 
     LDR_MODULE *module;
     NTSTATUS status;
     DWORD size;
+
+    RtlCaptureContext( orig_context );
 
     /* build an exception record, if we do not have one */
     if (!rec)
@@ -2796,7 +2910,7 @@ void WINAPI RtlUnwindEx( ULONG64 end_frame, ULONG64 target_ip, EXCEPTION_RECORD 
 
     rec->ExceptionFlags |= EH_UNWINDING | (end_frame ? 0 : EH_EXIT_UNWIND);
 
-    TRACE( "code=%x flags=%x end_frame=%lx target_ip=%lx rip=%016lx\n",
+    TRACE( "code=%x flags=%x end_frame=%p target_ip=%p rip=%016lx\n",
            rec->ExceptionCode, rec->ExceptionFlags, end_frame, target_ip, orig_context->Rip );
     TRACE(" rax=%016lx rbx=%016lx rcx=%016lx rdx=%016lx\n",
           orig_context->Rax, orig_context->Rbx, orig_context->Rcx, orig_context->Rdx );
@@ -2809,11 +2923,11 @@ void WINAPI RtlUnwindEx( ULONG64 end_frame, ULONG64 target_ip, EXCEPTION_RECORD 
 
     context = *orig_context;
     dispatch.EstablisherFrame = context.Rsp;
-    dispatch.TargetIp         = target_ip;
+    dispatch.TargetIp         = (ULONG64)target_ip;
     dispatch.ContextRecord    = &context;
     dispatch.HistoryTable     = table;
 
-    while (dispatch.EstablisherFrame != end_frame)
+    while (dispatch.EstablisherFrame != (ULONG64)end_frame)
     {
         new_context = context;
 
@@ -2899,30 +3013,55 @@ void WINAPI RtlUnwindEx( ULONG64 end_frame, ULONG64 target_ip, EXCEPTION_RECORD 
 
         if (dispatch.LanguageHandler)
         {
-            if (end_frame && (dispatch.EstablisherFrame > end_frame))
+            if (end_frame && (dispatch.EstablisherFrame > (ULONG64)end_frame))
             {
-                ERR( "invalid end frame %lx/%lx\n", dispatch.EstablisherFrame, end_frame );
+                ERR( "invalid end frame %lx/%p\n", dispatch.EstablisherFrame, end_frame );
                 raise_status( STATUS_INVALID_UNWIND_TARGET, rec );
             }
             call_unwind_handler( rec, &dispatch );
         }
         else  /* hack: call builtin handlers registered in the tib list */
         {
-            while ((ULONG64)teb_frame < new_context.Rsp && (ULONG64)teb_frame < end_frame)
+            while ((ULONG64)teb_frame < new_context.Rsp && (ULONG64)teb_frame < (ULONG64)end_frame)
             {
                 TRACE( "found builtin frame %p handler %p\n", teb_frame, teb_frame->Handler );
                 dispatch.EstablisherFrame = (ULONG64)teb_frame;
                 call_teb_unwind_handler( rec, &dispatch, teb_frame );
                 teb_frame = __wine_pop_frame( teb_frame );
             }
-            if ((ULONG64)teb_frame == end_frame && end_frame < new_context.Rsp) break;
+            if ((ULONG64)teb_frame == (ULONG64)end_frame && (ULONG64)end_frame < new_context.Rsp) break;
             dispatch.EstablisherFrame = new_context.Rsp;
         }
 
         context = new_context;
     }
-    context.Rax = retval;
-    context.Rip = target_ip;
+
+    if (rec->ExceptionCode == STATUS_LONGJUMP && rec->NumberParameters >= 1)
+    {
+        struct MSVCRT_JUMP_BUFFER *jmp = (struct MSVCRT_JUMP_BUFFER *)rec->ExceptionInformation[0];
+        context.Rbx       = jmp->Rbx;
+        context.Rsp       = jmp->Rsp;
+        context.Rbp       = jmp->Rbp;
+        context.Rsi       = jmp->Rsi;
+        context.Rdi       = jmp->Rdi;
+        context.R12       = jmp->R12;
+        context.R13       = jmp->R13;
+        context.R14       = jmp->R14;
+        context.R15       = jmp->R15;
+        context.Rip       = jmp->Rip;
+        context.u.s.Xmm6  = jmp->Xmm6;
+        context.u.s.Xmm7  = jmp->Xmm7;
+        context.u.s.Xmm8  = jmp->Xmm8;
+        context.u.s.Xmm9  = jmp->Xmm9;
+        context.u.s.Xmm10 = jmp->Xmm10;
+        context.u.s.Xmm11 = jmp->Xmm11;
+        context.u.s.Xmm12 = jmp->Xmm12;
+        context.u.s.Xmm13 = jmp->Xmm13;
+        context.u.s.Xmm14 = jmp->Xmm14;
+        context.u.s.Xmm15 = jmp->Xmm15;
+    }
+    context.Rax = (ULONG64)retval;
+    context.Rip = (ULONG64)target_ip;
     TRACE( "returning to %lx stack %lx\n", context.Rip, context.Rsp );
     set_cpu_context( &context );
 }
@@ -2931,12 +3070,11 @@ void WINAPI RtlUnwindEx( ULONG64 end_frame, ULONG64 target_ip, EXCEPTION_RECORD 
 /*******************************************************************
  *		RtlUnwind (NTDLL.@)
  */
-void WINAPI __regs_RtlUnwind( ULONG64 frame, ULONG64 target_ip, EXCEPTION_RECORD *rec,
-                              ULONG64 retval, CONTEXT *context )
+void WINAPI RtlUnwind( void *frame, void *target_ip, EXCEPTION_RECORD *rec, void *retval )
 {
-    RtlUnwindEx( frame, target_ip, rec, retval, context, NULL );
+    CONTEXT context;
+    RtlUnwindEx( frame, target_ip, rec, retval, &context, NULL );
 }
-DEFINE_REGS_ENTRYPOINT( RtlUnwind, 4 )
 
 
 /*******************************************************************
@@ -2982,7 +3120,7 @@ EXCEPTION_DISPOSITION WINAPI __C_specific_handler( EXCEPTION_RECORD *rec,
                 }
             }
             TRACE( "unwinding to target %lx\n", dispatch->ImageBase + table->ScopeRecord[i].JumpTarget );
-            RtlUnwindEx( frame, dispatch->ImageBase + table->ScopeRecord[i].JumpTarget,
+            RtlUnwindEx( (void *)frame, (char *)dispatch->ImageBase + table->ScopeRecord[i].JumpTarget,
                          rec, 0, context, dispatch->HistoryTable );
         }
     }
@@ -3012,7 +3150,22 @@ void WINAPI __regs_RtlRaiseException( EXCEPTION_RECORD *rec, CONTEXT *context )
     status = raise_exception( rec, context, TRUE );
     if (status != STATUS_SUCCESS) raise_status( status, rec );
 }
-DEFINE_REGS_ENTRYPOINT( RtlRaiseException, 1 )
+__ASM_GLOBAL_FUNC( RtlRaiseException,
+                   "movq %rcx,8(%rsp)\n\t"
+                   "sub $0x4f8,%rsp\n\t"
+                   __ASM_CFI(".cfi_adjust_cfa_offset 0x4f8\n\t")
+                   "leaq 0x20(%rsp),%rcx\n\t"
+                   "call " __ASM_NAME("RtlCaptureContext") "\n\t"
+                   "leaq 0x20(%rsp),%rdx\n\t"   /* context pointer */
+                   "movq 0x4f8(%rsp),%rax\n\t"  /* return address */
+                   "movq %rax,0xf8(%rdx)\n\t"   /* context->Rip */
+                   "leaq 0x500(%rsp),%rax\n\t"  /* orig stack pointer */
+                   "movq %rax,0x98(%rdx)\n\t"   /* context->Rsp */
+                   "movq (%rax),%rcx\n\t"       /* original first parameter */
+                   "movq %rcx,0x80(%rdx)\n\t"   /* context->Rcx */
+                   "call " __ASM_NAME("__regs_RtlRaiseException") "\n\t"
+                   "leaq 0x20(%rsp),%rdi\n\t"   /* context pointer */
+                   "call " __ASM_NAME("set_cpu_context") /* does not return */ );
 
 
 /*************************************************************************

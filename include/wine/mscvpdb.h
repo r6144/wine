@@ -1554,6 +1554,36 @@ union codeview_symbol
         short int               id;
         unsigned int            offset;
         unsigned short          segment;
+        unsigned short          symtype;
+        struct p_string         p_name;
+    } thread_v1;
+
+    struct
+    {
+        short int               len;
+        short int               id;
+        unsigned int            symtype;
+        unsigned int            offset;
+        unsigned short          segment;
+        struct p_string         p_name;
+    } thread_v2;
+
+    struct
+    {
+        short int               len;
+        short int               id;
+        unsigned int            symtype;
+        unsigned int            offset;
+        unsigned short          segment;
+        char                    name[1];
+    } thread_v3;
+
+    struct
+    {
+        short int               len;
+        short int               id;
+        unsigned int            offset;
+        unsigned short          segment;
     } ssearch_v1;
 
     struct
@@ -1568,15 +1598,14 @@ union codeview_symbol
     {
         short int               len;
         short int               id;
-        unsigned int            unknown1;       /* maybe size (of what ?) */
+        unsigned int            sz_frame;       /* size of frame */
         unsigned int            unknown2;
         unsigned int            unknown3;
-        unsigned int            unknown4;       /* maybe size (of what ?) */
-        unsigned int            unknown5;       /* maybe address <offset and segment> (of what ?) */
-        unsigned short          unknown6;
-        unsigned short          flags;
-        unsigned int            unknown7;
-    } func_info_v2;
+        unsigned int            sz_saved_regs;  /* size of saved registers from callee */
+        unsigned int            eh_offset;      /* offset for exception handler */
+        unsigned short          eh_sect;        /* section for exception handler */
+        unsigned int            flags;
+    } frame_info_v2;
 };
 
 #define S_COMPILAND_V1  0x0001
@@ -1630,7 +1659,7 @@ union codeview_symbol
 #define S_REGREL_V2     0x100d
 #define S_LTHREAD_V2    0x100e
 #define S_GTHREAD_V2    0x100f
-#define S_FUNCINFO_V2   0x1012
+#define S_FRAMEINFO_V2  0x1012
 #define S_COMPILAND_V2  0x1013
 
 #define S_COMPILAND_V3  0x1101
@@ -1647,6 +1676,8 @@ union codeview_symbol
 #define S_LPROC_V3      0x110F
 #define S_GPROC_V3      0x1110
 #define S_REGREL_V3     0x1111
+#define S_LTHREAD_V3    0x1112
+#define S_GTHREAD_V3    0x1113
 #define S_MSTOOL_V3     0x1116  /* compiler command line options and build information */
 #define S_PUB_FUNC1_V3  0x1125  /* didn't get the difference between the two */
 #define S_PUB_FUNC2_V3  0x1127
@@ -1914,8 +1945,54 @@ typedef struct _PDB_SYMBOLS
     DWORD       hash_size;
     DWORD       srcmodule_size;
     DWORD       pdbimport_size;
-    DWORD       resvd[5];
+    DWORD       resvd0;
+    DWORD       stream_index_size;
+    DWORD       unknown2_size;
+    WORD        resvd3;
+    WORD        machine;
+    DWORD       resvd4;
 } PDB_SYMBOLS, *PPDB_SYMBOLS;
+
+typedef struct
+{
+    WORD        FPO;
+    WORD        unk0;
+    WORD        unk1;
+    WORD        unk2;
+    WORD        unk3;
+    WORD        segments;
+} PDB_STREAM_INDEXES_OLD;
+
+typedef struct
+{
+    WORD        FPO;
+    WORD        unk0;
+    WORD        unk1;
+    WORD        unk2;
+    WORD        unk3;
+    WORD        segments;
+    WORD        unk4;
+    WORD        unk5;
+    WORD        unk6;
+    WORD        FPO_EXT;
+    WORD        unk7;
+} PDB_STREAM_INDEXES;
+
+typedef struct _PDB_FPO_DATA
+{
+    DWORD       start;
+    DWORD       func_size;
+    DWORD       locals_size;
+    DWORD       params_size;
+    DWORD       maxstack_size;
+    DWORD       str_offset;
+    WORD        prolog_size;
+    WORD        savedregs_size;
+#define PDB_FPO_DFL_SEH         0x00000001
+#define PDB_FPO_DFL_EH          0x00000002
+#define PDB_FPO_DFL_IN_BLOCK    0x00000004
+    DWORD       flags;
+} PDB_FPO_DATA;
 
 #include "poppack.h"
 

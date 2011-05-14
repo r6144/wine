@@ -228,6 +228,8 @@ static void InitializeTreeView( browse_info *info )
         hr = SHGetDesktopFolder(&lpsfDesktop);
         if (FAILED(hr)) {
             WARN("SHGetDesktopFolder failed! hr = %08x\n", hr);
+            ILFree(pidlChild);
+            ILFree(pidlParent);
             return;
         }
         hr = IShellFolder_BindToObject(lpsfDesktop, pidlParent, 0, &IID_IShellFolder, (LPVOID*)&lpsfParent);
@@ -236,6 +238,8 @@ static void InitializeTreeView( browse_info *info )
 
     if (FAILED(hr)) {
         WARN("Could not bind to parent shell folder! hr = %08x\n", hr);
+        ILFree(pidlChild);
+        ILFree(pidlParent);
         return;
     }
 
@@ -249,6 +253,8 @@ static void InitializeTreeView( browse_info *info )
     if (FAILED(hr)) {
         WARN("Could not bind to root shell folder! hr = %08x\n", hr);
         IShellFolder_Release(lpsfParent);
+        ILFree(pidlChild);
+        ILFree(pidlParent);
         return;
     }
 
@@ -258,6 +264,8 @@ static void InitializeTreeView( browse_info *info )
         WARN("Could not get child iterator! hr = %08x\n", hr);
         IShellFolder_Release(lpsfParent);
         IShellFolder_Release(lpsfRoot);
+        ILFree(pidlChild);
+        ILFree(pidlParent);
         return;
     }
 
@@ -266,6 +274,8 @@ static void InitializeTreeView( browse_info *info )
                                pidlParent, pEnumChildren, TVI_ROOT );
     SendMessageW( info->hwndTreeView, TVM_EXPAND, TVE_EXPAND, (LPARAM)item );
 
+    ILFree(pidlChild);
+    ILFree(pidlParent);
     IShellFolder_Release(lpsfRoot);
     IShellFolder_Release(lpsfParent);
 }
@@ -414,7 +424,7 @@ static void FillTreeView( browse_info *info, IShellFolder * lpsf,
 	SetCapture( hwnd );
 	SetCursor( LoadCursorA( 0, (LPSTR)IDC_WAIT ) );
 
-	while (NOERROR == IEnumIDList_Next(lpe,1,&pidlTemp,&ulFetched))
+	while (S_OK == IEnumIDList_Next(lpe,1,&pidlTemp,&ulFetched))
 	{
 	    ULONG ulAttrs = SFGAO_HASSUBFOLDER | SFGAO_FOLDER;
 	    IEnumIDList* pEnumIL = NULL;
@@ -521,14 +531,18 @@ static LRESULT BrsFolder_Treeview_Expand( browse_info *info, NMTREEVIEWW *pnmtv 
 
     if (!_ILIsEmpty(lptvid->lpi)) {
         r = IShellFolder_BindToObject( lptvid->lpsfParent, lptvid->lpi, 0,
-                                       &IID_IShellFolder, (LPVOID *)&lpsf2 );
+                                       &IID_IShellFolder, (void**)&lpsf2 );
     } else {
         lpsf2 = lptvid->lpsfParent;
-        r = IShellFolder_AddRef(lpsf2);
+        IShellFolder_AddRef(lpsf2);
+        r = S_OK;
     }
 
     if (SUCCEEDED(r))
+    {
         FillTreeView( info, lpsf2, lptvid->lpifq, pnmtv->itemNew.hItem, lptvid->pEnumIL);
+        IShellFolder_Release( lpsf2 );
+    }
 
     /* My Computer is already sorted and trying to do a simple text
      * sort will only mess things up */
@@ -544,7 +558,8 @@ static HRESULT BrsFolder_Treeview_Changed( browse_info *info, NMTREEVIEWW *pnmtv
     LPTV_ITEMDATA lptvid = (LPTV_ITEMDATA) pnmtv->itemNew.lParam;
 
     lptvid = (LPTV_ITEMDATA) pnmtv->itemNew.lParam;
-    info->pidlRet = lptvid->lpifq;
+    ILFree(info->pidlRet);
+    info->pidlRet = ILClone(lptvid->lpifq);
     browsefolder_callback( info->lpBrowseInfo, info->hWnd, BFFM_SELCHANGED,
                            (LPARAM)info->pidlRet );
     BrsFolder_CheckValidSelection( info, lptvid );
@@ -662,8 +677,6 @@ static BOOL BrsFolder_OnCommand( browse_info *info, UINT id )
     switch (id)
     {
     case IDOK:
-        /* The original pidl is owned by the treeview and will be free'd. */
-        info->pidlRet = ILClone(info->pidlRet);
         if (info->pidlRet == NULL) /* A null pidl would mean a cancel */
             info->pidlRet = _ILCreateDesktop();
         pdump( info->pidlRet );
@@ -767,6 +780,8 @@ done:
 static BOOL BrsFolder_OnSetSelectionW(browse_info *info, LPVOID selection, BOOL is_str) {
     HTREEITEM hItem;
     BOOL bResult;
+
+    if (!selection) return FALSE;
 
     bResult = BrsFolder_OnSetExpanded(info, selection, is_str, &hItem);
     if (bResult)
@@ -966,7 +981,10 @@ LPITEMIDLIST WINAPI SHBrowseForFolderW (LPBROWSEINFOW lpbi)
     if (SUCCEEDED(hr)) 
         OleUninitialize();
     if (!r)
+    {
+        ILFree(info.pidlRet);
         return NULL;
+    }
 
     return info.pidlRet;
 }

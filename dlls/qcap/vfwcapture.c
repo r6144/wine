@@ -684,7 +684,7 @@ static HRESULT WINAPI VfwPin_GetMediaType(BasePin *iface, int iPosition, AM_MEDI
     return hr;
 }
 
-LONG WINAPI VfwPin_GetMediaTypeVersion(BasePin *iface)
+static LONG WINAPI VfwPin_GetMediaTypeVersion(BasePin *iface)
 {
     return 1;
 }
@@ -726,7 +726,7 @@ VfwPin_Construct( IBaseFilter * pBaseFilter, LPCRITICAL_SECTION pCritSec,
     PIN_INFO piOutput;
     HRESULT hr;
 
-    ppPin = NULL;
+    *ppPin = NULL;
 
     piOutput.dir = PINDIR_OUTPUT;
     piOutput.pFilter = pBaseFilter;

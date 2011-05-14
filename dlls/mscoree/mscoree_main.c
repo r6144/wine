@@ -47,8 +47,6 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL( mscoree );
 
-LONG dll_refs = 0;
-
 char *WtoA(LPCWSTR wstr)
 {
     int length;
@@ -124,7 +122,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
         DisableThreadLibraryCalls(hinstDLL);
         break;
     case DLL_PROCESS_DETACH:
-        unload_all_runtimes();
+        expect_no_runtimes();
         break;
     }
     return TRUE;
@@ -154,7 +152,8 @@ __int32 WINAPI _CorExeMain2(PBYTE ptrMemory, DWORD cntMemory, LPWSTR imageName, 
 
 void WINAPI CorExitProcess(int exitCode)
 {
-    FIXME("(%x) stub\n", exitCode);
+    TRACE("(%x)\n", exitCode);
+    unload_all_runtimes();
     ExitProcess(exitCode);
 }
 
@@ -248,6 +247,33 @@ HRESULT WINAPI GetRequestedRuntimeInfo(LPCWSTR pExe, LPCWSTR pwszVersion, LPCWST
     }
 
     return ret;
+}
+
+HRESULT WINAPI GetRequestedRuntimeVersion(LPWSTR pExe, LPWSTR pVersion, DWORD cchBuffer, DWORD *dwlength)
+{
+    TRACE("(%s, %p, %d, %p)\n", debugstr_w(pExe), debugstr_w(pExe), cchBuffer, dwlength);
+
+    if(!dwlength)
+        return E_POINTER;
+
+    return GetRequestedRuntimeInfo(pExe, NULL, NULL, 0, 0, NULL, 0, NULL, pVersion, cchBuffer, dwlength);
+}
+
+HRESULT WINAPI GetRealProcAddress(LPCSTR procname, void **ppv)
+{
+    FIXME("(%s, %p)\n", debugstr_a(procname), ppv);
+    return CLR_E_SHIM_RUNTIMEEXPORT;
+}
+
+HRESULT WINAPI GetFileVersion(LPCWSTR szFilename, LPWSTR szBuffer, DWORD cchBuffer, DWORD *dwLength)
+{
+    TRACE("(%s, %p, %d, %p)\n", debugstr_w(szFilename), szBuffer, cchBuffer, dwLength);
+
+    if (!szFilename || !dwLength)
+        return E_POINTER;
+
+    *dwLength = cchBuffer;
+    return CLRMetaHost_GetVersionFromFile(0, szFilename, szBuffer, dwLength);
 }
 
 HRESULT WINAPI LoadLibraryShim( LPCWSTR szDllName, LPCWSTR szVersion, LPVOID pvReserved, HMODULE * phModDll)
@@ -412,6 +438,18 @@ BOOL WINAPI StrongNameSignatureVerificationEx(LPCWSTR filename, BOOL forceVerifi
     return FALSE;
 }
 
+HRESULT WINAPI CreateConfigStream(LPCWSTR filename, IStream **stream)
+{
+    FIXME("(%s, %p): stub\n", debugstr_w(filename), stream);
+    return E_NOTIMPL;
+}
+
+HRESULT WINAPI CreateDebuggingInterfaceFromVersion(int nDebugVersion, LPCWSTR version, IUnknown **ppIUnk)
+{
+    FIXME("(%d %s, %p): stub\n", nDebugVersion, debugstr_w(version), ppIUnk);
+    return E_NOTIMPL;
+}
+
 HRESULT WINAPI CLRCreateInstance(REFCLSID clsid, REFIID riid, LPVOID *ppInterface)
 {
     TRACE("(%s,%s,%p)\n", debugstr_guid(clsid), debugstr_guid(riid), ppInterface);
@@ -447,10 +485,7 @@ HRESULT WINAPI DllUnregisterServer(void)
 
 HRESULT WINAPI DllCanUnloadNow(VOID)
 {
-    if (dll_refs)
-        return S_FALSE;
-    else
-        return S_OK;
+    return S_FALSE;
 }
 
 INT WINAPI ND_RU1( const void *ptr, INT offset )

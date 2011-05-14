@@ -1,0 +1,10946 @@
+# Romansh translations for Wine
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Wine\n"
+"Report-Msgid-Bugs-To: http://bugs.winehq.org\n"
+"POT-Creation-Date: N/A\n"
+"PO-Revision-Date: N/A\n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"Language: Romansh\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: appwiz.rc:28
+msgid "Add/Remove Programs"
+msgstr ""
+
+#: appwiz.rc:29
+msgid ""
+"Allows you to install new software, or remove existing software from your "
+"computer."
+msgstr ""
+
+#: appwiz.rc:30 taskmgr.rc:262 winecfg.rc:38
+#, fuzzy
+msgid "Applications"
+msgstr "&Options"
+
+#: appwiz.rc:32
+msgid ""
+"Unable to execute the uninstaller, '%s'. Do you want to remove the uninstall "
+"entry for this program from the registry?"
+msgstr ""
+
+#: appwiz.rc:33
+msgid "Not specified"
+msgstr ""
+
+#: appwiz.rc:35 shell32.rc:129 shell32.rc:238 regedit.rc:122 winefile.rc:112
+msgid "Name"
+msgstr ""
+
+#: appwiz.rc:36
+msgid "Publisher"
+msgstr ""
+
+#: appwiz.rc:37 cryptui.rc:51
+msgid "Version"
+msgstr ""
+
+#: appwiz.rc:38
+msgid "Installation programs"
+msgstr ""
+
+#: appwiz.rc:39
+msgid "Programs (*.exe)"
+msgstr ""
+
+#: appwiz.rc:40 avifil32.rc:30 cryptui.rc:80 shell32.rc:183 notepad.rc:75
+#: oleview.rc:101 progman.rc:79 regedit.rc:195 winhlp32.rc:87
+msgid "All files (*.*)"
+msgstr "Tuot las datotecas (*.*)"
+
+#: appwiz.rc:42
+#, fuzzy
+msgid "&Remove"
+msgstr "&Annotaziun..."
+
+#: appwiz.rc:43
+msgid "&Modify/Remove"
+msgstr ""
+
+#: appwiz.rc:48
+msgid "Downloading..."
+msgstr ""
+
+#: appwiz.rc:49
+msgid "Installing..."
+msgstr ""
+
+#: appwiz.rc:50
+msgid ""
+"Unexpected checksum of downloaded file. Aborting installation of corrupted "
+"file."
+msgstr ""
+
+#: avifil32.rc:27
+msgid "Waveform: %s"
+msgstr ""
+
+#: avifil32.rc:28
+msgid "Waveform"
+msgstr ""
+
+#: avifil32.rc:29
+msgid "All multimedia files"
+msgstr ""
+
+#: avifil32.rc:31
+msgid "video"
+msgstr ""
+
+#: avifil32.rc:32
+msgid "audio"
+msgstr ""
+
+#: avifil32.rc:33
+msgid "%s %s #%d"
+msgstr ""
+
+#: avifil32.rc:34
+msgid "Wine AVI-default-filehandler"
+msgstr ""
+
+#: avifil32.rc:35
+msgid "uncompressed"
+msgstr ""
+
+#: browseui.rc:25
+msgid "Cancelling..."
+msgstr ""
+
+#: comctl32.rc:39
+msgid "Separator"
+msgstr ""
+
+#: comctl32.rc:44 progman.rc:78
+msgctxt "hotkey"
+msgid "None"
+msgstr ""
+
+#: comctl32.rc:28 wordpad.rc:169
+msgid "Close"
+msgstr ""
+
+#: comctl32.rc:33
+msgid "Today:"
+msgstr ""
+
+#: comctl32.rc:34
+msgid "Go to today"
+msgstr ""
+
+#: comdlg32.rc:29
+msgid "&About FolderPicker Test"
+msgstr ""
+
+#: comdlg32.rc:30
+msgid "Document Folders"
+msgstr ""
+
+#: comdlg32.rc:31 shell32.rc:187
+msgid "My Documents"
+msgstr ""
+
+#: comdlg32.rc:32
+msgid "My Favorites"
+msgstr ""
+
+#: comdlg32.rc:33
+msgid "System Path"
+msgstr ""
+
+#: comdlg32.rc:34 shell32.rc:141 shell32.rc:195 winecfg.rc:122 winefile.rc:103
+msgid "Desktop"
+msgstr ""
+
+#: comdlg32.rc:35 winhlp32.rc:46 winhlp32.rc:67
+msgid "Fonts"
+msgstr "Fonts"
+
+#: comdlg32.rc:36 shell32.rc:142 regedit.rc:200
+msgid "My Computer"
+msgstr ""
+
+#: comdlg32.rc:41
+#, fuzzy
+msgid "System Folders"
+msgstr "Use system colors"
+
+#: comdlg32.rc:42
+msgid "Local Hard Drives"
+msgstr ""
+
+#: comdlg32.rc:43
+msgid "File not found"
+msgstr ""
+
+#: comdlg32.rc:44
+msgid "Please verify that the correct file name was given"
+msgstr ""
+
+#: comdlg32.rc:45
+msgid ""
+"File does not exist.\n"
+"Do you want to create file?"
+msgstr ""
+
+#: comdlg32.rc:46
+msgid ""
+"File already exists.\n"
+"Do you want to replace it?"
+msgstr ""
+
+#: comdlg32.rc:47
+msgid "Invalid character(s) in path"
+msgstr ""
+
+#: comdlg32.rc:48
+msgid ""
+"A filename cannot contain any of the following characters:\n"
+"                          / : < > |"
+msgstr ""
+
+#: comdlg32.rc:49
+msgid "Path does not exist"
+msgstr ""
+
+#: comdlg32.rc:50
+msgid "File does not exist"
+msgstr ""
+
+#: comdlg32.rc:55
+msgid "Up One Level"
+msgstr ""
+
+#: comdlg32.rc:56
+msgid "Create New Folder"
+msgstr ""
+
+#: comdlg32.rc:57
+msgid "List"
+msgstr ""
+
+#: comdlg32.rc:58
+msgid "Details"
+msgstr ""
+
+#: comdlg32.rc:59
+msgid "Browse to Desktop"
+msgstr ""
+
+#: comdlg32.rc:123
+msgid "Regular"
+msgstr ""
+
+#: comdlg32.rc:124
+msgid "Bold"
+msgstr ""
+
+#: comdlg32.rc:125
+msgid "Italic"
+msgstr ""
+
+#: comdlg32.rc:126
+msgid "Bold Italic"
+msgstr ""
+
+#: comdlg32.rc:131 wordpad.rc:114
+msgid "Black"
+msgstr ""
+
+#: comdlg32.rc:132 wordpad.rc:115
+msgid "Maroon"
+msgstr ""
+
+#: comdlg32.rc:133 wordpad.rc:116
+msgid "Green"
+msgstr ""
+
+#: comdlg32.rc:134 wordpad.rc:117
+msgid "Olive"
+msgstr ""
+
+#: comdlg32.rc:135 wordpad.rc:118
+msgid "Navy"
+msgstr ""
+
+#: comdlg32.rc:136 wordpad.rc:119
+msgid "Purple"
+msgstr ""
+
+#: comdlg32.rc:137 wordpad.rc:120
+msgid "Teal"
+msgstr ""
+
+#: comdlg32.rc:138 wordpad.rc:121
+msgid "Gray"
+msgstr ""
+
+#: comdlg32.rc:139 wordpad.rc:122
+msgid "Silver"
+msgstr ""
+
+#: comdlg32.rc:140 wordpad.rc:123
+msgid "Red"
+msgstr ""
+
+#: comdlg32.rc:141 wordpad.rc:124
+msgid "Lime"
+msgstr ""
+
+#: comdlg32.rc:142 wordpad.rc:125
+msgid "Yellow"
+msgstr ""
+
+#: comdlg32.rc:143 wordpad.rc:126
+msgid "Blue"
+msgstr ""
+
+#: comdlg32.rc:144 wordpad.rc:127
+msgid "Fuchsia"
+msgstr ""
+
+#: comdlg32.rc:145 wordpad.rc:128
+msgid "Aqua"
+msgstr ""
+
+#: comdlg32.rc:146 wordpad.rc:129
+msgid "White"
+msgstr ""
+
+#: comdlg32.rc:66
+msgid "Unreadable Entry"
+msgstr ""
+
+#: comdlg32.rc:68
+msgid ""
+"This value does not lie within the page range.\n"
+"Please enter a value between %d and %d."
+msgstr ""
+
+#: comdlg32.rc:70
+msgid "The 'from' entry cannot exceed the 'to' entry."
+msgstr ""
+
+#: comdlg32.rc:72
+msgid ""
+"Margins overlap or fall outside Paper boundaries.\n"
+"Please reenter margins."
+msgstr ""
+
+#: comdlg32.rc:74
+msgid "The 'Number of copies' field cannot be empty."
+msgstr ""
+
+#: comdlg32.rc:76
+msgid ""
+"This large number of copies is not supported by your printer.\n"
+"Please enter a value between 1 and %d."
+msgstr ""
+
+#: comdlg32.rc:77
+msgid "A printer error occurred."
+msgstr ""
+
+#: comdlg32.rc:78
+msgid "No default printer defined."
+msgstr ""
+
+#: comdlg32.rc:79
+msgid "Cannot find the printer."
+msgstr ""
+
+#: comdlg32.rc:80 progman.rc:73
+msgid "Out of memory."
+msgstr ""
+
+#: comdlg32.rc:81
+msgid "An error occurred."
+msgstr ""
+
+#: comdlg32.rc:82
+msgid "Unknown printer driver."
+msgstr ""
+
+#: comdlg32.rc:85
+msgid ""
+"Before you can perform printer-related tasks such as page setup or printing "
+"a document, you need to install a printer. Please install one and retry."
+msgstr ""
+
+#: comdlg32.rc:151
+msgid "Select a font size between %d and %d points."
+msgstr ""
+
+#: comdlg32.rc:152 shdocvw.rc:32
+msgid "&Save"
+msgstr ""
+
+#: comdlg32.rc:153
+msgid "Save &in:"
+msgstr ""
+
+#: comdlg32.rc:154
+msgid "Save"
+msgstr ""
+
+#: comdlg32.rc:155
+msgid "Save as"
+msgstr ""
+
+#: comdlg32.rc:156
+#, fuzzy
+msgid "Open File"
+msgstr "Wine ag�d"
+
+#: comdlg32.rc:93 oleview.rc:95
+msgid "Ready"
+msgstr ""
+
+#: comdlg32.rc:94
+msgid "Paused; "
+msgstr ""
+
+#: comdlg32.rc:95
+msgid "Error; "
+msgstr ""
+
+#: comdlg32.rc:96
+msgid "Pending deletion; "
+msgstr ""
+
+#: comdlg32.rc:97
+msgid "Paper jam; "
+msgstr ""
+
+#: comdlg32.rc:98
+msgid "Out of paper; "
+msgstr ""
+
+#: comdlg32.rc:99
+msgid "Feed paper manual; "
+msgstr ""
+
+#: comdlg32.rc:100
+msgid "Paper problem; "
+msgstr ""
+
+#: comdlg32.rc:101
+#, fuzzy
+msgid "Printer offline; "
+msgstr "Tuot las datotecas (*.*)"
+
+#: comdlg32.rc:102
+msgid "I/O Active; "
+msgstr ""
+
+#: comdlg32.rc:103
+msgid "Busy; "
+msgstr ""
+
+#: comdlg32.rc:104
+#, fuzzy
+msgid "Printing; "
+msgstr "&Stampar tema"
+
+#: comdlg32.rc:105
+msgid "Output tray is full; "
+msgstr ""
+
+#: comdlg32.rc:106
+#, fuzzy
+msgid "Not available; "
+msgstr "INFUORMAZIUN"
+
+#: comdlg32.rc:107
+msgid "Waiting; "
+msgstr ""
+
+#: comdlg32.rc:108
+msgid "Processing; "
+msgstr ""
+
+#: comdlg32.rc:109
+msgid "Initialising; "
+msgstr ""
+
+#: comdlg32.rc:110
+msgid "Warming up; "
+msgstr ""
+
+#: comdlg32.rc:111
+msgid "Toner low; "
+msgstr ""
+
+#: comdlg32.rc:112
+msgid "No toner; "
+msgstr ""
+
+#: comdlg32.rc:113
+msgid "Page punt; "
+msgstr ""
+
+#: comdlg32.rc:114
+msgid "Interrupted by user; "
+msgstr ""
+
+#: comdlg32.rc:115
+msgid "Out of memory; "
+msgstr ""
+
+#: comdlg32.rc:116
+msgid "The printer door is open; "
+msgstr ""
+
+#: comdlg32.rc:117
+msgid "Print server unknown; "
+msgstr ""
+
+#: comdlg32.rc:118
+msgid "Power save mode; "
+msgstr ""
+
+#: comdlg32.rc:87
+#, fuzzy
+msgid "Default Printer; "
+msgstr "Default"
+
+#: comdlg32.rc:88
+msgid "There are %d documents in the queue"
+msgstr ""
+
+#: comdlg32.rc:89
+msgid "Margins [inches]"
+msgstr ""
+
+#: comdlg32.rc:90
+msgid "Margins [mm]"
+msgstr ""
+
+#: comdlg32.rc:91
+msgid "mm"
+msgstr ""
+
+#: comdlg32.rc:64 hhctrl.rc:46 wordpad.rc:162
+#, fuzzy
+msgid "Print"
+msgstr "&Stampar tema"
+
+#: credui.rc:27
+msgid "Connect to %s"
+msgstr ""
+
+#: credui.rc:28
+msgid "Connecting to %s"
+msgstr ""
+
+#: credui.rc:29
+msgid "Logon unsuccessful"
+msgstr ""
+
+#: credui.rc:30
+msgid ""
+"Make sure that your user name\n"
+"and password are correct."
+msgstr ""
+
+#: credui.rc:32
+msgid ""
+"Having Caps Lock on may cause you to enter your password incorrectly.\n"
+"\n"
+"Press the Caps Lock key on your keyboard to turn off Caps Lock before\n"
+"entering your password."
+msgstr ""
+
+#: credui.rc:31
+msgid "Caps Lock is On"
+msgstr ""
+
+#: crypt32.rc:27
+msgid "Authority Key Identifier"
+msgstr ""
+
+#: crypt32.rc:28
+msgid "Key Attributes"
+msgstr ""
+
+#: crypt32.rc:29
+msgid "Key Usage Restriction"
+msgstr ""
+
+#: crypt32.rc:30
+msgid "Subject Alternative Name"
+msgstr ""
+
+#: crypt32.rc:31
+msgid "Issuer Alternative Name"
+msgstr ""
+
+#: crypt32.rc:32
+msgid "Basic Constraints"
+msgstr ""
+
+#: crypt32.rc:33
+msgid "Key Usage"
+msgstr ""
+
+#: crypt32.rc:34
+msgid "Certificate Policies"
+msgstr ""
+
+#: crypt32.rc:35
+msgid "Subject Key Identifier"
+msgstr ""
+
+#: crypt32.rc:36
+msgid "CRL Reason Code"
+msgstr ""
+
+#: crypt32.rc:37
+msgid "CRL Distribution Points"
+msgstr ""
+
+#: crypt32.rc:38
+msgid "Enhanced Key Usage"
+msgstr ""
+
+#: crypt32.rc:39
+msgid "Authority Information Access"
+msgstr ""
+
+#: crypt32.rc:40
+msgid "Certificate Extensions"
+msgstr ""
+
+#: crypt32.rc:41
+msgid "Next Update Location"
+msgstr ""
+
+#: crypt32.rc:42
+msgid "Yes or No Trust"
+msgstr ""
+
+#: crypt32.rc:43
+msgid "Email Address"
+msgstr ""
+
+#: crypt32.rc:44
+msgid "Unstructured Name"
+msgstr ""
+
+#: crypt32.rc:45
+msgid "Content Type"
+msgstr ""
+
+#: crypt32.rc:46
+msgid "Message Digest"
+msgstr ""
+
+#: crypt32.rc:47
+msgid "Signing Time"
+msgstr ""
+
+#: crypt32.rc:48
+msgid "Counter Sign"
+msgstr ""
+
+#: crypt32.rc:49
+msgid "Challenge Password"
+msgstr ""
+
+#: crypt32.rc:50
+msgid "Unstructured Address"
+msgstr ""
+
+#: crypt32.rc:51
+msgid "S/MIME Capabilities"
+msgstr ""
+
+#: crypt32.rc:52
+msgid "Prefer Signed Data"
+msgstr ""
+
+#: crypt32.rc:53 cryptdlg.rc:31
+msgid "CPS"
+msgstr ""
+
+#: crypt32.rc:54 cryptdlg.rc:32
+msgid "User Notice"
+msgstr ""
+
+#: crypt32.rc:55
+msgid "On-line Certificate Status Protocol"
+msgstr ""
+
+#: crypt32.rc:56
+msgid "Certification Authority Issuer"
+msgstr ""
+
+#: crypt32.rc:57
+msgid "Certification Template Name"
+msgstr ""
+
+#: crypt32.rc:58
+msgid "Certificate Type"
+msgstr ""
+
+#: crypt32.rc:59
+msgid "Certificate Manifold"
+msgstr ""
+
+#: crypt32.rc:60
+msgid "Netscape Cert Type"
+msgstr ""
+
+#: crypt32.rc:61
+msgid "Netscape Base URL"
+msgstr ""
+
+#: crypt32.rc:62
+msgid "Netscape Revocation URL"
+msgstr ""
+
+#: crypt32.rc:63
+msgid "Netscape CA Revocation URL"
+msgstr ""
+
+#: crypt32.rc:64
+msgid "Netscape Cert Renewal URL"
+msgstr ""
+
+#: crypt32.rc:65
+msgid "Netscape CA Policy URL"
+msgstr ""
+
+#: crypt32.rc:66
+msgid "Netscape SSL ServerName"
+msgstr ""
+
+#: crypt32.rc:67
+msgid "Netscape Comment"
+msgstr ""
+
+#: crypt32.rc:68
+msgid "SpcSpAgencyInfo"
+msgstr ""
+
+#: crypt32.rc:69
+msgid "SpcFinancialCriteria"
+msgstr ""
+
+#: crypt32.rc:70
+msgid "SpcMinimalCriteria"
+msgstr ""
+
+#: crypt32.rc:71
+msgid "Country/Region"
+msgstr ""
+
+#: crypt32.rc:72
+msgid "Organization"
+msgstr ""
+
+#: crypt32.rc:73
+msgid "Organizational Unit"
+msgstr ""
+
+#: crypt32.rc:74
+msgid "Common Name"
+msgstr ""
+
+#: crypt32.rc:75
+msgid "Locality"
+msgstr ""
+
+#: crypt32.rc:76
+msgid "State or Province"
+msgstr ""
+
+#: crypt32.rc:77
+msgid "Title"
+msgstr ""
+
+#: crypt32.rc:78
+msgid "Given Name"
+msgstr ""
+
+#: crypt32.rc:79
+msgid "Initials"
+msgstr ""
+
+#: crypt32.rc:80
+msgid "Sur Name"
+msgstr ""
+
+#: crypt32.rc:81
+msgid "Domain Component"
+msgstr ""
+
+#: crypt32.rc:82
+msgid "Street Address"
+msgstr ""
+
+#: crypt32.rc:83
+msgid "Serial Number"
+msgstr ""
+
+#: crypt32.rc:84
+msgid "CA Version"
+msgstr ""
+
+#: crypt32.rc:85
+msgid "Cross CA Version"
+msgstr ""
+
+#: crypt32.rc:86
+msgid "Serialized Signature Serial Number"
+msgstr ""
+
+#: crypt32.rc:87
+msgid "Principal Name"
+msgstr ""
+
+#: crypt32.rc:88
+msgid "Windows Product Update"
+msgstr ""
+
+#: crypt32.rc:89
+msgid "Enrollment Name Value Pair"
+msgstr ""
+
+#: crypt32.rc:90
+msgid "OS Version"
+msgstr ""
+
+#: crypt32.rc:91
+msgid "Enrollment CSP"
+msgstr ""
+
+#: crypt32.rc:92
+msgid "CRL Number"
+msgstr ""
+
+#: crypt32.rc:93
+msgid "Delta CRL Indicator"
+msgstr ""
+
+#: crypt32.rc:94
+msgid "Issuing Distribution Point"
+msgstr ""
+
+#: crypt32.rc:95
+msgid "Freshest CRL"
+msgstr ""
+
+#: crypt32.rc:96
+msgid "Name Constraints"
+msgstr ""
+
+#: crypt32.rc:97
+msgid "Policy Mappings"
+msgstr ""
+
+#: crypt32.rc:98
+msgid "Policy Constraints"
+msgstr ""
+
+#: crypt32.rc:99
+msgid "Cross-Certificate Distribution Points"
+msgstr ""
+
+#: crypt32.rc:100
+msgid "Application Policies"
+msgstr ""
+
+#: crypt32.rc:101
+msgid "Application Policy Mappings"
+msgstr ""
+
+#: crypt32.rc:102
+msgid "Application Policy Constraints"
+msgstr ""
+
+#: crypt32.rc:103
+msgid "CMC Data"
+msgstr ""
+
+#: crypt32.rc:104
+msgid "CMC Response"
+msgstr ""
+
+#: crypt32.rc:105
+msgid "Unsigned CMC Request"
+msgstr ""
+
+#: crypt32.rc:106
+msgid "CMC Status Info"
+msgstr ""
+
+#: crypt32.rc:107
+msgid "CMC Extensions"
+msgstr ""
+
+#: crypt32.rc:108
+msgid "CMC Attributes"
+msgstr ""
+
+#: crypt32.rc:109
+msgid "PKCS 7 Data"
+msgstr ""
+
+#: crypt32.rc:110
+msgid "PKCS 7 Signed"
+msgstr ""
+
+#: crypt32.rc:111
+msgid "PKCS 7 Enveloped"
+msgstr ""
+
+#: crypt32.rc:112
+msgid "PKCS 7 Signed Enveloped"
+msgstr ""
+
+#: crypt32.rc:113
+msgid "PKCS 7 Digested"
+msgstr ""
+
+#: crypt32.rc:114
+msgid "PKCS 7 Encrypted"
+msgstr ""
+
+#: crypt32.rc:115
+msgid "Previous CA Certificate Hash"
+msgstr ""
+
+#: crypt32.rc:116
+msgid "Virtual Base CRL Number"
+msgstr ""
+
+#: crypt32.rc:117
+msgid "Next CRL Publish"
+msgstr ""
+
+#: crypt32.rc:118
+msgid "CA Encryption Certificate"
+msgstr ""
+
+#: crypt32.rc:119 cryptui.rc:145
+msgid "Key Recovery Agent"
+msgstr ""
+
+#: crypt32.rc:120
+msgid "Certificate Template Information"
+msgstr ""
+
+#: crypt32.rc:121
+msgid "Enterprise Root OID"
+msgstr ""
+
+#: crypt32.rc:122
+msgid "Dummy Signer"
+msgstr ""
+
+#: crypt32.rc:123
+msgid "Encrypted Private Key"
+msgstr ""
+
+#: crypt32.rc:124
+msgid "Published CRL Locations"
+msgstr ""
+
+#: crypt32.rc:125
+msgid "Enforce Certificate Chain Policy"
+msgstr ""
+
+#: crypt32.rc:126
+msgid "Transaction Id"
+msgstr ""
+
+#: crypt32.rc:127
+msgid "Sender Nonce"
+msgstr ""
+
+#: crypt32.rc:128
+msgid "Recipient Nonce"
+msgstr ""
+
+#: crypt32.rc:129
+msgid "Reg Info"
+msgstr ""
+
+#: crypt32.rc:130
+msgid "Get Certificate"
+msgstr ""
+
+#: crypt32.rc:131
+msgid "Get CRL"
+msgstr ""
+
+#: crypt32.rc:132
+msgid "Revoke Request"
+msgstr ""
+
+#: crypt32.rc:133
+msgid "Query Pending"
+msgstr ""
+
+#: crypt32.rc:134 cryptui.rc:92
+msgid "Certificate Trust List"
+msgstr ""
+
+#: crypt32.rc:135
+msgid "Archived Key Certificate Hash"
+msgstr ""
+
+#: crypt32.rc:136
+msgid "Private Key Usage Period"
+msgstr ""
+
+#: crypt32.rc:137
+#, fuzzy
+msgid "Client Information"
+msgstr "INFUORMAZIUN"
+
+#: crypt32.rc:138
+msgid "Server Authentication"
+msgstr ""
+
+#: crypt32.rc:139
+msgid "Client Authentication"
+msgstr ""
+
+#: crypt32.rc:140
+msgid "Code Signing"
+msgstr ""
+
+#: crypt32.rc:141
+msgid "Secure Email"
+msgstr ""
+
+#: crypt32.rc:142
+msgid "Time Stamping"
+msgstr ""
+
+#: crypt32.rc:143
+msgid "Microsoft Trust List Signing"
+msgstr ""
+
+#: crypt32.rc:144
+msgid "Microsoft Time Stamping"
+msgstr ""
+
+#: crypt32.rc:145
+msgid "IP security end system"
+msgstr ""
+
+#: crypt32.rc:146
+msgid "IP security tunnel termination"
+msgstr ""
+
+#: crypt32.rc:147
+msgid "IP security user"
+msgstr ""
+
+#: crypt32.rc:148
+msgid "Encrypting File System"
+msgstr ""
+
+#: crypt32.rc:149 cryptui.rc:130
+msgid "Windows Hardware Driver Verification"
+msgstr ""
+
+#: crypt32.rc:150 cryptui.rc:131
+msgid "Windows System Component Verification"
+msgstr ""
+
+#: crypt32.rc:151 cryptui.rc:132
+msgid "OEM Windows System Component Verification"
+msgstr ""
+
+#: crypt32.rc:152 cryptui.rc:133
+msgid "Embedded Windows System Component Verification"
+msgstr ""
+
+#: crypt32.rc:153 cryptui.rc:140
+msgid "Key Pack Licenses"
+msgstr ""
+
+#: crypt32.rc:154 cryptui.rc:141
+msgid "License Server Verification"
+msgstr ""
+
+#: crypt32.rc:155 cryptui.rc:143
+msgid "Smart Card Logon"
+msgstr ""
+
+#: crypt32.rc:156 cryptui.rc:139
+msgid "Digital Rights"
+msgstr ""
+
+#: crypt32.rc:157 cryptui.rc:135
+msgid "Qualified Subordination"
+msgstr ""
+
+#: crypt32.rc:158 cryptui.rc:136
+msgid "Key Recovery"
+msgstr ""
+
+#: crypt32.rc:159 cryptui.rc:137
+msgid "Document Signing"
+msgstr ""
+
+#: crypt32.rc:160
+msgid "IP security IKE intermediate"
+msgstr ""
+
+#: crypt32.rc:161 cryptui.rc:129
+msgid "File Recovery"
+msgstr ""
+
+#: crypt32.rc:162 cryptui.rc:134
+msgid "Root List Signer"
+msgstr ""
+
+#: crypt32.rc:163
+msgid "All application policies"
+msgstr ""
+
+#: crypt32.rc:164 cryptui.rc:146
+msgid "Directory Service Email Replication"
+msgstr ""
+
+#: crypt32.rc:165 cryptui.rc:142
+msgid "Certificate Request Agent"
+msgstr ""
+
+#: crypt32.rc:166 cryptui.rc:138
+msgid "Lifetime Signing"
+msgstr ""
+
+#: crypt32.rc:167
+msgid "All issuance policies"
+msgstr ""
+
+#: crypt32.rc:172
+msgid "Trusted Root Certification Authorities"
+msgstr ""
+
+#: crypt32.rc:173
+msgid "Personal"
+msgstr ""
+
+#: crypt32.rc:174
+msgid "Intermediate Certification Authorities"
+msgstr ""
+
+#: crypt32.rc:175
+msgid "Other People"
+msgstr ""
+
+#: crypt32.rc:176
+msgid "Trusted Publishers"
+msgstr ""
+
+#: crypt32.rc:177
+msgid "Untrusted Certificates"
+msgstr ""
+
+#: crypt32.rc:182
+msgid "KeyID="
+msgstr ""
+
+#: crypt32.rc:183
+msgid "Certificate Issuer"
+msgstr ""
+
+#: crypt32.rc:184
+msgid "Certificate Serial Number="
+msgstr ""
+
+#: crypt32.rc:185
+msgid "Other Name="
+msgstr ""
+
+#: crypt32.rc:186
+msgid "Email Address="
+msgstr ""
+
+#: crypt32.rc:187
+msgid "DNS Name="
+msgstr ""
+
+#: crypt32.rc:188
+msgid "Directory Address"
+msgstr ""
+
+#: crypt32.rc:189
+msgid "URL="
+msgstr ""
+
+#: crypt32.rc:190
+msgid "IP Address="
+msgstr ""
+
+#: crypt32.rc:191
+msgid "Mask="
+msgstr ""
+
+#: crypt32.rc:192
+msgid "Registered ID="
+msgstr ""
+
+#: crypt32.rc:193
+msgid "Unknown Key Usage"
+msgstr ""
+
+#: crypt32.rc:194
+msgid "Subject Type="
+msgstr ""
+
+#: crypt32.rc:195
+msgid "CA"
+msgstr ""
+
+#: crypt32.rc:196
+msgid "End Entity"
+msgstr ""
+
+#: crypt32.rc:197
+msgid "Path Length Constraint="
+msgstr ""
+
+#: crypt32.rc:198
+msgctxt "path length"
+msgid "None"
+msgstr ""
+
+#: crypt32.rc:199
+#, fuzzy
+msgid "Information Not Available"
+msgstr "INFUORMAZIUN"
+
+#: crypt32.rc:200
+msgid "Authority Info Access"
+msgstr ""
+
+#: crypt32.rc:201
+msgid "Access Method="
+msgstr ""
+
+#: crypt32.rc:202
+msgid "OCSP"
+msgstr ""
+
+#: crypt32.rc:203
+msgid "CA Issuers"
+msgstr ""
+
+#: crypt32.rc:204
+msgid "Unknown Access Method"
+msgstr ""
+
+#: crypt32.rc:205
+msgid "Alternative Name"
+msgstr ""
+
+#: crypt32.rc:206
+msgid "CRL Distribution Point"
+msgstr ""
+
+#: crypt32.rc:207
+msgid "Distribution Point Name"
+msgstr ""
+
+#: crypt32.rc:208
+msgid "Full Name"
+msgstr ""
+
+#: crypt32.rc:209
+msgid "RDN Name"
+msgstr ""
+
+#: crypt32.rc:210
+msgid "CRL Reason="
+msgstr ""
+
+#: crypt32.rc:211
+msgid "CRL Issuer"
+msgstr ""
+
+#: crypt32.rc:212
+msgid "Key Compromise"
+msgstr ""
+
+#: crypt32.rc:213
+msgid "CA Compromise"
+msgstr ""
+
+#: crypt32.rc:214
+msgid "Affiliation Changed"
+msgstr ""
+
+#: crypt32.rc:215
+msgid "Superseded"
+msgstr ""
+
+#: crypt32.rc:216
+msgid "Operation Ceased"
+msgstr ""
+
+#: crypt32.rc:217
+msgid "Certificate Hold"
+msgstr ""
+
+#: crypt32.rc:218
+#, fuzzy
+msgid "Financial Information="
+msgstr "INFUORMAZIUN"
+
+#: crypt32.rc:219
+msgid "Available"
+msgstr ""
+
+#: crypt32.rc:220
+msgid "Not Available"
+msgstr ""
+
+#: crypt32.rc:221
+msgid "Meets Criteria="
+msgstr ""
+
+#: crypt32.rc:222 cryptui.rc:163 oleaut32.rc:29 ipconfig.rc:44
+msgid "Yes"
+msgstr ""
+
+#: crypt32.rc:223 cryptui.rc:164 oleaut32.rc:30 ipconfig.rc:45
+msgid "No"
+msgstr ""
+
+#: crypt32.rc:224
+msgid "Digital Signature"
+msgstr ""
+
+#: crypt32.rc:225
+msgid "Non-Repudiation"
+msgstr ""
+
+#: crypt32.rc:226
+msgid "Key Encipherment"
+msgstr ""
+
+#: crypt32.rc:227
+msgid "Data Encipherment"
+msgstr ""
+
+#: crypt32.rc:228
+msgid "Key Agreement"
+msgstr ""
+
+#: crypt32.rc:229
+msgid "Certificate Signing"
+msgstr ""
+
+#: crypt32.rc:230
+msgid "Off-line CRL Signing"
+msgstr ""
+
+#: crypt32.rc:231
+msgid "CRL Signing"
+msgstr ""
+
+#: crypt32.rc:232
+msgid "Encipher Only"
+msgstr ""
+
+#: crypt32.rc:233
+msgid "Decipher Only"
+msgstr ""
+
+#: crypt32.rc:234
+msgid "SSL Client Authentication"
+msgstr ""
+
+#: crypt32.rc:235
+msgid "SSL Server Authentication"
+msgstr ""
+
+#: crypt32.rc:236
+msgid "S/MIME"
+msgstr ""
+
+#: crypt32.rc:237
+msgid "Signature"
+msgstr ""
+
+#: crypt32.rc:238
+msgid "SSL CA"
+msgstr ""
+
+#: crypt32.rc:239
+msgid "S/MIME CA"
+msgstr ""
+
+#: crypt32.rc:240
+msgid "Signature CA"
+msgstr ""
+
+#: cryptdlg.rc:27
+msgid "Certificate Policy"
+msgstr ""
+
+#: cryptdlg.rc:28
+msgid "Policy Identifier: "
+msgstr ""
+
+#: cryptdlg.rc:29
+msgid "Policy Qualifier Info"
+msgstr ""
+
+#: cryptdlg.rc:30
+msgid "Policy Qualifier Id="
+msgstr ""
+
+#: cryptdlg.rc:33
+msgid "Qualifier"
+msgstr ""
+
+#: cryptdlg.rc:34
+msgid "Notice Reference"
+msgstr ""
+
+#: cryptdlg.rc:35
+msgid "Organization="
+msgstr ""
+
+#: cryptdlg.rc:36
+msgid "Notice Number="
+msgstr ""
+
+#: cryptdlg.rc:37
+msgid "Notice Text="
+msgstr ""
+
+#: cryptui.rc:27 cryptui.rc:90
+msgid "Certificate"
+msgstr ""
+
+#: cryptui.rc:28
+#, fuzzy
+msgid "Certificate Information"
+msgstr "INFUORMAZIUN"
+
+#: cryptui.rc:29
+msgid ""
+"This certificate has an invalid signature.  The certificate may have been "
+"altered or corrupted."
+msgstr ""
+
+#: cryptui.rc:30
+msgid ""
+"This root certificate is not trusted.  To trust it, add it to your system's "
+"trusted root certificate store."
+msgstr ""
+
+#: cryptui.rc:31
+msgid "This certificate could not be validated to a trusted root certificate."
+msgstr ""
+
+#: cryptui.rc:32
+msgid "This certificate's issuer could not be found."
+msgstr ""
+
+#: cryptui.rc:33
+msgid "All the intended purposes of this certificate could not be verified."
+msgstr ""
+
+#: cryptui.rc:34
+msgid "This certificate is intended for the following purposes:"
+msgstr ""
+
+#: cryptui.rc:35
+msgid "Issued to: "
+msgstr ""
+
+#: cryptui.rc:36
+msgid "Issued by: "
+msgstr ""
+
+#: cryptui.rc:37
+msgid "Valid from "
+msgstr ""
+
+#: cryptui.rc:38
+msgid " to "
+msgstr ""
+
+#: cryptui.rc:39
+msgid "This certificate has an invalid signature."
+msgstr ""
+
+#: cryptui.rc:40
+msgid "This certificate has expired or is not yet valid."
+msgstr ""
+
+#: cryptui.rc:41
+msgid "This certificate's validity period exceeds that of its issuer."
+msgstr ""
+
+#: cryptui.rc:42
+msgid "This certificate was revoked by its issuer."
+msgstr ""
+
+#: cryptui.rc:43
+msgid "This certificate is OK."
+msgstr ""
+
+#: cryptui.rc:44
+msgid "Field"
+msgstr ""
+
+#: cryptui.rc:45
+msgid "Value"
+msgstr ""
+
+#: cryptui.rc:46 cryptui.rc:99 cryptui.rc:105
+msgid "<All>"
+msgstr ""
+
+#: cryptui.rc:47
+msgid "Version 1 Fields Only"
+msgstr ""
+
+#: cryptui.rc:48
+msgid "Extensions Only"
+msgstr ""
+
+#: cryptui.rc:49
+msgid "Critical Extensions Only"
+msgstr ""
+
+#: cryptui.rc:50
+msgid "Properties Only"
+msgstr ""
+
+#: cryptui.rc:52
+msgid "Serial number"
+msgstr ""
+
+#: cryptui.rc:53
+msgid "Issuer"
+msgstr ""
+
+#: cryptui.rc:54
+msgid "Valid from"
+msgstr ""
+
+#: cryptui.rc:55
+msgid "Valid to"
+msgstr ""
+
+#: cryptui.rc:56
+msgid "Subject"
+msgstr ""
+
+#: cryptui.rc:57
+msgid "Public key"
+msgstr ""
+
+#: cryptui.rc:58
+msgid "%s (%d bits)"
+msgstr ""
+
+#: cryptui.rc:59
+msgid "SHA1 hash"
+msgstr ""
+
+#: cryptui.rc:60
+msgid "Enhanced key usage (property)"
+msgstr ""
+
+#: cryptui.rc:61
+msgid "Friendly name"
+msgstr ""
+
+#: cryptui.rc:62 shell32.rc:239 ipconfig.rc:41
+msgid "Description"
+msgstr ""
+
+#: cryptui.rc:63
+msgid "Certificate Properties"
+msgstr ""
+
+#: cryptui.rc:64
+msgid "Please enter an OID in the form 1.2.3.4"
+msgstr ""
+
+#: cryptui.rc:65
+msgid "The OID you entered already exists."
+msgstr ""
+
+#: cryptui.rc:66
+msgid "Select Certificate Store"
+msgstr ""
+
+#: cryptui.rc:67
+msgid "Please select a certificate store."
+msgstr ""
+
+#: cryptui.rc:68
+msgid "Certificate Import Wizard"
+msgstr ""
+
+#: cryptui.rc:69
+msgid ""
+"The file contains objects that do not match the given criteria.  Please "
+"select another file."
+msgstr ""
+
+#: cryptui.rc:70
+msgid "File to Import"
+msgstr ""
+
+#: cryptui.rc:71
+msgid "Specify the file you want to import."
+msgstr ""
+
+#: cryptui.rc:72 cryptui.rc:95
+msgid "Certificate Store"
+msgstr ""
+
+#: cryptui.rc:73
+msgid ""
+"Certificate stores are collections of certificates, certificate revocation "
+"lists, and certificate trust lists."
+msgstr ""
+
+#: cryptui.rc:74
+msgid "X.509 Certificate (*.cer; *.crt)"
+msgstr ""
+
+#: cryptui.rc:75
+msgid "Personal Information Exchange (*.pfx; *.p12)"
+msgstr ""
+
+#: cryptui.rc:76 cryptui.rc:155
+msgid "Certificate Revocation List (*.crl)"
+msgstr ""
+
+#: cryptui.rc:77 cryptui.rc:156
+msgid "Certificate Trust List (*.stl)"
+msgstr ""
+
+#: cryptui.rc:78
+msgid "Microsoft Serialized Certificate Store (*.sst)"
+msgstr ""
+
+#: cryptui.rc:79
+msgid "CMS/PKCS #7 Messages (*.spc; *.p7b)"
+msgstr ""
+
+#: cryptui.rc:81
+msgid "Please select a file."
+msgstr ""
+
+#: cryptui.rc:82
+msgid "The file format is not recognized.  Please select another file."
+msgstr ""
+
+#: cryptui.rc:83
+msgid "Could not open "
+msgstr ""
+
+#: cryptui.rc:84
+msgid "Determined by the program"
+msgstr ""
+
+#: cryptui.rc:85
+msgid "Please select a store"
+msgstr ""
+
+#: cryptui.rc:86
+msgid "Certificate Store Selected"
+msgstr ""
+
+#: cryptui.rc:87
+msgid "Automatically determined by the program"
+msgstr ""
+
+#: cryptui.rc:88 shell32.rc:122
+#, fuzzy
+msgid "File"
+msgstr "&Datoteca"
+
+#: cryptui.rc:89
+msgid "Content"
+msgstr ""
+
+#: cryptui.rc:91
+msgid "Certificate Revocation List"
+msgstr ""
+
+#: cryptui.rc:93
+msgid "CMS/PKCS #7 Message"
+msgstr ""
+
+#: cryptui.rc:94
+msgid "Personal Information Exchange"
+msgstr ""
+
+#: cryptui.rc:96
+msgid "The import was successful."
+msgstr ""
+
+#: cryptui.rc:97
+msgid "The import failed."
+msgstr ""
+
+#: cryptui.rc:98
+msgid "Arial"
+msgstr ""
+
+#: cryptui.rc:100
+msgid "<Advanced Purposes>"
+msgstr ""
+
+#: cryptui.rc:101
+msgid "Issued To"
+msgstr ""
+
+#: cryptui.rc:102
+msgid "Issued By"
+msgstr ""
+
+#: cryptui.rc:103
+msgid "Expiration Date"
+msgstr ""
+
+#: cryptui.rc:104
+msgid "Friendly Name"
+msgstr ""
+
+#: cryptui.rc:106 cryptui.rc:120
+msgid "<None>"
+msgstr ""
+
+#: cryptui.rc:107
+msgid ""
+"You will no longer be able to decrypt messages with this certificate, or "
+"sign messages with it.\n"
+"Are you sure you want to remove this certificate?"
+msgstr ""
+
+#: cryptui.rc:108
+msgid ""
+"You will no longer be able to decrypt messages with these certificates, or "
+"sign messages with them.\n"
+"Are you sure you want to remove these certificates?"
+msgstr ""
+
+#: cryptui.rc:109
+msgid ""
+"You will no longer be able to encrypt messages with this certificate, or "
+"verify messages signed with it.\n"
+"Are you sure you want to remove this certificate?"
+msgstr ""
+
+#: cryptui.rc:110
+msgid ""
+"You will no longer be able to encrypt messages with these certificates, or "
+"verify messages signed with it.\n"
+"Are you sure you want to remove these certificates?"
+msgstr ""
+
+#: cryptui.rc:111
+msgid ""
+"Certificates issued by this certification authority will no longer be "
+"trusted.\n"
+"Are you sure you want to remove this certificate?"
+msgstr ""
+
+#: cryptui.rc:112
+msgid ""
+"Certificates issued by these certification authorities will no longer be "
+"trusted.\n"
+"Are you sure you want to remove these certificates?"
+msgstr ""
+
+#: cryptui.rc:113
+msgid ""
+"Certificates issued by this root certification authority, or any "
+"certification authorities it issued, will no longer be trusted.\n"
+"Are you sure you want to remove this trusted root certificate?"
+msgstr ""
+
+#: cryptui.rc:114
+msgid ""
+"Certificates issued by these root certification authorities, or any "
+"certification authorities they issued, will no longer be trusted.\n"
+"Are you sure you want to remove these trusted root certificates?"
+msgstr ""
+
+#: cryptui.rc:115
+msgid ""
+"Software signed by this publisher will no longer be trusted.\n"
+"Are you sure you want to remove this certificate?"
+msgstr ""
+
+#: cryptui.rc:116
+msgid ""
+"Software signed by these publishers will no longer be trusted.\n"
+"Are you sure you want to remove these certificates?"
+msgstr ""
+
+#: cryptui.rc:117
+msgid "Are you sure you want to remove this certificate?"
+msgstr ""
+
+#: cryptui.rc:118
+msgid "Are you sure you want to remove these certificates?"
+msgstr ""
+
+#: cryptui.rc:119
+msgid "Certificates"
+msgstr ""
+
+#: cryptui.rc:121
+msgid "Ensures the identity of a remote computer"
+msgstr ""
+
+#: cryptui.rc:122
+msgid "Proves your identity to a remote computer"
+msgstr ""
+
+#: cryptui.rc:123
+msgid ""
+"Ensures software came from software publisher\n"
+"Protects software from alteration after publication"
+msgstr ""
+
+#: cryptui.rc:124
+msgid "Protects e-mail messages"
+msgstr ""
+
+#: cryptui.rc:125
+msgid "Allows secure communication over the Internet"
+msgstr ""
+
+#: cryptui.rc:126
+msgid "Allows data to be signed with the current time"
+msgstr ""
+
+#: cryptui.rc:127
+msgid "Allows you to digitally sign a certificate trust list"
+msgstr ""
+
+#: cryptui.rc:128
+msgid "Allows data on disk to be encrypted"
+msgstr ""
+
+#: cryptui.rc:144
+msgid "Private Key Archival"
+msgstr ""
+
+#: cryptui.rc:147
+msgid "Certificate Export Wizard"
+msgstr ""
+
+#: cryptui.rc:148
+#, fuzzy
+msgid "Export Format"
+msgstr "Normal"
+
+#: cryptui.rc:149
+msgid "Choose the format in which the content will be saved."
+msgstr ""
+
+#: cryptui.rc:150
+msgid "Export Filename"
+msgstr ""
+
+#: cryptui.rc:151
+msgid "Specify the name of the file in which the content will be saved."
+msgstr ""
+
+#: cryptui.rc:152
+msgid "The specified file already exists.  Do you want to replace it?"
+msgstr ""
+
+#: cryptui.rc:153
+msgid "DER-Encoded Binary X.509 (*.cer)"
+msgstr ""
+
+#: cryptui.rc:154
+msgid "Base64-Encoded X.509 (*.cer)"
+msgstr ""
+
+#: cryptui.rc:157
+msgid "CMS/PKCS #7 Messages (*.p7b)"
+msgstr ""
+
+#: cryptui.rc:158
+msgid "Personal Information Exchange (*.pfx)"
+msgstr ""
+
+#: cryptui.rc:159
+msgid "Serialized Certificate Store (*.sst)"
+msgstr ""
+
+#: cryptui.rc:160
+#, fuzzy
+msgid "File Format"
+msgstr "Normal"
+
+#: cryptui.rc:161
+msgid "Include all certificates in certificate path"
+msgstr ""
+
+#: cryptui.rc:162
+msgid "Export keys"
+msgstr ""
+
+#: cryptui.rc:165
+msgid "The export was successful."
+msgstr ""
+
+#: cryptui.rc:166
+msgid "The export failed."
+msgstr ""
+
+#: cryptui.rc:167
+msgid "Export Private Key"
+msgstr ""
+
+#: cryptui.rc:168
+msgid ""
+"The certificate contains a private key which may be exported along with the "
+"certificate."
+msgstr ""
+
+#: cryptui.rc:169
+msgid "Enter Password"
+msgstr ""
+
+#: cryptui.rc:170
+msgid "You may password-protect a private key."
+msgstr ""
+
+#: cryptui.rc:171
+msgid "The passwords do not match."
+msgstr ""
+
+#: cryptui.rc:172
+msgid "Note: The private key for this certificate could not be opened."
+msgstr ""
+
+#: cryptui.rc:173
+msgid "Note: The private  key for this certificate is not exportable."
+msgstr ""
+
+#: devenum.rc:32
+msgid "Default DirectSound"
+msgstr ""
+
+#: devenum.rc:33
+msgid "DirectSound: %s"
+msgstr ""
+
+#: devenum.rc:34
+msgid "Default WaveOut Device"
+msgstr ""
+
+#: devenum.rc:35
+msgid "Default MidiOut Device"
+msgstr ""
+
+#: dxdiagn.rc:25
+#, fuzzy
+msgid "Regional Setting"
+msgstr "Default"
+
+#: dxdiagn.rc:26
+msgid "%uMB used, %uMB available"
+msgstr ""
+
+#: hhctrl.rc:67 hhctrl.rc:47 wordpad.rc:155
+#, fuzzy
+msgid "Options"
+msgstr "&Options"
+
+#: hhctrl.rc:70
+msgid "S&ync"
+msgstr ""
+
+#: hhctrl.rc:71 shdoclc.rc:38 winhlp32.rc:86
+msgid "&Back"
+msgstr "&Inavo"
+
+#: hhctrl.rc:72
+msgid "&Forward"
+msgstr ""
+
+#: hhctrl.rc:73
+msgctxt "table of contents"
+msgid "&Home"
+msgstr ""
+
+#: hhctrl.rc:74
+msgid "&Stop"
+msgstr ""
+
+#: hhctrl.rc:75 shdoclc.rc:56
+msgid "&Refresh"
+msgstr ""
+
+#: hhctrl.rc:76 winhlp32.rc:31
+#, fuzzy
+msgid "&Print..."
+msgstr "&Stampar tema"
+
+#: hhctrl.rc:28 taskmgr.rc:89
+msgid "&Contents"
+msgstr ""
+
+#: hhctrl.rc:29
+#, fuzzy
+msgid "I&ndex"
+msgstr "&Cuntgn�"
+
+#: hhctrl.rc:30 notepad.rc:52
+msgid "&Search"
+msgstr ""
+
+#: hhctrl.rc:31
+msgid "Favor&ites"
+msgstr ""
+
+#: hhctrl.rc:33
+msgid "Hide &Tabs"
+msgstr ""
+
+#: hhctrl.rc:34
+msgid "Show &Tabs"
+msgstr ""
+
+#: hhctrl.rc:39
+msgid "Show"
+msgstr ""
+
+#: hhctrl.rc:40
+msgid "Hide"
+msgstr ""
+
+#: hhctrl.rc:41 shdoclc.rc:170 shdoclc.rc:194 shdocvw.rc:65
+msgid "Stop"
+msgstr ""
+
+#: hhctrl.rc:42 shdocvw.rc:66 shell32.rc:59
+msgid "Refresh"
+msgstr ""
+
+#: hhctrl.rc:43 shdocvw.rc:63
+#, fuzzy
+msgid "Back"
+msgstr "&Inavo"
+
+#: hhctrl.rc:44
+msgctxt "table of contents"
+msgid "Home"
+msgstr ""
+
+#: hhctrl.rc:45
+msgid "Sync"
+msgstr ""
+
+#: hhctrl.rc:48 shdocvw.rc:64
+msgid "Forward"
+msgstr ""
+
+#: hhctrl.rc:49
+msgid "IDTB_NOTES"
+msgstr ""
+
+#: hhctrl.rc:50
+msgid "IDTB_BROWSE_FWD"
+msgstr ""
+
+#: hhctrl.rc:51
+msgid "IDT_BROWSE_BACK"
+msgstr ""
+
+#: hhctrl.rc:52
+msgid "IDTB_CONTENTS"
+msgstr ""
+
+#: hhctrl.rc:53
+msgid "IDTB_INDEX"
+msgstr ""
+
+#: hhctrl.rc:54
+msgid "IDTB_SEARCH"
+msgstr ""
+
+#: hhctrl.rc:55
+msgid "IDTB_HISTORY"
+msgstr ""
+
+#: hhctrl.rc:56
+msgid "IDTB_FAVORITES"
+msgstr ""
+
+#: hhctrl.rc:57
+msgid "Jump1"
+msgstr ""
+
+#: hhctrl.rc:58
+msgid "Jump2"
+msgstr ""
+
+#: hhctrl.rc:59
+msgid "Customize"
+msgstr ""
+
+#: hhctrl.rc:60
+msgid "Zoom"
+msgstr ""
+
+#: hhctrl.rc:61
+msgid "IDTB_TOC_NEXT"
+msgstr ""
+
+#: hhctrl.rc:62
+msgid "IDTB_TOC_PREV"
+msgstr ""
+
+#: iccvid.rc:25 iccvid.rc:26
+msgid "Cinepak Video codec"
+msgstr ""
+
+#: inetcpl.rc:28
+msgid "Internet Settings"
+msgstr ""
+
+#: inetcpl.rc:29
+msgid "Configure Wine Internet Browser and related settings"
+msgstr ""
+
+#: inetcpl.rc:30
+msgid "Security settings for zone: "
+msgstr ""
+
+#: inetcpl.rc:31
+msgid "Custom"
+msgstr ""
+
+#: inetcpl.rc:32
+msgid "Very Low"
+msgstr ""
+
+#: inetcpl.rc:33
+msgid "Low"
+msgstr ""
+
+#: inetcpl.rc:34
+msgid "Medium"
+msgstr ""
+
+#: inetcpl.rc:35
+msgid "Increased"
+msgstr ""
+
+#: inetcpl.rc:36
+msgid "High"
+msgstr ""
+
+#: jscript.rc:25
+msgid "Error converting object to primitive type"
+msgstr ""
+
+#: jscript.rc:26
+msgid "Invalid procedure call or argument"
+msgstr ""
+
+#: jscript.rc:27
+msgid "Subscript out of range"
+msgstr ""
+
+#: jscript.rc:28
+msgid "Automation server can't create object"
+msgstr ""
+
+#: jscript.rc:29
+msgid "Object doesn't support this property or method"
+msgstr ""
+
+#: jscript.rc:30
+msgid "Object doesn't support this action"
+msgstr ""
+
+#: jscript.rc:31
+msgid "Argument not optional"
+msgstr ""
+
+#: jscript.rc:32
+msgid "Syntax error"
+msgstr ""
+
+#: jscript.rc:33
+msgid "Expected ';'"
+msgstr ""
+
+#: jscript.rc:34
+msgid "Expected '('"
+msgstr ""
+
+#: jscript.rc:35
+msgid "Expected ')'"
+msgstr ""
+
+#: jscript.rc:36
+msgid "Unterminated string constant"
+msgstr ""
+
+#: jscript.rc:37
+msgid "Conditional compilation is turned off"
+msgstr ""
+
+#: jscript.rc:40
+msgid "Number expected"
+msgstr ""
+
+#: jscript.rc:38
+msgid "Function expected"
+msgstr ""
+
+#: jscript.rc:39
+msgid "'[object]' is not a date object"
+msgstr ""
+
+#: jscript.rc:41
+msgid "Object expected"
+msgstr ""
+
+#: jscript.rc:42
+msgid "Illegal assignment"
+msgstr ""
+
+#: jscript.rc:43
+msgid "'|' is undefined"
+msgstr ""
+
+#: jscript.rc:44
+msgid "Boolean object expected"
+msgstr ""
+
+#: jscript.rc:45
+msgid "VBArray object expected"
+msgstr ""
+
+#: jscript.rc:46
+msgid "JScript object expected"
+msgstr ""
+
+#: jscript.rc:47
+msgid "Syntax error in regular expression"
+msgstr ""
+
+#: jscript.rc:48
+msgid "URI to be encoded contains invalid characters"
+msgstr ""
+
+#: jscript.rc:49
+msgid "Array length must be a finite positive integer"
+msgstr ""
+
+#: jscript.rc:50
+msgid "Array object expected"
+msgstr ""
+
+#: winerror.mc:26
+msgid "Success\n"
+msgstr ""
+
+#: winerror.mc:31
+msgid "Invalid function\n"
+msgstr ""
+
+#: winerror.mc:36
+msgid "File not found\n"
+msgstr ""
+
+#: winerror.mc:41
+msgid "Path not found\n"
+msgstr ""
+
+#: winerror.mc:46
+msgid "Too many open files\n"
+msgstr ""
+
+#: winerror.mc:51
+msgid "Access denied\n"
+msgstr ""
+
+#: winerror.mc:56
+msgid "Invalid handle\n"
+msgstr ""
+
+#: winerror.mc:61
+msgid "Memory trashed\n"
+msgstr ""
+
+#: winerror.mc:66
+msgid "Not enough memory\n"
+msgstr ""
+
+#: winerror.mc:71
+msgid "Invalid block\n"
+msgstr ""
+
+#: winerror.mc:76
+msgid "Bad environment\n"
+msgstr ""
+
+#: winerror.mc:81
+msgid "Bad format\n"
+msgstr ""
+
+#: winerror.mc:86
+msgid "Invalid access\n"
+msgstr ""
+
+#: winerror.mc:91
+msgid "Invalid data\n"
+msgstr ""
+
+#: winerror.mc:96
+msgid "Out of memory\n"
+msgstr ""
+
+#: winerror.mc:101
+msgid "Invalid drive\n"
+msgstr ""
+
+#: winerror.mc:106
+msgid "Can't delete current directory\n"
+msgstr ""
+
+#: winerror.mc:111
+msgid "Not same device\n"
+msgstr ""
+
+#: winerror.mc:116
+msgid "No more files\n"
+msgstr ""
+
+#: winerror.mc:121
+msgid "Write protected\n"
+msgstr ""
+
+#: winerror.mc:126
+msgid "Bad unit\n"
+msgstr ""
+
+#: winerror.mc:131
+msgid "Not ready\n"
+msgstr ""
+
+#: winerror.mc:136
+msgid "Bad command\n"
+msgstr ""
+
+#: winerror.mc:141
+msgid "CRC error\n"
+msgstr ""
+
+#: winerror.mc:146
+msgid "Bad length\n"
+msgstr ""
+
+#: winerror.mc:151 winerror.mc:526
+msgid "Seek error\n"
+msgstr ""
+
+#: winerror.mc:156
+msgid "Not DOS disk\n"
+msgstr ""
+
+#: winerror.mc:161
+msgid "Sector not found\n"
+msgstr ""
+
+#: winerror.mc:166
+msgid "Out of paper\n"
+msgstr ""
+
+#: winerror.mc:171
+#, fuzzy
+msgid "Write fault\n"
+msgstr "Default"
+
+#: winerror.mc:176
+#, fuzzy
+msgid "Read fault\n"
+msgstr "Default"
+
+#: winerror.mc:181
+msgid "General failure\n"
+msgstr ""
+
+#: winerror.mc:186
+msgid "Sharing violation\n"
+msgstr ""
+
+#: winerror.mc:191
+#, fuzzy
+msgid "Lock violation\n"
+msgstr "&Options"
+
+#: winerror.mc:196
+msgid "Wrong disk\n"
+msgstr ""
+
+#: winerror.mc:201
+msgid "Sharing buffer exceeded\n"
+msgstr ""
+
+#: winerror.mc:206
+msgid "End of file\n"
+msgstr ""
+
+#: winerror.mc:211 winerror.mc:436
+msgid "Disk full\n"
+msgstr ""
+
+#: winerror.mc:216
+msgid "Request not supported\n"
+msgstr ""
+
+#: winerror.mc:221
+msgid "Remote machine not listening\n"
+msgstr ""
+
+#: winerror.mc:226
+msgid "Duplicate network name\n"
+msgstr ""
+
+#: winerror.mc:231
+msgid "Bad network path\n"
+msgstr ""
+
+#: winerror.mc:236
+msgid "Network busy\n"
+msgstr ""
+
+#: winerror.mc:241
+msgid "Device does not exist\n"
+msgstr ""
+
+#: winerror.mc:246
+msgid "Too many commands\n"
+msgstr ""
+
+#: winerror.mc:251
+msgid "Adaptor hardware error\n"
+msgstr ""
+
+#: winerror.mc:256
+msgid "Bad network response\n"
+msgstr ""
+
+#: winerror.mc:261
+msgid "Unexpected network error\n"
+msgstr ""
+
+#: winerror.mc:266
+msgid "Bad remote adaptor\n"
+msgstr ""
+
+#: winerror.mc:271
+msgid "Print queue full\n"
+msgstr ""
+
+#: winerror.mc:276
+msgid "No spool space\n"
+msgstr ""
+
+#: winerror.mc:281
+msgid "Print cancelled\n"
+msgstr ""
+
+#: winerror.mc:286
+msgid "Network name deleted\n"
+msgstr ""
+
+#: winerror.mc:291
+msgid "Network access denied\n"
+msgstr ""
+
+#: winerror.mc:296
+msgid "Bad device type\n"
+msgstr ""
+
+#: winerror.mc:301
+msgid "Bad network name\n"
+msgstr ""
+
+#: winerror.mc:306
+msgid "Too many network names\n"
+msgstr ""
+
+#: winerror.mc:311
+msgid "Too many network sessions\n"
+msgstr ""
+
+#: winerror.mc:316
+msgid "Sharing paused\n"
+msgstr ""
+
+#: winerror.mc:321
+msgid "Request not accepted\n"
+msgstr ""
+
+#: winerror.mc:326
+msgid "Redirector paused\n"
+msgstr ""
+
+#: winerror.mc:331
+msgid "File exists\n"
+msgstr ""
+
+#: winerror.mc:336
+msgid "Cannot create\n"
+msgstr ""
+
+#: winerror.mc:341
+msgid "Int24 failure\n"
+msgstr ""
+
+#: winerror.mc:346
+msgid "Out of structures\n"
+msgstr ""
+
+#: winerror.mc:351
+msgid "Already assigned\n"
+msgstr ""
+
+#: winerror.mc:356 winerror.mc:1711
+msgid "Invalid password\n"
+msgstr ""
+
+#: winerror.mc:361
+msgid "Invalid parameter\n"
+msgstr ""
+
+#: winerror.mc:366
+#, fuzzy
+msgid "Net write fault\n"
+msgstr "Default"
+
+#: winerror.mc:371
+msgid "No process slots\n"
+msgstr ""
+
+#: winerror.mc:376
+msgid "Too many semaphores\n"
+msgstr ""
+
+#: winerror.mc:381
+msgid "Exclusive semaphore already owned\n"
+msgstr ""
+
+#: winerror.mc:386
+msgid "Semaphore is set\n"
+msgstr ""
+
+#: winerror.mc:391
+msgid "Too many semaphore requests\n"
+msgstr ""
+
+#: winerror.mc:396
+msgid "Invalid at interrupt time\n"
+msgstr ""
+
+#: winerror.mc:401
+msgid "Semaphore owner died\n"
+msgstr ""
+
+#: winerror.mc:406
+msgid "Semaphore user limit\n"
+msgstr ""
+
+#: winerror.mc:411
+msgid "Insert disk for drive %1\n"
+msgstr ""
+
+#: winerror.mc:416
+msgid "Drive locked\n"
+msgstr ""
+
+#: winerror.mc:421
+msgid "Broken pipe\n"
+msgstr ""
+
+#: winerror.mc:426
+#, fuzzy
+msgid "Open failed\n"
+msgstr "Wine ag�d"
+
+#: winerror.mc:431
+msgid "Buffer overflow\n"
+msgstr ""
+
+#: winerror.mc:441
+msgid "No more search handles\n"
+msgstr ""
+
+#: winerror.mc:446
+msgid "Invalid target handle\n"
+msgstr ""
+
+#: winerror.mc:451
+msgid "Invalid IOCTL\n"
+msgstr ""
+
+#: winerror.mc:456
+msgid "Invalid verify switch\n"
+msgstr ""
+
+#: winerror.mc:461
+msgid "Bad driver level\n"
+msgstr ""
+
+#: winerror.mc:466
+#, fuzzy
+msgid "Call not implemented\n"
+msgstr "Na implementa"
+
+#: winerror.mc:471
+msgid "Semaphore timeout\n"
+msgstr ""
+
+#: winerror.mc:476
+msgid "Insufficient buffer\n"
+msgstr ""
+
+#: winerror.mc:481
+msgid "Invalid name\n"
+msgstr ""
+
+#: winerror.mc:486
+msgid "Invalid level\n"
+msgstr ""
+
+#: winerror.mc:491
+msgid "No volume label\n"
+msgstr ""
+
+#: winerror.mc:496
+msgid "Module not found\n"
+msgstr ""
+
+#: winerror.mc:501
+msgid "Procedure not found\n"
+msgstr ""
+
+#: winerror.mc:506
+msgid "No children to wait for\n"
+msgstr ""
+
+#: winerror.mc:511
+msgid "Child process has not completed\n"
+msgstr ""
+
+#: winerror.mc:516
+msgid "Invalid use of direct access handle\n"
+msgstr ""
+
+#: winerror.mc:521
+msgid "Negative seek\n"
+msgstr ""
+
+#: winerror.mc:531
+msgid "Drive is a JOIN target\n"
+msgstr ""
+
+#: winerror.mc:536
+msgid "Drive is already JOINed\n"
+msgstr ""
+
+#: winerror.mc:541
+msgid "Drive is already SUBSTed\n"
+msgstr ""
+
+#: winerror.mc:546
+msgid "Drive is not JOINed\n"
+msgstr ""
+
+#: winerror.mc:551
+msgid "Drive is not SUBSTed\n"
+msgstr ""
+
+#: winerror.mc:556
+msgid "Attempt to JOIN onto a JOINed drive\n"
+msgstr ""
+
+#: winerror.mc:561
+msgid "Attempt to SUBST onto a SUBSTed drive\n"
+msgstr ""
+
+#: winerror.mc:566
+msgid "Attempt to JOIN to a SUBSTed drive\n"
+msgstr ""
+
+#: winerror.mc:571
+msgid "Attempt to SUBST to a JOINed drive\n"
+msgstr ""
+
+#: winerror.mc:576
+msgid "Drive is busy\n"
+msgstr ""
+
+#: winerror.mc:581
+msgid "Same drive\n"
+msgstr ""
+
+#: winerror.mc:586
+msgid "Not toplevel directory\n"
+msgstr ""
+
+#: winerror.mc:591
+msgid "Directory is not empty\n"
+msgstr ""
+
+#: winerror.mc:596
+msgid "Path is in use as a SUBST\n"
+msgstr ""
+
+#: winerror.mc:601
+msgid "Path is in use as a JOIN\n"
+msgstr ""
+
+#: winerror.mc:606
+msgid "Path is busy\n"
+msgstr ""
+
+#: winerror.mc:611
+msgid "Already a SUBST target\n"
+msgstr ""
+
+#: winerror.mc:616
+msgid "System trace not specified or disallowed\n"
+msgstr ""
+
+#: winerror.mc:621
+msgid "Event count for DosMuxSemWait incorrect\n"
+msgstr ""
+
+#: winerror.mc:626
+msgid "Too many waiters for DosMuxSemWait\n"
+msgstr ""
+
+#: winerror.mc:631
+msgid "DosSemMuxWait list invalid\n"
+msgstr ""
+
+#: winerror.mc:636
+msgid "Volume label too long\n"
+msgstr ""
+
+#: winerror.mc:641
+msgid "Too many TCBs\n"
+msgstr ""
+
+#: winerror.mc:646
+msgid "Signal refused\n"
+msgstr ""
+
+#: winerror.mc:651
+msgid "Segment discarded\n"
+msgstr ""
+
+#: winerror.mc:656
+msgid "Segment not locked\n"
+msgstr ""
+
+#: winerror.mc:661
+msgid "Bad thread ID address\n"
+msgstr ""
+
+#: winerror.mc:666
+msgid "Bad arguments to DosExecPgm\n"
+msgstr ""
+
+#: winerror.mc:671
+msgid "Path is invalid\n"
+msgstr ""
+
+#: winerror.mc:676
+msgid "Signal pending\n"
+msgstr ""
+
+#: winerror.mc:681
+msgid "Max system-wide thread count reached\n"
+msgstr ""
+
+#: winerror.mc:686
+msgid "Lock failed\n"
+msgstr ""
+
+#: winerror.mc:691
+msgid "Resource in use\n"
+msgstr ""
+
+#: winerror.mc:696
+#, fuzzy
+msgid "Cancel violation\n"
+msgstr "INFUORMAZIUN"
+
+#: winerror.mc:701
+msgid "Atomic locks not supported\n"
+msgstr ""
+
+#: winerror.mc:706
+msgid "Invalid segment number\n"
+msgstr ""
+
+#: winerror.mc:711
+msgid "Invalid ordinal for %1\n"
+msgstr ""
+
+#: winerror.mc:716
+msgid "File already exists\n"
+msgstr ""
+
+#: winerror.mc:721
+msgid "Invalid flag number\n"
+msgstr ""
+
+#: winerror.mc:726
+msgid "Semaphore name not found\n"
+msgstr ""
+
+#: winerror.mc:731
+msgid "Invalid starting code segment for %1\n"
+msgstr ""
+
+#: winerror.mc:736
+msgid "Invalid starting stack segment for %1\n"
+msgstr ""
+
+#: winerror.mc:741
+msgid "Invalid module type for %1\n"
+msgstr ""
+
+#: winerror.mc:746
+msgid "Invalid EXE signature in %1\n"
+msgstr ""
+
+#: winerror.mc:751
+msgid "EXE %1 is marked invalid\n"
+msgstr ""
+
+#: winerror.mc:756
+msgid "Bad EXE format for %1\n"
+msgstr ""
+
+#: winerror.mc:761
+msgid "Iterated data exceeds 64k in %1\n"
+msgstr ""
+
+#: winerror.mc:766
+msgid "Invalid MinAllocSize in %1\n"
+msgstr ""
+
+#: winerror.mc:771
+msgid "Dynlink from invalid ring\n"
+msgstr ""
+
+#: winerror.mc:776
+msgid "IOPL not enabled\n"
+msgstr ""
+
+#: winerror.mc:781
+msgid "Invalid SEGDPL in %1\n"
+msgstr ""
+
+#: winerror.mc:786
+msgid "Auto data segment exceeds 64k\n"
+msgstr ""
+
+#: winerror.mc:791
+msgid "Ring 2 segment must be movable\n"
+msgstr ""
+
+#: winerror.mc:796
+msgid "Relocation chain exceeds segment limit in %1\n"
+msgstr ""
+
+#: winerror.mc:801
+msgid "Infinite loop in relocation chain in %1\n"
+msgstr ""
+
+#: winerror.mc:806
+msgid "Environment variable not found\n"
+msgstr ""
+
+#: winerror.mc:811
+msgid "No signal sent\n"
+msgstr ""
+
+#: winerror.mc:816
+msgid "File name is too long\n"
+msgstr ""
+
+#: winerror.mc:821
+msgid "Ring 2 stack in use\n"
+msgstr ""
+
+#: winerror.mc:826
+msgid "Error in use of filename wildcards\n"
+msgstr ""
+
+#: winerror.mc:831
+msgid "Invalid signal number\n"
+msgstr ""
+
+#: winerror.mc:836
+msgid "Error setting signal handler\n"
+msgstr ""
+
+#: winerror.mc:841
+msgid "Segment locked\n"
+msgstr ""
+
+#: winerror.mc:846
+msgid "Too many modules\n"
+msgstr ""
+
+#: winerror.mc:851
+msgid "Nesting LoadModule calls not allowed\n"
+msgstr ""
+
+#: winerror.mc:856
+msgid "Machine type mismatch\n"
+msgstr ""
+
+#: winerror.mc:861
+msgid "Bad pipe\n"
+msgstr ""
+
+#: winerror.mc:866
+msgid "Pipe busy\n"
+msgstr ""
+
+#: winerror.mc:871
+msgid "Pipe closed\n"
+msgstr ""
+
+#: winerror.mc:876
+msgid "Pipe not connected\n"
+msgstr ""
+
+#: winerror.mc:881
+#, fuzzy
+msgid "More data available\n"
+msgstr "INFUORMAZIUN"
+
+#: winerror.mc:886
+msgid "Session cancelled\n"
+msgstr ""
+
+#: winerror.mc:891
+msgid "Invalid extended attribute name\n"
+msgstr ""
+
+#: winerror.mc:896
+msgid "Extended attribute list inconsistent\n"
+msgstr ""
+
+#: winerror.mc:901
+#, fuzzy
+msgid "No more data available\n"
+msgstr "INFUORMAZIUN"
+
+#: winerror.mc:906
+msgid "Cannot use Copy API\n"
+msgstr ""
+
+#: winerror.mc:911
+msgid "Directory name invalid\n"
+msgstr ""
+
+#: winerror.mc:916
+msgid "Extended attributes didn't fit\n"
+msgstr ""
+
+#: winerror.mc:921
+msgid "Extended attribute file corrupt\n"
+msgstr ""
+
+#: winerror.mc:926
+msgid "Extended attribute table full\n"
+msgstr ""
+
+#: winerror.mc:931
+msgid "Invalid extended attribute handle\n"
+msgstr ""
+
+#: winerror.mc:936
+msgid "Extended attributes not supported\n"
+msgstr ""
+
+#: winerror.mc:941
+msgid "Mutex not owned by caller\n"
+msgstr ""
+
+#: winerror.mc:946
+msgid "Too many posts to semaphore\n"
+msgstr ""
+
+#: winerror.mc:951
+msgid "Read/WriteProcessMemory partially completed\n"
+msgstr ""
+
+#: winerror.mc:956
+msgid "The oplock wasn't granted\n"
+msgstr ""
+
+#: winerror.mc:961
+msgid "Invalid oplock message received\n"
+msgstr ""
+
+#: winerror.mc:966
+msgid "Message 0x%1 not found in file %2\n"
+msgstr ""
+
+#: winerror.mc:971
+msgid "Invalid address\n"
+msgstr ""
+
+#: winerror.mc:976
+msgid "Arithmetic overflow\n"
+msgstr ""
+
+#: winerror.mc:981
+msgid "Pipe connected\n"
+msgstr ""
+
+#: winerror.mc:986
+msgid "Pipe listening\n"
+msgstr ""
+
+#: winerror.mc:991
+msgid "Extended attribute access denied\n"
+msgstr ""
+
+#: winerror.mc:996
+msgid "I/O operation aborted\n"
+msgstr ""
+
+#: winerror.mc:1001
+msgid "Overlapped I/O incomplete\n"
+msgstr ""
+
+#: winerror.mc:1006
+msgid "Overlapped I/O pending\n"
+msgstr ""
+
+#: winerror.mc:1011
+msgid "No access to memory location\n"
+msgstr ""
+
+#: winerror.mc:1016
+msgid "Swap error\n"
+msgstr ""
+
+#: winerror.mc:1021
+msgid "Stack overflow\n"
+msgstr ""
+
+#: winerror.mc:1026
+msgid "Invalid message\n"
+msgstr ""
+
+#: winerror.mc:1031
+msgid "Cannot complete\n"
+msgstr ""
+
+#: winerror.mc:1036
+msgid "Invalid flags\n"
+msgstr ""
+
+#: winerror.mc:1041
+msgid "Unrecognised volume\n"
+msgstr ""
+
+#: winerror.mc:1046
+msgid "File invalid\n"
+msgstr ""
+
+#: winerror.mc:1051
+msgid "Cannot run full-screen\n"
+msgstr ""
+
+#: winerror.mc:1056
+msgid "Nonexistent token\n"
+msgstr ""
+
+#: winerror.mc:1061
+msgid "Registry corrupt\n"
+msgstr ""
+
+#: winerror.mc:1066
+msgid "Invalid key\n"
+msgstr ""
+
+#: winerror.mc:1071
+#, fuzzy
+msgid "Can't open registry key\n"
+msgstr "Tuot las datotecas (*.*)"
+
+#: winerror.mc:1076
+msgid "Can't read registry key\n"
+msgstr ""
+
+#: winerror.mc:1081
+msgid "Can't write registry key\n"
+msgstr ""
+
+#: winerror.mc:1086
+msgid "Registry has been recovered\n"
+msgstr ""
+
+#: winerror.mc:1091
+#, fuzzy
+msgid "Registry is corrupt\n"
+msgstr "Tuot las datotecas (*.*)"
+
+#: winerror.mc:1096
+msgid "I/O to registry failed\n"
+msgstr ""
+
+#: winerror.mc:1101
+#, fuzzy
+msgid "Not registry file\n"
+msgstr "Tuot las datotecas (*.*)"
+
+#: winerror.mc:1106
+msgid "Key deleted\n"
+msgstr ""
+
+#: winerror.mc:1111
+msgid "No registry log space\n"
+msgstr ""
+
+#: winerror.mc:1116
+msgid "Registry key has subkeys\n"
+msgstr ""
+
+#: winerror.mc:1121
+msgid "Subkey must be volatile\n"
+msgstr ""
+
+#: winerror.mc:1126
+msgid "Notify change request in progress\n"
+msgstr ""
+
+#: winerror.mc:1131
+msgid "Dependent services are running\n"
+msgstr ""
+
+#: winerror.mc:1136
+msgid "Invalid service control\n"
+msgstr ""
+
+#: winerror.mc:1141
+msgid "Service request timeout\n"
+msgstr ""
+
+#: winerror.mc:1146
+msgid "Cannot create service thread\n"
+msgstr ""
+
+#: winerror.mc:1151
+msgid "Service database locked\n"
+msgstr ""
+
+#: winerror.mc:1156
+msgid "Service already running\n"
+msgstr ""
+
+#: winerror.mc:1161
+msgid "Invalid service account\n"
+msgstr ""
+
+#: winerror.mc:1166
+msgid "Service is disabled\n"
+msgstr ""
+
+#: winerror.mc:1171
+msgid "Circular dependency\n"
+msgstr ""
+
+#: winerror.mc:1176
+msgid "Service does not exist\n"
+msgstr ""
+
+#: winerror.mc:1181
+msgid "Service cannot accept control message\n"
+msgstr ""
+
+#: winerror.mc:1186
+msgid "Service not active\n"
+msgstr ""
+
+#: winerror.mc:1191
+msgid "Service controller connect failed\n"
+msgstr ""
+
+#: winerror.mc:1196
+msgid "Exception in service\n"
+msgstr ""
+
+#: winerror.mc:1201
+msgid "Database does not exist\n"
+msgstr ""
+
+#: winerror.mc:1206
+msgid "Service-specific error\n"
+msgstr ""
+
+#: winerror.mc:1211
+msgid "Process aborted\n"
+msgstr ""
+
+#: winerror.mc:1216
+msgid "Service dependency failed\n"
+msgstr ""
+
+#: winerror.mc:1221
+msgid "Service login failed\n"
+msgstr ""
+
+#: winerror.mc:1226
+msgid "Service start-hang\n"
+msgstr ""
+
+#: winerror.mc:1231
+msgid "Invalid service lock\n"
+msgstr ""
+
+#: winerror.mc:1236
+msgid "Service marked for delete\n"
+msgstr ""
+
+#: winerror.mc:1241
+msgid "Service exists\n"
+msgstr ""
+
+#: winerror.mc:1246
+msgid "System running last-known-good config\n"
+msgstr ""
+
+#: winerror.mc:1251
+msgid "Service dependency deleted\n"
+msgstr ""
+
+#: winerror.mc:1256
+msgid "Boot already accepted as last-good config\n"
+msgstr ""
+
+#: winerror.mc:1261
+msgid "Service not started since last boot\n"
+msgstr ""
+
+#: winerror.mc:1266
+msgid "Duplicate service name\n"
+msgstr ""
+
+#: winerror.mc:1271
+msgid "Different service account\n"
+msgstr ""
+
+#: winerror.mc:1276
+msgid "Driver failure cannot be detected\n"
+msgstr ""
+
+#: winerror.mc:1281
+msgid "Process abort cannot be detected\n"
+msgstr ""
+
+#: winerror.mc:1286
+msgid "No recovery program for service\n"
+msgstr ""
+
+#: winerror.mc:1291
+#, fuzzy
+msgid "Service not implemented by exe\n"
+msgstr "Na implementa"
+
+#: winerror.mc:1296
+msgid "End of media\n"
+msgstr ""
+
+#: winerror.mc:1301
+msgid "Filemark detected\n"
+msgstr ""
+
+#: winerror.mc:1306
+msgid "Beginning of media\n"
+msgstr ""
+
+#: winerror.mc:1311
+msgid "Setmark detected\n"
+msgstr ""
+
+#: winerror.mc:1316
+msgid "No data detected\n"
+msgstr ""
+
+#: winerror.mc:1321
+msgid "Partition failure\n"
+msgstr ""
+
+#: winerror.mc:1326
+msgid "Invalid block length\n"
+msgstr ""
+
+#: winerror.mc:1331
+msgid "Device not partitioned\n"
+msgstr ""
+
+#: winerror.mc:1336
+msgid "Unable to lock media\n"
+msgstr ""
+
+#: winerror.mc:1341
+msgid "Unable to unload media\n"
+msgstr ""
+
+#: winerror.mc:1346
+msgid "Media changed\n"
+msgstr ""
+
+#: winerror.mc:1351
+msgid "I/O bus reset\n"
+msgstr ""
+
+#: winerror.mc:1356
+msgid "No media in drive\n"
+msgstr ""
+
+#: winerror.mc:1361
+msgid "No Unicode translation\n"
+msgstr ""
+
+#: winerror.mc:1366
+msgid "DLL init failed\n"
+msgstr ""
+
+#: winerror.mc:1371
+msgid "Shutdown in progress\n"
+msgstr ""
+
+#: winerror.mc:1376
+msgid "No shutdown in progress\n"
+msgstr ""
+
+#: winerror.mc:1381
+msgid "I/O device error\n"
+msgstr ""
+
+#: winerror.mc:1386
+msgid "No serial devices found\n"
+msgstr ""
+
+#: winerror.mc:1391
+msgid "Shared IRQ busy\n"
+msgstr ""
+
+#: winerror.mc:1396
+msgid "Serial I/O completed\n"
+msgstr ""
+
+#: winerror.mc:1401
+msgid "Serial I/O counter timeout\n"
+msgstr ""
+
+#: winerror.mc:1406
+msgid "Floppy ID address mark not found\n"
+msgstr ""
+
+#: winerror.mc:1411
+msgid "Floppy reports wrong cylinder\n"
+msgstr ""
+
+#: winerror.mc:1416
+msgid "Unknown floppy error\n"
+msgstr ""
+
+#: winerror.mc:1421
+msgid "Floppy registers inconsistent\n"
+msgstr ""
+
+#: winerror.mc:1426
+msgid "Hard disk recalibrate failed\n"
+msgstr ""
+
+#: winerror.mc:1431
+msgid "Hard disk operation failed\n"
+msgstr ""
+
+#: winerror.mc:1436
+msgid "Hard disk reset failed\n"
+msgstr ""
+
+#: winerror.mc:1441
+msgid "End of tape media\n"
+msgstr ""
+
+#: winerror.mc:1446
+msgid "Not enough server memory\n"
+msgstr ""
+
+#: winerror.mc:1451
+msgid "Possible deadlock\n"
+msgstr ""
+
+#: winerror.mc:1456
+msgid "Incorrect alignment\n"
+msgstr ""
+
+#: winerror.mc:1461
+msgid "Set-power-state vetoed\n"
+msgstr ""
+
+#: winerror.mc:1466
+msgid "Set-power-state failed\n"
+msgstr ""
+
+#: winerror.mc:1471
+msgid "Too many links\n"
+msgstr ""
+
+#: winerror.mc:1476
+msgid "Newer windows version needed\n"
+msgstr ""
+
+#: winerror.mc:1481
+msgid "Wrong operating system\n"
+msgstr ""
+
+#: winerror.mc:1486
+msgid "Single-instance application\n"
+msgstr ""
+
+#: winerror.mc:1491
+#, fuzzy
+msgid "Real-mode application\n"
+msgstr "&Options"
+
+#: winerror.mc:1496
+msgid "Invalid DLL\n"
+msgstr ""
+
+#: winerror.mc:1501
+msgid "No associated application\n"
+msgstr ""
+
+#: winerror.mc:1506
+msgid "DDE failure\n"
+msgstr ""
+
+#: winerror.mc:1511
+msgid "DLL not found\n"
+msgstr ""
+
+#: winerror.mc:1516
+msgid "Out of user handles\n"
+msgstr ""
+
+#: winerror.mc:1521
+msgid "Message can only be used in synchronous calls\n"
+msgstr ""
+
+#: winerror.mc:1526
+msgid "The source element is empty\n"
+msgstr ""
+
+#: winerror.mc:1531
+msgid "The destination element is full\n"
+msgstr ""
+
+#: winerror.mc:1536
+msgid "The element address is invalid\n"
+msgstr ""
+
+#: winerror.mc:1541
+msgid "The magazine is not present\n"
+msgstr ""
+
+#: winerror.mc:1546
+msgid "The device needs reinitialization\n"
+msgstr ""
+
+#: winerror.mc:1551
+msgid "The device requires cleaning\n"
+msgstr ""
+
+#: winerror.mc:1556
+msgid "The device door is open\n"
+msgstr ""
+
+#: winerror.mc:1561
+msgid "The device is not connected\n"
+msgstr ""
+
+#: winerror.mc:1566
+msgid "Element not found\n"
+msgstr ""
+
+#: winerror.mc:1571
+msgid "No match found\n"
+msgstr ""
+
+#: winerror.mc:1576
+msgid "Property set not found\n"
+msgstr ""
+
+#: winerror.mc:1581
+msgid "Point not found\n"
+msgstr ""
+
+#: winerror.mc:1586
+msgid "No running tracking service\n"
+msgstr ""
+
+#: winerror.mc:1591
+msgid "No such volume ID\n"
+msgstr ""
+
+#: winerror.mc:1596
+msgid "Unable to remove the file to be replaced\n"
+msgstr ""
+
+#: winerror.mc:1601
+msgid "Unable to move the replacement file into place\n"
+msgstr ""
+
+#: winerror.mc:1606
+msgid "Moving the replacement file failed\n"
+msgstr ""
+
+#: winerror.mc:1611
+msgid "The journal is being deleted\n"
+msgstr ""
+
+#: winerror.mc:1616
+msgid "The journal is not active\n"
+msgstr ""
+
+#: winerror.mc:1621
+msgid "Potential matching file found\n"
+msgstr ""
+
+#: winerror.mc:1626
+msgid "The journal entry was deleted\n"
+msgstr ""
+
+#: winerror.mc:1631
+msgid "Invalid device name\n"
+msgstr ""
+
+#: winerror.mc:1636
+#, fuzzy
+msgid "Connection unavailable\n"
+msgstr "INFUORMAZIUN"
+
+#: winerror.mc:1641
+msgid "Device already remembered\n"
+msgstr ""
+
+#: winerror.mc:1646
+msgid "No network or bad path\n"
+msgstr ""
+
+#: winerror.mc:1651
+msgid "Invalid network provider name\n"
+msgstr ""
+
+#: winerror.mc:1656
+msgid "Cannot open network connection profile\n"
+msgstr ""
+
+#: winerror.mc:1661
+msgid "Corrupt network connection profile\n"
+msgstr ""
+
+#: winerror.mc:1666
+msgid "Not a container\n"
+msgstr ""
+
+#: winerror.mc:1671
+msgid "Extended error\n"
+msgstr ""
+
+#: winerror.mc:1676
+msgid "Invalid group name\n"
+msgstr ""
+
+#: winerror.mc:1681
+msgid "Invalid computer name\n"
+msgstr ""
+
+#: winerror.mc:1686
+msgid "Invalid event name\n"
+msgstr ""
+
+#: winerror.mc:1691
+msgid "Invalid domain name\n"
+msgstr ""
+
+#: winerror.mc:1696
+msgid "Invalid service name\n"
+msgstr ""
+
+#: winerror.mc:1701
+msgid "Invalid network name\n"
+msgstr ""
+
+#: winerror.mc:1706
+msgid "Invalid share name\n"
+msgstr ""
+
+#: winerror.mc:1716
+msgid "Invalid message name\n"
+msgstr ""
+
+#: winerror.mc:1721
+msgid "Invalid message destination\n"
+msgstr ""
+
+#: winerror.mc:1726
+msgid "Session credential conflict\n"
+msgstr ""
+
+#: winerror.mc:1731
+msgid "Remote session limit exceeded\n"
+msgstr ""
+
+#: winerror.mc:1736
+msgid "Duplicate domain or workgroup name\n"
+msgstr ""
+
+#: winerror.mc:1741
+msgid "No network\n"
+msgstr ""
+
+#: winerror.mc:1746
+msgid "Operation cancelled by user\n"
+msgstr ""
+
+#: winerror.mc:1751
+msgid "File has a user-mapped section\n"
+msgstr ""
+
+#: winerror.mc:1756 winerror.mc:3741
+msgid "Connection refused\n"
+msgstr ""
+
+#: winerror.mc:1761
+msgid "Connection gracefully closed\n"
+msgstr ""
+
+#: winerror.mc:1766
+msgid "Address already associated with transport endpoint\n"
+msgstr ""
+
+#: winerror.mc:1771
+msgid "Address not associated with transport endpoint\n"
+msgstr ""
+
+#: winerror.mc:1776
+msgid "Connection invalid\n"
+msgstr ""
+
+#: winerror.mc:1781
+msgid "Connection is active\n"
+msgstr ""
+
+#: winerror.mc:1786
+msgid "Network unreachable\n"
+msgstr ""
+
+#: winerror.mc:1791
+msgid "Host unreachable\n"
+msgstr ""
+
+#: winerror.mc:1796
+msgid "Protocol unreachable\n"
+msgstr ""
+
+#: winerror.mc:1801
+msgid "Port unreachable\n"
+msgstr ""
+
+#: winerror.mc:1806
+msgid "Request aborted\n"
+msgstr ""
+
+#: winerror.mc:1811
+msgid "Connection aborted\n"
+msgstr ""
+
+#: winerror.mc:1816
+msgid "Please retry operation\n"
+msgstr ""
+
+#: winerror.mc:1821
+msgid "Connection count limit reached\n"
+msgstr ""
+
+#: winerror.mc:1826
+msgid "Login time restriction\n"
+msgstr ""
+
+#: winerror.mc:1831
+msgid "Login workstation restriction\n"
+msgstr ""
+
+#: winerror.mc:1836
+msgid "Incorrect network address\n"
+msgstr ""
+
+#: winerror.mc:1841
+msgid "Service already registered\n"
+msgstr ""
+
+#: winerror.mc:1846
+msgid "Service not found\n"
+msgstr ""
+
+#: winerror.mc:1851
+msgid "User not authenticated\n"
+msgstr ""
+
+#: winerror.mc:1856
+msgid "User not logged on\n"
+msgstr ""
+
+#: winerror.mc:1861
+msgid "Continue work in progress\n"
+msgstr ""
+
+#: winerror.mc:1866
+msgid "Already initialised\n"
+msgstr ""
+
+#: winerror.mc:1871
+msgid "No more local devices\n"
+msgstr ""
+
+#: winerror.mc:1876
+msgid "The site does not exist\n"
+msgstr ""
+
+#: winerror.mc:1881
+msgid "The domain controller already exists\n"
+msgstr ""
+
+#: winerror.mc:1886
+msgid "Supported only when connected\n"
+msgstr ""
+
+#: winerror.mc:1891
+msgid "Perform operation even when nothing changed\n"
+msgstr ""
+
+#: winerror.mc:1896
+msgid "The user profile is invalid\n"
+msgstr ""
+
+#: winerror.mc:1901
+msgid "Not supported on Small Business Server\n"
+msgstr ""
+
+#: winerror.mc:1906
+msgid "Not all privileges assigned\n"
+msgstr ""
+
+#: winerror.mc:1911
+msgid "Some security IDs not mapped\n"
+msgstr ""
+
+#: winerror.mc:1916
+msgid "No quotas for account\n"
+msgstr ""
+
+#: winerror.mc:1921
+msgid "Local user session key\n"
+msgstr ""
+
+#: winerror.mc:1926
+msgid "Password too complex for LM\n"
+msgstr ""
+
+#: winerror.mc:1931
+msgid "Unknown revision\n"
+msgstr ""
+
+#: winerror.mc:1936
+msgid "Incompatible revision levels\n"
+msgstr ""
+
+#: winerror.mc:1941
+msgid "Invalid owner\n"
+msgstr ""
+
+#: winerror.mc:1946
+msgid "Invalid primary group\n"
+msgstr ""
+
+#: winerror.mc:1951
+msgid "No impersonation token\n"
+msgstr ""
+
+#: winerror.mc:1956
+msgid "Can't disable mandatory group\n"
+msgstr ""
+
+#: winerror.mc:1961
+msgid "No logon servers available\n"
+msgstr ""
+
+#: winerror.mc:1966
+msgid "No such logon session\n"
+msgstr ""
+
+#: winerror.mc:1971
+msgid "No such privilege\n"
+msgstr ""
+
+#: winerror.mc:1976
+msgid "Privilege not held\n"
+msgstr ""
+
+#: winerror.mc:1981
+msgid "Invalid account name\n"
+msgstr ""
+
+#: winerror.mc:1986
+msgid "User already exists\n"
+msgstr ""
+
+#: winerror.mc:1991
+msgid "No such user\n"
+msgstr ""
+
+#: winerror.mc:1996
+msgid "Group already exists\n"
+msgstr ""
+
+#: winerror.mc:2001
+msgid "No such group\n"
+msgstr ""
+
+#: winerror.mc:2006
+msgid "User already in group\n"
+msgstr ""
+
+#: winerror.mc:2011
+msgid "User not in group\n"
+msgstr ""
+
+#: winerror.mc:2016
+msgid "Can't delete last admin user\n"
+msgstr ""
+
+#: winerror.mc:2021
+msgid "Wrong password\n"
+msgstr ""
+
+#: winerror.mc:2026
+msgid "Ill-formed password\n"
+msgstr ""
+
+#: winerror.mc:2031
+msgid "Password restriction\n"
+msgstr ""
+
+#: winerror.mc:2036
+msgid "Logon failure\n"
+msgstr ""
+
+#: winerror.mc:2041
+msgid "Account restriction\n"
+msgstr ""
+
+#: winerror.mc:2046
+msgid "Invalid logon hours\n"
+msgstr ""
+
+#: winerror.mc:2051
+msgid "Invalid workstation\n"
+msgstr ""
+
+#: winerror.mc:2056
+msgid "Password expired\n"
+msgstr ""
+
+#: winerror.mc:2061
+msgid "Account disabled\n"
+msgstr ""
+
+#: winerror.mc:2066
+msgid "No security ID mapped\n"
+msgstr ""
+
+#: winerror.mc:2071
+msgid "Too many LUIDs requested\n"
+msgstr ""
+
+#: winerror.mc:2076
+msgid "LUIDs exhausted\n"
+msgstr ""
+
+#: winerror.mc:2081
+msgid "Invalid sub authority\n"
+msgstr ""
+
+#: winerror.mc:2086
+msgid "Invalid ACL\n"
+msgstr ""
+
+#: winerror.mc:2091
+msgid "Invalid SID\n"
+msgstr ""
+
+#: winerror.mc:2096
+msgid "Invalid security descriptor\n"
+msgstr ""
+
+#: winerror.mc:2101
+msgid "Bad inherited ACL\n"
+msgstr ""
+
+#: winerror.mc:2106
+msgid "Server disabled\n"
+msgstr ""
+
+#: winerror.mc:2111
+msgid "Server not disabled\n"
+msgstr ""
+
+#: winerror.mc:2116
+msgid "Invalid ID authority\n"
+msgstr ""
+
+#: winerror.mc:2121
+msgid "Allotted space exceeded\n"
+msgstr ""
+
+#: winerror.mc:2126
+msgid "Invalid group attributes\n"
+msgstr ""
+
+#: winerror.mc:2131
+msgid "Bad impersonation level\n"
+msgstr ""
+
+#: winerror.mc:2136
+msgid "Can't open anonymous security token\n"
+msgstr ""
+
+#: winerror.mc:2141
+msgid "Bad validation class\n"
+msgstr ""
+
+#: winerror.mc:2146
+msgid "Bad token type\n"
+msgstr ""
+
+#: winerror.mc:2151
+msgid "No security on object\n"
+msgstr ""
+
+#: winerror.mc:2156
+msgid "Can't access domain information\n"
+msgstr ""
+
+#: winerror.mc:2161
+msgid "Invalid server state\n"
+msgstr ""
+
+#: winerror.mc:2166
+msgid "Invalid domain state\n"
+msgstr ""
+
+#: winerror.mc:2171
+msgid "Invalid domain role\n"
+msgstr ""
+
+#: winerror.mc:2176
+msgid "No such domain\n"
+msgstr ""
+
+#: winerror.mc:2181
+msgid "Domain already exists\n"
+msgstr ""
+
+#: winerror.mc:2186
+msgid "Domain limit exceeded\n"
+msgstr ""
+
+#: winerror.mc:2191
+msgid "Internal database corruption\n"
+msgstr ""
+
+#: winerror.mc:2196
+msgid "Internal error\n"
+msgstr ""
+
+#: winerror.mc:2201
+msgid "Generic access types not mapped\n"
+msgstr ""
+
+#: winerror.mc:2206
+msgid "Bad descriptor format\n"
+msgstr ""
+
+#: winerror.mc:2211
+msgid "Not a logon process\n"
+msgstr ""
+
+#: winerror.mc:2216
+msgid "Logon session ID exists\n"
+msgstr ""
+
+#: winerror.mc:2221
+msgid "Unknown authentication package\n"
+msgstr ""
+
+#: winerror.mc:2226
+msgid "Bad logon session state\n"
+msgstr ""
+
+#: winerror.mc:2231
+msgid "Logon session ID collision\n"
+msgstr ""
+
+#: winerror.mc:2236
+msgid "Invalid logon type\n"
+msgstr ""
+
+#: winerror.mc:2241
+msgid "Cannot impersonate\n"
+msgstr ""
+
+#: winerror.mc:2246
+msgid "Invalid transaction state\n"
+msgstr ""
+
+#: winerror.mc:2251
+msgid "Security DB commit failure\n"
+msgstr ""
+
+#: winerror.mc:2256
+msgid "Account is built-in\n"
+msgstr ""
+
+#: winerror.mc:2261
+msgid "Group is built-in\n"
+msgstr ""
+
+#: winerror.mc:2266
+msgid "User is built-in\n"
+msgstr ""
+
+#: winerror.mc:2271
+msgid "Group is primary for user\n"
+msgstr ""
+
+#: winerror.mc:2276
+msgid "Token already in use\n"
+msgstr ""
+
+#: winerror.mc:2281
+msgid "No such local group\n"
+msgstr ""
+
+#: winerror.mc:2286
+msgid "User not in local group\n"
+msgstr ""
+
+#: winerror.mc:2291
+msgid "User already in local group\n"
+msgstr ""
+
+#: winerror.mc:2296
+msgid "Local group already exists\n"
+msgstr ""
+
+#: winerror.mc:2301 winerror.mc:2326
+msgid "Logon type not granted\n"
+msgstr ""
+
+#: winerror.mc:2306
+msgid "Too many secrets\n"
+msgstr ""
+
+#: winerror.mc:2311
+msgid "Secret too long\n"
+msgstr ""
+
+#: winerror.mc:2316
+msgid "Internal security DB error\n"
+msgstr ""
+
+#: winerror.mc:2321
+msgid "Too many context IDs\n"
+msgstr ""
+
+#: winerror.mc:2331
+msgid "Cross-encrypted NT password required\n"
+msgstr ""
+
+#: winerror.mc:2336
+msgid "No such member\n"
+msgstr ""
+
+#: winerror.mc:2341
+msgid "Invalid member\n"
+msgstr ""
+
+#: winerror.mc:2346
+msgid "Too many SIDs\n"
+msgstr ""
+
+#: winerror.mc:2351
+msgid "Cross-encrypted LM password required\n"
+msgstr ""
+
+#: winerror.mc:2356
+msgid "No inheritable components\n"
+msgstr ""
+
+#: winerror.mc:2361
+msgid "File or directory corrupt\n"
+msgstr ""
+
+#: winerror.mc:2366
+msgid "Disk is corrupt\n"
+msgstr ""
+
+#: winerror.mc:2371
+msgid "No user session key\n"
+msgstr ""
+
+#: winerror.mc:2376
+msgid "Licence quota exceeded\n"
+msgstr ""
+
+#: winerror.mc:2381
+msgid "Wrong target name\n"
+msgstr ""
+
+#: winerror.mc:2386
+msgid "Mutual authentication failed\n"
+msgstr ""
+
+#: winerror.mc:2391
+msgid "Time skew between client and server\n"
+msgstr ""
+
+#: winerror.mc:2396
+msgid "Invalid window handle\n"
+msgstr ""
+
+#: winerror.mc:2401
+msgid "Invalid menu handle\n"
+msgstr ""
+
+#: winerror.mc:2406
+msgid "Invalid cursor handle\n"
+msgstr ""
+
+#: winerror.mc:2411
+msgid "Invalid accelerator table handle\n"
+msgstr ""
+
+#: winerror.mc:2416
+msgid "Invalid hook handle\n"
+msgstr ""
+
+#: winerror.mc:2421
+msgid "Invalid DWP handle\n"
+msgstr ""
+
+#: winerror.mc:2426
+msgid "Can't create top-level child window\n"
+msgstr ""
+
+#: winerror.mc:2431
+msgid "Can't find window class\n"
+msgstr ""
+
+#: winerror.mc:2436
+msgid "Window owned by another thread\n"
+msgstr ""
+
+#: winerror.mc:2441
+msgid "Hotkey already registered\n"
+msgstr ""
+
+#: winerror.mc:2446
+msgid "Class already exists\n"
+msgstr ""
+
+#: winerror.mc:2451
+msgid "Class does not exist\n"
+msgstr ""
+
+#: winerror.mc:2456
+msgid "Class has open windows\n"
+msgstr ""
+
+#: winerror.mc:2461
+msgid "Invalid index\n"
+msgstr ""
+
+#: winerror.mc:2466
+msgid "Invalid icon handle\n"
+msgstr ""
+
+#: winerror.mc:2471
+msgid "Private dialog index\n"
+msgstr ""
+
+#: winerror.mc:2476
+msgid "List box ID not found\n"
+msgstr ""
+
+#: winerror.mc:2481
+msgid "No wildcard characters\n"
+msgstr ""
+
+#: winerror.mc:2486
+msgid "Clipboard not open\n"
+msgstr ""
+
+#: winerror.mc:2491
+msgid "Hotkey not registered\n"
+msgstr ""
+
+#: winerror.mc:2496
+msgid "Not a dialog window\n"
+msgstr ""
+
+#: winerror.mc:2501
+msgid "Control ID not found\n"
+msgstr ""
+
+#: winerror.mc:2506
+msgid "Invalid combobox message\n"
+msgstr ""
+
+#: winerror.mc:2511
+msgid "Not a combobox window\n"
+msgstr ""
+
+#: winerror.mc:2516
+msgid "Invalid edit height\n"
+msgstr ""
+
+#: winerror.mc:2521
+msgid "DC not found\n"
+msgstr ""
+
+#: winerror.mc:2526
+msgid "Invalid hook filter\n"
+msgstr ""
+
+#: winerror.mc:2531
+msgid "Invalid filter procedure\n"
+msgstr ""
+
+#: winerror.mc:2536
+msgid "Hook procedure needs module handle\n"
+msgstr ""
+
+#: winerror.mc:2541
+msgid "Global-only hook procedure\n"
+msgstr ""
+
+#: winerror.mc:2546
+msgid "Journal hook already set\n"
+msgstr ""
+
+#: winerror.mc:2551
+msgid "Hook procedure not installed\n"
+msgstr ""
+
+#: winerror.mc:2556
+msgid "Invalid list box message\n"
+msgstr ""
+
+#: winerror.mc:2561
+msgid "Invalid LB_SETCOUNT sent\n"
+msgstr ""
+
+#: winerror.mc:2566
+msgid "No tab stops on this list box\n"
+msgstr ""
+
+#: winerror.mc:2571
+msgid "Can't destroy object owned by another thread\n"
+msgstr ""
+
+#: winerror.mc:2576
+msgid "Child window menus not allowed\n"
+msgstr ""
+
+#: winerror.mc:2581
+msgid "Window has no system menu\n"
+msgstr ""
+
+#: winerror.mc:2586
+msgid "Invalid message box style\n"
+msgstr ""
+
+#: winerror.mc:2591
+msgid "Invalid SPI parameter\n"
+msgstr ""
+
+#: winerror.mc:2596
+msgid "Screen already locked\n"
+msgstr ""
+
+#: winerror.mc:2601
+msgid "Window handles have different parents\n"
+msgstr ""
+
+#: winerror.mc:2606
+msgid "Not a child window\n"
+msgstr ""
+
+#: winerror.mc:2611
+msgid "Invalid GW command\n"
+msgstr ""
+
+#: winerror.mc:2616
+msgid "Invalid thread ID\n"
+msgstr ""
+
+#: winerror.mc:2621
+msgid "Not an MDI child window\n"
+msgstr ""
+
+#: winerror.mc:2626
+msgid "Popup menu already active\n"
+msgstr ""
+
+#: winerror.mc:2631
+msgid "No scrollbars\n"
+msgstr ""
+
+#: winerror.mc:2636
+msgid "Invalid scrollbar range\n"
+msgstr ""
+
+#: winerror.mc:2641
+msgid "Invalid ShowWin command\n"
+msgstr ""
+
+#: winerror.mc:2646
+msgid "No system resources\n"
+msgstr ""
+
+#: winerror.mc:2651
+msgid "No non-paged system resources\n"
+msgstr ""
+
+#: winerror.mc:2656
+msgid "No paged system resources\n"
+msgstr ""
+
+#: winerror.mc:2661
+msgid "No working set quota\n"
+msgstr ""
+
+#: winerror.mc:2666
+msgid "No page file quota\n"
+msgstr ""
+
+#: winerror.mc:2671
+msgid "Exceeded commitment limit\n"
+msgstr ""
+
+#: winerror.mc:2676
+msgid "Menu item not found\n"
+msgstr ""
+
+#: winerror.mc:2681
+msgid "Invalid keyboard handle\n"
+msgstr ""
+
+#: winerror.mc:2686
+msgid "Hook type not allowed\n"
+msgstr ""
+
+#: winerror.mc:2691
+msgid "Interactive window station required\n"
+msgstr ""
+
+#: winerror.mc:2696
+msgid "Timeout\n"
+msgstr ""
+
+#: winerror.mc:2701
+msgid "Invalid monitor handle\n"
+msgstr ""
+
+#: winerror.mc:2706
+msgid "Event log file corrupt\n"
+msgstr ""
+
+#: winerror.mc:2711
+msgid "Event log can't start\n"
+msgstr ""
+
+#: winerror.mc:2716
+msgid "Event log file full\n"
+msgstr ""
+
+#: winerror.mc:2721
+msgid "Event log file changed\n"
+msgstr ""
+
+#: winerror.mc:2726
+msgid "Installer service failed.\n"
+msgstr ""
+
+#: winerror.mc:2731
+msgid "Installation aborted by user\n"
+msgstr ""
+
+#: winerror.mc:2736
+msgid "Installation failure\n"
+msgstr ""
+
+#: winerror.mc:2741
+msgid "Installation suspended\n"
+msgstr ""
+
+#: winerror.mc:2746
+msgid "Unknown product\n"
+msgstr ""
+
+#: winerror.mc:2751
+msgid "Unknown feature\n"
+msgstr ""
+
+#: winerror.mc:2756
+msgid "Unknown component\n"
+msgstr ""
+
+#: winerror.mc:2761
+msgid "Unknown property\n"
+msgstr ""
+
+#: winerror.mc:2766
+msgid "Invalid handle state\n"
+msgstr ""
+
+#: winerror.mc:2771
+#, fuzzy
+msgid "Bad configuration\n"
+msgstr "INFUORMAZIUN"
+
+#: winerror.mc:2776
+msgid "Index is missing\n"
+msgstr ""
+
+#: winerror.mc:2781
+msgid "Installation source is missing\n"
+msgstr ""
+
+#: winerror.mc:2786
+msgid "Wrong installation package version\n"
+msgstr ""
+
+#: winerror.mc:2791
+msgid "Product uninstalled\n"
+msgstr ""
+
+#: winerror.mc:2796
+msgid "Invalid query syntax\n"
+msgstr ""
+
+#: winerror.mc:2801
+msgid "Invalid field\n"
+msgstr ""
+
+#: winerror.mc:2806
+msgid "Device removed\n"
+msgstr ""
+
+#: winerror.mc:2811
+msgid "Installation already running\n"
+msgstr ""
+
+#: winerror.mc:2816
+msgid "Installation package failed to open\n"
+msgstr ""
+
+#: winerror.mc:2821
+msgid "Installation package is invalid\n"
+msgstr ""
+
+#: winerror.mc:2826
+msgid "Installer user interface failed\n"
+msgstr ""
+
+#: winerror.mc:2831
+msgid "Failed to open installation log file\n"
+msgstr ""
+
+#: winerror.mc:2836
+msgid "Installation language not supported\n"
+msgstr ""
+
+#: winerror.mc:2841
+msgid "Installation transform failed to apply\n"
+msgstr ""
+
+#: winerror.mc:2846
+msgid "Installation package rejected\n"
+msgstr ""
+
+#: winerror.mc:2851
+msgid "Function could not be called\n"
+msgstr ""
+
+#: winerror.mc:2856
+#, fuzzy
+msgid "Function failed\n"
+msgstr "Wine ag�d"
+
+#: winerror.mc:2861
+msgid "Invalid table\n"
+msgstr ""
+
+#: winerror.mc:2866
+msgid "Data type mismatch\n"
+msgstr ""
+
+#: winerror.mc:2871 winerror.mc:3081
+msgid "Unsupported type\n"
+msgstr ""
+
+#: winerror.mc:2876
+#, fuzzy
+msgid "Creation failed\n"
+msgstr "Wine ag�d"
+
+#: winerror.mc:2881
+msgid "Temporary directory not writable\n"
+msgstr ""
+
+#: winerror.mc:2886
+msgid "Installation platform not supported\n"
+msgstr ""
+
+#: winerror.mc:2891
+msgid "Installer not used\n"
+msgstr ""
+
+#: winerror.mc:2896
+msgid "Failed to open the patch package\n"
+msgstr ""
+
+#: winerror.mc:2901
+msgid "Invalid patch package\n"
+msgstr ""
+
+#: winerror.mc:2906
+msgid "Unsupported patch package\n"
+msgstr ""
+
+#: winerror.mc:2911
+msgid "Another version is installed\n"
+msgstr ""
+
+#: winerror.mc:2916
+msgid "Invalid command line\n"
+msgstr ""
+
+#: winerror.mc:2921
+msgid "Remote installation not allowed\n"
+msgstr ""
+
+#: winerror.mc:2926
+msgid "Reboot initiated after successful install\n"
+msgstr ""
+
+#: winerror.mc:2931
+msgid "Invalid string binding\n"
+msgstr ""
+
+#: winerror.mc:2936
+msgid "Wrong kind of binding\n"
+msgstr ""
+
+#: winerror.mc:2941
+msgid "Invalid binding\n"
+msgstr ""
+
+#: winerror.mc:2946
+msgid "RPC protocol sequence not supported\n"
+msgstr ""
+
+#: winerror.mc:2951
+msgid "Invalid RPC protocol sequence\n"
+msgstr ""
+
+#: winerror.mc:2956
+msgid "Invalid string UUID\n"
+msgstr ""
+
+#: winerror.mc:2961
+msgid "Invalid endpoint format\n"
+msgstr ""
+
+#: winerror.mc:2966
+msgid "Invalid network address\n"
+msgstr ""
+
+#: winerror.mc:2971
+msgid "No endpoint found\n"
+msgstr ""
+
+#: winerror.mc:2976
+msgid "Invalid timeout value\n"
+msgstr ""
+
+#: winerror.mc:2981
+msgid "Object UUID not found\n"
+msgstr ""
+
+#: winerror.mc:2986
+msgid "UUID already registered\n"
+msgstr ""
+
+#: winerror.mc:2991
+msgid "UUID type already registered\n"
+msgstr ""
+
+#: winerror.mc:2996
+msgid "Server already listening\n"
+msgstr ""
+
+#: winerror.mc:3001
+msgid "No protocol sequences registered\n"
+msgstr ""
+
+#: winerror.mc:3006
+msgid "RPC server not listening\n"
+msgstr ""
+
+#: winerror.mc:3011
+msgid "Unknown manager type\n"
+msgstr ""
+
+#: winerror.mc:3016
+msgid "Unknown interface\n"
+msgstr ""
+
+#: winerror.mc:3021
+msgid "No bindings\n"
+msgstr ""
+
+#: winerror.mc:3026
+msgid "No protocol sequences\n"
+msgstr ""
+
+#: winerror.mc:3031
+msgid "Can't create endpoint\n"
+msgstr ""
+
+#: winerror.mc:3036
+msgid "Out of resources\n"
+msgstr ""
+
+#: winerror.mc:3041
+msgid "RPC server unavailable\n"
+msgstr ""
+
+#: winerror.mc:3046
+msgid "RPC server too busy\n"
+msgstr ""
+
+#: winerror.mc:3051
+msgid "Invalid network options\n"
+msgstr ""
+
+#: winerror.mc:3056
+msgid "No RPC call active\n"
+msgstr ""
+
+#: winerror.mc:3061
+msgid "RPC call failed\n"
+msgstr ""
+
+#: winerror.mc:3066
+msgid "RPC call failed and didn't execute\n"
+msgstr ""
+
+#: winerror.mc:3071
+msgid "RPC protocol error\n"
+msgstr ""
+
+#: winerror.mc:3076
+msgid "Unsupported transfer syntax\n"
+msgstr ""
+
+#: winerror.mc:3086
+msgid "Invalid tag\n"
+msgstr ""
+
+#: winerror.mc:3091
+msgid "Invalid array bounds\n"
+msgstr ""
+
+#: winerror.mc:3096
+msgid "No entry name\n"
+msgstr ""
+
+#: winerror.mc:3101
+msgid "Invalid name syntax\n"
+msgstr ""
+
+#: winerror.mc:3106
+msgid "Unsupported name syntax\n"
+msgstr ""
+
+#: winerror.mc:3111
+msgid "No network address\n"
+msgstr ""
+
+#: winerror.mc:3116
+msgid "Duplicate endpoint\n"
+msgstr ""
+
+#: winerror.mc:3121
+msgid "Unknown authentication type\n"
+msgstr ""
+
+#: winerror.mc:3126
+msgid "Maximum calls too low\n"
+msgstr ""
+
+#: winerror.mc:3131
+msgid "String too long\n"
+msgstr ""
+
+#: winerror.mc:3136
+msgid "Protocol sequence not found\n"
+msgstr ""
+
+#: winerror.mc:3141
+msgid "Procedure number out of range\n"
+msgstr ""
+
+#: winerror.mc:3146
+msgid "Binding has no authentication data\n"
+msgstr ""
+
+#: winerror.mc:3151
+msgid "Unknown authentication service\n"
+msgstr ""
+
+#: winerror.mc:3156
+msgid "Unknown authentication level\n"
+msgstr ""
+
+#: winerror.mc:3161
+msgid "Invalid authentication identity\n"
+msgstr ""
+
+#: winerror.mc:3166
+msgid "Unknown authorisation service\n"
+msgstr ""
+
+#: winerror.mc:3171
+msgid "Invalid entry\n"
+msgstr ""
+
+#: winerror.mc:3176
+#, fuzzy
+msgid "Can't perform operation\n"
+msgstr "INFUORMAZIUN"
+
+#: winerror.mc:3181
+msgid "Endpoints not registered\n"
+msgstr ""
+
+#: winerror.mc:3186
+msgid "Nothing to export\n"
+msgstr ""
+
+#: winerror.mc:3191
+msgid "Incomplete name\n"
+msgstr ""
+
+#: winerror.mc:3196
+msgid "Invalid version option\n"
+msgstr ""
+
+#: winerror.mc:3201
+msgid "No more members\n"
+msgstr ""
+
+#: winerror.mc:3206
+msgid "Not all objects unexported\n"
+msgstr ""
+
+#: winerror.mc:3211
+msgid "Interface not found\n"
+msgstr ""
+
+#: winerror.mc:3216
+msgid "Entry already exists\n"
+msgstr ""
+
+#: winerror.mc:3221
+msgid "Entry not found\n"
+msgstr ""
+
+#: winerror.mc:3226
+msgid "Name service unavailable\n"
+msgstr ""
+
+#: winerror.mc:3231
+msgid "Invalid network address family\n"
+msgstr ""
+
+#: winerror.mc:3236
+msgid "Operation not supported\n"
+msgstr ""
+
+#: winerror.mc:3241
+msgid "No security context available\n"
+msgstr ""
+
+#: winerror.mc:3246
+msgid "RPCInternal error\n"
+msgstr ""
+
+#: winerror.mc:3251
+msgid "RPC divide-by-zero\n"
+msgstr ""
+
+#: winerror.mc:3256
+msgid "Address error\n"
+msgstr ""
+
+#: winerror.mc:3261
+msgid "Floating-point divide-by-zero\n"
+msgstr ""
+
+#: winerror.mc:3266
+msgid "Floating-point underflow\n"
+msgstr ""
+
+#: winerror.mc:3271
+msgid "Floating-point overflow\n"
+msgstr ""
+
+#: winerror.mc:3276
+msgid "No more entries\n"
+msgstr ""
+
+#: winerror.mc:3281
+msgid "Character translation table open failed\n"
+msgstr ""
+
+#: winerror.mc:3286
+msgid "Character translation table file too small\n"
+msgstr ""
+
+#: winerror.mc:3291
+msgid "Null context handle\n"
+msgstr ""
+
+#: winerror.mc:3296
+msgid "Context handle damaged\n"
+msgstr ""
+
+#: winerror.mc:3301
+msgid "Binding handle mismatch\n"
+msgstr ""
+
+#: winerror.mc:3306
+msgid "Cannot get call handle\n"
+msgstr ""
+
+#: winerror.mc:3311
+msgid "Null reference pointer\n"
+msgstr ""
+
+#: winerror.mc:3316
+msgid "Enumeration value out of range\n"
+msgstr ""
+
+#: winerror.mc:3321
+msgid "Byte count too small\n"
+msgstr ""
+
+#: winerror.mc:3326
+msgid "Bad stub data\n"
+msgstr ""
+
+#: winerror.mc:3331
+msgid "Invalid user buffer\n"
+msgstr ""
+
+#: winerror.mc:3336
+msgid "Unrecognised media\n"
+msgstr ""
+
+#: winerror.mc:3341
+msgid "No trust secret\n"
+msgstr ""
+
+#: winerror.mc:3346
+msgid "No trust SAM account\n"
+msgstr ""
+
+#: winerror.mc:3351
+msgid "Trusted domain failure\n"
+msgstr ""
+
+#: winerror.mc:3356
+msgid "Trusted relationship failure\n"
+msgstr ""
+
+#: winerror.mc:3361
+msgid "Trust logon failure\n"
+msgstr ""
+
+#: winerror.mc:3366
+msgid "RPC call already in progress\n"
+msgstr ""
+
+#: winerror.mc:3371
+msgid "NETLOGON is not started\n"
+msgstr ""
+
+#: winerror.mc:3376
+msgid "Account expired\n"
+msgstr ""
+
+#: winerror.mc:3381
+msgid "Redirector has open handles\n"
+msgstr ""
+
+#: winerror.mc:3386
+msgid "Printer driver already installed\n"
+msgstr ""
+
+#: winerror.mc:3391
+msgid "Unknown port\n"
+msgstr ""
+
+#: winerror.mc:3396
+msgid "Unknown printer driver\n"
+msgstr ""
+
+#: winerror.mc:3401
+msgid "Unknown print processor\n"
+msgstr ""
+
+#: winerror.mc:3406
+msgid "Invalid separator file\n"
+msgstr ""
+
+#: winerror.mc:3411
+msgid "Invalid priority\n"
+msgstr ""
+
+#: winerror.mc:3416
+msgid "Invalid printer name\n"
+msgstr ""
+
+#: winerror.mc:3421
+msgid "Printer already exists\n"
+msgstr ""
+
+#: winerror.mc:3426
+msgid "Invalid printer command\n"
+msgstr ""
+
+#: winerror.mc:3431
+msgid "Invalid data type\n"
+msgstr ""
+
+#: winerror.mc:3436
+msgid "Invalid environment\n"
+msgstr ""
+
+#: winerror.mc:3441
+msgid "No more bindings\n"
+msgstr ""
+
+#: winerror.mc:3446
+msgid "Can't logon with interdomain trust account\n"
+msgstr ""
+
+#: winerror.mc:3451
+msgid "Can't logon with workstation trust account\n"
+msgstr ""
+
+#: winerror.mc:3456
+msgid "Can't logon with server trust account\n"
+msgstr ""
+
+#: winerror.mc:3461
+msgid "Domain trust information inconsistent\n"
+msgstr ""
+
+#: winerror.mc:3466
+msgid "Server has open handles\n"
+msgstr ""
+
+#: winerror.mc:3471
+msgid "Resource data not found\n"
+msgstr ""
+
+#: winerror.mc:3476
+msgid "Resource type not found\n"
+msgstr ""
+
+#: winerror.mc:3481
+msgid "Resource name not found\n"
+msgstr ""
+
+#: winerror.mc:3486
+msgid "Resource language not found\n"
+msgstr ""
+
+#: winerror.mc:3491
+msgid "Not enough quota\n"
+msgstr ""
+
+#: winerror.mc:3496
+msgid "No interfaces\n"
+msgstr ""
+
+#: winerror.mc:3501
+msgid "RPC call cancelled\n"
+msgstr ""
+
+#: winerror.mc:3506
+#, fuzzy
+msgid "Binding incomplete\n"
+msgstr "Na implementa"
+
+#: winerror.mc:3511
+msgid "RPC comm failure\n"
+msgstr ""
+
+#: winerror.mc:3516
+msgid "Unsupported authorisation level\n"
+msgstr ""
+
+#: winerror.mc:3521
+msgid "No principal name registered\n"
+msgstr ""
+
+#: winerror.mc:3526
+msgid "Not an RPC error\n"
+msgstr ""
+
+#: winerror.mc:3531
+msgid "UUID is local only\n"
+msgstr ""
+
+#: winerror.mc:3536
+msgid "Security package error\n"
+msgstr ""
+
+#: winerror.mc:3541
+msgid "Thread not cancelled\n"
+msgstr ""
+
+#: winerror.mc:3546
+msgid "Invalid handle operation\n"
+msgstr ""
+
+#: winerror.mc:3551
+msgid "Wrong serialising package version\n"
+msgstr ""
+
+#: winerror.mc:3556
+msgid "Wrong stub version\n"
+msgstr ""
+
+#: winerror.mc:3561
+msgid "Invalid pipe object\n"
+msgstr ""
+
+#: winerror.mc:3566
+msgid "Wrong pipe order\n"
+msgstr ""
+
+#: winerror.mc:3571
+msgid "Wrong pipe version\n"
+msgstr ""
+
+#: winerror.mc:3576
+msgid "Group member not found\n"
+msgstr ""
+
+#: winerror.mc:3581
+msgid "Can't create endpoint mapper DB\n"
+msgstr ""
+
+#: winerror.mc:3586
+msgid "Invalid object\n"
+msgstr ""
+
+#: winerror.mc:3591
+msgid "Invalid time\n"
+msgstr ""
+
+#: winerror.mc:3596
+msgid "Invalid form name\n"
+msgstr ""
+
+#: winerror.mc:3601
+msgid "Invalid form size\n"
+msgstr ""
+
+#: winerror.mc:3606
+msgid "Already awaiting printer handle\n"
+msgstr ""
+
+#: winerror.mc:3611
+#, fuzzy
+msgid "Printer deleted\n"
+msgstr "Tuot las datotecas (*.*)"
+
+#: winerror.mc:3616
+msgid "Invalid printer state\n"
+msgstr ""
+
+#: winerror.mc:3621
+msgid "User must change password\n"
+msgstr ""
+
+#: winerror.mc:3626
+msgid "Domain controller not found\n"
+msgstr ""
+
+#: winerror.mc:3631
+msgid "Account locked out\n"
+msgstr ""
+
+#: winerror.mc:3636
+msgid "Invalid pixel format\n"
+msgstr ""
+
+#: winerror.mc:3641
+msgid "Invalid driver\n"
+msgstr ""
+
+#: winerror.mc:3646
+msgid "Invalid object resolver set\n"
+msgstr ""
+
+#: winerror.mc:3651
+msgid "Incomplete RPC send\n"
+msgstr ""
+
+#: winerror.mc:3656
+msgid "Invalid asynchronous RPC handle\n"
+msgstr ""
+
+#: winerror.mc:3661
+msgid "Invalid asynchronous RPC call\n"
+msgstr ""
+
+#: winerror.mc:3666
+msgid "RPC pipe closed\n"
+msgstr ""
+
+#: winerror.mc:3671
+msgid "Discipline error on RPC pipe\n"
+msgstr ""
+
+#: winerror.mc:3676
+msgid "No data on RPC pipe\n"
+msgstr ""
+
+#: winerror.mc:3681
+#, fuzzy
+msgid "No site name available\n"
+msgstr "INFUORMAZIUN"
+
+#: winerror.mc:3686
+msgid "The file cannot be accessed\n"
+msgstr ""
+
+#: winerror.mc:3691
+msgid "The filename cannot be resolved\n"
+msgstr ""
+
+#: winerror.mc:3696
+msgid "RPC entry type mismatch\n"
+msgstr ""
+
+#: winerror.mc:3701
+msgid "Not all objects could be exported\n"
+msgstr ""
+
+#: winerror.mc:3706
+msgid "The interface could not be exported\n"
+msgstr ""
+
+#: winerror.mc:3711
+msgid "The profile could not be added\n"
+msgstr ""
+
+#: winerror.mc:3716
+msgid "The profile element could not be added\n"
+msgstr ""
+
+#: winerror.mc:3721
+msgid "The profile element could not be removed\n"
+msgstr ""
+
+#: winerror.mc:3726
+msgid "The group element could not be added\n"
+msgstr ""
+
+#: winerror.mc:3731
+msgid "The group element could not be removed\n"
+msgstr ""
+
+#: winerror.mc:3736
+msgid "The username could not be found\n"
+msgstr ""
+
+#: localspl.rc:28 localui.rc:28 winspool.rc:27
+msgid "Local Port"
+msgstr ""
+
+#: localspl.rc:29
+msgid "Local Monitor"
+msgstr ""
+
+#: localui.rc:29
+msgid "'%s' is not a valid port name"
+msgstr ""
+
+#: localui.rc:30
+msgid "Port %s already exists"
+msgstr ""
+
+#: localui.rc:31
+msgid "This port has no options to configure"
+msgstr ""
+
+#: mapi32.rc:28
+msgid "Mail sending failed as you do not have a MAPI mail client installed."
+msgstr ""
+
+#: mapi32.rc:29
+msgid "Send Mail"
+msgstr ""
+
+#: mpr.rc:27
+msgid "Entire Network"
+msgstr ""
+
+#: mshtml.rc:31
+msgid "HTML rendering is currently disabled."
+msgstr ""
+
+#: mshtml.rc:32
+msgid "HTML Document"
+msgstr ""
+
+#: mshtml.rc:26
+msgid "Downloading from %s..."
+msgstr ""
+
+#: mshtml.rc:25
+msgid "Done"
+msgstr ""
+
+#: msi.rc:27
+msgid ""
+"The specified installation package could not be opened.  Please check the "
+"file path and try again."
+msgstr ""
+
+#: msi.rc:28
+msgid "path %s not found"
+msgstr ""
+
+#: msi.rc:29
+msgid "insert disk %s"
+msgstr ""
+
+#: msi.rc:30
+msgid ""
+"Windows Installer %s\n"
+"\n"
+"Usage:\n"
+"msiexec command {required parameter} [optional parameter]\n"
+"\n"
+"Install a product:\n"
+"\t/i {package|product_code} [property]\n"
+"\t/package {package|product_code} [property]\n"
+"\t/a package [property]\n"
+"Repair an installation:\n"
+"\t/f[p|o|e|d|c|a|u|m|s|v] {package|product_code}\n"
+"Uninstall a product:\n"
+"\t/uninstall {package|product_code} [property]\n"
+"\t/x {package|product_code} [property]\n"
+"Advertise a product:\n"
+"\t/j[u|m] package [/t transform] [/g languageid]\n"
+"Apply a patch:\n"
+"\t/p patch_package [property]\n"
+"\t/p patch_package /a package [property]\n"
+"Log and UI Modifiers for above commands:\n"
+"\t/l[*][i|w|e|a|r|u|c|m|o|p|v|][+|!] logfile\n"
+"\t/q{|n|b|r|f|n+|b+|b-}\n"
+"Register MSI Service:\n"
+"\t/y\n"
+"Unregister MSI Service:\n"
+"\t/z\n"
+"Display this help:\n"
+"\t/help\n"
+"\t/?\n"
+msgstr ""
+
+#: msi.rc:57
+msgid "enter which folder contains %s"
+msgstr ""
+
+#: msi.rc:58
+msgid "install source for feature missing"
+msgstr ""
+
+#: msi.rc:59
+msgid "network drive for feature missing"
+msgstr ""
+
+#: msi.rc:60
+msgid "feature from:"
+msgstr ""
+
+#: msi.rc:61
+msgid "choose which folder contains %s"
+msgstr ""
+
+#: msrle32.rc:27
+msgid "WINE-MS-RLE"
+msgstr ""
+
+#: msrle32.rc:28
+msgid "Wine MS-RLE video codec"
+msgstr ""
+
+#: msrle32.rc:29
+msgid ""
+"Wine MS-RLE video codec\n"
+"Copyright 2002 by Michael Guennewig"
+msgstr ""
+
+#: msvfw32.rc:25
+msgid "Full Frames (Uncompressed)"
+msgstr ""
+
+#: msvidc32.rc:25
+msgid "MS-CRAM"
+msgstr ""
+
+#: msvidc32.rc:26
+msgid "Wine Video 1 video codec"
+msgstr ""
+
+#: oleacc.rc:27
+msgid "unknown object"
+msgstr ""
+
+#: oleacc.rc:28
+msgid "title bar"
+msgstr ""
+
+#: oleacc.rc:29
+msgid "menu bar"
+msgstr ""
+
+#: oleacc.rc:30
+msgid "scroll bar"
+msgstr ""
+
+#: oleacc.rc:31
+msgid "grip"
+msgstr ""
+
+#: oleacc.rc:32
+msgid "sound"
+msgstr ""
+
+#: oleacc.rc:33
+msgid "cursor"
+msgstr ""
+
+#: oleacc.rc:34
+msgid "caret"
+msgstr ""
+
+#: oleacc.rc:35
+msgid "alert"
+msgstr ""
+
+#: oleacc.rc:36
+msgid "window"
+msgstr ""
+
+#: oleacc.rc:37
+msgid "client"
+msgstr ""
+
+#: oleacc.rc:38
+msgid "popup menu"
+msgstr ""
+
+#: oleacc.rc:39
+msgid "menu item"
+msgstr ""
+
+#: oleacc.rc:40
+msgid "tool tip"
+msgstr ""
+
+#: oleacc.rc:41
+#, fuzzy
+msgid "application"
+msgstr "&Options"
+
+#: oleacc.rc:42
+msgid "document"
+msgstr ""
+
+#: oleacc.rc:43
+msgid "pane"
+msgstr ""
+
+#: oleacc.rc:44
+msgid "chart"
+msgstr ""
+
+#: oleacc.rc:45
+msgid "dialog"
+msgstr ""
+
+#: oleacc.rc:46
+msgid "border"
+msgstr ""
+
+#: oleacc.rc:47
+msgid "grouping"
+msgstr ""
+
+#: oleacc.rc:48
+msgid "separator"
+msgstr ""
+
+#: oleacc.rc:49
+msgid "tool bar"
+msgstr ""
+
+#: oleacc.rc:50
+msgid "status bar"
+msgstr ""
+
+#: oleacc.rc:51
+msgid "table"
+msgstr ""
+
+#: oleacc.rc:52
+msgid "column header"
+msgstr ""
+
+#: oleacc.rc:53
+msgid "row header"
+msgstr ""
+
+#: oleacc.rc:54
+msgid "column"
+msgstr ""
+
+#: oleacc.rc:55
+msgid "row"
+msgstr ""
+
+#: oleacc.rc:56
+msgid "cell"
+msgstr ""
+
+#: oleacc.rc:57
+msgid "link"
+msgstr ""
+
+#: oleacc.rc:58
+msgid "help balloon"
+msgstr ""
+
+#: oleacc.rc:59
+msgid "character"
+msgstr ""
+
+#: oleacc.rc:60
+msgid "list"
+msgstr ""
+
+#: oleacc.rc:61
+msgid "list item"
+msgstr ""
+
+#: oleacc.rc:62
+msgid "outline"
+msgstr ""
+
+#: oleacc.rc:63
+msgid "outline item"
+msgstr ""
+
+#: oleacc.rc:64
+msgid "page tab"
+msgstr ""
+
+#: oleacc.rc:65
+msgid "property page"
+msgstr ""
+
+#: oleacc.rc:66
+msgid "indicator"
+msgstr ""
+
+#: oleacc.rc:67
+msgid "graphic"
+msgstr ""
+
+#: oleacc.rc:68
+msgid "static text"
+msgstr ""
+
+#: oleacc.rc:69
+msgid "text"
+msgstr ""
+
+#: oleacc.rc:70
+msgid "push button"
+msgstr ""
+
+#: oleacc.rc:71
+msgid "check button"
+msgstr ""
+
+#: oleacc.rc:72
+msgid "radio button"
+msgstr ""
+
+#: oleacc.rc:73
+msgid "combo box"
+msgstr ""
+
+#: oleacc.rc:74
+msgid "drop down"
+msgstr ""
+
+#: oleacc.rc:75
+msgid "progress bar"
+msgstr ""
+
+#: oleacc.rc:76
+msgid "dial"
+msgstr ""
+
+#: oleacc.rc:77
+msgid "hot key field"
+msgstr ""
+
+#: oleacc.rc:78
+msgid "slider"
+msgstr ""
+
+#: oleacc.rc:79
+msgid "spin box"
+msgstr ""
+
+#: oleacc.rc:80
+msgid "diagram"
+msgstr ""
+
+#: oleacc.rc:81
+#, fuzzy
+msgid "animation"
+msgstr "INFUORMAZIUN"
+
+#: oleacc.rc:82
+msgid "equation"
+msgstr ""
+
+#: oleacc.rc:83
+msgid "drop down button"
+msgstr ""
+
+#: oleacc.rc:84
+msgid "menu button"
+msgstr ""
+
+#: oleacc.rc:85
+msgid "grid drop down button"
+msgstr ""
+
+#: oleacc.rc:86
+msgid "white space"
+msgstr ""
+
+#: oleacc.rc:87
+msgid "page tab list"
+msgstr ""
+
+#: oleacc.rc:88
+msgid "clock"
+msgstr ""
+
+#: oleacc.rc:89
+msgid "split button"
+msgstr ""
+
+#: oleacc.rc:90 ipconfig.rc:33
+msgid "IP address"
+msgstr ""
+
+#: oleacc.rc:91
+msgid "outline button"
+msgstr ""
+
+#: oleaut32.rc:27 oleview.rc:144
+msgid "True"
+msgstr ""
+
+#: oleaut32.rc:28 oleview.rc:145
+msgid "False"
+msgstr ""
+
+#: oleaut32.rc:31
+msgid "On"
+msgstr ""
+
+#: oleaut32.rc:32
+msgid "Off"
+msgstr ""
+
+#: oledlg.rc:25
+msgid "Insert a new %s object into your document"
+msgstr ""
+
+#: oledlg.rc:26
+msgid ""
+"Insert the contents of the file as an object into your document so that you "
+"may activate it using the program which created it."
+msgstr ""
+
+#: oledlg.rc:27 shell32.rc:181
+msgid "Browse"
+msgstr ""
+
+#: oledlg.rc:28
+msgid ""
+"File does not appear to be a valid OLE module. Unable to register OLE "
+"control."
+msgstr ""
+
+#: oledlg.rc:29
+msgid "Add Control"
+msgstr ""
+
+#: oledlg.rc:34
+msgid "Inserts the contents of the clipboard into your document as %s."
+msgstr ""
+
+#: oledlg.rc:35
+msgid ""
+"Inserts the contents of the clipboard into your document so that you can "
+"activate it using %s."
+msgstr ""
+
+#: oledlg.rc:36
+msgid ""
+"Inserts the contents of the clipboard into your document so that you can "
+"activate it using %s.  It will be displayed as an icon."
+msgstr ""
+
+#: oledlg.rc:37
+msgid ""
+"Inserts the contents of the clipboard into your document as %s.  The data is "
+"linked to the source file so that changes to the file will be reflected in "
+"your document."
+msgstr ""
+
+#: oledlg.rc:38
+msgid ""
+"Inserts a picture of the clipboard contents into your document.  The picture "
+"is linked to the source file so that changes to the file will be reflected "
+"in your document."
+msgstr ""
+
+#: oledlg.rc:39
+msgid ""
+"Inserts a shortcut which points to the location of the clipboard contents.  "
+"The shortcut is linked to the source file so that changes to the file will "
+"be reflected in your document."
+msgstr ""
+
+#: oledlg.rc:40
+msgid "Inserts the contents of the clipboard into your document."
+msgstr ""
+
+#: oledlg.rc:41
+msgid "Unknown Type"
+msgstr ""
+
+#: oledlg.rc:42
+msgid "Unknown Source"
+msgstr ""
+
+#: oledlg.rc:43
+msgid "the program which created it"
+msgstr ""
+
+#: sane.rc:31
+msgctxt "unit: pixels"
+msgid "px"
+msgstr ""
+
+#: sane.rc:32
+msgctxt "unit: bits"
+msgid "b"
+msgstr ""
+
+#: sane.rc:33
+msgctxt "unit: millimeters"
+msgid "mm"
+msgstr ""
+
+#: sane.rc:34
+msgctxt "unit: dots/inch"
+msgid "dpi"
+msgstr ""
+
+#: sane.rc:35
+msgctxt "unit: percent"
+msgid "%"
+msgstr ""
+
+#: sane.rc:36
+msgctxt "unit: microseconds"
+msgid "us"
+msgstr ""
+
+#: setupapi.rc:28
+msgid "The file '%s' on %s is needed"
+msgstr ""
+
+#: setupapi.rc:29 ipconfig.rc:31
+msgid "Unknown"
+msgstr ""
+
+#: setupapi.rc:30
+msgid "Copy files from:"
+msgstr ""
+
+#: setupapi.rc:31
+msgid "Type the path where the file is located, and then click OK."
+msgstr ""
+
+#: shdoclc.rc:36
+msgid "Default"
+msgstr "Default"
+
+#: shdoclc.rc:39
+msgid "F&orward"
+msgstr ""
+
+#: shdoclc.rc:41
+msgid "&Save Background As..."
+msgstr ""
+
+#: shdoclc.rc:42
+msgid "Set As Back&ground"
+msgstr ""
+
+#: shdoclc.rc:43
+msgid "&Copy Background"
+msgstr ""
+
+#: shdoclc.rc:44
+msgid "Set as &Desktop Item"
+msgstr ""
+
+#: shdoclc.rc:46 shdoclc.rc:98 shdoclc.rc:121 user32.rc:49
+msgid "Select &All"
+msgstr ""
+
+#: shdoclc.rc:47 shdoclc.rc:80 shdoclc.rc:94 shdoclc.rc:136 shdoclc.rc:164
+#: shdoclc.rc:189 user32.rc:46 wineconsole.rc:30 wordpad.rc:103
+msgid "&Paste"
+msgstr ""
+
+#: shdoclc.rc:49
+msgid "Create Shor&tcut"
+msgstr ""
+
+#: shdoclc.rc:50
+msgid "Add to &Favorites"
+msgstr ""
+
+#: shdoclc.rc:51
+msgid "&View Source"
+msgstr ""
+
+#: shdoclc.rc:53
+msgid "&Encoding"
+msgstr ""
+
+#: shdoclc.rc:55
+msgid "Pr&int"
+msgstr ""
+
+#: shdoclc.rc:59 shdocvw.rc:39 shell32.rc:93 clock.rc:28 wineconsole.rc:27
+msgid "&Properties"
+msgstr ""
+
+#: shdoclc.rc:62
+msgid "Image"
+msgstr ""
+
+#: shdoclc.rc:64 shdoclc.rc:151 shdoclc.rc:176
+#, fuzzy
+msgid "&Open Link"
+msgstr "&Rivir"
+
+#: shdoclc.rc:65 shdoclc.rc:152 shdoclc.rc:177
+msgid "Open Link in &New Window"
+msgstr ""
+
+#: shdoclc.rc:66 shdoclc.rc:130 shdoclc.rc:153 shdoclc.rc:178
+msgid "Save Target &As..."
+msgstr ""
+
+#: shdoclc.rc:67 shdoclc.rc:131 shdoclc.rc:154 shdoclc.rc:179
+#, fuzzy
+msgid "&Print Target"
+msgstr "&Stampar tema"
+
+#: shdoclc.rc:69 shdoclc.rc:156 shdoclc.rc:181
+msgid "S&how Picture"
+msgstr ""
+
+#: shdoclc.rc:70 shdoclc.rc:182
+msgid "&Save Picture As..."
+msgstr ""
+
+#: shdoclc.rc:71
+msgid "&E-mail Picture..."
+msgstr ""
+
+#: shdoclc.rc:72
+msgid "Pr&int Picture..."
+msgstr ""
+
+#: shdoclc.rc:73
+msgid "&Go to My Pictures"
+msgstr ""
+
+#: shdoclc.rc:74 shdoclc.rc:158 shdoclc.rc:183
+msgid "Set as Back&ground"
+msgstr ""
+
+#: shdoclc.rc:75 shdoclc.rc:159 shdoclc.rc:184
+msgid "Set as &Desktop Item..."
+msgstr ""
+
+#: shdoclc.rc:77 shdoclc.rc:92 shdoclc.rc:118 shdoclc.rc:161 shdoclc.rc:186
+#: user32.rc:44 wordpad.rc:101
+msgid "Cu&t"
+msgstr ""
+
+#: shdoclc.rc:78 shdoclc.rc:93 shdoclc.rc:119 shdoclc.rc:134 shdoclc.rc:162
+#: shdoclc.rc:187 shell32.rc:87 user32.rc:45 wineconsole.rc:29 winhlp32.rc:37
+#: wordpad.rc:102
+#, fuzzy
+msgid "&Copy"
+msgstr "Capchar"
+
+#: shdoclc.rc:79 shdoclc.rc:135 shdoclc.rc:163 shdoclc.rc:188
+msgid "Copy Shor&tcut"
+msgstr ""
+
+#: shdoclc.rc:82 shdoclc.rc:138 shdoclc.rc:166 shdoclc.rc:191
+msgid "Add to &Favorites..."
+msgstr ""
+
+#: shdoclc.rc:85 shdoclc.rc:141 shdoclc.rc:171 shdoclc.rc:198
+msgid "P&roperties"
+msgstr ""
+
+#: shdoclc.rc:88
+msgid "Control"
+msgstr ""
+
+#: shdoclc.rc:90 user32.rc:42
+msgid "&Undo"
+msgstr ""
+
+#: shdoclc.rc:95 shell32.rc:90 user32.rc:47
+msgid "&Delete"
+msgstr ""
+
+#: shdoclc.rc:101
+msgid "Table"
+msgstr ""
+
+#: shdoclc.rc:103 shell32.rc:82
+msgid "&Select"
+msgstr ""
+
+#: shdoclc.rc:105
+msgid "&Cell"
+msgstr ""
+
+#: shdoclc.rc:106
+msgid "&Row"
+msgstr ""
+
+#: shdoclc.rc:107
+msgid "&Column"
+msgstr ""
+
+#: shdoclc.rc:108
+msgid "&Table"
+msgstr ""
+
+#: shdoclc.rc:112
+msgid "&Cell Properties"
+msgstr ""
+
+#: shdoclc.rc:113
+msgid "&Table Properties"
+msgstr ""
+
+#: shdoclc.rc:116
+msgid "1DSite Select"
+msgstr ""
+
+#: shdoclc.rc:120 shell32.rc:61
+msgid "Paste"
+msgstr ""
+
+#: shdoclc.rc:122
+msgid "&Print"
+msgstr "&Stampar tema"
+
+#: shdoclc.rc:126
+msgid "Anchor"
+msgstr ""
+
+#: shdoclc.rc:128 shell32.rc:84
+msgid "&Open"
+msgstr "&Rivir"
+
+#: shdoclc.rc:129
+msgid "Open in &New Window"
+msgstr ""
+
+#: shdoclc.rc:133
+msgid "Cut"
+msgstr ""
+
+#: shdoclc.rc:144
+msgid "Context Unknown"
+msgstr ""
+
+#: shdoclc.rc:149
+msgid "DYNSRC Image"
+msgstr ""
+
+#: shdoclc.rc:157
+msgid "&Save Video As..."
+msgstr ""
+
+#: shdoclc.rc:169 shdoclc.rc:193
+msgid "Play"
+msgstr ""
+
+#: shdoclc.rc:174
+msgid "ART Image"
+msgstr ""
+
+#: shdoclc.rc:195
+msgid "Rewind"
+msgstr ""
+
+#: shdoclc.rc:201
+msgid "Debug"
+msgstr ""
+
+#: shdoclc.rc:203
+msgid "Trace Tags"
+msgstr ""
+
+#: shdoclc.rc:204
+msgid "Resource Failures"
+msgstr ""
+
+#: shdoclc.rc:205
+msgid "Dump Tracking Info"
+msgstr ""
+
+#: shdoclc.rc:206
+msgid "Debug Break"
+msgstr ""
+
+#: shdoclc.rc:207
+msgid "Debug View"
+msgstr ""
+
+#: shdoclc.rc:208
+msgid "Dump Tree"
+msgstr ""
+
+#: shdoclc.rc:209
+msgid "Dump Lines"
+msgstr ""
+
+#: shdoclc.rc:210
+msgid "Dump DisplayTree"
+msgstr ""
+
+#: shdoclc.rc:211
+msgid "Dump FormatCaches"
+msgstr ""
+
+#: shdoclc.rc:212
+msgid "Dump LayoutRects"
+msgstr ""
+
+#: shdoclc.rc:213
+msgid "Memory Monitor"
+msgstr ""
+
+#: shdoclc.rc:214
+msgid "Performance Meters"
+msgstr ""
+
+#: shdoclc.rc:215
+msgid "Save HTML"
+msgstr ""
+
+#: shdoclc.rc:217
+msgid "&Browse View"
+msgstr ""
+
+#: shdoclc.rc:218
+#, fuzzy
+msgid "&Edit View"
+msgstr "&Lavurar"
+
+#: shdoclc.rc:221
+msgid "Vertical Scrollbar"
+msgstr ""
+
+#: shdoclc.rc:223 shdoclc.rc:237
+msgid "Scroll Here"
+msgstr ""
+
+#: shdoclc.rc:225
+msgid "Top"
+msgstr ""
+
+#: shdoclc.rc:226
+msgid "Bottom"
+msgstr ""
+
+#: shdoclc.rc:228
+msgid "Page Up"
+msgstr ""
+
+#: shdoclc.rc:229
+msgid "Page Down"
+msgstr ""
+
+#: shdoclc.rc:231
+msgid "Scroll Up"
+msgstr ""
+
+#: shdoclc.rc:232
+msgid "Scroll Down"
+msgstr ""
+
+#: shdoclc.rc:235
+msgid "Horizontal Scrollbar"
+msgstr ""
+
+#: shdoclc.rc:239
+msgid "Left Edge"
+msgstr ""
+
+#: shdoclc.rc:240
+msgid "Right Edge"
+msgstr ""
+
+#: shdoclc.rc:242
+msgid "Page Left"
+msgstr ""
+
+#: shdoclc.rc:243
+msgid "Page Right"
+msgstr ""
+
+#: shdoclc.rc:245
+msgid "Scroll Left"
+msgstr ""
+
+#: shdoclc.rc:246
+msgid "Scroll Right"
+msgstr ""
+
+#: shdoclc.rc:25
+msgid "Wine Internet Explorer"
+msgstr ""
+
+#: shdoclc.rc:30
+msgid "&w&bPage &p"
+msgstr ""
+
+#: shdoclc.rc:31
+msgid "&u&b&d"
+msgstr ""
+
+#: shdocvw.rc:25 shell32.rc:99 notepad.rc:26 oleview.rc:27 oleview.rc:77
+#: progman.rc:29 taskmgr.rc:35 view.rc:28 winefile.rc:25 winhlp32.rc:28
+#: wordpad.rc:26
+msgid "&File"
+msgstr "&Datoteca"
+
+#: shdocvw.rc:27 regedit.rc:44 regedit.rc:95
+msgid "&New"
+msgstr ""
+
+#: shdocvw.rc:29 winefile.rc:76
+msgid "&Window"
+msgstr ""
+
+#: shdocvw.rc:31 view.rc:30 winhlp32.rc:29
+#, fuzzy
+msgid "&Open..."
+msgstr "&Rivir"
+
+#: shdocvw.rc:33 notepad.rc:30 wordpad.rc:31
+msgid "Save &as..."
+msgstr ""
+
+#: shdocvw.rc:35
+#, fuzzy
+msgid "Print &format..."
+msgstr "&Stampar tema"
+
+#: shdocvw.rc:36
+#, fuzzy
+msgid "Pr&int..."
+msgstr "&Stampar tema"
+
+#: shdocvw.rc:37 wordpad.rc:34
+#, fuzzy
+msgid "Print previe&w"
+msgstr "&Stampar tema"
+
+#: shdocvw.rc:40 oleview.rc:80 taskmgr.rc:139
+msgid "&Close"
+msgstr ""
+
+#: shdocvw.rc:42 shell32.rc:40 shell32.rc:105 oleview.rc:58 oleview.rc:82
+#: regedit.rc:63 taskmgr.rc:52 winefile.rc:49 wordpad.rc:66
+msgid "&View"
+msgstr ""
+
+#: shdocvw.rc:44
+msgid "&Toolbars"
+msgstr ""
+
+#: shdocvw.rc:46
+msgid "&Standard bar"
+msgstr ""
+
+#: shdocvw.rc:47
+msgid "&Address bar"
+msgstr ""
+
+#: shdocvw.rc:50 regedit.rc:71
+msgid "&Favorites"
+msgstr ""
+
+#: shdocvw.rc:52 regedit.rc:73
+msgid "&Add to Favorites..."
+msgstr ""
+
+#: shdocvw.rc:55 shell32.rc:113 clock.rc:41 notepad.rc:57 oleview.rc:69
+#: progman.rc:52 regedit.rc:76 taskmgr.rc:87 winefile.rc:85 winemine.rc:48
+#: winhlp32.rc:53 wordpad.rc:91
+msgid "&Help"
+msgstr "&Ag�d"
+
+#: shdocvw.rc:57
+#, fuzzy
+msgid "&About Internet Explorer"
+msgstr "I&nfuormaziuns"
+
+#: shdocvw.rc:67
+msgctxt "home page"
+msgid "Home"
+msgstr ""
+
+#: shdocvw.rc:68 winhlp32.rc:66
+#, fuzzy
+msgid "Print..."
+msgstr "&Stampar tema"
+
+#: shdocvw.rc:73
+msgid "Address"
+msgstr ""
+
+#: shell32.rc:27 shell32.rc:42 shell32.rc:107 shell32.rc:147 taskmgr.rc:65
+#: taskmgr.rc:110 taskmgr.rc:252
+msgid "Lar&ge Icons"
+msgstr ""
+
+#: shell32.rc:28 shell32.rc:43 shell32.rc:108 shell32.rc:148 taskmgr.rc:66
+#: taskmgr.rc:111 taskmgr.rc:253
+msgid "S&mall Icons"
+msgstr ""
+
+#: shell32.rc:29 shell32.rc:44 shell32.rc:109 shell32.rc:149
+msgid "&List"
+msgstr ""
+
+#: shell32.rc:30 shell32.rc:45 shell32.rc:110 shell32.rc:150 taskmgr.rc:67
+#: taskmgr.rc:112 taskmgr.rc:254
+msgid "&Details"
+msgstr ""
+
+#: shell32.rc:48
+msgid "Arrange &Icons"
+msgstr ""
+
+#: shell32.rc:50
+msgid "By &Name"
+msgstr ""
+
+#: shell32.rc:51
+msgid "By &Type"
+msgstr ""
+
+#: shell32.rc:52
+msgid "By &Size"
+msgstr ""
+
+#: shell32.rc:53
+msgid "By &Date"
+msgstr ""
+
+#: shell32.rc:55
+msgid "&Auto Arrange"
+msgstr ""
+
+#: shell32.rc:57
+msgid "Line up Icons"
+msgstr ""
+
+#: shell32.rc:62
+msgid "Paste as Link"
+msgstr ""
+
+#: shell32.rc:64
+msgid "New"
+msgstr ""
+
+#: shell32.rc:66
+msgid "New &Folder"
+msgstr ""
+
+#: shell32.rc:67
+#, fuzzy
+msgid "New &Link"
+msgstr "&Rivir"
+
+#: shell32.rc:71
+#, fuzzy
+msgid "Properties"
+msgstr "&Options"
+
+#: shell32.rc:83
+msgid "E&xplore"
+msgstr ""
+
+#: shell32.rc:86
+msgid "C&ut"
+msgstr ""
+
+#: shell32.rc:89
+msgid "Create &Link"
+msgstr ""
+
+#: shell32.rc:91 regedit.rc:91
+#, fuzzy
+msgid "&Rename"
+msgstr "&Annotaziun..."
+
+#: shell32.rc:102 notepad.rc:36 oleview.rc:35 regedit.rc:38 view.rc:31
+#: winhlp32.rc:34 wordpad.rc:37
+msgid "E&xit"
+msgstr "&Finir"
+
+#: shell32.rc:115
+#, fuzzy
+msgid "&About Control Panel..."
+msgstr "I&nfuormaziuns"
+
+#: shell32.rc:123 shell32.rc:127 winefile.rc:113
+msgid "Size"
+msgstr ""
+
+#: shell32.rc:124 regedit.rc:123
+msgid "Type"
+msgstr ""
+
+#: shell32.rc:125
+msgid "Modified"
+msgstr ""
+
+#: shell32.rc:126 winefile.rc:119
+msgid "Attributes"
+msgstr ""
+
+#: shell32.rc:128
+msgid "Size available"
+msgstr ""
+
+#: shell32.rc:130
+msgid "Comments"
+msgstr ""
+
+#: shell32.rc:131
+msgid "Owner"
+msgstr ""
+
+#: shell32.rc:132
+msgid "Group"
+msgstr ""
+
+#: shell32.rc:133
+msgid "Original location"
+msgstr ""
+
+#: shell32.rc:134
+msgid "Date deleted"
+msgstr ""
+
+#: shell32.rc:144
+msgid "Control Panel"
+msgstr ""
+
+#: shell32.rc:151
+msgid "Select"
+msgstr ""
+
+#: shell32.rc:152 oleview.rc:99
+#, fuzzy
+msgid "Open"
+msgstr "&Rivir"
+
+#: shell32.rc:173
+msgid "Restart"
+msgstr ""
+
+#: shell32.rc:174
+msgid "Do you want to simulate a Windows reboot?"
+msgstr ""
+
+#: shell32.rc:175
+msgid "Shutdown"
+msgstr ""
+
+#: shell32.rc:176
+msgid "Do you want to shutdown your Wine session?"
+msgstr ""
+
+#: shell32.rc:186
+msgid "Start Menu\\Programs"
+msgstr ""
+
+#: shell32.rc:188
+msgid "Favorites"
+msgstr ""
+
+#: shell32.rc:189
+msgid "Start Menu\\Programs\\StartUp"
+msgstr ""
+
+#: shell32.rc:190
+msgid "Recent"
+msgstr ""
+
+#: shell32.rc:191
+msgid "SendTo"
+msgstr ""
+
+#: shell32.rc:192
+msgid "Start Menu"
+msgstr ""
+
+#: shell32.rc:193
+msgid "My Music"
+msgstr ""
+
+#: shell32.rc:194
+msgid "My Videos"
+msgstr ""
+
+#: shell32.rc:196
+msgid "NetHood"
+msgstr ""
+
+#: shell32.rc:197
+msgid "Templates"
+msgstr ""
+
+#: shell32.rc:198
+#, fuzzy
+msgid "Application Data"
+msgstr "&Options"
+
+#: shell32.rc:199
+#, fuzzy
+msgid "PrintHood"
+msgstr "&Stampar tema"
+
+#: shell32.rc:200
+msgid "Local Settings\\Application Data"
+msgstr ""
+
+#: shell32.rc:201
+msgid "Local Settings\\Temporary Internet Files"
+msgstr ""
+
+#: shell32.rc:202
+msgid "Cookies"
+msgstr ""
+
+#: shell32.rc:203
+msgid "Local Settings\\History"
+msgstr ""
+
+#: shell32.rc:204
+msgid "Program Files"
+msgstr ""
+
+#: shell32.rc:206
+msgid "My Pictures"
+msgstr ""
+
+#: shell32.rc:207
+msgid "Program Files\\Common Files"
+msgstr ""
+
+#: shell32.rc:209 shell32.rc:135 shell32.rc:231
+msgid "Documents"
+msgstr ""
+
+#: shell32.rc:210
+msgid "Start Menu\\Programs\\Administrative Tools"
+msgstr ""
+
+#: shell32.rc:211
+msgid "Music"
+msgstr ""
+
+#: shell32.rc:212
+msgid "Pictures"
+msgstr ""
+
+#: shell32.rc:213
+msgid "Videos"
+msgstr ""
+
+#: shell32.rc:214
+msgid "Local Settings\\Application Data\\Microsoft\\CD Burning"
+msgstr ""
+
+#: shell32.rc:205
+msgid "Program Files (x86)"
+msgstr ""
+
+#: shell32.rc:208
+msgid "Program Files (x86)\\Common Files"
+msgstr ""
+
+#: shell32.rc:215
+msgid "Contacts"
+msgstr ""
+
+#: shell32.rc:216 winefile.rc:118
+msgid "Links"
+msgstr ""
+
+#: shell32.rc:217
+msgid "Pictures\\Slide Shows"
+msgstr ""
+
+#: shell32.rc:218
+msgid "Music\\Playlists"
+msgstr ""
+
+#: shell32.rc:219 shell32.rc:232
+msgid "Downloads"
+msgstr ""
+
+#: shell32.rc:136 taskmgr.rc:326
+msgid "Status"
+msgstr ""
+
+#: shell32.rc:137
+#, fuzzy
+msgid "Location"
+msgstr "&Options"
+
+#: shell32.rc:138
+msgid "Model"
+msgstr ""
+
+#: shell32.rc:220
+msgid "Microsoft\\Windows\\GameExplorer"
+msgstr ""
+
+#: shell32.rc:221
+msgid "Microsoft\\Windows\\Libraries"
+msgstr ""
+
+#: shell32.rc:222
+msgid "Microsoft\\Windows\\Ringtones"
+msgstr ""
+
+#: shell32.rc:223
+msgid "Music\\Sample Music"
+msgstr ""
+
+#: shell32.rc:224
+msgid "Pictures\\Sample Pictures"
+msgstr ""
+
+#: shell32.rc:225
+msgid "Music\\Sample Playlists"
+msgstr ""
+
+#: shell32.rc:226
+msgid "Videos\\Sample Videos"
+msgstr ""
+
+#: shell32.rc:227
+msgid "Saved Games"
+msgstr ""
+
+#: shell32.rc:228
+msgid "Searches"
+msgstr ""
+
+#: shell32.rc:229
+msgid "Users"
+msgstr ""
+
+#: shell32.rc:230
+#, fuzzy
+msgid "OEM Links"
+msgstr "&Rivir"
+
+#: shell32.rc:233
+msgid "AppData\\LocalLow"
+msgstr ""
+
+#: shell32.rc:154
+msgid "Unable to create new Folder: Permission denied."
+msgstr ""
+
+#: shell32.rc:155
+msgid "Error during creation of a new folder"
+msgstr ""
+
+#: shell32.rc:156
+msgid "Confirm file deletion"
+msgstr ""
+
+#: shell32.rc:157
+msgid "Confirm folder deletion"
+msgstr ""
+
+#: shell32.rc:158
+msgid "Are you sure you want to delete '%1'?"
+msgstr ""
+
+#: shell32.rc:159
+msgid "Are you sure you want to delete these %1 items?"
+msgstr ""
+
+#: shell32.rc:166
+msgid "Confirm file overwrite"
+msgstr ""
+
+#: shell32.rc:165
+msgid ""
+"This folder already contains a file called '%1'.\n"
+"\n"
+"Do you want to replace it?"
+msgstr ""
+
+#: shell32.rc:160
+msgid "Are you sure you want to delete the selected item(s)?"
+msgstr ""
+
+#: shell32.rc:162
+msgid ""
+"Are you sure that you want to send '%1' and all its content to the Trash?"
+msgstr ""
+
+#: shell32.rc:161
+msgid "Are you sure that you want to send '%1' to the Trash?"
+msgstr ""
+
+#: shell32.rc:163
+msgid "Are you sure that you want to send these %1 items to the Trash?"
+msgstr ""
+
+#: shell32.rc:164
+msgid "The item '%1' can't be sent to Trash. Do you want to delete it instead?"
+msgstr ""
+
+#: shell32.rc:167
+msgid ""
+"This folder already contains a folder named '%1'.\n"
+"\n"
+"If the files in the destination folder have the same names as files in the\n"
+"selected folder they will be replaced. Do you still want to move or copy\n"
+"the folder?"
+msgstr ""
+
+#: shell32.rc:235
+msgid "New Folder"
+msgstr ""
+
+#: shell32.rc:237
+msgid "Wine Control Panel"
+msgstr ""
+
+#: shell32.rc:179
+msgid "Unable to display Run File dialog box (internal error)"
+msgstr ""
+
+#: shell32.rc:180
+msgid "Unable to display Browse dialog box (internal error)"
+msgstr ""
+
+#: shell32.rc:182
+#, fuzzy
+msgid "Executable files (*.exe)"
+msgstr "Tuot las datotecas (*.*)"
+
+#: shell32.rc:241
+msgid "There is no Windows program configured to open this type of file."
+msgstr ""
+
+#: shell32.rc:258
+msgid ""
+"Wine is free software; you can redistribute it and/or modify it under the "
+"terms of the GNU Lesser General Public License as published by the Free "
+"Software Foundation; either version 2.1 of the License, or (at your option) "
+"any later version.\n"
+"\n"
+"Wine is distributed in the hope that it will be useful, but WITHOUT ANY "
+"WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS "
+"FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License for "
+"more details.\n"
+"\n"
+"You should have received a copy of the GNU Lesser General Public License "
+"along with Wine; if not, write to the Free Software Foundation, Inc., 51 "
+"Franklin St, Fifth Floor, Boston, MA 02110-1301, USA."
+msgstr ""
+
+#: shell32.rc:246
+#, fuzzy
+msgid "Wine License"
+msgstr "Wine ag�d"
+
+#: shell32.rc:143
+msgid "Trash"
+msgstr ""
+
+#: shlwapi.rc:27
+msgid "%ld bytes"
+msgstr ""
+
+#: shlwapi.rc:28
+msgid " hr"
+msgstr ""
+
+#: shlwapi.rc:29
+msgid " min"
+msgstr ""
+
+#: shlwapi.rc:30
+msgid " sec"
+msgstr ""
+
+#: user32.rc:27 taskmgr.rc:138
+msgid "&Restore"
+msgstr ""
+
+#: user32.rc:28
+msgid "&Move"
+msgstr ""
+
+#: user32.rc:29
+msgid "&Size"
+msgstr ""
+
+#: user32.rc:30
+msgid "Mi&nimize"
+msgstr ""
+
+#: user32.rc:31 taskmgr.rc:83 taskmgr.rc:99 taskmgr.rc:126
+msgid "Ma&ximize"
+msgstr ""
+
+#: user32.rc:33
+msgid "&Close\tAlt-F4"
+msgstr ""
+
+#: user32.rc:35
+#, fuzzy
+msgid "&About Wine"
+msgstr "I&nfuormaziuns"
+
+#: user32.rc:55 regedit.rc:176 winefile.rc:100
+msgid "Error"
+msgstr ""
+
+#: user32.rc:56
+msgid "&More Windows..."
+msgstr ""
+
+#: wininet.rc:25
+msgid "LAN Connection"
+msgstr ""
+
+#: wininet.rc:26
+msgid "The certificate is issued by an unknown or untrusted publisher."
+msgstr ""
+
+#: wininet.rc:27
+msgid "The date on the certificate is invalid."
+msgstr ""
+
+#: wininet.rc:28
+msgid "The name on the certificate does not match the site."
+msgstr ""
+
+#: wininet.rc:29
+msgid ""
+"There is at least one unspecified security problem with this certificate."
+msgstr ""
+
+#: winmm.rc:28
+msgid "The specified command was carried out."
+msgstr ""
+
+#: winmm.rc:29
+msgid "Undefined external error."
+msgstr ""
+
+#: winmm.rc:30
+msgid "A device ID has been used that is out of range for your system."
+msgstr ""
+
+#: winmm.rc:31
+msgid "The driver was not enabled."
+msgstr ""
+
+#: winmm.rc:32
+msgid ""
+"The specified device is already in use. Wait until it is free, and then try "
+"again."
+msgstr ""
+
+#: winmm.rc:33
+msgid "The specified device handle is invalid."
+msgstr ""
+
+#: winmm.rc:34
+msgid "There is no driver installed on your system!\n"
+msgstr ""
+
+#: winmm.rc:35
+msgid ""
+"Not enough memory available for this task. Quit one or more applications to "
+"increase available memory, and then try again."
+msgstr ""
+
+#: winmm.rc:36
+msgid ""
+"This function is not supported. Use the Capabilities function to determine "
+"which functions and messages the driver supports."
+msgstr ""
+
+#: winmm.rc:37
+msgid "An error number was specified that is not defined in the system."
+msgstr ""
+
+#: winmm.rc:38
+msgid "An invalid flag was passed to a system function."
+msgstr ""
+
+#: winmm.rc:39
+msgid "An invalid parameter was passed to a system function."
+msgstr ""
+
+#: winmm.rc:42
+msgid ""
+"The specified format is not supported or cannot be translated. Use the "
+"Capabilities function to determine the supported formats."
+msgstr ""
+
+#: winmm.rc:43 winmm.rc:49
+msgid ""
+"Cannot perform this operation while media data is still playing. Reset the "
+"device, or wait until the data is finished playing."
+msgstr ""
+
+#: winmm.rc:44
+msgid ""
+"The wave header was not prepared. Use the Prepare function to prepare the "
+"header, and then try again."
+msgstr ""
+
+#: winmm.rc:45
+msgid ""
+"Cannot open the device without using the WAVE_ALLOWSYNC flag. Use the flag, "
+"and then try again."
+msgstr ""
+
+#: winmm.rc:48
+msgid ""
+"The MIDI header was not prepared. Use the Prepare function to prepare the "
+"header, and then try again."
+msgstr ""
+
+#: winmm.rc:50
+msgid ""
+"A MIDI map was not found. There may be a problem with the driver, or the "
+"MIDIMAP.CFG file may be corrupt or missing."
+msgstr ""
+
+#: winmm.rc:51
+msgid ""
+"The port is transmitting data to the device. Wait until the data has been "
+"transmitted, and then try again."
+msgstr ""
+
+#: winmm.rc:52
+msgid ""
+"The current MIDI Mapper setup refers to a MIDI device that is not installed "
+"on the system. Use MIDI Mapper to edit the setup."
+msgstr ""
+
+#: winmm.rc:53
+msgid ""
+"The current MIDI setup is damaged. Copy the original MIDIMAP.CFG file to the "
+"Windows SYSTEM directory, and then try again."
+msgstr ""
+
+#: winmm.rc:56
+msgid "Invalid MCI device ID. Use the ID returned when opening the MCI device."
+msgstr ""
+
+#: winmm.rc:57
+msgid "The driver cannot recognize the specified command parameter."
+msgstr ""
+
+#: winmm.rc:58
+msgid "The driver cannot recognize the specified command."
+msgstr ""
+
+#: winmm.rc:59
+msgid ""
+"There is a problem with your media device. Make sure it is working correctly "
+"or contact the device manufacturer."
+msgstr ""
+
+#: winmm.rc:60
+msgid "The specified device is not open or is not recognized by MCI."
+msgstr ""
+
+#: winmm.rc:61
+msgid ""
+"Not enough memory available for this task.\n"
+"Quit one or more applications to increase available memory, and then try "
+"again."
+msgstr ""
+
+#: winmm.rc:62
+msgid ""
+"The device name is already being used as an alias by this application. Use a "
+"unique alias."
+msgstr ""
+
+#: winmm.rc:63
+msgid ""
+"There is an undetectable problem in loading the specified device driver."
+msgstr ""
+
+#: winmm.rc:64
+msgid "No command was specified."
+msgstr ""
+
+#: winmm.rc:65
+msgid ""
+"The output string was too large to fit in the return buffer. Increase the "
+"size of the buffer."
+msgstr ""
+
+#: winmm.rc:66
+msgid ""
+"The specified command requires a character-string parameter. Please provide "
+"one."
+msgstr ""
+
+#: winmm.rc:67
+msgid "The specified integer is invalid for this command."
+msgstr ""
+
+#: winmm.rc:68
+msgid ""
+"The device driver returned an invalid return type. Check with the device "
+"manufacturer about obtaining a new driver."
+msgstr ""
+
+#: winmm.rc:69
+msgid ""
+"There is a problem with the device driver. Check with the device "
+"manufacturer about obtaining a new driver."
+msgstr ""
+
+#: winmm.rc:70
+msgid "The specified command requires a parameter. Please supply one."
+msgstr ""
+
+#: winmm.rc:71
+msgid "The MCI device you are using does not support the specified command."
+msgstr ""
+
+#: winmm.rc:72
+msgid ""
+"Cannot find the specified file. Make sure the path and filename are correct."
+msgstr ""
+
+#: winmm.rc:73
+msgid "The device driver is not ready."
+msgstr ""
+
+#: winmm.rc:74
+msgid "A problem occurred in initializing MCI. Try restarting Windows."
+msgstr ""
+
+#: winmm.rc:75
+msgid ""
+"There is a problem with the device driver. The driver has closed. Cannot "
+"access error."
+msgstr ""
+
+#: winmm.rc:76
+msgid "Cannot use 'all' as the device name with the specified command."
+msgstr ""
+
+#: winmm.rc:77
+msgid ""
+"Errors occurred in more than one device. Specify each command and device "
+"separately to determine which devices caused the error."
+msgstr ""
+
+#: winmm.rc:78
+msgid "Cannot determine the device type from the given filename extension."
+msgstr ""
+
+#: winmm.rc:79
+msgid "The specified parameter is out of range for the specified command."
+msgstr ""
+
+#: winmm.rc:80
+msgid "The specified parameters cannot be used together."
+msgstr ""
+
+#: winmm.rc:81
+msgid ""
+"Cannot save the specified file. Make sure you have enough disk space or are "
+"still connected to the network."
+msgstr ""
+
+#: winmm.rc:82
+msgid ""
+"Cannot find the specified device. Make sure it is installed or that the "
+"device name is spelled correctly."
+msgstr ""
+
+#: winmm.rc:83
+msgid ""
+"The specified device is now being closed. Wait a few seconds, and then try "
+"again."
+msgstr ""
+
+#: winmm.rc:84
+msgid ""
+"The specified alias is already being used in this application. Use a unique "
+"alias."
+msgstr ""
+
+#: winmm.rc:85
+msgid "The specified parameter is invalid for this command."
+msgstr ""
+
+#: winmm.rc:86
+msgid ""
+"The device driver is already in use. To share it, use the 'shareable' "
+"parameter with each 'open' command."
+msgstr ""
+
+#: winmm.rc:87
+msgid ""
+"The specified command requires an alias, file, driver, or device name. "
+"Please supply one."
+msgstr ""
+
+#: winmm.rc:88
+msgid ""
+"The specified value for the time format is invalid. Refer to the MCI "
+"documentation for valid formats."
+msgstr ""
+
+#: winmm.rc:89
+msgid ""
+"A closing double-quotation mark is missing from the parameter value. Please "
+"supply one."
+msgstr ""
+
+#: winmm.rc:90
+msgid "A parameter or value was specified twice. Only specify it once."
+msgstr ""
+
+#: winmm.rc:91
+msgid ""
+"The specified file cannot be played on the specified MCI device. The file "
+"may be corrupt, or not in the correct format."
+msgstr ""
+
+#: winmm.rc:92
+msgid "A null parameter block was passed to MCI."
+msgstr ""
+
+#: winmm.rc:93
+msgid "Cannot save an unnamed file. Supply a filename."
+msgstr ""
+
+#: winmm.rc:94
+msgid "You must specify an alias when using the 'new' parameter."
+msgstr ""
+
+#: winmm.rc:95
+msgid "Cannot use the 'notify' flag with auto-opened devices."
+msgstr ""
+
+#: winmm.rc:96
+msgid "Cannot use a filename with the specified device."
+msgstr ""
+
+#: winmm.rc:97
+msgid ""
+"Cannot carry out the commands in the order specified. Correct the command "
+"sequence, and then try again."
+msgstr ""
+
+#: winmm.rc:98
+msgid ""
+"Cannot carry out the specified command on an auto-opened device. Wait until "
+"the device is closed, and then try again."
+msgstr ""
+
+#: winmm.rc:99
+msgid ""
+"The filename is invalid. Make sure the filename is not longer than 8 "
+"characters, followed by a period and an extension."
+msgstr ""
+
+#: winmm.rc:100
+msgid ""
+"Cannot specify extra characters after a string enclosed in quotation marks."
+msgstr ""
+
+#: winmm.rc:101
+msgid ""
+"The specified device is not installed on the system. Use the Drivers option "
+"in Control Panel to install the device."
+msgstr ""
+
+#: winmm.rc:102
+msgid ""
+"Cannot access the specified file or MCI device. Try changing directories or "
+"restarting your computer."
+msgstr ""
+
+#: winmm.rc:103
+msgid ""
+"Cannot access the specified file or MCI device because the application "
+"cannot change directories."
+msgstr ""
+
+#: winmm.rc:104
+msgid ""
+"Cannot access specified file or MCI device because the application cannot "
+"change drives."
+msgstr ""
+
+#: winmm.rc:105
+msgid "Specify a device or driver name that is less than 79 characters."
+msgstr ""
+
+#: winmm.rc:106
+msgid "Specify a device or driver name that is less than 69 characters."
+msgstr ""
+
+#: winmm.rc:107
+msgid ""
+"The specified command requires an integer parameter. Please provide one."
+msgstr ""
+
+#: winmm.rc:108
+msgid ""
+"All wave devices that can play files in the current format are in use. Wait "
+"until a wave device is free, and then try again."
+msgstr ""
+
+#: winmm.rc:109
+msgid ""
+"Cannot set the current wave device for play back because it is in use. Wait "
+"until the device is free, and then try again."
+msgstr ""
+
+#: winmm.rc:110
+msgid ""
+"All wave devices that can record files in the current format are in use. "
+"Wait until a wave device is free, and then try again."
+msgstr ""
+
+#: winmm.rc:111
+msgid ""
+"Cannot set the current wave device for recording because it is in use. Wait "
+"until the device is free, and then try again."
+msgstr ""
+
+#: winmm.rc:112
+msgid "Any compatible waveform playback device may be used."
+msgstr ""
+
+#: winmm.rc:113
+msgid "Any compatible waveform recording device may be used."
+msgstr ""
+
+#: winmm.rc:114
+msgid ""
+"No wave device that can play files in the current format is installed. Use "
+"the Drivers option to install the wave device."
+msgstr ""
+
+#: winmm.rc:115
+msgid ""
+"The device you are trying to play to cannot recognize the current file "
+"format."
+msgstr ""
+
+#: winmm.rc:116
+msgid ""
+"No wave device that can record files in the current format is installed. Use "
+"the Drivers option to install the wave device."
+msgstr ""
+
+#: winmm.rc:117
+msgid ""
+"The device you are trying to record from cannot recognize the current file "
+"format."
+msgstr ""
+
+#: winmm.rc:122
+msgid ""
+"The time formats of the \"song pointer\" and SMPTE are mutually exclusive. "
+"You can't use them together."
+msgstr ""
+
+#: winmm.rc:124
+msgid ""
+"The specified MIDI port is already in use. Wait until it is free; then try "
+"again."
+msgstr ""
+
+#: winmm.rc:127
+msgid ""
+"The specified MIDI device is not installed on the system. Use the Drivers "
+"option from the Control Panel to install a MIDI device."
+msgstr ""
+
+#: winmm.rc:125
+msgid ""
+"The current MIDI Mapper setup refers to a MIDI device that is not installed "
+"on the system. Use the MIDI Mapper option from the Control Panel to edit the "
+"setup."
+msgstr ""
+
+#: winmm.rc:126
+msgid "An error occurred with the specified port."
+msgstr ""
+
+#: winmm.rc:129
+msgid ""
+"All multimedia timers are being used by other applications. Quit one of "
+"these applications; then, try again."
+msgstr ""
+
+#: winmm.rc:128
+msgid "The system doesn't have a current MIDI port specified."
+msgstr ""
+
+#: winmm.rc:123
+msgid ""
+"The system has no installed MIDI devices. Use the Drivers option from the "
+"Control Panel to install a MIDI driver."
+msgstr ""
+
+#: winmm.rc:118
+msgid "There is no display window."
+msgstr ""
+
+#: winmm.rc:119
+msgid "Could not create or use window."
+msgstr ""
+
+#: winmm.rc:120
+msgid ""
+"Cannot read the specified file. Make sure the file is still present, or "
+"check your disk or network connection."
+msgstr ""
+
+#: winmm.rc:121
+msgid ""
+"Cannot write to the specified file. Make sure you have enough disk space or "
+"are still connected to the network."
+msgstr ""
+
+#: winspool.rc:28
+msgid "The output file already exists.  Click OK to overwrite."
+msgstr ""
+
+#: winspool.rc:29
+msgid "Unable to create the output file."
+msgstr ""
+
+#: wldap32.rc:27
+msgid "Success"
+msgstr ""
+
+#: wldap32.rc:28
+msgid "Operations Error"
+msgstr ""
+
+#: wldap32.rc:29
+msgid "Protocol Error"
+msgstr ""
+
+#: wldap32.rc:30
+msgid "Time Limit Exceeded"
+msgstr ""
+
+#: wldap32.rc:31
+msgid "Size Limit Exceeded"
+msgstr ""
+
+#: wldap32.rc:32
+msgid "Compare False"
+msgstr ""
+
+#: wldap32.rc:33
+msgid "Compare True"
+msgstr ""
+
+#: wldap32.rc:34
+msgid "Authentication Method Not Supported"
+msgstr ""
+
+#: wldap32.rc:35
+msgid "Strong Authentication Required"
+msgstr ""
+
+#: wldap32.rc:36
+msgid "Referral (v2)"
+msgstr ""
+
+#: wldap32.rc:37
+msgid "Referral"
+msgstr ""
+
+#: wldap32.rc:38
+msgid "Administration Limit Exceeded"
+msgstr ""
+
+#: wldap32.rc:39
+msgid "Unavailable Critical Extension"
+msgstr ""
+
+#: wldap32.rc:40
+msgid "Confidentiality Required"
+msgstr ""
+
+#: wldap32.rc:43
+msgid "No Such Attribute"
+msgstr ""
+
+#: wldap32.rc:44
+msgid "Undefined Type"
+msgstr ""
+
+#: wldap32.rc:45
+msgid "Inappropriate Matching"
+msgstr ""
+
+#: wldap32.rc:46
+msgid "Constraint Violation"
+msgstr ""
+
+#: wldap32.rc:47
+msgid "Attribute Or Value Exists"
+msgstr ""
+
+#: wldap32.rc:48
+msgid "Invalid Syntax"
+msgstr ""
+
+#: wldap32.rc:59
+msgid "No Such Object"
+msgstr ""
+
+#: wldap32.rc:60
+msgid "Alias Problem"
+msgstr ""
+
+#: wldap32.rc:61
+msgid "Invalid DN Syntax"
+msgstr ""
+
+#: wldap32.rc:62
+msgid "Is Leaf"
+msgstr ""
+
+#: wldap32.rc:63
+msgid "Alias Dereference Problem"
+msgstr ""
+
+#: wldap32.rc:75
+msgid "Inappropriate Authentication"
+msgstr ""
+
+#: wldap32.rc:76
+msgid "Invalid Credentials"
+msgstr ""
+
+#: wldap32.rc:77
+msgid "Insufficient Rights"
+msgstr ""
+
+#: wldap32.rc:78
+msgid "Busy"
+msgstr ""
+
+#: wldap32.rc:79
+msgid "Unavailable"
+msgstr ""
+
+#: wldap32.rc:80
+msgid "Unwilling To Perform"
+msgstr ""
+
+#: wldap32.rc:81
+msgid "Loop Detected"
+msgstr ""
+
+#: wldap32.rc:87
+msgid "Sort Control Missing"
+msgstr ""
+
+#: wldap32.rc:88
+msgid "Index range error"
+msgstr ""
+
+#: wldap32.rc:91
+msgid "Naming Violation"
+msgstr ""
+
+#: wldap32.rc:92
+msgid "Object Class Violation"
+msgstr ""
+
+#: wldap32.rc:93
+msgid "Not allowed on Non-leaf"
+msgstr ""
+
+#: wldap32.rc:94
+msgid "Not allowed on RDN"
+msgstr ""
+
+#: wldap32.rc:95
+msgid "Already Exists"
+msgstr ""
+
+#: wldap32.rc:96
+msgid "No Object Class Mods"
+msgstr ""
+
+#: wldap32.rc:97
+msgid "Results Too Large"
+msgstr ""
+
+#: wldap32.rc:98
+msgid "Affects Multiple DSAs"
+msgstr ""
+
+#: wldap32.rc:107
+msgid "Other"
+msgstr ""
+
+#: wldap32.rc:108
+msgid "Server Down"
+msgstr ""
+
+#: wldap32.rc:109
+msgid "Local Error"
+msgstr ""
+
+#: wldap32.rc:110
+msgid "Encoding Error"
+msgstr ""
+
+#: wldap32.rc:111
+msgid "Decoding Error"
+msgstr ""
+
+#: wldap32.rc:112
+msgid "Timeout"
+msgstr ""
+
+#: wldap32.rc:113
+msgid "Auth Unknown"
+msgstr ""
+
+#: wldap32.rc:114
+msgid "Filter Error"
+msgstr ""
+
+#: wldap32.rc:115
+msgid "User Cancelled"
+msgstr ""
+
+#: wldap32.rc:116
+msgid "Parameter Error"
+msgstr ""
+
+#: wldap32.rc:117
+msgid "No Memory"
+msgstr ""
+
+#: wldap32.rc:118
+msgid "Can't connect to the LDAP server"
+msgstr ""
+
+#: wldap32.rc:119
+msgid "Operation not supported by this version of the LDAP protocol"
+msgstr ""
+
+#: wldap32.rc:120
+msgid "Specified control was not found in message"
+msgstr ""
+
+#: wldap32.rc:121
+msgid "No result present in message"
+msgstr ""
+
+#: wldap32.rc:122
+msgid "More results returned"
+msgstr ""
+
+#: wldap32.rc:123
+msgid "Loop while handling referrals"
+msgstr ""
+
+#: wldap32.rc:124
+msgid "Referral hop limit exceeded"
+msgstr ""
+
+#: clock.rc:29
+msgid "Ana&log"
+msgstr ""
+
+#: clock.rc:30
+msgid "Digi&tal"
+msgstr ""
+
+#: clock.rc:32 notepad.rc:50 winefile.rc:64 wordpad.rc:81
+#, fuzzy
+msgid "&Font..."
+msgstr "Fonts"
+
+#: clock.rc:34
+msgid "&Without Titlebar"
+msgstr ""
+
+#: clock.rc:36
+msgid "&Seconds"
+msgstr ""
+
+#: clock.rc:37
+msgid "&Date"
+msgstr ""
+
+#: clock.rc:39 taskmgr.rc:43 taskmgr.rc:141
+#, fuzzy
+msgid "&Always on Top"
+msgstr "Ad�na da&vant"
+
+#: clock.rc:42
+#, fuzzy
+msgid "&About Clock"
+msgstr "I&nfuormaziuns"
+
+#: clock.rc:48
+msgid "Clock"
+msgstr ""
+
+#: cmd.rc:30
+msgid "ATTRIB shows or changes DOS file attributes.\n"
+msgstr ""
+
+#: cmd.rc:38
+msgid ""
+"CALL <batchfilename> is used within a batch file to execute commands\n"
+"from another batch file. When the batch file exits, control returns to\n"
+"the file which called it. The CALL command may supply parameters to the\n"
+"called procedure.\n"
+"\n"
+"Changes to default directory, environment variables etc made within a\n"
+"called procedure are inherited by the caller.\n"
+msgstr ""
+
+#: cmd.rc:41
+msgid ""
+"CD <dir> is the short version of CHDIR. It changes the current\n"
+"default directory.\n"
+msgstr ""
+
+#: cmd.rc:42
+msgid "CHDIR <dir> changes the current default directory.\n"
+msgstr ""
+
+#: cmd.rc:44
+msgid "CLS clears the console screen.\n"
+msgstr ""
+
+#: cmd.rc:46
+msgid "COPY <filename> copies a file.\n"
+msgstr ""
+
+#: cmd.rc:47
+msgid "CTTY changes the input/output device.\n"
+msgstr ""
+
+#: cmd.rc:48
+msgid "DATE shows or changes the system date.\n"
+msgstr ""
+
+#: cmd.rc:49
+msgid "DEL <filename> deletes a file or set of files.\n"
+msgstr ""
+
+#: cmd.rc:50
+msgid "DIR lists the contents of a directory.\n"
+msgstr ""
+
+#: cmd.rc:60
+msgid ""
+"ECHO <string> displays <string> on the current terminal device.\n"
+"\n"
+"ECHO ON causes all subsequent commands in a batch file to be displayed\n"
+"on the terminal device before they are executed.\n"
+"\n"
+"ECHO OFF reverses the effect of a previous ECHO ON (ECHO is OFF by\n"
+"default). The ECHO OFF command can be prevented from displaying by\n"
+"preceding it with an @ sign.\n"
+msgstr ""
+
+#: cmd.rc:62
+msgid "ERASE <filename> deletes a file or set of files.\n"
+msgstr ""
+
+#: cmd.rc:70
+msgid ""
+"The FOR command is used to execute a command for each of a set of files.\n"
+"\n"
+"Syntax: FOR %variable IN (set) DO command\n"
+"\n"
+"The requirement to double the % sign when using FOR in a batch file does\n"
+"not exist in wine's cmd.\n"
+msgstr ""
+
+#: cmd.rc:82
+msgid ""
+"The GOTO command transfers execution to another statement within a\n"
+"batch file.\n"
+"\n"
+"The label which is the target of a GOTO may be up to 255 characters\n"
+"long but may not include spaces (this is different from other operating\n"
+"systems). If two or more identical labels exist in a batch file the\n"
+"first one will always be executed. Attempting to GOTO a nonexistent\n"
+"label terminates the batch file execution.\n"
+"\n"
+"GOTO has no effect when used interactively.\n"
+msgstr ""
+
+#: cmd.rc:85
+msgid ""
+"HELP <command> shows brief help details on a topic.\n"
+"HELP without an argument shows all CMD built-in commands.\n"
+msgstr ""
+
+#: cmd.rc:95
+msgid ""
+"IF is used to conditionally execute a command.\n"
+"\n"
+"Syntax:\tIF [NOT] EXIST filename command\n"
+"IF [NOT] string1==string2 command\n"
+"IF [NOT] ERRORLEVEL number command\n"
+"\n"
+"In the second form of the command, string1 and string2 must be in double\n"
+"quotes. The comparison is not case-sensitive.\n"
+msgstr ""
+
+#: cmd.rc:101
+msgid ""
+"LABEL is used to set a disk volume label.\n"
+"\n"
+"Syntax: LABEL [drive:]\n"
+"The command will prompt you for the new volume label for the given drive.\n"
+"You can display the disk volume label with the VOL command.\n"
+msgstr ""
+
+#: cmd.rc:104
+msgid "MD <name> is the short version of MKDIR. It creates a subdirectory.\n"
+msgstr ""
+
+#: cmd.rc:105
+msgid "MKDIR <name> creates a subdirectory.\n"
+msgstr ""
+
+#: cmd.rc:112
+msgid ""
+"MOVE relocates a file or directory to a new point within the file system.\n"
+"\n"
+"If the item being moved is a directory then all the files and "
+"subdirectories\n"
+"below the item are moved as well.\n"
+"\n"
+"MOVE fails if the old and new locations are on different DOS drive letters.\n"
+msgstr ""
+
+#: cmd.rc:123
+msgid ""
+"PATH displays or changes the cmd search path.\n"
+"\n"
+"Entering PATH will display the current PATH setting (initially taken\n"
+"from the registry). To change the setting follow the\n"
+"PATH command with the new value.\n"
+"\n"
+"It is also possible to modify the PATH by using the PATH environment\n"
+"variable, for example:\n"
+"PATH %PATH%;c:\\temp\n"
+msgstr ""
+
+#: cmd.rc:129
+msgid ""
+"PAUSE displays a message on the screen 'Press Return key to continue'\n"
+"and waits for the user to press the Return key. It is mainly useful in\n"
+"batch files to allow the user to read the output of a previous command\n"
+"before it scrolls off the screen.\n"
+msgstr ""
+
+#: cmd.rc:150
+msgid ""
+"PROMPT sets the command-line prompt.\n"
+"\n"
+"The string following the PROMPT command (and the space immediately after)\n"
+"appears at the beginning of the line when cmd is waiting for input.\n"
+"\n"
+"The following character strings have the special meaning shown:\n"
+"\n"
+"$$    Dollar sign         $_    Linefeed            $b    Pipe sign (|)\n"
+"$d    Current date        $e    Escape              $g    > sign\n"
+"$l    < sign              $n    Current drive       $p    Current path\n"
+"$q    Equal sign          $t    Current time        $v    cmd version\n"
+"\n"
+"Note that entering the PROMPT command without a prompt-string resets the\n"
+"prompt to the default, which is the current directory (which includes the\n"
+"current drive letter) followed by a greater-than (>) sign.\n"
+"(like a command PROMPT $p$g).\n"
+"\n"
+"The prompt can also be changed by altering the PROMPT environment variable,\n"
+"so the command 'SET PROMPT=text' has the same effect as 'PROMPT text'\n"
+msgstr ""
+
+#: cmd.rc:154
+msgid ""
+"A command line beginning REM (followed by a space) performs no\n"
+"action, and can therefore be used as a comment in a batch file.\n"
+msgstr ""
+
+#: cmd.rc:157
+msgid "REN <filename> is the short version of RENAME. It renames a file.\n"
+msgstr ""
+
+#: cmd.rc:158
+msgid "RENAME <filename> renames a file.\n"
+msgstr ""
+
+#: cmd.rc:160
+msgid "RD <dir> is the short version of RMDIR. It deletes a subdirectory.\n"
+msgstr ""
+
+#: cmd.rc:161
+msgid "RMDIR <dir> deletes a subdirectory.\n"
+msgstr ""
+
+#: cmd.rc:179
+msgid ""
+"SET displays or changes the cmd environment variables.\n"
+"\n"
+"SET without parameters shows all of the current environment.\n"
+"\n"
+"To create or modify an environment variable the syntax is:\n"
+"\n"
+"SET <variable>=<value>\n"
+"\n"
+"where <variable> and <value> are character strings. There must be no\n"
+"spaces before the equals sign, nor can the variable name\n"
+"have embedded spaces.\n"
+"\n"
+"Under Wine, the environment of the underlying operating system is\n"
+"included into the Win32 environment, there will generally therefore be\n"
+"many more values than in a native Win32 implementation. Note that it is\n"
+"not possible to affect the operating system environment from within cmd.\n"
+msgstr ""
+
+#: cmd.rc:184
+msgid ""
+"SHIFT is used in a batch file to remove one parameter from the head of\n"
+"the list, so parameter 2 becomes parameter 1 and so on. It has no effect\n"
+"if called from the command line.\n"
+msgstr ""
+
+#: cmd.rc:186
+msgid "TIME sets or shows the current system time.\n"
+msgstr ""
+
+#: cmd.rc:188
+msgid "Sets the window title for the cmd window, syntax TITLE [string]\n"
+msgstr ""
+
+#: cmd.rc:192
+msgid ""
+"TYPE <filename> copies <filename> to the console device (or elsewhere\n"
+"if redirected). No check is made that the file is readable text.\n"
+msgstr ""
+
+#: cmd.rc:201
+msgid ""
+"VERIFY is used to set, clear or test the verify flag. Valid forms are:\n"
+"\n"
+"VERIFY ON\tSet the flag\n"
+"VERIFY OFF\tClear the flag\n"
+"VERIFY\t\tDisplays ON or OFF as appropriate.\n"
+"\n"
+"The verify flag has no function in Wine.\n"
+msgstr ""
+
+#: cmd.rc:204
+msgid "VER displays the version of cmd you are running.\n"
+msgstr ""
+
+#: cmd.rc:206
+msgid "VOL shows the volume label of a disk device.\n"
+msgstr ""
+
+#: cmd.rc:209
+msgid ""
+"PUSHD <directoryname> saves the current directory onto a\n"
+"stack, and then changes the current directory to the supplied one.\n"
+msgstr ""
+
+#: cmd.rc:212
+msgid ""
+"POPD changes current directory to the last one saved with\n"
+"PUSHD.\n"
+msgstr ""
+
+#: cmd.rc:214
+msgid "MORE displays output of files or piped input in pages.\n"
+msgstr ""
+
+#: cmd.rc:218
+msgid ""
+"CHOICE displays a text and waits, until the User\n"
+"presses an allowed Key from a selectable list.\n"
+"CHOICE is mainly used to build a menu selection in a batch file.\n"
+msgstr ""
+
+#: cmd.rc:222
+msgid ""
+"EXIT terminates the current command session and returns\n"
+"to the operating system or shell from which you invoked cmd.\n"
+msgstr ""
+
+#: cmd.rc:253
+msgid ""
+"CMD built-in commands are:\n"
+"ATTRIB\t\tShow or change DOS file attributes\n"
+"CALL\t\tInvoke a batch file from inside another\n"
+"CD (CHDIR)\tChange current default directory\n"
+"CHOICE\t\tWait for an keypress from a selectable list\n"
+"CLS\t\tClear the console screen\n"
+"COPY\t\tCopy file\n"
+"CTTY\t\tChange input/output device\n"
+"DATE\t\tShow or change the system date\n"
+"DEL (ERASE)\tDelete a file or set of files\n"
+"DIR\t\tList the contents of a directory\n"
+"ECHO\t\tCopy text directly to the console output\n"
+"HELP\t\tShow brief help details on a topic\n"
+"MD (MKDIR)\tCreate a subdirectory\n"
+"MORE\t\tDisplay output in pages\n"
+"MOVE\t\tMove a file, set of files or directory tree\n"
+"PATH\t\tSet or show the search path\n"
+"POPD\t\tRestores the directory to the last one saved with PUSHD\n"
+"PROMPT\t\tChange the command prompt\n"
+"PUSHD\t\tChanges to a new directory, saving the current one\n"
+"REN (RENAME)\tRename a file\n"
+"RD (RMDIR)\tDelete a subdirectory\n"
+"SET\t\tSet or show environment variables\n"
+"TIME\t\tSet or show the current system time\n"
+"TITLE\t\tSet the window title for the CMD session\n"
+"TYPE\t\tType the contents of a text file\n"
+"VER\t\tShow the current version of CMD\n"
+"VOL\t\tShow the volume label of a disk device\n"
+"EXIT\t\tClose down CMD\n"
+"\n"
+"Enter HELP <command> for further information on any of the above commands\n"
+msgstr ""
+
+#: cmd.rc:255
+msgid "Are you sure"
+msgstr ""
+
+#: cmd.rc:256 xcopy.rc:40
+msgctxt "Yes key"
+msgid "Y"
+msgstr ""
+
+#: cmd.rc:257 xcopy.rc:41
+msgctxt "No key"
+msgid "N"
+msgstr ""
+
+#: cmd.rc:258
+msgid "File association missing for extension %s\n"
+msgstr ""
+
+#: cmd.rc:259
+msgid "No open command associated with file type '%s'\n"
+msgstr ""
+
+#: cmd.rc:260
+msgid "Overwrite %s"
+msgstr ""
+
+#: cmd.rc:261
+msgid "More..."
+msgstr ""
+
+#: cmd.rc:262
+msgid "Line in Batch processing possibly truncated. Using:\n"
+msgstr ""
+
+#: cmd.rc:263
+#, fuzzy
+msgid ""
+"Not Yet Implemented\n"
+"\n"
+msgstr "Na implementa"
+
+#: cmd.rc:264
+msgid "Argument missing\n"
+msgstr ""
+
+#: cmd.rc:265
+msgid "Syntax error\n"
+msgstr ""
+
+#: cmd.rc:266
+msgid "%s: File Not Found\n"
+msgstr ""
+
+#: cmd.rc:267
+msgid "No help available for %s\n"
+msgstr ""
+
+#: cmd.rc:268
+msgid "Target to GOTO not found\n"
+msgstr ""
+
+#: cmd.rc:269
+msgid "Current Date is %s\n"
+msgstr ""
+
+#: cmd.rc:270
+msgid "Current Time is %s\n"
+msgstr ""
+
+#: cmd.rc:271
+msgid "Enter new date: "
+msgstr ""
+
+#: cmd.rc:272
+msgid "Enter new time: "
+msgstr ""
+
+#: cmd.rc:273
+msgid "Environment variable %s not defined\n"
+msgstr ""
+
+#: cmd.rc:274 xcopy.rc:38
+msgid "Failed to open '%s'\n"
+msgstr ""
+
+#: cmd.rc:275
+msgid "Cannot call batch label outside of a batch script\n"
+msgstr ""
+
+#: cmd.rc:276 xcopy.rc:42
+msgctxt "All key"
+msgid "A"
+msgstr ""
+
+#: cmd.rc:277
+msgid "%s, Delete"
+msgstr ""
+
+#: cmd.rc:278
+msgid "Echo is %s\n"
+msgstr ""
+
+#: cmd.rc:279
+msgid "Verify is %s\n"
+msgstr ""
+
+#: cmd.rc:280
+msgid "Verify must be ON or OFF\n"
+msgstr ""
+
+#: cmd.rc:281
+msgid "Parameter error\n"
+msgstr ""
+
+#: cmd.rc:282
+msgid ""
+"Volume in drive %c is %s\n"
+"Volume Serial Number is %04x-%04x\n"
+"\n"
+msgstr ""
+
+#: cmd.rc:283
+msgid "Volume label (11 characters, ENTER for none)?"
+msgstr ""
+
+#: cmd.rc:284
+msgid "PATH not found\n"
+msgstr ""
+
+#: cmd.rc:285
+msgid "Press Return key to continue: "
+msgstr ""
+
+#: cmd.rc:286
+msgid "Wine Command Prompt"
+msgstr ""
+
+#: cmd.rc:287
+msgid ""
+"CMD Version %s\n"
+"\n"
+msgstr ""
+
+#: cmd.rc:288
+msgid "More? "
+msgstr ""
+
+#: cmd.rc:289
+msgid "The input line is too long.\n"
+msgstr ""
+
+#: ipconfig.rc:27
+msgid "Usage: ipconfig [ /? | /all ]\n"
+msgstr ""
+
+#: ipconfig.rc:28
+msgid "Error: Unknown or invalid command line parameters specified\n"
+msgstr ""
+
+#: ipconfig.rc:29
+msgid "%s adapter %s\n"
+msgstr ""
+
+#: ipconfig.rc:30
+msgid "Ethernet"
+msgstr ""
+
+#: ipconfig.rc:32
+msgid "Connection-specific DNS suffix"
+msgstr ""
+
+#: ipconfig.rc:34
+msgid "Hostname"
+msgstr ""
+
+#: ipconfig.rc:35
+msgid "Node type"
+msgstr ""
+
+#: ipconfig.rc:36
+msgid "Broadcast"
+msgstr ""
+
+#: ipconfig.rc:37
+msgid "Peer-to-peer"
+msgstr ""
+
+#: ipconfig.rc:38
+msgid "Mixed"
+msgstr ""
+
+#: ipconfig.rc:39
+msgid "Hybrid"
+msgstr ""
+
+#: ipconfig.rc:40
+msgid "IP routing enabled"
+msgstr ""
+
+#: ipconfig.rc:42
+msgid "Physical address"
+msgstr ""
+
+#: ipconfig.rc:43
+msgid "DHCP enabled"
+msgstr ""
+
+#: ipconfig.rc:46
+#, fuzzy
+msgid "Default gateway"
+msgstr "Default"
+
+#: net.rc:27
+msgid ""
+"The syntax of this command is:\n"
+"\n"
+"NET [ HELP | START | STOP | USE ]\n"
+msgstr ""
+
+#: net.rc:28
+msgid "Specify service name to start.\n"
+msgstr ""
+
+#: net.rc:29
+msgid "Specify service name to stop.\n"
+msgstr ""
+
+#: net.rc:30
+msgid "Stopping dependent service: %s\n"
+msgstr ""
+
+#: net.rc:31
+msgid "Could not stop service %s\n"
+msgstr ""
+
+#: net.rc:32
+msgid "Could not get handle to service control manager.\n"
+msgstr ""
+
+#: net.rc:33
+msgid "Could not get handle to service.\n"
+msgstr ""
+
+#: net.rc:34
+msgid "The %s service is starting.\n"
+msgstr ""
+
+#: net.rc:35
+msgid "The %s service was started successfully.\n"
+msgstr ""
+
+#: net.rc:36
+msgid "The %s service failed to start.\n"
+msgstr ""
+
+#: net.rc:37
+msgid "The %s service is stopping.\n"
+msgstr ""
+
+#: net.rc:38
+msgid "The %s service was stopped successfully.\n"
+msgstr ""
+
+#: net.rc:39
+msgid "The %s service failed to stop.\n"
+msgstr ""
+
+#: net.rc:40
+msgid ""
+"The syntax of this command is:\n"
+"\n"
+"NET HELP command\n"
+"    -or-\n"
+"NET command /HELP\n"
+"\n"
+"   Commands available are:\n"
+"   NET HELP    NET START    NET STOP    NET USE\n"
+msgstr ""
+
+#: net.rc:42
+msgid "There are no entries in the list.\n"
+msgstr ""
+
+#: net.rc:43
+msgid ""
+"\n"
+"Status  Local   Remote\n"
+"---------------------------------------------------------------\n"
+msgstr ""
+
+#: net.rc:44
+msgid "%s      %S      %S      Open resources: %lu\n"
+msgstr ""
+
+#: notepad.rc:27
+msgid "&New\tCtrl+N"
+msgstr ""
+
+#: notepad.rc:28 wordpad.rc:29
+msgid "&Open...\tCtrl+O"
+msgstr ""
+
+#: notepad.rc:29 wordpad.rc:30
+msgid "&Save\tCtrl+S"
+msgstr ""
+
+#: notepad.rc:32 regedit.rc:36 wordpad.rc:33
+msgid "&Print...\tCtrl+P"
+msgstr ""
+
+#: notepad.rc:33 wordpad.rc:35
+#, fuzzy
+msgid "Page Se&tup..."
+msgstr "&Installaziun dal stampader..."
+
+#: notepad.rc:34
+#, fuzzy
+msgid "P&rinter Setup..."
+msgstr "&Installaziun dal stampader..."
+
+#: notepad.rc:38 regedit.rc:40 wineconsole.rc:25 winhlp32.rc:36 wordpad.rc:39
+msgid "&Edit"
+msgstr "&Lavurar"
+
+#: notepad.rc:39 wordpad.rc:41
+msgid "&Undo\tCtrl+Z"
+msgstr ""
+
+#: notepad.rc:41 wordpad.rc:44
+msgid "Cu&t\tCtrl+X"
+msgstr ""
+
+#: notepad.rc:42 wordpad.rc:45
+msgid "&Copy\tCtrl+C"
+msgstr ""
+
+#: notepad.rc:43 wordpad.rc:46
+msgid "&Paste\tCtrl+V"
+msgstr ""
+
+#: notepad.rc:44 progman.rc:34 regedit.rc:55 regedit.rc:90 regedit.rc:106
+#: winefile.rc:29
+msgid "&Delete\tDel"
+msgstr ""
+
+#: notepad.rc:46
+msgid "Select &all\tCtrl+A"
+msgstr ""
+
+#: notepad.rc:47
+msgid "&Time/Date\tF5"
+msgstr ""
+
+#: notepad.rc:49
+msgid "&Wrap long lines"
+msgstr ""
+
+#: notepad.rc:53
+msgid "&Search...\tCtrl+F"
+msgstr ""
+
+#: notepad.rc:54
+msgid "&Search next\tF3"
+msgstr ""
+
+#: notepad.rc:55 wordpad.rc:52
+msgid "&Replace...\tCtrl+H"
+msgstr ""
+
+#: notepad.rc:58 progman.rc:53 regedit.rc:78 winefile.rc:86
+msgid "&Contents\tF1"
+msgstr ""
+
+#: notepad.rc:59
+#, fuzzy
+msgid "&About Notepad"
+msgstr "I&nfuormaziuns"
+
+#: notepad.rc:65
+msgid "&f"
+msgstr ""
+
+#: notepad.rc:66
+msgid "Page &p"
+msgstr ""
+
+#: notepad.rc:68
+msgid "Notepad"
+msgstr ""
+
+#: notepad.rc:69 progman.rc:61 winhlp32.rc:79
+msgid "ERROR"
+msgstr "SBAGL"
+
+#: notepad.rc:70 progman.rc:62 winhlp32.rc:80
+msgid "WARNING"
+msgstr "ATTENZIUN"
+
+#: notepad.rc:71 progman.rc:63 winhlp32.rc:81
+msgid "Information"
+msgstr "INFUORMAZIUN"
+
+#: notepad.rc:73
+msgid "Untitled"
+msgstr ""
+
+#: notepad.rc:76
+#, fuzzy
+msgid "Text files (*.txt)"
+msgstr "Tuot las datotecas (*.*)"
+
+#: notepad.rc:79
+msgid ""
+"File '%s' is too large for notepad.\n"
+"Please use a different editor."
+msgstr ""
+
+#: notepad.rc:81
+msgid ""
+"You didn't enter any text.\n"
+"Please type something and try again"
+msgstr ""
+
+#: notepad.rc:83
+msgid ""
+"File '%s' does not exist.\n"
+"\n"
+"Do you want to create a new file?"
+msgstr ""
+
+#: notepad.rc:85
+msgid ""
+"File '%s' has been modified.\n"
+"\n"
+"Would you like to save the changes?"
+msgstr ""
+
+#: notepad.rc:86
+msgid "'%s' could not be found."
+msgstr ""
+
+#: notepad.rc:88
+msgid ""
+"Not enough memory to complete this task.\n"
+"Close one or more applications to increase the amount of free memory."
+msgstr ""
+
+#: notepad.rc:90
+msgid "Unicode (UTF-16)"
+msgstr ""
+
+#: notepad.rc:91
+msgid "Unicode (UTF-16 big-endian)"
+msgstr ""
+
+#: notepad.rc:92
+msgid "Unicode (UTF-8)"
+msgstr ""
+
+#: notepad.rc:99
+msgid ""
+"%s\n"
+"This file contains Unicode characters which will be lost if\n"
+"you save this file in the %s encoding.\n"
+"To keep these characters, click Cancel, and then select\n"
+"one of the Unicode options in the Encoding drop down list.\n"
+"Continue?"
+msgstr ""
+
+#: oleview.rc:29
+msgid "&Bind to file..."
+msgstr ""
+
+#: oleview.rc:30
+msgid "&View TypeLib..."
+msgstr ""
+
+#: oleview.rc:32
+#, fuzzy
+msgid "&System Configuration..."
+msgstr "INFUORMAZIUN"
+
+#: oleview.rc:33
+msgid "&Run the Registry Editor"
+msgstr ""
+
+#: oleview.rc:37
+msgid "&Object"
+msgstr ""
+
+#: oleview.rc:39
+msgid "&CoCreateInstance Flag"
+msgstr ""
+
+#: oleview.rc:41
+msgid "CLSCTX_&INPROC_SERVER"
+msgstr ""
+
+#: oleview.rc:42
+msgid "CLSCTX_INPROC_&HANDLER"
+msgstr ""
+
+#: oleview.rc:43
+msgid "CLSCTX_&LOCAL_SERVER"
+msgstr ""
+
+#: oleview.rc:44
+msgid "CLSCTX_&REMOTE_SERVER"
+msgstr ""
+
+#: oleview.rc:47
+#, fuzzy
+msgid "View &Type information"
+msgstr "INFUORMAZIUN"
+
+#: oleview.rc:49
+msgid "Create &Instance"
+msgstr ""
+
+#: oleview.rc:50
+msgid "Create Instance &On..."
+msgstr ""
+
+#: oleview.rc:51
+msgid "&Release Instance"
+msgstr ""
+
+#: oleview.rc:53
+msgid "Copy C&LSID to clipboard"
+msgstr ""
+
+#: oleview.rc:54
+msgid "Copy &HTML object Tag to clipboard"
+msgstr ""
+
+#: oleview.rc:56
+msgid "&View..."
+msgstr ""
+
+#: oleview.rc:60
+msgid "&Expert mode"
+msgstr ""
+
+#: oleview.rc:62
+msgid "&Hidden component categories"
+msgstr ""
+
+#: oleview.rc:64 oleview.rc:86 winefile.rc:66 wordpad.rc:68
+msgid "&Toolbar"
+msgstr ""
+
+#: oleview.rc:65 oleview.rc:87 winefile.rc:68
+msgid "&Status Bar"
+msgstr ""
+
+#: oleview.rc:67 regedit.rc:69 winefile.rc:82
+msgid "&Refresh\tF5"
+msgstr ""
+
+#: oleview.rc:71
+#, fuzzy
+msgid "&About OleView"
+msgstr "I&nfuormaziuns"
+
+#: oleview.rc:79
+msgid "&Save as..."
+msgstr ""
+
+#: oleview.rc:84
+msgid "&Group by type kind"
+msgstr ""
+
+#: oleview.rc:93 oleview.rc:94
+msgid "OleView"
+msgstr ""
+
+#: oleview.rc:98
+msgid "ITypeLib viewer"
+msgstr ""
+
+#: oleview.rc:96
+msgid "OleView - OLE/COM Object Viewer"
+msgstr ""
+
+#: oleview.rc:97
+msgid "version 1.0"
+msgstr ""
+
+#: oleview.rc:100
+msgid "TypeLib files (*.tlb;*.olb;*.dll;*.ocx;*.exe)"
+msgstr ""
+
+#: oleview.rc:103
+msgid "Bind to file via a File Moniker"
+msgstr ""
+
+#: oleview.rc:104
+msgid "Open a TypeLib file and view the contents"
+msgstr ""
+
+#: oleview.rc:105
+msgid "Change machine wide Distributed COM settings"
+msgstr ""
+
+#: oleview.rc:106
+msgid "Run the Wine registry editor"
+msgstr ""
+
+#: oleview.rc:107
+msgid "Quit the application. Prompts to save changes"
+msgstr ""
+
+#: oleview.rc:108
+msgid "Create an instance of the selected object"
+msgstr ""
+
+#: oleview.rc:109
+msgid "Create an instance of the selected object on a specific machine"
+msgstr ""
+
+#: oleview.rc:110
+msgid "Release the currently selected object instance"
+msgstr ""
+
+#: oleview.rc:111
+msgid "Copy the GUID of the currently selected item to the clipboard"
+msgstr ""
+
+#: oleview.rc:112
+msgid "Display the viewer for the selected item"
+msgstr ""
+
+#: oleview.rc:117
+msgid "Toggle between expert and novice display mode"
+msgstr ""
+
+#: oleview.rc:118
+msgid ""
+"Toggle the display of component categories that are not meant to be visible"
+msgstr ""
+
+#: oleview.rc:119
+msgid "Show or hide the toolbar"
+msgstr ""
+
+#: oleview.rc:120
+msgid "Show or hide the status bar"
+msgstr ""
+
+#: oleview.rc:121
+msgid "Refresh all lists"
+msgstr ""
+
+#: oleview.rc:122
+msgid "Display program information, version number and copyright"
+msgstr ""
+
+#: oleview.rc:113
+msgid "Use CLSCTX_INPROC_SERVER when calling CoGetClassObject"
+msgstr ""
+
+#: oleview.rc:114
+msgid "Use CLSCTX_INPROC_HANDLER when calling CoGetClassObject"
+msgstr ""
+
+#: oleview.rc:115
+msgid "Use CLSCTX_LOCAL_SERVER when calling CoGetClassObject"
+msgstr ""
+
+#: oleview.rc:116
+msgid "Use CLSCTX_REMOTE_SERVER when calling CoGetClassObject"
+msgstr ""
+
+#: oleview.rc:128
+msgid "ObjectClasses"
+msgstr ""
+
+#: oleview.rc:129
+msgid "Grouped by Component Category"
+msgstr ""
+
+#: oleview.rc:130
+msgid "OLE 1.0 Objects"
+msgstr ""
+
+#: oleview.rc:131
+msgid "COM Library Objects"
+msgstr ""
+
+#: oleview.rc:132
+msgid "All Objects"
+msgstr ""
+
+#: oleview.rc:133
+#, fuzzy
+msgid "Application IDs"
+msgstr "&Options"
+
+#: oleview.rc:134
+msgid "Type Libraries"
+msgstr ""
+
+#: oleview.rc:135
+msgid "ver."
+msgstr ""
+
+#: oleview.rc:136
+msgid "Interfaces"
+msgstr ""
+
+#: oleview.rc:138
+msgid "Registry"
+msgstr ""
+
+#: oleview.rc:139
+msgid "Implementation"
+msgstr ""
+
+#: oleview.rc:140
+#, fuzzy
+msgid "Activation"
+msgstr "&Options"
+
+#: oleview.rc:142
+msgid "CoGetClassObject failed."
+msgstr ""
+
+#: oleview.rc:143
+msgid "Unknown error"
+msgstr ""
+
+#: oleview.rc:146
+msgid "bytes"
+msgstr ""
+
+#: oleview.rc:148
+msgid "LoadTypeLib( %s ) failed ($%x)"
+msgstr ""
+
+#: oleview.rc:149
+msgid "Inherited Interfaces"
+msgstr ""
+
+#: oleview.rc:124
+msgid "Save as an .IDL or .H file"
+msgstr ""
+
+#: oleview.rc:125
+msgid "Close window"
+msgstr ""
+
+#: oleview.rc:126
+msgid "Group typeinfos by kind"
+msgstr ""
+
+#: progman.rc:30
+msgid "&New..."
+msgstr ""
+
+#: progman.rc:31
+msgid "O&pen\tEnter"
+msgstr ""
+
+#: progman.rc:32 winefile.rc:27
+msgid "&Move...\tF7"
+msgstr ""
+
+#: progman.rc:33 winefile.rc:28
+#, fuzzy
+msgid "&Copy...\tF8"
+msgstr "Capchar"
+
+#: progman.rc:35
+msgid "&Attributes...\tAlt+Enter"
+msgstr ""
+
+#: progman.rc:37
+msgid "&Execute..."
+msgstr ""
+
+#: progman.rc:39
+msgid "E&xit Windows..."
+msgstr ""
+
+#: progman.rc:41 taskmgr.rc:41 winefile.rc:63 winhlp32.rc:44
+msgid "&Options"
+msgstr "&Options"
+
+#: progman.rc:42
+msgid "&Arrange automatically"
+msgstr ""
+
+#: progman.rc:43
+msgid "&Minimize on run"
+msgstr ""
+
+#: progman.rc:44 winefile.rc:73
+msgid "&Save settings on exit"
+msgstr ""
+
+#: progman.rc:46 taskmgr.rc:78 taskmgr.rc:255
+msgid "&Windows"
+msgstr ""
+
+#: progman.rc:47
+msgid "&Overlapped\tShift+F5"
+msgstr ""
+
+#: progman.rc:48
+msgid "&Side by side\tShift+F4"
+msgstr ""
+
+#: progman.rc:49
+msgid "&Arrange Icons"
+msgstr ""
+
+#: progman.rc:54
+msgid "&About Program Manager"
+msgstr ""
+
+#: progman.rc:60
+msgid "Program Manager"
+msgstr ""
+
+#: progman.rc:64
+msgid "Delete"
+msgstr ""
+
+#: progman.rc:65
+msgid "Delete group `%s'?"
+msgstr ""
+
+#: progman.rc:66
+msgid "Delete program `%s'?"
+msgstr ""
+
+#: progman.rc:67 winhlp32.rc:82
+msgid "Not implemented"
+msgstr "Na implementa"
+
+#: progman.rc:68
+#, fuzzy
+msgid "Error reading `%s'."
+msgstr "Sbagl cun leger la datoteca d'ag�d `%s'"
+
+#: progman.rc:69
+msgid "Error writing `%s'."
+msgstr ""
+
+#: progman.rc:72
+msgid ""
+"The group file `%s' cannot be opened.\n"
+"Should it be tried further on?"
+msgstr ""
+
+#: progman.rc:74
+msgid "Help not available."
+msgstr ""
+
+#: progman.rc:75
+msgid "Unknown feature in %s"
+msgstr ""
+
+#: progman.rc:76
+msgid "File `%s' exists. Not overwritten."
+msgstr ""
+
+#: progman.rc:77
+msgid "Save group as `%s to prevent overwriting original files."
+msgstr ""
+
+#: progman.rc:80
+msgid "Programs"
+msgstr ""
+
+#: progman.rc:81
+msgid "Libraries (*.dll)"
+msgstr ""
+
+#: progman.rc:82
+msgid "Icon files"
+msgstr ""
+
+#: progman.rc:83
+msgid "Icons (*.ico)"
+msgstr ""
+
+#: reg.rc:27
+msgid ""
+"The syntax of this command is:\n"
+"\n"
+"REG [ ADD | DELETE | QUERY ]\n"
+"REG command /?\n"
+msgstr ""
+
+#: reg.rc:28
+msgid ""
+"REG ADD key_name [/v value_name | /ve] [/t type] [/s separator] [/d data] [/"
+"f]\n"
+msgstr ""
+
+#: reg.rc:29
+msgid "REG DELETE key_name [/v value_name | /ve | /va] [/f]\n"
+msgstr ""
+
+#: reg.rc:30
+msgid "REG QUERY key_name [/v value_name | /ve] [/s]\n"
+msgstr ""
+
+#: reg.rc:31
+msgid "The operation completed successfully\n"
+msgstr ""
+
+#: reg.rc:32
+msgid "Error: Invalid key name\n"
+msgstr ""
+
+#: reg.rc:33
+msgid "Error: Invalid command line parameters\n"
+msgstr ""
+
+#: reg.rc:34
+msgid "Error: Unable to add keys to remote machine\n"
+msgstr ""
+
+#: reg.rc:35
+msgid ""
+"Error: The system was unable to find the specified registry key or value\n"
+msgstr ""
+
+#: regedit.rc:31
+msgid "&Registry"
+msgstr ""
+
+#: regedit.rc:33
+msgid "&Import Registry File..."
+msgstr ""
+
+#: regedit.rc:34
+msgid "&Export Registry File..."
+msgstr ""
+
+#: regedit.rc:42 regedit.rc:87
+#, fuzzy
+msgid "&Modify..."
+msgstr "Capchar"
+
+#: regedit.rc:46 regedit.rc:97
+msgid "&Key"
+msgstr ""
+
+#: regedit.rc:48 regedit.rc:99
+msgid "&String Value"
+msgstr ""
+
+#: regedit.rc:49 regedit.rc:100
+msgid "&Binary Value"
+msgstr ""
+
+#: regedit.rc:50 regedit.rc:101
+msgid "&DWORD Value"
+msgstr ""
+
+#: regedit.rc:51 regedit.rc:102
+msgid "&Multi String Value"
+msgstr ""
+
+#: regedit.rc:52 regedit.rc:103
+msgid "&Expandable String Value"
+msgstr ""
+
+#: regedit.rc:56 regedit.rc:107
+#, fuzzy
+msgid "&Rename\tF2"
+msgstr "&Annotaziun..."
+
+#: regedit.rc:58 regedit.rc:110
+msgid "&Copy Key Name"
+msgstr ""
+
+#: regedit.rc:60 regedit.rc:112 wordpad.rc:50
+msgid "&Find...\tCtrl+F"
+msgstr ""
+
+#: regedit.rc:61
+msgid "Find Ne&xt\tF3"
+msgstr ""
+
+#: regedit.rc:65
+msgid "Status &Bar"
+msgstr ""
+
+#: regedit.rc:67 winefile.rc:50
+msgid "Sp&lit"
+msgstr ""
+
+#: regedit.rc:74
+#, fuzzy
+msgid "&Remove Favorite..."
+msgstr "&Annotaziun..."
+
+#: regedit.rc:79
+msgid "&About Registry Editor"
+msgstr ""
+
+#: regedit.rc:88
+msgid "Modify Binary Data..."
+msgstr ""
+
+#: regedit.rc:109
+#, fuzzy
+msgid "&Export..."
+msgstr "Fonts"
+
+#: regedit.rc:134
+msgid "Contains commands for working with the whole registry"
+msgstr ""
+
+#: regedit.rc:135
+msgid "Contains commands for editing values or keys"
+msgstr ""
+
+#: regedit.rc:136
+msgid "Contains commands for customising the registry window"
+msgstr ""
+
+#: regedit.rc:137
+msgid "Contains commands for accessing frequently used keys"
+msgstr ""
+
+#: regedit.rc:138
+msgid ""
+"Contains commands for displaying help and information about registry editor"
+msgstr ""
+
+#: regedit.rc:139
+msgid "Contains commands for creating new keys or values"
+msgstr ""
+
+#: regedit.rc:124
+msgid "Data"
+msgstr ""
+
+#: regedit.rc:129
+msgid "Registry Editor"
+msgstr ""
+
+#: regedit.rc:191
+msgid "Import Registry File"
+msgstr ""
+
+#: regedit.rc:192
+msgid "Export Registry File"
+msgstr ""
+
+#: regedit.rc:193
+#, fuzzy
+msgid "Registry files (*.reg)"
+msgstr "Tuot las datotecas (*.*)"
+
+#: regedit.rc:194
+msgid "Win9x/NT4 Registry files (REGEDIT4)"
+msgstr ""
+
+#: regedit.rc:201
+#, fuzzy
+msgid "(Default)"
+msgstr "Default"
+
+#: regedit.rc:202
+msgid "(value not set)"
+msgstr ""
+
+#: regedit.rc:203
+msgid "(cannot display value)"
+msgstr ""
+
+#: regedit.rc:204
+msgid "(unknown %d)"
+msgstr ""
+
+#: regedit.rc:160
+msgid "Quits the registry editor"
+msgstr ""
+
+#: regedit.rc:161
+msgid "Adds keys to the favorites list"
+msgstr ""
+
+#: regedit.rc:162
+msgid "Removes keys from the favorites list"
+msgstr ""
+
+#: regedit.rc:163
+msgid "Shows or hides the status bar"
+msgstr ""
+
+#: regedit.rc:164
+msgid "Change position of split between two panes"
+msgstr ""
+
+#: regedit.rc:165
+msgid "Refreshes the window"
+msgstr ""
+
+#: regedit.rc:166
+msgid "Deletes the selection"
+msgstr ""
+
+#: regedit.rc:167
+msgid "Renames the selection"
+msgstr ""
+
+#: regedit.rc:168
+msgid "Copies the name of the selected key to the clipboard"
+msgstr ""
+
+#: regedit.rc:169
+msgid "Finds a text string in a key, value or data"
+msgstr ""
+
+#: regedit.rc:170
+msgid "Finds next occurrence of text specified in previous search"
+msgstr ""
+
+#: regedit.rc:144
+msgid "Modifies the value's data"
+msgstr ""
+
+#: regedit.rc:145
+msgid "Adds a new key"
+msgstr ""
+
+#: regedit.rc:146
+msgid "Adds a new string value"
+msgstr ""
+
+#: regedit.rc:147
+msgid "Adds a new binary value"
+msgstr ""
+
+#: regedit.rc:148
+msgid "Adds a new double word value"
+msgstr ""
+
+#: regedit.rc:150
+msgid "Imports a text file into the registry"
+msgstr ""
+
+#: regedit.rc:152
+msgid "Exports all or part of the registry to a text file"
+msgstr ""
+
+#: regedit.rc:153
+msgid "Prints all or part of the registry"
+msgstr ""
+
+#: regedit.rc:155
+msgid "Displays program information, version number and copyright"
+msgstr ""
+
+#: regedit.rc:178
+msgid "Can't query value '%s'"
+msgstr ""
+
+#: regedit.rc:179
+msgid "Can't edit keys of this type (%u)"
+msgstr ""
+
+#: regedit.rc:180
+msgid "Value is too big (%u)"
+msgstr ""
+
+#: regedit.rc:181
+msgid "Confirm Value Delete"
+msgstr ""
+
+#: regedit.rc:182
+msgid "Are you sure you want to delete value '%s'?"
+msgstr ""
+
+#: regedit.rc:186
+msgid "Search string '%s' not found"
+msgstr ""
+
+#: regedit.rc:183
+msgid "Are you sure you want to delete these values?"
+msgstr ""
+
+#: regedit.rc:184
+msgid "New Key #%d"
+msgstr ""
+
+#: regedit.rc:185
+msgid "New Value #%d"
+msgstr ""
+
+#: regedit.rc:177
+msgid "Can't query key '%s'"
+msgstr ""
+
+#: regedit.rc:149
+msgid "Adds a new multi string value"
+msgstr ""
+
+#: regedit.rc:171
+msgid "Exports selected branch of the registry to a text file"
+msgstr ""
+
+#: start.rc:45
+msgid ""
+"Start a program, or open a document in the program normally used for files "
+"with that suffix.\n"
+"Usage:\n"
+"start [options] program_filename [...]\n"
+"start [options] document_filename\n"
+"\n"
+"Options:\n"
+"/M[inimized] Start the program minimized.\n"
+"/MAX[imized] Start the program maximized.\n"
+"/R[estored]  Start the program normally (neither minimized nor maximized).\n"
+"/W[ait]      Wait for started program to finish, then exit with its exit "
+"code.\n"
+"/Unix        Use a Unix filename and start the file like windows explorer.\n"
+"/ProgIDOpen  Open a document using the following progID.\n"
+"/L           Show end-user license.\n"
+"\n"
+"start.exe version 0.2 Copyright (C) 2003, Dan Kegel\n"
+"Start comes with ABSOLUTELY NO WARRANTY; for details run with /L option.\n"
+"This is free software, and you are welcome to redistribute it\n"
+"under certain conditions; run 'start /L' for details.\n"
+msgstr ""
+
+#: start.rc:63
+msgid ""
+"start.exe version 0.2 Copyright (C) 2003, Dan Kegel\n"
+"This program is free software; you can redistribute it and/or\n"
+"modify it under the terms of the GNU Lesser Public License\n"
+"as published by the Free Software Foundation; either version 2.1\n"
+"of the License, or (at your option) any later version.\n"
+"\n"
+"This program is distributed in the hope that it will be useful,\n"
+"but WITHOUT ANY WARRANTY; without even the implied warranty of\n"
+"MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n"
+"GNU Lesser Public License for more details.\n"
+"\n"
+"You should have received a copy of the GNU Lesser Public License\n"
+"along with this program; if not, write to the Free Software\n"
+"Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.\n"
+"\n"
+"See the COPYING.LIB file for license information.\n"
+msgstr ""
+
+#: start.rc:65
+msgid ""
+"Application could not be started, or no application associated with the "
+"specified file.\n"
+"ShellExecuteEx failed"
+msgstr ""
+
+#: start.rc:67
+msgid "Could not translate the specified Unix filename to a DOS filename."
+msgstr ""
+
+#: taskkill.rc:27
+msgid "Usage: taskkill [/?] [/f] [/im ProcessName | /pid ProcessID]\n"
+msgstr ""
+
+#: taskkill.rc:28
+msgid "Error: Unknown or invalid command line option specified.\n"
+msgstr ""
+
+#: taskkill.rc:29
+msgid "Error: Invalid command line parameter specified.\n"
+msgstr ""
+
+#: taskkill.rc:30
+msgid "Error: One of options /im or /pid must be specified.\n"
+msgstr ""
+
+#: taskkill.rc:31
+msgid "Error: Option %s expects a command line parameter.\n"
+msgstr ""
+
+#: taskkill.rc:32
+msgid "Error: Options /im and /pid are mutually exclusive.\n"
+msgstr ""
+
+#: taskkill.rc:33
+msgid "Close message sent to top-level windows of process with PID %u.\n"
+msgstr ""
+
+#: taskkill.rc:34
+msgid ""
+"Close message sent to top-level windows of process \"%s\" with PID %u.\n"
+msgstr ""
+
+#: taskkill.rc:35
+msgid "Process with PID %u was forcibly terminated.\n"
+msgstr ""
+
+#: taskkill.rc:36
+msgid "Process \"%s\" with PID %u was forcibly terminated.\n"
+msgstr ""
+
+#: taskkill.rc:37
+msgid "Error: Could not find process \"%s\".\n"
+msgstr ""
+
+#: taskkill.rc:38
+msgid "Error: Unable to enumerate the process list.\n"
+msgstr ""
+
+#: taskkill.rc:39
+msgid "Error: Unable to terminate process \"%s\".\n"
+msgstr ""
+
+#: taskkill.rc:40
+msgid "Error: Process self-termination is not permitted.\n"
+msgstr ""
+
+#: taskmgr.rc:37 taskmgr.rc:108
+msgid "&New Task (Run...)"
+msgstr ""
+
+#: taskmgr.rc:39
+msgid "E&xit Task Manager"
+msgstr ""
+
+#: taskmgr.rc:45
+msgid "&Minimize On Use"
+msgstr ""
+
+#: taskmgr.rc:47
+msgid "&Hide When Minimized"
+msgstr ""
+
+#: taskmgr.rc:49 taskmgr.rc:257
+msgid "&Show 16-bit tasks"
+msgstr ""
+
+#: taskmgr.rc:54
+msgid "&Refresh Now"
+msgstr ""
+
+#: taskmgr.rc:55
+msgid "&Update Speed"
+msgstr ""
+
+#: taskmgr.rc:57 taskmgr.rc:158
+msgid "&High"
+msgstr ""
+
+#: taskmgr.rc:58 taskmgr.rc:162
+#, fuzzy
+msgid "&Normal"
+msgstr "Normal"
+
+#: taskmgr.rc:60 taskmgr.rc:166
+msgid "&Low"
+msgstr ""
+
+#: taskmgr.rc:61
+msgid "&Paused"
+msgstr ""
+
+#: taskmgr.rc:68 taskmgr.rc:256
+msgid "&Select Columns..."
+msgstr ""
+
+#: taskmgr.rc:69 taskmgr.rc:258
+#, fuzzy
+msgid "&CPU History"
+msgstr "History"
+
+#: taskmgr.rc:71 taskmgr.rc:259
+msgid "&One Graph, All CPUs"
+msgstr ""
+
+#: taskmgr.rc:73 taskmgr.rc:260
+msgid "One Graph &Per CPU"
+msgstr ""
+
+#: taskmgr.rc:76 taskmgr.rc:261
+msgid "&Show Kernel Times"
+msgstr ""
+
+#: taskmgr.rc:80 taskmgr.rc:96 taskmgr.rc:123 winefile.rc:79
+msgid "Tile &Horizontally"
+msgstr ""
+
+#: taskmgr.rc:81 taskmgr.rc:97 taskmgr.rc:124
+msgid "Tile &Vertically"
+msgstr ""
+
+#: taskmgr.rc:82 taskmgr.rc:98 taskmgr.rc:125
+msgid "&Minimize"
+msgstr ""
+
+#: taskmgr.rc:84 taskmgr.rc:100 taskmgr.rc:127
+msgid "&Cascade"
+msgstr ""
+
+#: taskmgr.rc:85 taskmgr.rc:101 taskmgr.rc:121
+msgid "&Bring To Front"
+msgstr ""
+
+#: taskmgr.rc:90
+msgid "&About Task Manager"
+msgstr ""
+
+#: taskmgr.rc:106 taskmgr.rc:118 taskmgr.rc:136 taskmgr.rc:147
+msgid "DUMMY"
+msgstr ""
+
+#: taskmgr.rc:120
+msgid "&Switch To"
+msgstr ""
+
+#: taskmgr.rc:129
+msgid "&End Task"
+msgstr ""
+
+#: taskmgr.rc:130
+msgid "&Go To Process"
+msgstr ""
+
+#: taskmgr.rc:149
+msgid "&End Process"
+msgstr ""
+
+#: taskmgr.rc:150
+msgid "End Process &Tree"
+msgstr ""
+
+#: taskmgr.rc:152 winedbg.rc:29
+msgid "&Debug"
+msgstr ""
+
+#: taskmgr.rc:154
+msgid "Set &Priority"
+msgstr ""
+
+#: taskmgr.rc:156
+msgid "&Realtime"
+msgstr ""
+
+#: taskmgr.rc:160
+#, fuzzy
+msgid "&AboveNormal"
+msgstr "Normal"
+
+#: taskmgr.rc:164
+#, fuzzy
+msgid "&BelowNormal"
+msgstr "Normal"
+
+#: taskmgr.rc:169
+msgid "Set &Affinity..."
+msgstr ""
+
+#: taskmgr.rc:170
+msgid "Edit Debug &Channels..."
+msgstr ""
+
+#: taskmgr.rc:180 taskmgr.rc:181
+msgid "Task Manager"
+msgstr ""
+
+#: taskmgr.rc:182
+msgid "Create New Task"
+msgstr ""
+
+#: taskmgr.rc:187
+msgid "Runs a new program"
+msgstr ""
+
+#: taskmgr.rc:188
+msgid "Task Manager remains in front of all other windows unless minimized"
+msgstr ""
+
+#: taskmgr.rc:190
+msgid "Task Manager is minimized when a SwitchTo operation is performed"
+msgstr ""
+
+#: taskmgr.rc:191
+msgid "Hide the Task Manager when it is minimized"
+msgstr ""
+
+#: taskmgr.rc:192
+msgid "Force Task Manager to update now, regardless of Update Speed setting"
+msgstr ""
+
+#: taskmgr.rc:193
+msgid "Displays tasks by using large icons"
+msgstr ""
+
+#: taskmgr.rc:194
+msgid "Displays tasks by using small icons"
+msgstr ""
+
+#: taskmgr.rc:195
+msgid "Displays information about each task"
+msgstr ""
+
+#: taskmgr.rc:196
+msgid "Updates the display twice per second"
+msgstr ""
+
+#: taskmgr.rc:197
+msgid "Updates the display every two seconds"
+msgstr ""
+
+#: taskmgr.rc:198
+msgid "Updates the display every four seconds"
+msgstr ""
+
+#: taskmgr.rc:203
+msgid "Does not automatically update"
+msgstr ""
+
+#: taskmgr.rc:205
+msgid "Tiles the windows horizontally on the desktop"
+msgstr ""
+
+#: taskmgr.rc:206
+msgid "Tiles the windows vertically on the desktop"
+msgstr ""
+
+#: taskmgr.rc:207
+msgid "Minimizes the windows"
+msgstr ""
+
+#: taskmgr.rc:208
+msgid "Maximizes the windows"
+msgstr ""
+
+#: taskmgr.rc:209
+msgid "Cascades the windows diagonally on the desktop"
+msgstr ""
+
+#: taskmgr.rc:210
+msgid "Brings the window front, but does not switch to it"
+msgstr ""
+
+#: taskmgr.rc:211
+msgid "Displays Task Manager help topics"
+msgstr ""
+
+#: taskmgr.rc:212
+msgid "Displays program information, version number, and copyright"
+msgstr ""
+
+#: taskmgr.rc:213
+msgid "Exits the Task Manager application"
+msgstr ""
+
+#: taskmgr.rc:215
+msgid "Shows 16-bit tasks under the associated ntvdm.exe"
+msgstr ""
+
+#: taskmgr.rc:216
+msgid "Select which columns will be visible on the Process page"
+msgstr ""
+
+#: taskmgr.rc:217
+msgid "Displays kernel time in the performance graphs"
+msgstr ""
+
+#: taskmgr.rc:219
+msgid "A single history graph shows total CPU usage"
+msgstr ""
+
+#: taskmgr.rc:220
+msgid "Each CPU has its own history graph"
+msgstr ""
+
+#: taskmgr.rc:222
+msgid "Brings a task to the foreground, switch focus to that task"
+msgstr ""
+
+#: taskmgr.rc:227
+msgid "Tells the selected tasks to close"
+msgstr ""
+
+#: taskmgr.rc:228
+msgid "Switches the focus to the process of the selected task"
+msgstr ""
+
+#: taskmgr.rc:229
+msgid "Restores the Task Manager from its hidden state"
+msgstr ""
+
+#: taskmgr.rc:230
+msgid "Removes the process from the system"
+msgstr ""
+
+#: taskmgr.rc:232
+msgid "Removes this process and all descendants from the system"
+msgstr ""
+
+#: taskmgr.rc:233
+msgid "Attaches the debugger to this process"
+msgstr ""
+
+#: taskmgr.rc:235
+msgid "Controls which processors the process will be allowed to run on"
+msgstr ""
+
+#: taskmgr.rc:237
+msgid "Sets process to the REALTIME priority class"
+msgstr ""
+
+#: taskmgr.rc:238
+msgid "Sets process to the HIGH priority class"
+msgstr ""
+
+#: taskmgr.rc:240
+msgid "Sets process to the ABOVE NORMAL priority class"
+msgstr ""
+
+#: taskmgr.rc:242
+msgid "Sets process to the NORMAL priority class"
+msgstr ""
+
+#: taskmgr.rc:244
+msgid "Sets process to the BELOW NORMAL priority class"
+msgstr ""
+
+#: taskmgr.rc:245
+msgid "Sets process to the LOW priority class"
+msgstr ""
+
+#: taskmgr.rc:247
+msgid "Controls Debug Channels"
+msgstr ""
+
+#: taskmgr.rc:263
+msgid "Processes"
+msgstr ""
+
+#: taskmgr.rc:264
+msgid "Performance"
+msgstr ""
+
+#: taskmgr.rc:265
+msgid "CPU Usage: %3d%%"
+msgstr ""
+
+#: taskmgr.rc:266
+msgid "Processes: %d"
+msgstr ""
+
+#: taskmgr.rc:267
+msgid "Mem Usage: %dK / %dK"
+msgstr ""
+
+#: taskmgr.rc:272
+msgid "Image Name"
+msgstr ""
+
+#: taskmgr.rc:273
+msgid "PID"
+msgstr ""
+
+#: taskmgr.rc:274
+msgid "CPU"
+msgstr ""
+
+#: taskmgr.rc:275
+msgid "CPU Time"
+msgstr ""
+
+#: taskmgr.rc:276
+msgid "Mem Usage"
+msgstr ""
+
+#: taskmgr.rc:277
+msgid "Mem Delta"
+msgstr ""
+
+#: taskmgr.rc:278
+msgid "Peak Mem Usage"
+msgstr ""
+
+#: taskmgr.rc:279
+msgid "Page Faults"
+msgstr ""
+
+#: taskmgr.rc:280
+msgid "USER Objects"
+msgstr ""
+
+#: taskmgr.rc:281
+msgid "I/O Reads"
+msgstr ""
+
+#: taskmgr.rc:282
+msgid "I/O Read Bytes"
+msgstr ""
+
+#: taskmgr.rc:283
+msgid "Session ID"
+msgstr ""
+
+#: taskmgr.rc:284
+msgid "Username"
+msgstr ""
+
+#: taskmgr.rc:285
+msgid "PF Delta"
+msgstr ""
+
+#: taskmgr.rc:286
+msgid "VM Size"
+msgstr ""
+
+#: taskmgr.rc:287
+msgid "Paged Pool"
+msgstr ""
+
+#: taskmgr.rc:288
+msgid "NP Pool"
+msgstr ""
+
+#: taskmgr.rc:289
+msgid "Base Pri"
+msgstr ""
+
+#: taskmgr.rc:290
+msgid "Handles"
+msgstr ""
+
+#: taskmgr.rc:291
+msgid "Threads"
+msgstr ""
+
+#: taskmgr.rc:292
+msgid "GDI Objects"
+msgstr ""
+
+#: taskmgr.rc:293
+msgid "I/O Writes"
+msgstr ""
+
+#: taskmgr.rc:294
+msgid "I/O Write Bytes"
+msgstr ""
+
+#: taskmgr.rc:295
+msgid "I/O Other"
+msgstr ""
+
+#: taskmgr.rc:296
+msgid "I/O Other Bytes"
+msgstr ""
+
+#: taskmgr.rc:301
+msgid "Task Manager Warning"
+msgstr ""
+
+#: taskmgr.rc:304
+msgid ""
+"WARNING: Changing the priority class of this process may\n"
+"cause undesired results including system instability. Are you\n"
+"sure you want to change the priority class?"
+msgstr ""
+
+#: taskmgr.rc:305
+msgid "Unable to Change Priority"
+msgstr ""
+
+#: taskmgr.rc:310
+msgid ""
+"WARNING: Terminating a process can cause undesired\n"
+"results including loss of data and system instability. The\n"
+"process will not be given the chance to save its state or\n"
+"data before it is terminated. Are you sure you want to\n"
+"terminate the process?"
+msgstr ""
+
+#: taskmgr.rc:311
+msgid "Unable to Terminate Process"
+msgstr ""
+
+#: taskmgr.rc:313
+msgid ""
+"WARNING: Debugging this process may result in loss of data.\n"
+"Are you sure you wish to attach the debugger?"
+msgstr ""
+
+#: taskmgr.rc:314
+msgid "Unable to Debug Process"
+msgstr ""
+
+#: taskmgr.rc:315
+msgid "The process must have affinity with at least one processor"
+msgstr ""
+
+#: taskmgr.rc:316
+msgid "Invalid Option"
+msgstr ""
+
+#: taskmgr.rc:317
+msgid "Unable to Access or Set Process Affinity"
+msgstr ""
+
+#: taskmgr.rc:322
+msgid "System Idle Process"
+msgstr ""
+
+#: taskmgr.rc:323
+msgid "Not Responding"
+msgstr ""
+
+#: taskmgr.rc:324
+msgid "Running"
+msgstr ""
+
+#: taskmgr.rc:325
+msgid "Task"
+msgstr ""
+
+#: taskmgr.rc:327
+msgid "Debug Channels"
+msgstr ""
+
+#: taskmgr.rc:328
+msgid "Fixme"
+msgstr ""
+
+#: taskmgr.rc:329
+msgid "Err"
+msgstr ""
+
+#: taskmgr.rc:330
+msgid "Warn"
+msgstr ""
+
+#: taskmgr.rc:331
+msgid "Trace"
+msgstr ""
+
+#: uninstaller.rc:26
+msgid "Wine Application Uninstaller"
+msgstr ""
+
+#: uninstaller.rc:27
+msgid ""
+"Execution of uninstall command '%s' failed, perhaps due to missing "
+"executable.\n"
+"Do you want to remove the uninstall entry from the registry?"
+msgstr ""
+
+#: view.rc:33
+msgid "&Pan"
+msgstr ""
+
+#: view.rc:35
+msgid "&Scale to Window"
+msgstr ""
+
+#: view.rc:37
+msgid "&Left"
+msgstr ""
+
+#: view.rc:38
+msgid "&Right"
+msgstr ""
+
+#: view.rc:39
+msgid "&Up"
+msgstr ""
+
+#: view.rc:40
+msgid "&Down"
+msgstr ""
+
+#: view.rc:46
+msgid "Regular Metafile Viewer"
+msgstr ""
+
+#: winecfg.rc:32
+#, fuzzy
+msgid "Configure..."
+msgstr "INFUORMAZIUN"
+
+#: winecfg.rc:39
+msgid "Libraries"
+msgstr ""
+
+#: winecfg.rc:40
+msgid "Drives"
+msgstr ""
+
+#: winecfg.rc:41
+msgid "Select the unix target directory, please."
+msgstr ""
+
+#: winecfg.rc:43
+msgid "Show &Advanced"
+msgstr ""
+
+#: winecfg.rc:42
+msgid "Hide &Advanced"
+msgstr ""
+
+#: winecfg.rc:44
+msgid "(No Theme)"
+msgstr ""
+
+#: winecfg.rc:45
+msgid "Graphics"
+msgstr ""
+
+#: winecfg.rc:46
+msgid "Desktop Integration"
+msgstr ""
+
+#: winecfg.rc:47
+msgid "Audio"
+msgstr ""
+
+#: winecfg.rc:48
+#, fuzzy
+msgid "About"
+msgstr "I&nfuormaziuns"
+
+#: winecfg.rc:49
+#, fuzzy
+msgid "Wine configuration"
+msgstr "INFUORMAZIUN"
+
+#: winecfg.rc:51
+msgid "Theme files (*.msstyles; *.theme)"
+msgstr ""
+
+#: winecfg.rc:52
+msgid "Select a theme file"
+msgstr ""
+
+#: winecfg.rc:54
+msgid "Folder"
+msgstr ""
+
+#: winecfg.rc:55
+msgid "Links to"
+msgstr ""
+
+#: winecfg.rc:50
+msgid "Wine configuration for %s"
+msgstr ""
+
+#: winecfg.rc:53
+msgid ""
+"There is no audio driver currently specified in the registry.\n"
+"\n"
+"A recommended driver has been selected for you.\n"
+"You can use this driver or select another driver if available.\n"
+"\n"
+"You must click Apply for the selection to take effect."
+msgstr ""
+
+#: winecfg.rc:60
+msgid ""
+"Changing the load order of this library is not recommended.\n"
+"Are you sure you want to do this?"
+msgstr ""
+
+#: winecfg.rc:61
+msgid "Warning: system library"
+msgstr ""
+
+#: winecfg.rc:62
+msgid "native"
+msgstr ""
+
+#: winecfg.rc:63
+msgid "builtin"
+msgstr ""
+
+#: winecfg.rc:64
+msgid "native, builtin"
+msgstr ""
+
+#: winecfg.rc:65
+msgid "builtin, native"
+msgstr ""
+
+#: winecfg.rc:66
+msgid "disabled"
+msgstr ""
+
+#: winecfg.rc:67
+#, fuzzy
+msgid "Default Settings"
+msgstr "Default"
+
+#: winecfg.rc:68
+msgid "Wine Programs (*.exe,*.exe.so)"
+msgstr ""
+
+#: winecfg.rc:69
+msgid "Use global settings"
+msgstr ""
+
+#: winecfg.rc:70
+msgid "Select an executable file"
+msgstr ""
+
+#: winecfg.rc:75
+msgid "Hardware"
+msgstr ""
+
+#: winecfg.rc:76
+msgctxt "vertex shader mode"
+msgid "None"
+msgstr ""
+
+#: winecfg.rc:81
+msgid "Autodetect..."
+msgstr ""
+
+#: winecfg.rc:82
+msgid "Local hard disk"
+msgstr ""
+
+#: winecfg.rc:83
+msgid "Network share"
+msgstr ""
+
+#: winecfg.rc:84
+msgid "Floppy disk"
+msgstr ""
+
+#: winecfg.rc:85
+msgid "CD-ROM"
+msgstr ""
+
+#: winecfg.rc:86
+msgid ""
+"You cannot add any more drives.\n"
+"\n"
+"Each drive must have a letter, from A to Z, so you cannot have more than 26."
+msgstr ""
+
+#: winecfg.rc:87
+msgid "System drive"
+msgstr ""
+
+#: winecfg.rc:88
+msgid ""
+"Are you sure you want to delete drive C?\n"
+"\n"
+"Most Windows applications expect drive C to exist, and will die messily if "
+"it doesn't. If you proceed remember to recreate it!"
+msgstr ""
+
+#: winecfg.rc:89
+msgid "Letter"
+msgstr ""
+
+#: winecfg.rc:90
+msgid "Drive Mapping"
+msgstr ""
+
+#: winecfg.rc:91
+msgid ""
+"You don't have a drive C. This is not so great.\n"
+"\n"
+"Remember to click 'Add' in the Drives tab to create one!\n"
+msgstr ""
+
+#: winecfg.rc:96
+msgid "Full"
+msgstr ""
+
+#: winecfg.rc:97
+msgid "Standard"
+msgstr ""
+
+#: winecfg.rc:98
+msgid "Basic"
+msgstr ""
+
+#: winecfg.rc:99
+#, fuzzy
+msgid "Emulation"
+msgstr "INFUORMAZIUN"
+
+#: winecfg.rc:100
+msgid "ALSA Driver"
+msgstr ""
+
+#: winecfg.rc:101
+msgid "EsounD Driver"
+msgstr ""
+
+#: winecfg.rc:102
+msgid "OSS Driver"
+msgstr ""
+
+#: winecfg.rc:103
+msgid "JACK Driver"
+msgstr ""
+
+#: winecfg.rc:104
+msgid "NAS Driver"
+msgstr ""
+
+#: winecfg.rc:105
+msgid "CoreAudio Driver"
+msgstr ""
+
+#: winecfg.rc:106
+msgid "Couldn't open %s!"
+msgstr ""
+
+#: winecfg.rc:107
+msgid "Sound Drivers"
+msgstr ""
+
+#: winecfg.rc:108
+msgid "Wave Out Devices"
+msgstr ""
+
+#: winecfg.rc:109
+msgid "Wave In Devices"
+msgstr ""
+
+#: winecfg.rc:110
+msgid "MIDI Out Devices"
+msgstr ""
+
+#: winecfg.rc:111
+msgid "MIDI In Devices"
+msgstr ""
+
+#: winecfg.rc:112
+msgid "Aux Devices"
+msgstr ""
+
+#: winecfg.rc:113
+msgid "Mixer Devices"
+msgstr ""
+
+#: winecfg.rc:114
+msgid ""
+"Found driver in registry that is not available!\n"
+"\n"
+"Remove '%s' from registry?"
+msgstr ""
+
+#: winecfg.rc:115
+msgid "Warning"
+msgstr ""
+
+#: winecfg.rc:120
+msgid "Controls Background"
+msgstr ""
+
+#: winecfg.rc:121
+msgid "Controls Text"
+msgstr ""
+
+#: winecfg.rc:123
+msgid "Menu Background"
+msgstr ""
+
+#: winecfg.rc:124
+msgid "Menu Text"
+msgstr ""
+
+#: winecfg.rc:125
+msgid "Scrollbar"
+msgstr ""
+
+#: winecfg.rc:126
+msgid "Selection Background"
+msgstr ""
+
+#: winecfg.rc:127
+msgid "Selection Text"
+msgstr ""
+
+#: winecfg.rc:128
+msgid "ToolTip Background"
+msgstr ""
+
+#: winecfg.rc:129
+msgid "ToolTip Text"
+msgstr ""
+
+#: winecfg.rc:130
+msgid "Window Background"
+msgstr ""
+
+#: winecfg.rc:131
+msgid "Window Text"
+msgstr ""
+
+#: winecfg.rc:132
+msgid "Active Title Bar"
+msgstr ""
+
+#: winecfg.rc:133
+msgid "Active Title Text"
+msgstr ""
+
+#: winecfg.rc:134
+msgid "Inactive Title Bar"
+msgstr ""
+
+#: winecfg.rc:135
+msgid "Inactive Title Text"
+msgstr ""
+
+#: winecfg.rc:136
+msgid "Message Box Text"
+msgstr ""
+
+#: winecfg.rc:137
+#, fuzzy
+msgid "Application Workspace"
+msgstr "&Options"
+
+#: winecfg.rc:138
+msgid "Window Frame"
+msgstr ""
+
+#: winecfg.rc:139
+msgid "Active Border"
+msgstr ""
+
+#: winecfg.rc:140
+msgid "Inactive Border"
+msgstr ""
+
+#: winecfg.rc:141
+msgid "Controls Shadow"
+msgstr ""
+
+#: winecfg.rc:142
+msgid "Gray Text"
+msgstr ""
+
+#: winecfg.rc:143
+msgid "Controls Highlight"
+msgstr ""
+
+#: winecfg.rc:144
+msgid "Controls Dark Shadow"
+msgstr ""
+
+#: winecfg.rc:145
+msgid "Controls Light"
+msgstr ""
+
+#: winecfg.rc:146
+msgid "Controls Alternate Background"
+msgstr ""
+
+#: winecfg.rc:147
+msgid "Hot Tracked Item"
+msgstr ""
+
+#: winecfg.rc:148
+msgid "Active Title Bar Gradient"
+msgstr ""
+
+#: winecfg.rc:149
+msgid "Inactive Title Bar Gradient"
+msgstr ""
+
+#: winecfg.rc:150
+msgid "Menu Highlight"
+msgstr ""
+
+#: winecfg.rc:151
+msgid "Menu Bar"
+msgstr ""
+
+#: wineconsole.rc:26
+#, fuzzy
+msgid "Set &Defaults"
+msgstr "Default"
+
+#: wineconsole.rc:28
+msgid "&Mark"
+msgstr ""
+
+#: wineconsole.rc:31
+msgid "&Select all"
+msgstr ""
+
+#: wineconsole.rc:32
+msgid "Sc&roll"
+msgstr ""
+
+#: wineconsole.rc:33
+msgid "S&earch"
+msgstr ""
+
+#: wineconsole.rc:36
+msgid "Setup - Default settings"
+msgstr ""
+
+#: wineconsole.rc:37
+msgid "Setup - Current settings"
+msgstr ""
+
+#: wineconsole.rc:38
+msgid "Configuration error"
+msgstr ""
+
+#: wineconsole.rc:39
+msgid "Screen buffer size must be greater or equal to the window's one"
+msgstr ""
+
+#: wineconsole.rc:34
+msgid "Each character is %ld pixels wide on %ld pixels high"
+msgstr ""
+
+#: wineconsole.rc:35
+msgid "This is a test"
+msgstr ""
+
+#: wineconsole.rc:41
+msgid "wineconsole: Couldn't parse event id\n"
+msgstr ""
+
+#: wineconsole.rc:42
+msgid "wineconsole: Invalid backend\n"
+msgstr ""
+
+#: wineconsole.rc:43
+msgid "wineconsole: Unrecognized command line option\n"
+msgstr ""
+
+#: wineconsole.rc:44
+msgid "Starts a program in a Wine console\n"
+msgstr ""
+
+#: wineconsole.rc:45
+msgid ""
+"wineconsole: Starting program %s failed.\n"
+"The command is invalid.\n"
+msgstr ""
+
+#: wineconsole.rc:48
+msgid ""
+"\n"
+"Usage:\n"
+"  wineconsole [options] <command>\n"
+"\n"
+"Options:\n"
+msgstr ""
+
+#: wineconsole.rc:49
+msgid ""
+"  --backend={user|curses}  Choosing user will spawn a new window, curses "
+"will\n"
+"                            try to setup the current terminal as a Wine "
+"console\n"
+msgstr ""
+
+#: wineconsole.rc:51
+msgid "  <command>                 The Wine program to launch in the console\n"
+msgstr ""
+
+#: wineconsole.rc:52
+msgid ""
+"\n"
+"Example:\n"
+"  wineconsole cmd\n"
+"Starts the Wine command prompt in a Wine console\n"
+"\n"
+msgstr ""
+
+#: winedbg.rc:35
+msgid "Wine program crash"
+msgstr ""
+
+#: winedbg.rc:36
+msgid "Internal errors - invalid parameters received"
+msgstr ""
+
+#: winedbg.rc:37
+msgid "(unidentified)"
+msgstr ""
+
+#: winefile.rc:26
+#, fuzzy
+msgid "&Open\tEnter"
+msgstr "&Rivir"
+
+#: winefile.rc:30
+#, fuzzy
+msgid "Re&name..."
+msgstr "&Annotaziun..."
+
+#: winefile.rc:31
+#, fuzzy
+msgid "Propert&ies\tAlt+Enter"
+msgstr "&Options"
+
+#: winefile.rc:33
+msgid "&Run..."
+msgstr ""
+
+#: winefile.rc:35
+msgid "Cr&eate Directory..."
+msgstr ""
+
+#: winefile.rc:38 winemine.rc:46
+#, fuzzy
+msgid "E&xit\tAlt+X"
+msgstr "&Finir"
+
+#: winefile.rc:44
+msgid "&Disk"
+msgstr ""
+
+#: winefile.rc:45
+msgid "Connect &Network Drive..."
+msgstr ""
+
+#: winefile.rc:46
+msgid "&Disconnect Network Drive"
+msgstr ""
+
+#: winefile.rc:52
+msgid "&Name"
+msgstr ""
+
+#: winefile.rc:53
+msgid "&All File Details"
+msgstr ""
+
+#: winefile.rc:55
+msgid "&Sort by Name"
+msgstr ""
+
+#: winefile.rc:56
+msgid "Sort &by Type"
+msgstr ""
+
+#: winefile.rc:57
+msgid "Sort by Si&ze"
+msgstr ""
+
+#: winefile.rc:58
+msgid "Sort by &Date"
+msgstr ""
+
+#: winefile.rc:60
+#, fuzzy
+msgid "Filter by&..."
+msgstr "&Installaziun dal stampader..."
+
+#: winefile.rc:67
+msgid "&Drivebar"
+msgstr ""
+
+#: winefile.rc:70
+msgid "F&ull Screen\tCtrl+Shift+S"
+msgstr ""
+
+#: winefile.rc:77
+msgid "New &Window"
+msgstr ""
+
+#: winefile.rc:78
+msgid "Cascading\tCtrl+F5"
+msgstr ""
+
+#: winefile.rc:80
+msgid "Tile &Vertically\tCtrl+F4"
+msgstr ""
+
+#: winefile.rc:81
+msgid "Arrange &Symbols"
+msgstr ""
+
+#: winefile.rc:87
+#, fuzzy
+msgid "&About Wine File"
+msgstr "I&nfuormaziuns"
+
+#: winefile.rc:93
+msgid "Applying font settings"
+msgstr ""
+
+#: winefile.rc:94
+msgid "Error while selecting new font."
+msgstr ""
+
+#: winefile.rc:99
+msgid "Wine File Manager"
+msgstr ""
+
+#: winefile.rc:101
+msgid "root fs"
+msgstr ""
+
+#: winefile.rc:102
+msgid "unixfs"
+msgstr ""
+
+#: winefile.rc:104
+msgid "Shell"
+msgstr ""
+
+#: winefile.rc:105
+msgid "%s - %s"
+msgstr ""
+
+#: winefile.rc:106
+#, fuzzy
+msgid "Not yet implemented"
+msgstr "Na implementa"
+
+#: winefile.rc:107
+#, fuzzy
+msgid "Wine File"
+msgstr "Wine ag�d"
+
+#: winefile.rc:114
+msgid "CDate"
+msgstr ""
+
+#: winefile.rc:115
+msgid "ADate"
+msgstr ""
+
+#: winefile.rc:116
+msgid "MDate"
+msgstr ""
+
+#: winefile.rc:117
+msgid "Index/Inode"
+msgstr ""
+
+#: winefile.rc:120
+msgid "Security"
+msgstr ""
+
+#: winefile.rc:122
+msgid "%s of %s free"
+msgstr ""
+
+#: winemine.rc:34
+msgid "&Game"
+msgstr ""
+
+#: winemine.rc:35
+msgid "&New\tF2"
+msgstr ""
+
+#: winemine.rc:37
+msgid "Question &Marks"
+msgstr ""
+
+#: winemine.rc:39
+msgid "&Beginner"
+msgstr ""
+
+#: winemine.rc:40
+msgid "&Advanced"
+msgstr ""
+
+#: winemine.rc:41
+msgid "&Expert"
+msgstr ""
+
+#: winemine.rc:42
+msgid "&Custom..."
+msgstr ""
+
+#: winemine.rc:44
+msgid "&Fastest Times"
+msgstr ""
+
+#: winemine.rc:49
+#, fuzzy
+msgid "&About WineMine"
+msgstr "I&nfuormaziuns"
+
+#: winemine.rc:27
+msgid "WineMine"
+msgstr ""
+
+#: winemine.rc:28
+msgid "Nobody"
+msgstr ""
+
+#: winemine.rc:29
+msgid "Copyright 2000 Joshua Thielen"
+msgstr ""
+
+#: winhlp32.rc:32
+msgid "Printer &setup..."
+msgstr "&Installaziun dal stampader..."
+
+#: winhlp32.rc:39
+msgid "&Annotate..."
+msgstr "&Annotaziun..."
+
+#: winhlp32.rc:41
+msgid "&Bookmark"
+msgstr "&Marca"
+
+#: winhlp32.rc:42
+msgid "&Define..."
+msgstr "&Definir..."
+
+#: winhlp32.rc:45
+msgid "History"
+msgstr "History"
+
+#: winhlp32.rc:48 winhlp32.rc:69
+msgid "Small"
+msgstr "Small"
+
+#: winhlp32.rc:49 winhlp32.rc:70
+msgid "Normal"
+msgstr "Normal"
+
+#: winhlp32.rc:50 winhlp32.rc:71
+msgid "Large"
+msgstr "Large"
+
+#: winhlp32.rc:54
+#, fuzzy
+msgid "&Help on help\tF1"
+msgstr "&Douvrar l'ag�d"
+
+#: winhlp32.rc:55
+msgid "Always on &top"
+msgstr "Ad�na da&vant"
+
+#: winhlp32.rc:56
+msgid "&About Wine Help"
+msgstr "I&nfuormaziuns"
+
+#: winhlp32.rc:64
+#, fuzzy
+msgid "Annotation..."
+msgstr "&Annotaziun..."
+
+#: winhlp32.rc:65
+#, fuzzy
+msgid "Copy"
+msgstr "Capchar"
+
+#: winhlp32.rc:78
+msgid "Wine Help"
+msgstr "Wine ag�d"
+
+#: winhlp32.rc:83
+msgid "Error while reading the help file `%s'"
+msgstr "Sbagl cun leger la datoteca d'ag�d `%s'"
+
+#: winhlp32.rc:85
+msgid "Summary"
+msgstr "Summary"
+
+#: winhlp32.rc:84
+msgid "&Index"
+msgstr "&Cuntgn�"
+
+#: winhlp32.rc:88
+msgid "Help files (*.hlp)"
+msgstr "Datotecas d'ag�d (*.hlp)"
+
+#: winhlp32.rc:89
+msgid "Cannot find '%s'. Do you want to find this file yourself?"
+msgstr "Cannot find '%s'. Do you want to find this file yourself?"
+
+#: winhlp32.rc:90
+msgid "Cannot find a richedit implementation... Aborting"
+msgstr "Cannot find a richedit implementation... Aborting"
+
+#: winhlp32.rc:91
+msgid "Help topics: "
+msgstr ""
+
+#: wordpad.rc:28
+msgid "&New...\tCtrl+N"
+msgstr ""
+
+#: wordpad.rc:42
+msgid "R&edo\tCtrl+Y"
+msgstr ""
+
+#: wordpad.rc:47
+msgid "&Clear\tDEL"
+msgstr ""
+
+#: wordpad.rc:48
+msgid "&Select all\tCtrl+A"
+msgstr ""
+
+#: wordpad.rc:51
+msgid "Find &next\tF3"
+msgstr ""
+
+#: wordpad.rc:54
+msgid "Read-&only"
+msgstr ""
+
+#: wordpad.rc:55
+msgid "&Modified"
+msgstr ""
+
+#: wordpad.rc:57
+msgid "E&xtras"
+msgstr ""
+
+#: wordpad.rc:59
+msgid "Selection &info"
+msgstr ""
+
+#: wordpad.rc:60
+msgid "Character &format"
+msgstr ""
+
+#: wordpad.rc:61
+msgid "&Def. char format"
+msgstr ""
+
+#: wordpad.rc:62
+msgid "Paragrap&h format"
+msgstr ""
+
+#: wordpad.rc:63
+msgid "&Get text"
+msgstr ""
+
+#: wordpad.rc:69
+msgid "&Formatbar"
+msgstr ""
+
+#: wordpad.rc:70
+msgid "&Ruler"
+msgstr ""
+
+#: wordpad.rc:71
+msgid "&Statusbar"
+msgstr ""
+
+#: wordpad.rc:73
+#, fuzzy
+msgid "&Options..."
+msgstr "&Options"
+
+#: wordpad.rc:75
+msgid "&Insert"
+msgstr ""
+
+#: wordpad.rc:77
+msgid "&Date and time..."
+msgstr ""
+
+#: wordpad.rc:79
+#, fuzzy
+msgid "F&ormat"
+msgstr "Normal"
+
+#: wordpad.rc:82 wordpad.rc:105
+msgid "&Bullet points"
+msgstr ""
+
+#: wordpad.rc:83 wordpad.rc:106
+msgid "&Paragraph..."
+msgstr ""
+
+#: wordpad.rc:84
+msgid "&Tabs..."
+msgstr ""
+
+#: wordpad.rc:85
+msgid "Backgroun&d"
+msgstr ""
+
+#: wordpad.rc:87
+msgid "&System\tCtrl+1"
+msgstr ""
+
+#: wordpad.rc:88
+msgid "&Pale yellow\tCtrl+2"
+msgstr ""
+
+#: wordpad.rc:93
+#, fuzzy
+msgid "&About Wine Wordpad"
+msgstr "I&nfuormaziuns"
+
+#: wordpad.rc:130
+msgid "Automatic"
+msgstr ""
+
+#: wordpad.rc:136
+#, fuzzy
+msgid "All documents (*.*)"
+msgstr "Tuot las datotecas (*.*)"
+
+#: wordpad.rc:137
+#, fuzzy
+msgid "Text documents (*.txt)"
+msgstr "Tuot las datotecas (*.*)"
+
+#: wordpad.rc:138
+msgid "Unicode text document (*.txt)"
+msgstr ""
+
+#: wordpad.rc:139
+msgid "Rich text format (*.rtf)"
+msgstr ""
+
+#: wordpad.rc:140
+msgid "Rich text document"
+msgstr ""
+
+#: wordpad.rc:141
+msgid "Text document"
+msgstr ""
+
+#: wordpad.rc:142
+msgid "Unicode text document"
+msgstr ""
+
+#: wordpad.rc:143
+#, fuzzy
+msgid "Printer files (*.PRN)"
+msgstr "Tuot las datotecas (*.*)"
+
+#: wordpad.rc:148
+msgid "Left"
+msgstr ""
+
+#: wordpad.rc:149
+msgid "Right"
+msgstr ""
+
+#: wordpad.rc:150
+msgid "Center"
+msgstr ""
+
+#: wordpad.rc:156
+msgid "Text"
+msgstr ""
+
+#: wordpad.rc:157
+msgid "Rich text"
+msgstr ""
+
+#: wordpad.rc:163
+msgid "Next page"
+msgstr ""
+
+#: wordpad.rc:164
+msgid "Previous page"
+msgstr ""
+
+#: wordpad.rc:165
+msgid "Two pages"
+msgstr ""
+
+#: wordpad.rc:166
+msgid "One page"
+msgstr ""
+
+#: wordpad.rc:167
+msgid "Zoom in"
+msgstr ""
+
+#: wordpad.rc:168
+msgid "Zoom out"
+msgstr ""
+
+#: wordpad.rc:170
+msgid "Page"
+msgstr ""
+
+#: wordpad.rc:171
+msgid "Pages"
+msgstr ""
+
+#: wordpad.rc:172
+msgid "cm"
+msgstr ""
+
+#: wordpad.rc:173
+msgid "in"
+msgstr ""
+
+#: wordpad.rc:174
+msgid "inch"
+msgstr ""
+
+#: wordpad.rc:175
+msgid "pt"
+msgstr ""
+
+#: wordpad.rc:180
+msgid "Document"
+msgstr ""
+
+#: wordpad.rc:181
+msgid "Save changes to '%s'?"
+msgstr ""
+
+#: wordpad.rc:182
+msgid "Finished searching the document."
+msgstr ""
+
+#: wordpad.rc:183
+msgid "Failed to load the RichEdit library."
+msgstr ""
+
+#: wordpad.rc:184
+msgid ""
+"You have chosen to save in plain text format, which will cause all "
+"formatting to be lost. Are you sure that you wish to do this?"
+msgstr ""
+
+#: wordpad.rc:187
+msgid "Invalid number format"
+msgstr ""
+
+#: wordpad.rc:188
+msgid "OLE storage documents are not supported"
+msgstr ""
+
+#: wordpad.rc:189
+msgid "Could not save the file."
+msgstr ""
+
+#: wordpad.rc:190
+msgid "You do not have access to save the file."
+msgstr ""
+
+#: wordpad.rc:191
+msgid "Could not open the file."
+msgstr ""
+
+#: wordpad.rc:192
+msgid "You do not have access to open the file."
+msgstr ""
+
+#: wordpad.rc:193
+#, fuzzy
+msgid "Printing not implemented"
+msgstr "Na implementa"
+
+#: wordpad.rc:194
+msgid "Cannot add more than 32 tab stops."
+msgstr ""
+
+#: write.rc:27
+msgid "Starting Wordpad failed"
+msgstr ""
+
+#: xcopy.rc:27
+msgid "Invalid number of parameters - Use xcopy /? for help\n"
+msgstr ""
+
+#: xcopy.rc:28
+msgid "Invalid parameter '%s' -  Use xcopy /? for help\n"
+msgstr ""
+
+#: xcopy.rc:29
+msgid "Press <enter> to begin copying\n"
+msgstr ""
+
+#: xcopy.rc:30
+msgid "%d file(s) would be copied\n"
+msgstr ""
+
+#: xcopy.rc:31
+msgid "%d file(s) copied\n"
+msgstr ""
+
+#: xcopy.rc:34
+msgid ""
+"Is '%s' a filename or directory\n"
+"on the target?\n"
+"(F - File, D - Directory)\n"
+msgstr ""
+
+#: xcopy.rc:35
+msgid "%s? (Yes|No)\n"
+msgstr ""
+
+#: xcopy.rc:36
+msgid "Overwrite %s? (Yes|No|All)\n"
+msgstr ""
+
+#: xcopy.rc:37
+msgid "Copying of '%s' to '%s' failed with r/c %d\n"
+msgstr ""
+
+#: xcopy.rc:39
+msgid "Failed during reading of '%s'\n"
+msgstr ""
+
+#: xcopy.rc:43
+msgctxt "File key"
+msgid "F"
+msgstr ""
+
+#: xcopy.rc:44
+msgctxt "Directory key"
+msgid "D"
+msgstr ""
+
+#: xcopy.rc:77
+msgid ""
+"XCOPY - Copies source files or directory trees to a destination\n"
+"\n"
+"Syntax:\n"
+"XCOPY source [dest] [/I] [/S] [/Q] [/F] [/L] [/W] [/T] [/N] [/U]\n"
+"\t     [/R] [/H] [/C] [/P] [/A] [/M] [/E] [/D] [/Y] [/-Y]\n"
+"\n"
+"Where:\n"
+"\n"
+"[/I]  Assume directory if destination does not exist and copying two or\n"
+"\tmore files\n"
+"[/S]  Copy directories and subdirectories\n"
+"[/E]  Copy directories and subdirectories, including any empty ones\n"
+"[/Q]  Do not list names during copy, ie quiet.\n"
+"[/F]  Show full source and destination names during copy\n"
+"[/L]  Simulate operation, showing names which would be copied\n"
+"[/W]  Prompts before beginning the copy operation\n"
+"[/T]  Creates empty directory structure but does not copy files\n"
+"[/Y]  Suppress prompting when overwriting files\n"
+"[/-Y] Enable prompting when overwriting files\n"
+"[/P]  Prompts on each source file before copying\n"
+"[/N]  Copy using short names\n"
+"[/U]  Copy only files which already exist in destination\n"
+"[/R]  Overwrite any read only files\n"
+"[/H]  Include hidden and system files in the copy\n"
+"[/C]  Continue even if an error occurs during the copy\n"
+"[/A]  Only copy files with archive attribute set\n"
+"[/M]  Only copy files with archive attribute set, removes\n"
+"\tarchive attribute\n"
+"[/D | /D:m-d-y] Copy new files or those modified after the supplied date.\n"
+"\t\tIf no date is supplied, only copy if destination is older\n"
+"\t\tthan source\n"
+"\n"
+msgstr ""

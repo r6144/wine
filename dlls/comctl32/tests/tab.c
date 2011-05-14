@@ -41,28 +41,44 @@
 
 #define TabWidthPadded(padd_x, num) (DEFAULT_MIN_TAB_WIDTH - (TAB_PADDING_X - (padd_x)) * num)
 
-#define TabCheckSetSize(hwnd, SetWidth, SetHeight, ExpWidth, ExpHeight, Msg)\
-    SendMessage (hwnd, TCM_SETITEMSIZE, 0,\
-	(LPARAM) MAKELPARAM((SetWidth >= 0) ? SetWidth:0, (SetHeight >= 0) ? SetHeight:0));\
-    if (winetest_interactive) RedrawWindow (hwnd, NULL, 0, RDW_UPDATENOW);\
-    CheckSize(hwnd, ExpWidth, ExpHeight, Msg);
+static void CheckSize(HWND hwnd, INT width, INT height, const char *msg, int line)
+{
+    RECT r;
 
-#define CheckSize(hwnd,width,height,msg)\
-    SendMessage (hwnd, TCM_GETITEMRECT, 0, (LPARAM) &rTab);\
-    if ((width  >= 0) && (height < 0))\
-	ok (width  == rTab.right  - rTab.left, "%s: Expected width [%d] got [%d]\n",\
-        msg, (int)width,  rTab.right  - rTab.left);\
-    else if ((height >= 0) && (width  < 0))\
-	ok (height == rTab.bottom - rTab.top,  "%s: Expected height [%d] got [%d]\n",\
-        msg, (int)height, rTab.bottom - rTab.top);\
-    else\
-	ok ((width  == rTab.right  - rTab.left) &&\
-	    (height == rTab.bottom - rTab.top ),\
-	    "%s: Expected [%d,%d] got [%d,%d]\n", msg, (int)width, (int)height,\
-            rTab.right - rTab.left, rTab.bottom - rTab.top);
+    SendMessage(hwnd, TCM_GETITEMRECT, 0, (LPARAM)&r);
+    if (width >= 0 && height < 0)
+    {
+        ok_(__FILE__,line) (width == r.right - r.left, "%s: Expected width [%d] got [%d]\n",\
+        msg, width, r.right - r.left);
+    }
+    else if (height >= 0 && width < 0)
+    {
+        ok_(__FILE__,line) (height == r.bottom - r.top,  "%s: Expected height [%d] got [%d]\n",\
+        msg, height, r.bottom - r.top);
+    }
+    else
+        ok_(__FILE__,line) ((width  == r.right  - r.left) && (height == r.bottom - r.top ),
+	    "%s: Expected [%d,%d] got [%d,%d]\n", msg, width, height,
+            r.right - r.left, r.bottom - r.top);
+}
+
+#define CHECKSIZE(hwnd,width,height,msg) CheckSize(hwnd,width,height,msg,__LINE__)
+
+static void TabCheckSetSize(HWND hwnd, INT set_width, INT set_height, INT exp_width,
+    INT exp_height, const char *msg, int line)
+{
+    SendMessage(hwnd, TCM_SETITEMSIZE, 0,
+	(LPARAM) MAKELPARAM((set_width >= 0) ? set_width : 0, (set_height >= 0) ? set_height : 0));
+    if (winetest_interactive) RedrawWindow (hwnd, NULL, 0, RDW_UPDATENOW);
+    CheckSize(hwnd, exp_width, exp_height, msg, line);
+}
+
+#define TABCHECKSETSIZE(hwnd,set_width,set_height,exp_width,exp_height,msg) \
+    TabCheckSetSize(hwnd,set_width,set_height,exp_width,exp_height,msg,__LINE__)
 
 static HFONT hFont;
 static DRAWITEMSTRUCT g_drawitem;
+static HWND parent_wnd;
 
 static struct msg_sequence *sequences[NUM_MSG_SEQUENCES];
 
@@ -522,16 +538,16 @@ static void test_tab(INT nMinTabWidth)
     ReleaseDC(hwTab, hdc);
 
     trace ("  TCS_FIXEDWIDTH tabs no icon...\n");
-    CheckSize(hwTab, dpi, -1, "default width");
-    TabCheckSetSize(hwTab, 50, 20, 50, 20, "set size");
-    TabCheckSetSize(hwTab, 0, 1, 0, 1, "min size");
+    CHECKSIZE(hwTab, dpi, -1, "default width");
+    TABCHECKSETSIZE(hwTab, 50, 20, 50, 20, "set size");
+    TABCHECKSETSIZE(hwTab, 0, 1, 0, 1, "min size");
 
     SendMessage(hwTab, TCM_SETIMAGELIST, 0, (LPARAM)himl);
 
     trace ("  TCS_FIXEDWIDTH tabs with icon...\n");
-    TabCheckSetSize(hwTab, 50, 30, 50, 30, "set size > icon");
-    TabCheckSetSize(hwTab, 20, 20, 25, 20, "set size < icon");
-    TabCheckSetSize(hwTab, 0, 1, 25, 1, "min size");
+    TABCHECKSETSIZE(hwTab, 50, 30, 50, 30, "set size > icon");
+    TABCHECKSETSIZE(hwTab, 20, 20, 25, 20, "set size < icon");
+    TABCHECKSETSIZE(hwTab, 0, 1, 25, 1, "min size");
 
     DestroyWindow (hwTab);
 
@@ -542,19 +558,19 @@ static void test_tab(INT nMinTabWidth)
     dpi = GetDeviceCaps(hdc, LOGPIXELSX);
     ReleaseDC(hwTab, hdc);
     trace ("  TCS_FIXEDWIDTH buttons no icon...\n");
-    CheckSize(hwTab, dpi, -1, "default width");
-    TabCheckSetSize(hwTab, 20, 20, 20, 20, "set size 1");
-    TabCheckSetSize(hwTab, 10, 50, 10, 50, "set size 2");
-    TabCheckSetSize(hwTab, 0, 1, 0, 1, "min size");
+    CHECKSIZE(hwTab, dpi, -1, "default width");
+    TABCHECKSETSIZE(hwTab, 20, 20, 20, 20, "set size 1");
+    TABCHECKSETSIZE(hwTab, 10, 50, 10, 50, "set size 2");
+    TABCHECKSETSIZE(hwTab, 0, 1, 0, 1, "min size");
 
     SendMessage(hwTab, TCM_SETIMAGELIST, 0, (LPARAM)himl);
 
     trace ("  TCS_FIXEDWIDTH buttons with icon...\n");
-    TabCheckSetSize(hwTab, 50, 30, 50, 30, "set size > icon");
-    TabCheckSetSize(hwTab, 20, 20, 25, 20, "set size < icon");
-    TabCheckSetSize(hwTab, 0, 1, 25, 1, "min size");
+    TABCHECKSETSIZE(hwTab, 50, 30, 50, 30, "set size > icon");
+    TABCHECKSETSIZE(hwTab, 20, 20, 25, 20, "set size < icon");
+    TABCHECKSETSIZE(hwTab, 0, 1, 25, 1, "min size");
     SendMessage(hwTab, TCM_SETPADDING, 0, MAKELPARAM(4,4));
-    TabCheckSetSize(hwTab, 0, 1, 25, 1, "set padding, min size");
+    TABCHECKSETSIZE(hwTab, 0, 1, 25, 1, "set padding, min size");
 
     DestroyWindow (hwTab);
 
@@ -565,19 +581,19 @@ static void test_tab(INT nMinTabWidth)
     dpi = GetDeviceCaps(hdc, LOGPIXELSX);
     ReleaseDC(hwTab, hdc);
     trace ("  TCS_FIXEDWIDTH | TCS_BOTTOM tabs...\n");
-    CheckSize(hwTab, dpi, -1, "no icon, default width");
+    CHECKSIZE(hwTab, dpi, -1, "no icon, default width");
 
-    TabCheckSetSize(hwTab, 20, 20, 20, 20, "no icon, set size 1");
-    TabCheckSetSize(hwTab, 10, 50, 10, 50, "no icon, set size 2");
-    TabCheckSetSize(hwTab, 0, 1, 0, 1, "no icon, min size");
+    TABCHECKSETSIZE(hwTab, 20, 20, 20, 20, "no icon, set size 1");
+    TABCHECKSETSIZE(hwTab, 10, 50, 10, 50, "no icon, set size 2");
+    TABCHECKSETSIZE(hwTab, 0, 1, 0, 1, "no icon, min size");
 
     SendMessage(hwTab, TCM_SETIMAGELIST, 0, (LPARAM)himl);
 
-    TabCheckSetSize(hwTab, 50, 30, 50, 30, "with icon, set size > icon");
-    TabCheckSetSize(hwTab, 20, 20, 25, 20, "with icon, set size < icon");
-    TabCheckSetSize(hwTab, 0, 1, 25, 1, "with icon, min size");
+    TABCHECKSETSIZE(hwTab, 50, 30, 50, 30, "with icon, set size > icon");
+    TABCHECKSETSIZE(hwTab, 20, 20, 25, 20, "with icon, set size < icon");
+    TABCHECKSETSIZE(hwTab, 0, 1, 25, 1, "with icon, min size");
     SendMessage(hwTab, TCM_SETPADDING, 0, MAKELPARAM(4,4));
-    TabCheckSetSize(hwTab, 0, 1, 25, 1, "set padding, min size");
+    TABCHECKSETSIZE(hwTab, 0, 1, 25, 1, "set padding, min size");
 
     DestroyWindow (hwTab);
 
@@ -597,15 +613,15 @@ static void test_tab(INT nMinTabWidth)
         SendMessage(hwTab, TCM_SETIMAGELIST, 0, 0);
         SendMessage(hwTab, TCM_SETPADDING, 0, MAKELPARAM(i,i));
 
-        TabCheckSetSize(hwTab, 50, 20, max(size.cx + i*2, nTabWidth), 20, "no icon, set size");
-        TabCheckSetSize(hwTab, 0, 1, max(size.cx + i*2, nTabWidth), 1, "no icon, min size");
+        TABCHECKSETSIZE(hwTab, 50, 20, max(size.cx + i*2, nTabWidth), 20, "no icon, set size");
+        TABCHECKSETSIZE(hwTab, 0, 1, max(size.cx + i*2, nTabWidth), 1, "no icon, min size");
 
         SendMessage(hwTab, TCM_SETIMAGELIST, 0, (LPARAM)himl);
         nTabWidth = (nMinTabWidth < 0) ? TabWidthPadded(i, 3) : nMinTabWidth;
 
-        TabCheckSetSize(hwTab, 50, 30, max(size.cx + 21 + i*3, nTabWidth), 30, "with icon, set size > icon");
-        TabCheckSetSize(hwTab, 20, 20, max(size.cx + 21 + i*3, nTabWidth), 20, "with icon, set size < icon");
-        TabCheckSetSize(hwTab, 0, 1, max(size.cx + 21 + i*3, nTabWidth), 1, "with icon, min size");
+        TABCHECKSETSIZE(hwTab, 50, 30, max(size.cx + 21 + i*3, nTabWidth), 30, "with icon, set size > icon");
+        TABCHECKSETSIZE(hwTab, 20, 20, max(size.cx + 21 + i*3, nTabWidth), 20, "with icon, set size < icon");
+        TABCHECKSETSIZE(hwTab, 0, 1, max(size.cx + 21 + i*3, nTabWidth), 1, "with icon, min size");
     }
     DestroyWindow (hwTab);
 
@@ -625,16 +641,16 @@ static void test_tab(INT nMinTabWidth)
         SendMessage(hwTab, TCM_SETIMAGELIST, 0, 0);
         SendMessage(hwTab, TCM_SETPADDING, 0, MAKELPARAM(i,i));
 
-        TabCheckSetSize(hwTab, 50, 20, nTabWidth, 20, "no icon, set size");
-        TabCheckSetSize(hwTab, 0, 1, nTabWidth, 1, "no icon, min size");
+        TABCHECKSETSIZE(hwTab, 50, 20, nTabWidth, 20, "no icon, set size");
+        TABCHECKSETSIZE(hwTab, 0, 1, nTabWidth, 1, "no icon, min size");
 
         SendMessage(hwTab, TCM_SETIMAGELIST, 0, (LPARAM)himl);
         if (i > 1 && nMinTabWidth > 0 && nMinTabWidth < DEFAULT_MIN_TAB_WIDTH)
             nTabWidth += EXTRA_ICON_PADDING *(i-1);
 
-        TabCheckSetSize(hwTab, 50, 30, nTabWidth, 30, "with icon, set size > icon");
-        TabCheckSetSize(hwTab, 20, 20, nTabWidth, 20, "with icon, set size < icon");
-        TabCheckSetSize(hwTab, 0, 1, nTabWidth, 1, "with icon, min size");
+        TABCHECKSETSIZE(hwTab, 50, 30, nTabWidth, 30, "with icon, set size > icon");
+        TABCHECKSETSIZE(hwTab, 20, 20, nTabWidth, 20, "with icon, set size < icon");
+        TABCHECKSETSIZE(hwTab, 0, 1, nTabWidth, 1, "with icon, min size");
     }
 
     DestroyWindow (hwTab);
@@ -643,8 +659,23 @@ static void test_tab(INT nMinTabWidth)
     DeleteObject(hFont);
 }
 
-static void test_curfocus(HWND parent_wnd, INT nTabs)
+static void test_width(void)
 {
+    trace ("Testing with default MinWidth\n");
+    test_tab(-1);
+    trace ("Testing with MinWidth set to -3\n");
+    test_tab(-3);
+    trace ("Testing with MinWidth set to 24\n");
+    test_tab(24);
+    trace ("Testing with MinWidth set to 54\n");
+    test_tab(54);
+    trace ("Testing with MinWidth set to 94\n");
+    test_tab(94);
+}
+
+static void test_curfocus(void)
+{
+    const INT nTabs = 5;
     INT focusIndex;
     HWND hTab;
 
@@ -676,8 +707,9 @@ static void test_curfocus(HWND parent_wnd, INT nTabs)
     DestroyWindow(hTab);
 }
 
-static void test_cursel(HWND parent_wnd, INT nTabs)
+static void test_cursel(void)
 {
+    const INT nTabs = 5;
     INT selectionIndex;
     INT focusIndex;
     TCITEM tcItem;
@@ -728,8 +760,9 @@ static void test_cursel(HWND parent_wnd, INT nTabs)
     DestroyWindow(hTab);
 }
 
-static void test_extendedstyle(HWND parent_wnd, INT nTabs)
+static void test_extendedstyle(void)
 {
+    const INT nTabs = 5;
     DWORD prevExtendedStyle;
     DWORD extendedStyle;
     HWND hTab;
@@ -762,8 +795,9 @@ static void test_extendedstyle(HWND parent_wnd, INT nTabs)
     DestroyWindow(hTab);
 }
 
-static void test_unicodeformat(HWND parent_wnd, INT nTabs)
+static void test_unicodeformat(void)
 {
+    const INT nTabs = 5;
     INT unicodeFormat;
     HWND hTab;
 
@@ -793,9 +827,10 @@ static void test_unicodeformat(HWND parent_wnd, INT nTabs)
     DestroyWindow(hTab);
 }
 
-static void test_getset_item(HWND parent_wnd, INT nTabs)
+static void test_getset_item(void)
 {
     char szText[32] = "New Label";
+    const INT nTabs = 5;
     TCITEM tcItem;
     LPARAM lparam;
     DWORD ret;
@@ -935,10 +970,11 @@ static void test_getset_item(HWND parent_wnd, INT nTabs)
     DestroyWindow(hTab);
 }
 
-static void test_getset_tooltips(HWND parent_wnd, INT nTabs)
+static void test_getset_tooltips(void)
 {
-    HWND hTab, toolTip;
     char toolTipText[32] = "ToolTip Text Test";
+    const INT nTabs = 5;
+    HWND hTab, toolTip;
 
     hTab = createFilledTabControl(parent_wnd, TCS_FIXEDWIDTH, TCIF_TEXT|TCIF_IMAGE, nTabs);
     ok(hTab != NULL, "Failed to create tab control\n");
@@ -958,8 +994,9 @@ static void test_getset_tooltips(HWND parent_wnd, INT nTabs)
     DestroyWindow(hTab);
 }
 
-static void test_misc(HWND parent_wnd, INT nTabs)
+static void test_misc(void)
 {
+    const INT nTabs = 5;
     HWND hTab;
     RECT rTab;
     INT nTabsRetrieved;
@@ -1012,14 +1049,14 @@ static void test_misc(HWND parent_wnd, INT nTabs)
     hdc = GetDC(hTab);
     dpi = GetDeviceCaps(hdc, LOGPIXELSX);
     ReleaseDC(hTab, hdc);
-    CheckSize(hTab, dpi, -1 , "Default Width");
+    CHECKSIZE(hTab, dpi, -1 , "Default Width");
     ok_sequence(sequences, TAB_SEQ_INDEX, get_item_rect_seq, "Get itemRect test sequence", FALSE);
     ok_sequence(sequences, PARENT_SEQ_INDEX, empty_sequence, "Get itemRect test parent sequence", FALSE);
 
     DestroyWindow(hTab);
 }
 
-static void test_adjustrect(HWND parent_wnd)
+static void test_adjustrect(void)
 {
     HWND hTab;
     INT r;
@@ -1036,7 +1073,7 @@ static void test_adjustrect(HWND parent_wnd)
     expect(-1, r);
 }
 
-static void test_insert_focus(HWND parent_wnd)
+static void test_insert_focus(void)
 {
     HWND hTab;
     INT nTabsRetrieved;
@@ -1051,6 +1088,9 @@ static void test_insert_focus(HWND parent_wnd)
 
     hTab = createFilledTabControl(parent_wnd, TCS_FIXEDWIDTH, mask, 0);
     ok(hTab != NULL, "Failed to create tab control\n");
+
+    r = SendMessage(hTab, TCM_GETCURSEL, 0, 0);
+    expect(-1, r);
 
     flush_sequences(sequences, NUM_MSG_SEQUENCES);
 
@@ -1099,7 +1139,7 @@ static void test_insert_focus(HWND parent_wnd)
     DestroyWindow(hTab);
 }
 
-static void test_delete_focus(HWND parent_wnd)
+static void test_delete_focus(void)
 {
     HWND hTab;
     INT nTabsRetrieved;
@@ -1148,7 +1188,7 @@ static void test_delete_focus(HWND parent_wnd)
     DestroyWindow(hTab);
 }
 
-static void test_removeimage(HWND parent_wnd)
+static void test_removeimage(void)
 {
     static const BYTE bits[32];
     HWND hwTab;
@@ -1211,7 +1251,7 @@ static void test_removeimage(HWND parent_wnd)
     DestroyIcon(hicon);
 }
 
-static void test_delete_selection(HWND parent_wnd)
+static void test_delete_selection(void)
 {
     HWND hTab;
     DWORD ret;
@@ -1233,7 +1273,7 @@ static void test_delete_selection(HWND parent_wnd)
     DestroyWindow(hTab);
 }
 
-static void test_TCM_SETITEMEXTRA(HWND parent_wnd)
+static void test_TCM_SETITEMEXTRA(void)
 {
     HWND hTab;
     DWORD ret;
@@ -1270,7 +1310,7 @@ static void test_TCM_SETITEMEXTRA(HWND parent_wnd)
     DestroyWindow(hTab);
 }
 
-static void test_TCS_OWNERDRAWFIXED(HWND parent_wnd)
+static void test_TCS_OWNERDRAWFIXED(void)
 {
     LPARAM lparam, lparam2;
     TCITEMA item;
@@ -1367,7 +1407,6 @@ static void test_TCS_OWNERDRAWFIXED(HWND parent_wnd)
 
 START_TEST(tab)
 {
-    HWND parent_wnd;
     LOGFONTA logfont;
 
     lstrcpyA(logfont.lfFaceName, "Arial");
@@ -1379,38 +1418,29 @@ START_TEST(tab)
 
     InitCommonControls();
 
-    trace ("Testing with default MinWidth\n");
-    test_tab(-1);
-    trace ("Testing with MinWidth set to -3\n");
-    test_tab(-3);
-    trace ("Testing with MinWidth set to 24\n");
-    test_tab(24);
-    trace ("Testing with MinWidth set to 54\n");
-    test_tab(54);
-    trace ("Testing with MinWidth set to 94\n");
-    test_tab(94);
+    test_width();
 
     init_msg_sequences(sequences, NUM_MSG_SEQUENCES);
 
     parent_wnd = createParentWindow();
     ok(parent_wnd != NULL, "Failed to create parent window!\n");
 
-    test_curfocus(parent_wnd, 5);
-    test_cursel(parent_wnd, 5);
-    test_extendedstyle(parent_wnd, 5);
-    test_unicodeformat(parent_wnd, 5);
-    test_getset_item(parent_wnd, 5);
-    test_getset_tooltips(parent_wnd, 5);
-    test_misc(parent_wnd, 5);
+    test_curfocus();
+    test_cursel();
+    test_extendedstyle();
+    test_unicodeformat();
+    test_getset_item();
+    test_getset_tooltips();
+    test_misc();
 
-    test_adjustrect(parent_wnd);
+    test_adjustrect();
 
-    test_insert_focus(parent_wnd);
-    test_delete_focus(parent_wnd);
-    test_delete_selection(parent_wnd);
-    test_removeimage(parent_wnd);
-    test_TCM_SETITEMEXTRA(parent_wnd);
-    test_TCS_OWNERDRAWFIXED(parent_wnd);
+    test_insert_focus();
+    test_delete_focus();
+    test_delete_selection();
+    test_removeimage();
+    test_TCM_SETITEMEXTRA();
+    test_TCS_OWNERDRAWFIXED();
 
     DestroyWindow(parent_wnd);
 }

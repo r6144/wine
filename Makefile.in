@@ -19,7 +19,11 @@
 # xmlpages:        compile xml source for the Wine API Guide
 
 # Sub-directories that don't have a makefile
-EXTRASUBDIRS = dlls libs programs
+EXTRASUBDIRS = \
+	dlls \
+	libs \
+	po \
+	programs
 
 # Destination directories for make install
 INSTALLDIRS = $(DESTDIR)$(bindir)
@@ -33,14 +37,6 @@ WINAPI_CHECK_EXTRA_FLAGS = --global
 
 # Rules for re-running configure
 
-$(srcdir)/configure: @MAINTAINER_MODE@ configure.ac aclocal.m4
-	cd $(srcdir) && autoconf --warnings=all
-
-$(srcdir)/include/config.h.in: @MAINTAINER_MODE@ include/stamp-h.in
-$(srcdir)/include/stamp-h.in: configure.ac aclocal.m4
-	cd $(srcdir) && autoheader --warnings=all
-	@echo timestamp > $@
-
 config.status: configure
 	@./config.status --recheck
 
@@ -52,8 +48,6 @@ include/stamp-h: include/config.h.in config.status
 
 .PHONY: __clean__
 clean:: __clean__
-	$(RM) tools/makedep$(EXEEXT)
-
 distclean:: clean
 	$(RM) config.* configure.lineno TAGS tags include/config.h include/stamp-h Makefile Make.tmp
 	$(RM) -r autom4te.cache
@@ -67,7 +61,7 @@ __builddeps__: __tooldeps__ include
 
 loader server: libs/port libs/wine tools
 fonts: tools
-include: tools/widl
+include: tools tools/widl
 libs/wine: libs/port
 tools/wmc tools/wrc: tools
 tools tools/wmc tools/wrc: libs/wine
@@ -75,7 +69,7 @@ tools/widl tools/wmc tools/wrc: libs/wpp
 
 dlls/shell32/Makefile dlls/shell32/__depend__: dlls/shell32/AUTHORS
 
-$(MAKEDEP): include/config.h tools/Makefile
+$(MAKEDEP): include/config.h
 	@cd $(TOOLSDIR)/tools && $(MAKE) makedep$(TOOLSEXT)
 
 # Misc rules

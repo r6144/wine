@@ -191,19 +191,6 @@ static inline struct hook *get_first_hook( struct hook_table *table, int index )
     return elem ? HOOK_ENTRY( elem ) : NULL;
 }
 
-/* check if a given hook should run in the current thread */
-static inline int run_hook_in_current_thread( struct hook *hook )
-{
-    if ((!hook->process || hook->process == current->process) &&
-        (!(hook->flags & WINEVENT_SKIPOWNPROCESS) || hook->process != current->process))
-    {
-        if ((!hook->thread || hook->thread == current) &&
-            (!(hook->flags & WINEVENT_SKIPOWNTHREAD) || hook->thread != current))
-            return 1;
-    }
-    return 0;
-}
-
 /* check if a given hook should run in the owner thread instead of the current thread */
 static inline int run_hook_in_owner_thread( struct hook *hook )
 {
@@ -211,6 +198,18 @@ static inline int run_hook_in_owner_thread( struct hook *hook )
          hook->index == WH_KEYBOARD_LL - WH_MINHOOK))
         return hook->owner != current;
     return 0;
+}
+
+/* check if a given hook should run in the current thread */
+static inline int run_hook_in_current_thread( struct hook *hook )
+{
+    if (hook->process && hook->process != current->process) return 0;
+    if ((hook->flags & WINEVENT_SKIPOWNPROCESS) && hook->process == current->process) return 0;
+    if (hook->thread && hook->thread != current) return 0;
+    if ((hook->flags & WINEVENT_SKIPOWNTHREAD) && hook->thread == current) return 0;
+    /* don't run low-level hooks in debugged processes */
+    if (run_hook_in_owner_thread( hook ) && hook->owner->process->debugger) return 0;
+    return 1;
 }
 
 /* find the first non-deleted hook in the chain */
@@ -369,6 +368,17 @@ unsigned int get_active_hooks(void)
     return ret;
 }
 
+/* return the thread that owns the first global hook */
+struct thread *get_first_global_hook( int id )
+{
+    struct hook *hook;
+    struct hook_table *global_hooks = get_global_hooks( current );
+
+    if (!global_hooks) return NULL;
+    if (!(hook = get_first_valid_hook( global_hooks, id - WH_MINHOOK, EVENT_MIN, 0, 0, 0 ))) return NULL;
+    return hook->owner;
+}
+
 /* set a window hook */
 DECL_HANDLER(set_hook)
 {
@@ -497,6 +507,7 @@ DECL_HANDLER(start_hook_chain)
 {
     struct hook *hook;
     struct hook_table *table = get_queue_hooks( current );
+    struct hook_table *global_table = get_global_hooks( current );
 
     if (req->id < WH_MINHOOK || req->id > WH_WINEVENT)
     {
@@ -510,9 +521,8 @@ DECL_HANDLER(start_hook_chain)
                                                  req->window, req->object_id, req->child_id )))
     {
         /* try global table */
-        if (!(table = get_global_hooks( current )) ||
-            !(hook = get_first_valid_hook( table, req->id - WH_MINHOOK, req->event,
-                                           req->window, req->object_id, req->child_id )))
+        if (!global_table || !(hook = get_first_valid_hook( global_table, req->id - WH_MINHOOK, req->event,
+                                                            req->window, req->object_id, req->child_id )))
             return;  /* no hook set */
     }
 
@@ -529,7 +539,8 @@ DECL_HANDLER(start_hook_chain)
     reply->proc    = hook->proc;
     reply->handle  = hook->handle;
     reply->unicode = hook->unicode;
-    table->counts[hook->index]++;
+    if (table) table->counts[hook->index]++;
+    if (global_table) global_table->counts[hook->index]++;
     if (hook->module) set_reply_data( hook->module, hook->module_size );
 }
 

@@ -2186,24 +2186,17 @@ static void test_msiimport(void)
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
 
     r = add_table_to_db(hdb, endlines1);
-    if (r == ERROR_FUNCTION_FAILED)
-    {
-        /* win9x doesn't handle this case */
-        skip("endlines not handled correctly.\n");
-        MsiCloseHandle(hdb);
-        DeleteFileA(msifile);
-        return;
-    }
+    ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
 
     r = add_table_to_db(hdb, endlines2);
-    ok(r == ERROR_FUNCTION_FAILED,
-       "Expected ERROR_FUNCTION_FAILED, got %d\n", r);
+    ok(r == ERROR_FUNCTION_FAILED, "Expected ERROR_FUNCTION_FAILED, got %d\n", r);
 
     query = "SELECT * FROM `TestTable`";
     r = MsiDatabaseOpenView(hdb, query, &view);
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
 
     r = MsiViewGetColumnInfo(view, MSICOLINFO_NAMES, &rec);
+    ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
     count = MsiRecordGetFieldCount(rec);
     ok(count == 9, "Expected 9, got %d\n", count);
     ok(check_record(rec, 1, "FirstPrimaryColumn"), "Expected FirstPrimaryColumn\n");
@@ -2218,6 +2211,7 @@ static void test_msiimport(void)
     MsiCloseHandle(rec);
 
     r = MsiViewGetColumnInfo(view, MSICOLINFO_TYPES, &rec);
+    ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
     count = MsiRecordGetFieldCount(rec);
     ok(count == 9, "Expected 9, got %d\n", count);
     ok(check_record(rec, 1, "s255"), "Expected s255\n");
@@ -2263,6 +2257,7 @@ static void test_msiimport(void)
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
 
     r = MsiViewGetColumnInfo(view, MSICOLINFO_NAMES, &rec);
+    ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
     count = MsiRecordGetFieldCount(rec);
     ok(count == 2, "Expected 2, got %d\n", count);
     ok(check_record(rec, 1, "PrimaryOne"), "Expected PrimaryOne\n");
@@ -2271,6 +2266,7 @@ static void test_msiimport(void)
     MsiCloseHandle(rec);
 
     r = MsiViewGetColumnInfo(view, MSICOLINFO_TYPES, &rec);
+    ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
     count = MsiRecordGetFieldCount(rec);
     ok(count == 2, "Expected 2, got %d\n", count);
     ok(check_record(rec, 1, "s255"), "Expected s255\n");
@@ -2310,6 +2306,7 @@ static void test_msiimport(void)
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
 
     r = MsiViewGetColumnInfo(view, MSICOLINFO_NAMES, &rec);
+    ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
     count = MsiRecordGetFieldCount(rec);
     ok(count == 6, "Expected 6, got %d\n", count);
     ok(check_record(rec, 1, "A"), "Expected A\n");
@@ -2321,6 +2318,7 @@ static void test_msiimport(void)
     MsiCloseHandle(rec);
 
     r = MsiViewGetColumnInfo(view, MSICOLINFO_TYPES, &rec);
+    ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
     count = MsiRecordGetFieldCount(rec);
     ok(count == 6, "Expected 6, got %d\n", count);
     ok(check_record(rec, 1, "s72"), "Expected s72\n");
@@ -2932,6 +2930,7 @@ static MSIHANDLE create_package_db(LPCSTR filename)
     ok( res == ERROR_SUCCESS , "Failed to commit database\n" );
 
     res = set_summary_info(hdb);
+    ok( res == ERROR_SUCCESS , "Failed to set summary info\n" );
 
     res = create_directory_table(hdb);
     ok( res == ERROR_SUCCESS , "Failed to create directory table\n" );
@@ -4217,6 +4216,7 @@ static void test_integers(void)
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
 
     r = MsiViewGetColumnInfo(view, MSICOLINFO_NAMES, &rec);
+    ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
     count = MsiRecordGetFieldCount(rec);
     ok(count == 8, "Expected 8, got %d\n", count);
     ok(check_record(rec, 1, "one"), "Expected one\n");
@@ -4230,6 +4230,7 @@ static void test_integers(void)
     MsiCloseHandle(rec);
 
     r = MsiViewGetColumnInfo(view, MSICOLINFO_TYPES, &rec);
+    ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
     count = MsiRecordGetFieldCount(rec);
     ok(count == 8, "Expected 8, got %d\n", count);
     ok(check_record(rec, 1, "I2"), "Expected I2\n");
@@ -4975,7 +4976,6 @@ static void test_collation(void)
     static const WCHAR letter_D[] = {'D',0};
     static const WCHAR letter_a_ring[] = {'a',0x30a,0};
     static const WCHAR letter_a_with_ring[] = {0xe5,0};
-    static const WCHAR letter_a_broken[] = {'a',0xb0,0};
     const char *query;
     MSIHANDLE hdb = 0, hview = 0, hrec = 0;
     UINT r;
@@ -5054,8 +5054,7 @@ static void test_collation(void)
     sz = sizeof(bufferW) / sizeof(bufferW[0]);
     r = MsiRecordGetStringW(hrec, 1, bufferW, &sz);
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
-    ok(!memcmp(bufferW, letter_a_ring, sizeof(letter_a_ring)) ||
-       broken(!memcmp(bufferW, letter_a_broken, sizeof(letter_a_broken))) /* win9x */,
+    ok(!memcmp(bufferW, letter_a_ring, sizeof(letter_a_ring)),
        "Expected %s, got %s\n", wine_dbgstr_w(letter_a_ring), wine_dbgstr_w(bufferW));
     sz = sizeof(bufferW) / sizeof(bufferW[0]);
     r = MsiRecordGetStringW(hrec, 2, bufferW, &sz);
@@ -5257,6 +5256,7 @@ static void test_select_markers(void)
 static void test_viewmodify_update(void)
 {
     MSIHANDLE hdb = 0, hview = 0, hrec = 0;
+    UINT i, test_max, offset, count;
     const char *query;
     UINT r;
 
@@ -5417,6 +5417,90 @@ static void test_viewmodify_update(void)
 
     r = MsiViewFetch(hview, &hrec);
     ok(r == ERROR_NO_MORE_ITEMS, "Expected ERROR_NO_MORE_ITEMS, got %d\n", r);
+
+    r = MsiViewClose(hview);
+    ok(r == ERROR_SUCCESS, "MsiViewClose failed\n");
+    r = MsiCloseHandle(hview);
+    ok(r == ERROR_SUCCESS, "MsiCloseHandle failed\n");
+
+    query = "CREATE TABLE `table2` (`A` INT, `B` INT PRIMARY KEY `A`)";
+    r = run_query( hdb, 0, query );
+    ok(r == ERROR_SUCCESS, "query failed\n");
+
+    query = "INSERT INTO `table2` (`A`, `B`) VALUES (?, ?)";
+    r = MsiDatabaseOpenView( hdb, query, &hview );
+    ok(r == ERROR_SUCCESS, "MsiDatabaseOpenView failed\n");
+
+    test_max = 100;
+    offset = 1234;
+    for(i = 0; i < test_max; i++)
+    {
+
+        hrec = MsiCreateRecord( 2 );
+        MsiRecordSetInteger( hrec, 1, test_max - i );
+        MsiRecordSetInteger( hrec, 2, i );
+
+        r = MsiViewExecute( hview, hrec );
+        ok(r == ERROR_SUCCESS, "Got %d\n", r);
+
+        r = MsiCloseHandle( hrec );
+        ok(r == ERROR_SUCCESS, "Got %d\n", r);
+    }
+
+    r = MsiViewClose( hview );
+    ok(r == ERROR_SUCCESS, "Got %d\n", r);
+    r = MsiCloseHandle( hview );
+    ok(r == ERROR_SUCCESS, "Got %d\n", r);
+
+    /* Update. */
+    query = "SELECT * FROM `table2` ORDER BY `B`";
+    r = MsiDatabaseOpenView( hdb, query, &hview);
+    ok(r == ERROR_SUCCESS, "MsiDatabaseOpenView failed\n");
+    r = MsiViewExecute( hview, 0 );
+    ok(r == ERROR_SUCCESS, "MsiViewExecute failed\n");
+
+    count = 0;
+    while (MsiViewFetch( hview, &hrec ) == ERROR_SUCCESS)
+    {
+        UINT b = MsiRecordGetInteger( hrec, 2 );
+
+        r = MsiRecordSetInteger( hrec, 2, b + offset);
+        ok(r == ERROR_SUCCESS, "Got %d\n", r);
+
+        r = MsiViewModify( hview, MSIMODIFY_UPDATE, hrec );
+        ok(r == ERROR_SUCCESS, "Got %d\n", r);
+
+        r = MsiCloseHandle(hrec);
+        ok(r == ERROR_SUCCESS, "failed to close record\n");
+        count++;
+    }
+    ok(count == test_max, "Got count %d\n", count);
+
+    r = MsiViewClose(hview);
+    ok(r == ERROR_SUCCESS, "MsiViewClose failed\n");
+    r = MsiCloseHandle(hview);
+    ok(r == ERROR_SUCCESS, "MsiCloseHandle failed\n");
+
+    /* Recheck. */
+    query = "SELECT * FROM `table2` ORDER BY `B`";
+    r = MsiDatabaseOpenView( hdb, query, &hview);
+    ok(r == ERROR_SUCCESS, "MsiDatabaseOpenView failed\n");
+    r = MsiViewExecute( hview, 0 );
+    ok(r == ERROR_SUCCESS, "MsiViewExecute failed\n");
+
+    count = 0;
+    while (MsiViewFetch( hview, &hrec ) == ERROR_SUCCESS)
+    {
+        UINT a = MsiRecordGetInteger( hrec, 1 );
+        UINT b = MsiRecordGetInteger( hrec, 2 );
+        ok( ( test_max - a + offset) == b, "Got (%d, %d), expected (%d, %d)\n",
+            a, b, test_max - a + offset, b);
+
+        r = MsiCloseHandle(hrec);
+        ok(r == ERROR_SUCCESS, "failed to close record\n");
+        count++;
+    }
+    ok(count == test_max, "Got count %d\n", count);
 
     r = MsiViewClose(hview);
     ok(r == ERROR_SUCCESS, "MsiViewClose failed\n");
@@ -8059,10 +8143,12 @@ static void test_dbmerge(void)
 
     size = MAX_PATH;
     r = MsiRecordGetString(hrec, 1, buf, &size);
+    ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
     ok(!lstrcmpA(buf, "Table"), "Expected \"Table\", got \"%s\"\n", buf);
 
     size = MAX_PATH;
     r = MsiRecordGetString(hrec, 2, buf, &size);
+    ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
     ok(!lstrcmpA(buf, "NumRowMergeConflicts"),
        "Expected \"NumRowMergeConflicts\", got \"%s\"\n", buf);
 
@@ -8073,10 +8159,12 @@ static void test_dbmerge(void)
 
     size = MAX_PATH;
     r = MsiRecordGetString(hrec, 1, buf, &size);
+    ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
     ok(!lstrcmpA(buf, "s255"), "Expected \"s255\", got \"%s\"\n", buf);
 
     size = MAX_PATH;
     r = MsiRecordGetString(hrec, 2, buf, &size);
+    ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
     ok(!lstrcmpA(buf, "i2"), "Expected \"i2\", got \"%s\"\n", buf);
 
     MsiCloseHandle(hrec);
@@ -8689,6 +8777,7 @@ static void test_columnorder(void)
 
     query = "SELECT * FROM `T`";
     r = do_query(hdb, query, &rec);
+    ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
 
     sz = MAX_PATH;
     lstrcpyA(buf, "kiwi");
@@ -8914,6 +9003,7 @@ static void test_columnorder(void)
 
     query = "SELECT * FROM `Z`";
     r = do_query(hdb, query, &rec);
+    ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
 
     r = MsiRecordGetInteger(rec, 1);
     ok(r == 2, "Expected 2, got %d\n", r);
@@ -9163,6 +9253,39 @@ static void test_createtable(void)
     DeleteFileA(msifile);
 }
 
+static void test_embedded_nulls(void)
+{
+    static const char control_table[] =
+        "Dialog\tText\n"
+        "s72\tL0\n"
+        "Control\tDialog\n"
+        "LicenseAgreementDlg\ttext\x11\x19text\0text";
+    UINT r, sz;
+    MSIHANDLE hdb, hrec;
+    char buffer[32];
+
+    r = MsiOpenDatabaseA( msifile, MSIDBOPEN_CREATE, &hdb );
+    ok( r == ERROR_SUCCESS, "failed to open database %u\n", r );
+
+    GetCurrentDirectoryA( MAX_PATH, CURR_DIR );
+    write_file( "temp_file", control_table, sizeof(control_table) );
+    r = MsiDatabaseImportA( hdb, CURR_DIR, "temp_file" );
+    ok( r == ERROR_SUCCESS, "failed to import table %u\n", r );
+    DeleteFileA( "temp_file" );
+
+    r = do_query( hdb, "SELECT `Text` FROM `Control` WHERE `Dialog` = 'LicenseAgreementDlg'", &hrec );
+    ok( r == ERROR_SUCCESS, "query failed %u\n", r );
+
+    buffer[0] = 0;
+    sz = sizeof(buffer);
+    r = MsiRecordGetStringA( hrec, 1, buffer, &sz );
+    ok( r == ERROR_SUCCESS, "failed to get string %u\n", r );
+    ok( !memcmp( "text\r\ntext\ntext", buffer, sizeof("text\r\ntext\ntext") - 1 ), "wrong buffer contents \"%s\"\n", buffer );
+
+    MsiCloseHandle( hrec );
+    MsiCloseHandle( hdb );
+    DeleteFileA( msifile );
+}
 
 START_TEST(db)
 {
@@ -9217,4 +9340,5 @@ START_TEST(db)
     test_suminfo_import();
     test_createtable();
     test_collation();
+    test_embedded_nulls();
 }

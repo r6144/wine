@@ -12,14 +12,15 @@
 /* Define to 1 if you have the <alias.h> header file. */
 #undef HAVE_ALIAS_H
 
-/* Define if you have ALSA 1.x including devel headers */
-#undef HAVE_ALSA
-
 /* Define to 1 if you have the <alsa/asoundlib.h> header file. */
 #undef HAVE_ALSA_ASOUNDLIB_H
 
 /* Define to 1 if you have the <AL/al.h> header file. */
 #undef HAVE_AL_AL_H
+
+/* Define to 1 if you have the <ApplicationServices/ApplicationServices.h>
+   header file. */
+#undef HAVE_APPLICATIONSERVICES_APPLICATIONSERVICES_H
 
 /* Define to 1 if you have the <arpa/inet.h> header file. */
 #undef HAVE_ARPA_INET_H
@@ -36,6 +37,9 @@
 /* Define to 1 if you have the <AudioToolbox/AudioConverter.h> header file. */
 #undef HAVE_AUDIOTOOLBOX_AUDIOCONVERTER_H
 
+/* Define to 1 if you have the <AudioUnit/AudioComponent.h> header file. */
+#undef HAVE_AUDIOUNIT_AUDIOCOMPONENT_H
+
 /* Define to 1 if you have the <AudioUnit/AudioUnit.h> header file. */
 #undef HAVE_AUDIOUNIT_AUDIOUNIT_H
 
@@ -44,6 +48,9 @@
 
 /* Define to 1 if you have the <audio/soundlib.h> header file. */
 #undef HAVE_AUDIO_SOUNDLIB_H
+
+/* Define to 1 if you have the `AUGraphAddNode' function. */
+#undef HAVE_AUGRAPHADDNODE
 
 /* Define to 1 if you have the <capi20.h> header file. */
 #undef HAVE_CAPI20_H
@@ -54,8 +61,8 @@
 /* Define to 1 if you have the `chsize' function. */
 #undef HAVE_CHSIZE
 
-/* Define to 1 if you have the <CL/opencl.h> header file. */
-#undef HAVE_CL_OPENCL_H
+/* Define to 1 if you have the <CL/cl.h> header file. */
+#undef HAVE_CL_CL_H
 
 /* Define to 1 if you have the <CoreAudio/CoreAudio.h> header file. */
 #undef HAVE_COREAUDIO_COREAUDIO_H
@@ -96,9 +103,6 @@
 
 /* Define to 1 if you have the `epoll_create' function. */
 #undef HAVE_EPOLL_CREATE
-
-/* Define if you have EsounD sound server */
-#undef HAVE_ESD
 
 /* Define to 1 if you have the `ffs' function. */
 #undef HAVE_FFS
@@ -196,6 +200,9 @@
 /* Define to 1 if you have the `getaddrinfo' function. */
 #undef HAVE_GETADDRINFO
 
+/* Define to 1 if you have the `getattrlist' function. */
+#undef HAVE_GETATTRLIST
+
 /* Define to 1 if you have the `getdirentries' function. */
 #undef HAVE_GETDIRENTRIES
 
@@ -226,8 +233,8 @@
 /* Define to 1 if you have the `getservbyport' function. */
 #undef HAVE_GETSERVBYPORT
 
-/* Define to 1 if you have the `gettid' function. */
-#undef HAVE_GETTID
+/* Define to 1 if you have the <gettext-po.h> header file. */
+#undef HAVE_GETTEXT_PO_H
 
 /* Define to 1 if you have the `gettimeofday' function. */
 #undef HAVE_GETTIMEOFDAY
@@ -258,9 +265,6 @@
 
 /* Define to 1 if you have the <hal/libhal.h> header file. */
 #undef HAVE_HAL_LIBHAL_H
-
-/* Define to 1 if you have the <icns.h> header file. */
-#undef HAVE_ICNS_H
 
 /* Define to 1 if you have the <ieeefp.h> header file. */
 #undef HAVE_IEEEFP_H
@@ -355,6 +359,9 @@
 /* Define to 1 if you have the `ldap_parse_vlv_control' function. */
 #undef HAVE_LDAP_PARSE_VLV_CONTROL
 
+/* Define to 1 if you have the `gettextpo' library (-lgettextpo). */
+#undef HAVE_LIBGETTEXTPO
+
 /* Define to 1 if you have the `i386' library (-li386). */
 #undef HAVE_LIBI386
 
@@ -369,6 +376,12 @@
 
 /* Define to 1 if you have the <libxml/parser.h> header file. */
 #undef HAVE_LIBXML_PARSER_H
+
+/* Define to 1 if you have the <libxml/SAX2.h> header file. */
+#undef HAVE_LIBXML_SAX2_H
+
+/* Define to 1 if you have the <libxml/xmlsave.h> header file. */
+#undef HAVE_LIBXML_XMLSAVE_H
 
 /* Define if you have the X Shape extension */
 #undef HAVE_LIBXSHAPE
@@ -448,9 +461,6 @@
 /* Define to 1 if you have the <machine/limits.h> header file. */
 #undef HAVE_MACHINE_LIMITS_H
 
-/* Define to 1 if you have the <machine/soundcard.h> header file. */
-#undef HAVE_MACHINE_SOUNDCARD_H
-
 /* Define to 1 if you have the <machine/sysarch.h> header file. */
 #undef HAVE_MACHINE_SYSARCH_H
 
@@ -489,9 +499,6 @@
 
 /* Define to 1 if you have the <mpg123.h> header file. */
 #undef HAVE_MPG123_H
-
-/* Define if you have NAS including devel headers */
-#undef HAVE_NAS
 
 /* Define to 1 if you have the <ncurses.h> header file. */
 #undef HAVE_NCURSES_H
@@ -589,6 +596,9 @@
 /* Define to 1 if you have the <openssl/ssl.h> header file. */
 #undef HAVE_OPENSSL_SSL_H
 
+/* Define to 1 if `numaudioengines' is a member of `oss_sysinfo'. */
+#undef HAVE_OSS_SYSINFO_NUMAUDIOENGINES
+
 /* Define to 1 if you have the `pclose' function. */
 #undef HAVE_PCLOSE
 
@@ -661,6 +671,9 @@
 /* Define to 1 if you have the `pwrite' function. */
 #undef HAVE_PWRITE
 
+/* Define to 1 if you have the <QuickTime/ImageCompression.h> header file. */
+#undef HAVE_QUICKTIME_IMAGECOMPRESSION_H
+
 /* Define to 1 if you have the `readdir' function. */
 #undef HAVE_READDIR
 
@@ -699,6 +712,9 @@
 
 /* Define to 1 if you have the <scsi/sg.h> header file. */
 #undef HAVE_SCSI_SG_H
+
+/* Define to 1 if you have the <Security/Security.h> header file. */
+#undef HAVE_SECURITY_SECURITY_H
 
 /* Define to 1 if you have the `select' function. */
 #undef HAVE_SELECT
@@ -741,9 +757,6 @@
 
 /* Define to 1 if you have the `socketpair' function. */
 #undef HAVE_SOCKETPAIR
-
-/* Define to 1 if you have the <soundcard.h> header file. */
-#undef HAVE_SOUNDCARD_H
 
 /* Define to 1 if you have the `spawnvp' function. */
 #undef HAVE_SPAWNVP
@@ -874,6 +887,9 @@
 /* Define to 1 if you have the <sys/asoundlib.h> header file. */
 #undef HAVE_SYS_ASOUNDLIB_H
 
+/* Define to 1 if you have the <sys/attr.h> header file. */
+#undef HAVE_SYS_ATTR_H
+
 /* Define to 1 if you have the <sys/cdio.h> header file. */
 #undef HAVE_SYS_CDIO_H
 
@@ -960,9 +976,6 @@
 
 /* Define to 1 if you have the <sys/sockio.h> header file. */
 #undef HAVE_SYS_SOCKIO_H
-
-/* Define to 1 if you have the <sys/soundcard.h> header file. */
-#undef HAVE_SYS_SOUNDCARD_H
 
 /* Define to 1 if you have the <sys/statfs.h> header file. */
 #undef HAVE_SYS_STATFS_H
@@ -1081,6 +1094,9 @@
 /* Define to 1 if you have the <X11/extensions/Xinerama.h> header file. */
 #undef HAVE_X11_EXTENSIONS_XINERAMA_H
 
+/* Define to 1 if you have the <X11/extensions/XInput2.h> header file. */
+#undef HAVE_X11_EXTENSIONS_XINPUT2_H
+
 /* Define to 1 if you have the <X11/extensions/XInput.h> header file. */
 #undef HAVE_X11_EXTENSIONS_XINPUT_H
 
@@ -1105,7 +1121,10 @@
 /* Define to 1 if you have the <X11/Xutil.h> header file. */
 #undef HAVE_X11_XUTIL_H
 
-/* Define to 1 if `callback' is member of `XICCallback'. */
+/* Define to 1 if `xcookie' is a member of `XEvent'. */
+#undef HAVE_XEVENT_XCOOKIE
+
+/* Define to 1 if `callback' is a member of `XICCallback'. */
 #undef HAVE_XICCALLBACK_CALLBACK
 
 /* Define if you have the XKB extension */
@@ -1218,9 +1237,6 @@
 
 /* Define to the soname of the libhal library. */
 #undef SONAME_LIBHAL
-
-/* Define to the soname of the libicns library. */
-#undef SONAME_LIBICNS
 
 /* Define to the soname of the libjack library. */
 #undef SONAME_LIBJACK

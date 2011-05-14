@@ -464,7 +464,7 @@ static void MCI_UnmapMsgAtoW(UINT msg, DWORD_PTR dwParam1, DWORD_PTR dwParam2,
             if (!result)
             {
                 WideCharToMultiByte(CP_ACP, 0,
-                                    mci_sysinfoW->lpstrReturn, mci_sysinfoW->dwRetSize,
+                                    mci_sysinfoW->lpstrReturn, -1,
                                     mci_sysinfoA->lpstrReturn, mci_sysinfoA->dwRetSize,
                                     NULL, NULL);
             }
@@ -482,7 +482,7 @@ static void MCI_UnmapMsgAtoW(UINT msg, DWORD_PTR dwParam1, DWORD_PTR dwParam2,
             if (!result)
             {
                 WideCharToMultiByte(CP_ACP, 0,
-                                    mci_infoW->lpstrReturn, mci_infoW->dwRetSize,
+                                    mci_infoW->lpstrReturn, -1,
                                     mci_infoA->lpstrReturn, mci_infoA->dwRetSize,
                                     NULL, NULL);
             }
@@ -625,7 +625,6 @@ static	BOOL		MCI_DumpCommandTable(UINT uTbl)
 {
     const BYTE*	lmem;
     LPCWSTR	str;
-    DWORD	flg;
     WORD	eid;
 
     if (!MCI_IsCommandTableValid(uTbl)) {
@@ -636,9 +635,10 @@ static	BOOL		MCI_DumpCommandTable(UINT uTbl)
     lmem = S_MciCmdTable[uTbl].lpTable;
     do {
 	do {
+	    /* DWORD flg; */
 	    str = (LPCWSTR)lmem;
 	    lmem += (strlenW(str) + 1) * sizeof(WCHAR);
-	    flg = *(const DWORD*)lmem;
+	    /* flg = *(const DWORD*)lmem; */
 	    eid = *(const WORD*)(lmem + sizeof(DWORD));
             /* TRACE("cmd=%s %08lx %04x\n", debugstr_w(str), flg, eid); */
 	    lmem += sizeof(DWORD) + sizeof(WORD);
@@ -978,7 +978,7 @@ static	BOOL		MCI_GetDWord(DWORD* data, LPWSTR* ptr)
     DWORD	val;
     LPWSTR	ret;
 
-    val = strtoulW(*ptr, &ret, 0);
+    val = strtoulW(*ptr, &ret, 10);
 
     switch (*ret) {
     case '\0':	break;

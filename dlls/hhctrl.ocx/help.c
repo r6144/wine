@@ -3,6 +3,7 @@
  *
  * Copyright 2005 James Hawkins
  * Copyright 2007 Jacek Caban for CodeWeavers
+ * Copyright 2011 Owen Rudge for CodeWeavers
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -32,6 +33,7 @@
 WINE_DEFAULT_DEBUG_CHANNEL(htmlhelp);
 
 static LRESULT Help_OnSize(HWND hWnd);
+static void ExpandContract(HHInfo *pHHInfo);
 
 /* Window type defaults */
 
@@ -109,21 +111,15 @@ BOOL NavigateToUrl(HHInfo *info, LPCWSTR surl)
     return ret;
 }
 
-BOOL NavigateToChm(HHInfo *info, LPCWSTR file, LPCWSTR index)
+static BOOL AppendFullPathURL(LPCWSTR file, LPWSTR buf, LPCWSTR index)
 {
-    WCHAR buf[INTERNET_MAX_URL_LENGTH];
-    WCHAR full_path[MAX_PATH];
-    LPWSTR ptr;
-
     static const WCHAR url_format[] =
         {'m','k',':','@','M','S','I','T','S','t','o','r','e',':','%','s',':',':','%','s','%','s',0};
     static const WCHAR slash[] = {'/',0};
     static const WCHAR empty[] = {0};
+    WCHAR full_path[MAX_PATH];
 
-    TRACE("%p %s %s\n", info, debugstr_w(file), debugstr_w(index));
-
-    if (!info->web_browser)
-        return FALSE;
+    TRACE("%s %p %s\n", debugstr_w(file), buf, debugstr_w(index));
 
     if(!GetFullPathNameW(file, sizeof(full_path)/sizeof(full_path[0]), full_path, NULL)) {
         WARN("GetFullPathName failed: %u\n", GetLastError());
@@ -131,12 +127,60 @@ BOOL NavigateToChm(HHInfo *info, LPCWSTR file, LPCWSTR index)
     }
 
     wsprintfW(buf, url_format, full_path, (!index || index[0] == '/') ? empty : slash, index);
+    return TRUE;
+}
+
+BOOL NavigateToChm(HHInfo *info, LPCWSTR file, LPCWSTR index)
+{
+    WCHAR buf[INTERNET_MAX_URL_LENGTH];
+    LPWSTR ptr;
+
+    TRACE("%p %s %s\n", info, debugstr_w(file), debugstr_w(index));
+
+    if ((!info->web_browser) || !AppendFullPathURL(file, buf, index))
+        return FALSE;
 
     /* FIXME: HACK */
     if((ptr = strchrW(buf, '#')))
        *ptr = 0;
 
     return SUCCEEDED(navigate_url(info, buf));
+}
+
+static void DoSync(HHInfo *info)
+{
+    WCHAR buf[INTERNET_MAX_URL_LENGTH];
+    HRESULT hres;
+    DWORD len;
+    BSTR url;
+
+    hres = IWebBrowser2_get_LocationURL(info->web_browser, &url);
+
+    if (FAILED(hres))
+    {
+        WARN("get_LocationURL failed: %08x\n", hres);
+        return;
+    }
+
+    /* If we're not currently viewing a page in the active .chm file, abort */
+    if ((!AppendFullPathURL(info->pszFile, buf, NULL)) || (len = lstrlenW(buf) > lstrlenW(url)))
+    {
+        SysFreeString(url);
+        return;
+    }
+
+    if (lstrcmpiW(buf, url) > 0)
+    {
+        static const WCHAR delimW[] = {':',':','/',0};
+        const WCHAR *index;
+
+        index = strstrW(url, delimW);
+
+        if (index)
+            ActivateContentTopic(info->tabs[TAB_CONTENTS].hwnd, index + 3, info->content); /* skip over ::/ */
+    }
+
+    SysFreeString(url);
 }
 
 /* Size Bar */
@@ -264,9 +308,12 @@ static BOOL HH_AddSizeBar(HHInfo *pHHInfo)
 {
     HWND hWnd;
     HWND hwndParent = pHHInfo->WinType.hwndHelp;
-    DWORD dwStyles = WS_CHILDWINDOW | WS_VISIBLE | WS_OVERLAPPED;
+    DWORD dwStyles = WS_CHILDWINDOW | WS_OVERLAPPED;
     DWORD dwExStyles = WS_EX_LEFT | WS_EX_LTRREADING | WS_EX_RIGHTSCROLLBAR;
     RECT rc;
+
+    if (!pHHInfo->WinType.fNotExpanded)
+        dwStyles |= WS_VISIBLE;
 
     SB_GetSizeBarRect(pHHInfo, &rc);
 
@@ -394,6 +441,7 @@ static LRESULT Child_OnSize(HWND hwnd)
 
     ResizeTabChild(info, TAB_CONTENTS);
     ResizeTabChild(info, TAB_INDEX);
+    ResizeTabChild(info, TAB_SEARCH);
     return 0;
 }
 
@@ -620,6 +668,54 @@ static void HH_RegisterChildWndClass(HHInfo *pHHInfo)
 
 #define ICON_SIZE   20
 
+static void DisplayPopupMenu(HHInfo *info)
+{
+    HMENU menu, submenu;
+    TBBUTTONINFOW button;
+    MENUITEMINFOW item;
+    POINT coords;
+    RECT rect;
+    DWORD index;
+
+    menu = LoadMenuW(hhctrl_hinstance, MAKEINTRESOURCEW(MENU_POPUP));
+
+    if (!menu)
+        return;
+
+    submenu = GetSubMenu(menu, 0);
+
+    /* Update the Show/Hide menu item */
+    item.cbSize = sizeof(MENUITEMINFOW);
+    item.fMask = MIIM_FTYPE | MIIM_STATE | MIIM_STRING;
+    item.fType = MFT_STRING;
+    item.fState = MF_ENABLED;
+
+    if (info->WinType.fNotExpanded)
+        item.dwTypeData = HH_LoadString(IDS_SHOWTABS);
+    else
+        item.dwTypeData = HH_LoadString(IDS_HIDETABS);
+
+    SetMenuItemInfoW(submenu, IDTB_EXPAND, FALSE, &item);
+    heap_free(item.dwTypeData);
+
+    /* Find the index toolbar button */
+    button.cbSize = sizeof(TBBUTTONINFOW);
+    button.dwMask = TBIF_COMMAND;
+    index = SendMessageW(info->WinType.hwndToolBar, TB_GETBUTTONINFOW, IDTB_OPTIONS, (LPARAM) &button);
+
+    if (index == -1)
+       return;
+
+    /* Get position */
+    SendMessageW(info->WinType.hwndToolBar, TB_GETITEMRECT, index, (LPARAM) &rect);
+
+    coords.x = rect.left;
+    coords.y = rect.bottom;
+
+    ClientToScreen(info->WinType.hwndToolBar, &coords);
+    TrackPopupMenu(submenu, TPM_LEFTALIGN | TPM_TOPALIGN | TPM_LEFTBUTTON | TPM_NOANIMATION, coords.x, coords.y, 0, info->WinType.hwndHelp, NULL);
+}
+
 static void TB_OnClick(HWND hWnd, DWORD dwID)
 {
     HHInfo *info = (HHInfo *)GetWindowLongPtrW(hWnd, GWLP_USERDATA);
@@ -641,11 +737,19 @@ static void TB_OnClick(HWND hWnd, DWORD dwID)
         case IDTB_FORWARD:
             DoPageAction(info, WB_GOFORWARD);
             break;
+        case IDTB_PRINT:
+            DoPageAction(info, WB_PRINT);
+            break;
         case IDTB_EXPAND:
         case IDTB_CONTRACT:
+            ExpandContract(info);
+            break;
         case IDTB_SYNC:
-        case IDTB_PRINT:
+            DoSync(info);
+            break;
         case IDTB_OPTIONS:
+            DisplayPopupMenu(info);
+            break;
         case IDTB_BROWSE_FWD:
         case IDTB_BROWSE_BACK:
         case IDTB_JUMP1:
@@ -658,10 +762,9 @@ static void TB_OnClick(HWND hWnd, DWORD dwID)
     }
 }
 
-static void TB_AddButton(TBBUTTON *pButtons, DWORD dwIndex, DWORD dwID)
+static void TB_AddButton(TBBUTTON *pButtons, DWORD dwIndex, DWORD dwID, DWORD dwBitmap)
 {
-    /* FIXME: Load the correct button bitmaps */
-    pButtons[dwIndex].iBitmap = STD_PRINT;
+    pButtons[dwIndex].iBitmap = dwBitmap;
     pButtons[dwIndex].idCommand = dwID;
     pButtons[dwIndex].fsState = TBSTATE_ENABLED;
     pButtons[dwIndex].fsStyle = BTNS_BUTTON;
@@ -669,51 +772,75 @@ static void TB_AddButton(TBBUTTON *pButtons, DWORD dwIndex, DWORD dwID)
     pButtons[dwIndex].iString = 0;
 }
 
-static void TB_AddButtonsFromFlags(TBBUTTON *pButtons, DWORD dwButtonFlags, LPDWORD pdwNumButtons)
+static void TB_AddButtonsFromFlags(HHInfo *pHHInfo, TBBUTTON *pButtons, DWORD dwButtonFlags, LPDWORD pdwNumButtons)
 {
+    int nHistBitmaps = 0, nStdBitmaps = 0, nHHBitmaps = 0;
+    HWND hToolbar = pHHInfo->WinType.hwndToolBar;
+    TBADDBITMAP tbAB;
+
+    /* Common bitmaps */
+    tbAB.hInst = HINST_COMMCTRL;
+    tbAB.nID = IDB_HIST_LARGE_COLOR;
+    nHistBitmaps = SendMessageW(hToolbar, TB_ADDBITMAP, 0, (LPARAM)&tbAB);
+    tbAB.nID = IDB_STD_LARGE_COLOR;
+    nStdBitmaps = SendMessageW(hToolbar, TB_ADDBITMAP, 0, (LPARAM)&tbAB);
+    /* hhctrl.ocx bitmaps */
+    tbAB.hInst = hhctrl_hinstance;
+    tbAB.nID = IDB_HHTOOLBAR;
+    nHHBitmaps = SendMessageW(hToolbar, TB_ADDBITMAP, 0, (LPARAM)&tbAB);
+
     *pdwNumButtons = 0;
 
     if (dwButtonFlags & HHWIN_BUTTON_EXPAND)
-        TB_AddButton(pButtons, (*pdwNumButtons)++, IDTB_EXPAND);
+    {
+        TB_AddButton(pButtons, (*pdwNumButtons)++, IDTB_EXPAND, nHistBitmaps + HIST_VIEWTREE);
+        TB_AddButton(pButtons, (*pdwNumButtons)++, IDTB_CONTRACT, nHistBitmaps + HIST_VIEWTREE);
+
+        if (pHHInfo->WinType.fNotExpanded)
+            pButtons[1].fsState |= TBSTATE_HIDDEN;
+        else
+            pButtons[0].fsState |= TBSTATE_HIDDEN;
+    }
 
     if (dwButtonFlags & HHWIN_BUTTON_BACK)
-        TB_AddButton(pButtons, (*pdwNumButtons)++, IDTB_BACK);
+        TB_AddButton(pButtons, (*pdwNumButtons)++, IDTB_BACK, nHistBitmaps + HIST_BACK);
 
     if (dwButtonFlags & HHWIN_BUTTON_FORWARD)
-        TB_AddButton(pButtons, (*pdwNumButtons)++, IDTB_FORWARD);
+        TB_AddButton(pButtons, (*pdwNumButtons)++, IDTB_FORWARD, nHistBitmaps + HIST_FORWARD);
 
     if (dwButtonFlags & HHWIN_BUTTON_STOP)
-        TB_AddButton(pButtons, (*pdwNumButtons)++, IDTB_STOP);
+        TB_AddButton(pButtons, (*pdwNumButtons)++, IDTB_STOP, nHHBitmaps + HH_STOP);
 
     if (dwButtonFlags & HHWIN_BUTTON_REFRESH)
-        TB_AddButton(pButtons, (*pdwNumButtons)++, IDTB_REFRESH);
+        TB_AddButton(pButtons, (*pdwNumButtons)++, IDTB_REFRESH, nHHBitmaps + HH_REFRESH);
 
     if (dwButtonFlags & HHWIN_BUTTON_HOME)
-        TB_AddButton(pButtons, (*pdwNumButtons)++, IDTB_HOME);
+        TB_AddButton(pButtons, (*pdwNumButtons)++, IDTB_HOME, nHHBitmaps + HH_HOME);
 
+    /* FIXME: Load the correct button bitmaps */
     if (dwButtonFlags & HHWIN_BUTTON_SYNC)
-        TB_AddButton(pButtons, (*pdwNumButtons)++, IDTB_SYNC);
+        TB_AddButton(pButtons, (*pdwNumButtons)++, IDTB_SYNC, nStdBitmaps + STD_PRINT);
 
     if (dwButtonFlags & HHWIN_BUTTON_OPTIONS)
-        TB_AddButton(pButtons, (*pdwNumButtons)++, IDTB_OPTIONS);
+        TB_AddButton(pButtons, (*pdwNumButtons)++, IDTB_OPTIONS, nStdBitmaps + STD_PRINT);
 
     if (dwButtonFlags & HHWIN_BUTTON_PRINT)
-        TB_AddButton(pButtons, (*pdwNumButtons)++, IDTB_PRINT);
+        TB_AddButton(pButtons, (*pdwNumButtons)++, IDTB_PRINT, nStdBitmaps + STD_PRINT);
 
     if (dwButtonFlags & HHWIN_BUTTON_JUMP1)
-        TB_AddButton(pButtons, (*pdwNumButtons)++, IDTB_JUMP1);
+        TB_AddButton(pButtons, (*pdwNumButtons)++, IDTB_JUMP1, nStdBitmaps + STD_PRINT);
 
     if (dwButtonFlags & HHWIN_BUTTON_JUMP2)
-        TB_AddButton(pButtons,(*pdwNumButtons)++, IDTB_JUMP2);
+        TB_AddButton(pButtons,(*pdwNumButtons)++, IDTB_JUMP2, nStdBitmaps + STD_PRINT);
 
     if (dwButtonFlags & HHWIN_BUTTON_ZOOM)
-        TB_AddButton(pButtons, (*pdwNumButtons)++, IDTB_ZOOM);
+        TB_AddButton(pButtons, (*pdwNumButtons)++, IDTB_ZOOM, nStdBitmaps + STD_PRINT);
 
     if (dwButtonFlags & HHWIN_BUTTON_TOC_NEXT)
-        TB_AddButton(pButtons, (*pdwNumButtons)++, IDTB_TOC_NEXT);
+        TB_AddButton(pButtons, (*pdwNumButtons)++, IDTB_TOC_NEXT, nStdBitmaps + STD_PRINT);
 
     if (dwButtonFlags & HHWIN_BUTTON_TOC_PREV)
-        TB_AddButton(pButtons, (*pdwNumButtons)++, IDTB_TOC_PREV);
+        TB_AddButton(pButtons, (*pdwNumButtons)++, IDTB_TOC_PREV, nStdBitmaps + STD_PRINT);
 }
 
 static BOOL HH_AddToolbar(HHInfo *pHHInfo)
@@ -722,7 +849,6 @@ static BOOL HH_AddToolbar(HHInfo *pHHInfo)
     HWND hwndParent = pHHInfo->WinType.hwndHelp;
     DWORD toolbarFlags;
     TBBUTTON buttons[IDTB_TOC_PREV - IDTB_EXPAND];
-    TBADDBITMAP tbAB;
     DWORD dwStyles, dwExStyles;
     DWORD dwNumButtons, dwIndex;
 
@@ -730,8 +856,6 @@ static BOOL HH_AddToolbar(HHInfo *pHHInfo)
         toolbarFlags = pHHInfo->WinType.fsToolBarFlags;
     else
         toolbarFlags = HHWIN_DEF_BUTTONS;
-
-    TB_AddButtonsFromFlags(buttons, toolbarFlags, &dwNumButtons);
 
     dwStyles = WS_CHILDWINDOW | WS_VISIBLE | TBSTYLE_FLAT |
                TBSTYLE_WRAPABLE | TBSTYLE_TOOLTIPS | CCS_NODIVIDER;
@@ -742,15 +866,13 @@ static BOOL HH_AddToolbar(HHInfo *pHHInfo)
                                hhctrl_hinstance, NULL);
     if (!hToolbar)
         return FALSE;
+    pHHInfo->WinType.hwndToolBar = hToolbar;
 
     SendMessageW(hToolbar, TB_SETBITMAPSIZE, 0, MAKELONG(ICON_SIZE, ICON_SIZE));
     SendMessageW(hToolbar, TB_BUTTONSTRUCTSIZE, sizeof(TBBUTTON), 0);
     SendMessageW(hToolbar, WM_SETFONT, (WPARAM)pHHInfo->hFont, TRUE);
 
-    /* FIXME: Load correct icons for all buttons */
-    tbAB.hInst = HINST_COMMCTRL;
-    tbAB.nID = IDB_STD_LARGE_COLOR;
-    SendMessageW(hToolbar, TB_ADDBITMAP, 0, (LPARAM)&tbAB);
+    TB_AddButtonsFromFlags(pHHInfo, buttons, toolbarFlags, &dwNumButtons);
 
     for (dwIndex = 0; dwIndex < dwNumButtons; dwIndex++)
     {
@@ -766,7 +888,6 @@ static BOOL HH_AddToolbar(HHInfo *pHHInfo)
     SendMessageW(hToolbar, TB_AUTOSIZE, 0, 0);
     ShowWindow(hToolbar, SW_SHOW);
 
-    pHHInfo->WinType.hwndToolBar = hToolbar;
     return TRUE;
 }
 
@@ -813,9 +934,12 @@ static BOOL HH_AddNavigationPane(HHInfo *info)
 {
     HWND hWnd, hwndTabCtrl;
     HWND hwndParent = info->WinType.hwndHelp;
-    DWORD dwStyles = WS_CHILDWINDOW | WS_VISIBLE;
+    DWORD dwStyles = WS_CHILDWINDOW;
     DWORD dwExStyles = WS_EX_LEFT | WS_EX_LTRREADING | WS_EX_RIGHTSCROLLBAR;
     RECT rc;
+
+    if (!info->WinType.fNotExpanded)
+        dwStyles |= WS_VISIBLE;
 
     NP_GetNavigationRect(info, &rc);
 
@@ -827,7 +951,7 @@ static BOOL HH_AddNavigationPane(HHInfo *info)
 
     SetWindowLongPtrW(hWnd, GWLP_USERDATA, (LONG_PTR)info);
 
-    hwndTabCtrl = CreateWindowExW(dwExStyles, WC_TABCONTROLW, szEmpty, dwStyles,
+    hwndTabCtrl = CreateWindowExW(dwExStyles, WC_TABCONTROLW, szEmpty, dwStyles | WS_VISIBLE,
                                   0, TAB_TOP_PADDING,
                                   rc.right - TAB_RIGHT_PADDING,
                                   rc.bottom - TAB_TOP_PADDING,
@@ -862,10 +986,16 @@ static void HP_GetHTMLRect(HHInfo *info, RECT *rc)
 
     GetClientRect(info->WinType.hwndHelp, &rectWND);
     GetClientRect(info->WinType.hwndToolBar, &rectTB);
-    GetClientRect(info->WinType.hwndNavigation, &rectNP);
     GetClientRect(info->hwndSizeBar, &rectSB);
 
-    rc->left = rectNP.right + rectSB.right;
+    if (info->WinType.fNotExpanded)
+        rc->left = 0;
+    else
+    {
+        GetClientRect(info->WinType.hwndNavigation, &rectNP);
+        rc->left = rectNP.right + rectSB.right;
+    }
+
     rc->top = rectTB.bottom;
     rc->right = rectWND.right - rc->left;
     rc->bottom = rectWND.bottom - rectTB.bottom;
@@ -1201,6 +1331,37 @@ static BOOL AddIndexPopup(HHInfo *info)
 
 /* Viewer Window */
 
+static void ExpandContract(HHInfo *pHHInfo)
+{
+    RECT r, nav;
+
+    pHHInfo->WinType.fNotExpanded = !pHHInfo->WinType.fNotExpanded;
+    GetWindowRect(pHHInfo->WinType.hwndHelp, &r);
+    NP_GetNavigationRect(pHHInfo, &nav);
+
+    /* hide/show both the nav bar and the size bar */
+    if (pHHInfo->WinType.fNotExpanded)
+    {
+        ShowWindow(pHHInfo->WinType.hwndNavigation, SW_HIDE);
+        ShowWindow(pHHInfo->hwndSizeBar, SW_HIDE);
+        r.left = r.left + nav.right;
+
+        SendMessageW(pHHInfo->WinType.hwndToolBar, TB_HIDEBUTTON, IDTB_EXPAND, MAKELPARAM(FALSE, 0));
+        SendMessageW(pHHInfo->WinType.hwndToolBar, TB_HIDEBUTTON, IDTB_CONTRACT, MAKELPARAM(TRUE, 0));
+    }
+    else
+    {
+        ShowWindow(pHHInfo->WinType.hwndNavigation, SW_SHOW);
+        ShowWindow(pHHInfo->hwndSizeBar, SW_SHOW);
+        r.left = r.left - nav.right;
+
+        SendMessageW(pHHInfo->WinType.hwndToolBar, TB_HIDEBUTTON, IDTB_EXPAND, MAKELPARAM(TRUE, 0));
+        SendMessageW(pHHInfo->WinType.hwndToolBar, TB_HIDEBUTTON, IDTB_CONTRACT, MAKELPARAM(FALSE, 0));
+    }
+
+    MoveWindow(pHHInfo->WinType.hwndHelp, r.left, r.top, r.right-r.left, r.bottom-r.top, TRUE);
+}
+
 static LRESULT Help_OnSize(HWND hWnd)
 {
     HHInfo *pHHInfo = (HHInfo *)GetWindowLongPtrW(hWnd, GWLP_USERDATA);
@@ -1210,13 +1371,17 @@ static LRESULT Help_OnSize(HWND hWnd)
     if (!pHHInfo)
         return 0;
 
-    NP_GetNavigationRect(pHHInfo, &rc);
-    SetWindowPos(pHHInfo->WinType.hwndNavigation, HWND_TOP, 0, 0,
-                 rc.right, rc.bottom, SWP_NOMOVE);
+    if (!pHHInfo->WinType.fNotExpanded)
+    {
+        NP_GetNavigationRect(pHHInfo, &rc);
+        SetWindowPos(pHHInfo->WinType.hwndNavigation, HWND_TOP, 0, 0,
+                     rc.right, rc.bottom, SWP_NOMOVE);
 
-    SB_GetSizeBarRect(pHHInfo, &rc);
-    SetWindowPos(pHHInfo->hwndSizeBar, HWND_TOP, rc.left, rc.top,
-                 rc.right, rc.bottom, SWP_SHOWWINDOW);
+        SB_GetSizeBarRect(pHHInfo, &rc);
+        SetWindowPos(pHHInfo->hwndSizeBar, HWND_TOP, rc.left, rc.top,
+                     rc.right, rc.bottom, SWP_SHOWWINDOW);
+
+    }
 
     HP_GetHTMLRect(pHHInfo, &rc);
     SetWindowPos(pHHInfo->WinType.hwndHTML, HWND_TOP, rc.left, rc.top,
@@ -1310,6 +1475,19 @@ static BOOL HH_CreateHelpWindow(HHInfo *info)
         height = WINTYPE_DEFAULT_HEIGHT;
     }
 
+    if (info->WinType.fNotExpanded)
+    {
+        if (!(info->WinType.fsValidMembers & HHWIN_PARAM_NAV_WIDTH) &&
+              info->WinType.iNavWidth == 0)
+        {
+            info->WinType.iNavWidth = WINTYPE_DEFAULT_NAVWIDTH;
+        }
+
+        x += info->WinType.iNavWidth;
+        width -= info->WinType.iNavWidth;
+    }
+
+
     caption = info->WinType.pszCaption;
     if (!*caption) caption = info->pCHMInfo->defTitle;
 
@@ -1332,7 +1510,7 @@ static void HH_CreateFont(HHInfo *pHHInfo)
 {
     LOGFONTW lf;
 
-    GetObjectW(GetStockObject(ANSI_VAR_FONT), sizeof(LOGFONTW), &lf);
+    GetObjectW(GetStockObject(DEFAULT_GUI_FONT), sizeof(LOGFONTW), &lf);
     lf.lfWeight = FW_NORMAL;
     lf.lfItalic = FALSE;
     lf.lfUnderline = FALSE;

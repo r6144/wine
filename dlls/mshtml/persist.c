@@ -48,15 +48,22 @@ typedef struct {
     LPOLESTR url;
 } download_proc_task_t;
 
-static BOOL use_gecko_script(LPCWSTR url)
+static BOOL use_gecko_script(HTMLWindow *window)
 {
-    static const WCHAR fileW[] = {'f','i','l','e',':'};
-    static const WCHAR aboutW[] = {'a','b','o','u','t',':'};
-    static const WCHAR resW[] = {'r','e','s',':'};
+    DWORD zone;
+    HRESULT hres;
 
-    return strncmpiW(fileW, url, sizeof(fileW)/sizeof(WCHAR))
-        && strncmpiW(aboutW, url, sizeof(aboutW)/sizeof(WCHAR))
-        && strncmpiW(resW, url, sizeof(resW)/sizeof(WCHAR));
+    static const WCHAR aboutW[] = {'a','b','o','u','t',':'};
+
+    hres = IInternetSecurityManager_MapUrlToZone(window->secmgr, window->url, &zone, 0);
+    if(FAILED(hres)) {
+        WARN("Could not map %s to zone: %08x\n", debugstr_w(window->url), hres);
+        return TRUE;
+    }
+
+    TRACE("zone %d\n", zone);
+    return zone != URLZONE_LOCAL_MACHINE && zone != URLZONE_TRUSTED
+        && strncmpiW(aboutW, window->url, sizeof(aboutW)/sizeof(WCHAR));
 }
 
 void set_current_mon(HTMLWindow *This, IMoniker *mon)
@@ -83,7 +90,7 @@ void set_current_mon(HTMLWindow *This, IMoniker *mon)
     if(FAILED(hres))
         WARN("GetDisplayName failed: %08x\n", hres);
 
-    set_script_mode(This, use_gecko_script(This->url) ? SCRIPTMODE_GECKO : SCRIPTMODE_ACTIVESCRIPT);
+    set_script_mode(This, use_gecko_script(This) ? SCRIPTMODE_GECKO : SCRIPTMODE_ACTIVESCRIPT);
 }
 
 static void set_progress_proc(task_t *_task)
@@ -203,9 +210,9 @@ HRESULT set_moniker(HTMLDocument *This, IMoniker *mon, IBindCtx *pibc, nsChannel
         hres = get_client_disp_property(This->doc_obj->client,
                 DISPID_AMBIENT_OFFLINEIFNOTCONNECTED, &offline);
         if(SUCCEEDED(hres)) {
-            if(V_VT(&silent) != VT_BOOL)
-                WARN("V_VT(offline) = %d\n", V_VT(&silent));
-            else if(V_BOOL(&silent))
+            if(V_VT(&offline) != VT_BOOL)
+                WARN("V_VT(offline) = %d\n", V_VT(&offline));
+            else if(V_BOOL(&offline))
                 FIXME("offline == true\n");
         }
     }
@@ -233,7 +240,7 @@ HRESULT set_moniker(HTMLDocument *This, IMoniker *mon, IBindCtx *pibc, nsChannel
                 IOleCommandTarget_Exec(cmdtrg, &CGID_ShellDocView, 37, 0, &var, NULL);
             }else {
                 V_VT(&var) = VT_UNKNOWN;
-                V_UNKNOWN(&var) = (IUnknown*)HTMLWINDOW2(This->window);
+                V_UNKNOWN(&var) = (IUnknown*)&This->window->IHTMLWindow2_iface;
                 V_VT(&out) = VT_EMPTY;
                 hres = IOleCommandTarget_Exec(cmdtrg, &CGID_ShellDocView, 63, 0, &var, &out);
                 if(SUCCEEDED(hres))
@@ -257,6 +264,9 @@ HRESULT set_moniker(HTMLDocument *This, IMoniker *mon, IBindCtx *pibc, nsChannel
 
     if(SUCCEEDED(hres))
     {
+        remove_target_tasks(This->task_magic);
+        abort_document_bindings(This->doc_node);
+
         hres = load_nsuri(This->window, nsuri, bscallback, LOAD_INITIAL_DOCUMENT_URI);
         nsISupports_Release((nsISupports*)nsuri); /* FIXME */
         if(SUCCEEDED(hres))

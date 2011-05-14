@@ -64,25 +64,25 @@ struct WININET_ErrorDlgParams
  */
 static BOOL WININET_GetProxyServer( HINTERNET hRequest, LPWSTR szBuf, DWORD sz )
 {
-    http_request_t *lpwhr;
-    http_session_t *lpwhs = NULL;
+    http_request_t *request;
+    http_session_t *session = NULL;
     appinfo_t *hIC = NULL;
     BOOL ret = FALSE;
     LPWSTR p;
 
-    lpwhr = (http_request_t*) WININET_GetObject( hRequest );
-    if (NULL == lpwhr)
+    request = (http_request_t*) get_handle_object( hRequest );
+    if (NULL == request)
         return FALSE;
 
-    lpwhs = lpwhr->lpHttpSession;
-    if (NULL == lpwhs)
+    session = request->session;
+    if (NULL == session)
         goto done;
 
-    hIC = lpwhs->lpAppInfo;
+    hIC = session->appInfo;
     if (NULL == hIC)
         goto done;
 
-    lstrcpynW(szBuf, hIC->lpszProxy, sz);
+    lstrcpynW(szBuf, hIC->proxy, sz);
 
     /* FIXME: perhaps it would be better to use InternetCrackUrl here */
     p = strchrW(szBuf, ':');
@@ -92,7 +92,7 @@ static BOOL WININET_GetProxyServer( HINTERNET hRequest, LPWSTR szBuf, DWORD sz )
     ret = TRUE;
 
 done:
-    WININET_Release( &lpwhr->hdr );
+    WININET_Release( &request->hdr );
     return ret;
 }
 
@@ -103,24 +103,24 @@ done:
  */
 static BOOL WININET_GetServer( HINTERNET hRequest, LPWSTR szBuf, DWORD sz )
 {
-    http_request_t *lpwhr;
-    http_session_t *lpwhs = NULL;
+    http_request_t *request;
+    http_session_t *session = NULL;
     BOOL ret = FALSE;
 
-    lpwhr = (http_request_t*) WININET_GetObject( hRequest );
-    if (NULL == lpwhr)
+    request = (http_request_t*) get_handle_object( hRequest );
+    if (NULL == request)
         return FALSE;
 
-    lpwhs = lpwhr->lpHttpSession;
-    if (NULL == lpwhs)
+    session = request->session;
+    if (NULL == session)
         goto done;
 
-    lstrcpynW(szBuf, lpwhs->lpszHostName, sz);
+    lstrcpynW(szBuf, session->hostName, sz);
 
     ret = TRUE;
 
 done:
-    WININET_Release( &lpwhr->hdr );
+    WININET_Release( &request->hdr );
     return ret;
 }
 
@@ -241,17 +241,17 @@ static BOOL WININET_GetSetPassword( HWND hdlg, LPCWSTR szServer,
 static BOOL WININET_SetAuthorization( HINTERNET hRequest, LPWSTR username,
                                       LPWSTR password, BOOL proxy )
 {
-    http_request_t *lpwhr;
-    http_session_t *lpwhs;
+    http_request_t *request;
+    http_session_t *session;
     BOOL ret = FALSE;
     LPWSTR p, q;
 
-    lpwhr = (http_request_t*) WININET_GetObject( hRequest );
-    if( !lpwhr )
+    request = (http_request_t*) get_handle_object( hRequest );
+    if( !request )
         return FALSE;
 
-    lpwhs = lpwhr->lpHttpSession;
-    if (NULL == lpwhs ||  lpwhs->hdr.htype != WH_HHTTPSESSION)
+    session = request->session;
+    if (NULL == session ||  session->hdr.htype != WH_HHTTPSESSION)
     {
         INTERNET_SetLastError(ERROR_INTERNET_INCORRECT_HANDLE_TYPE);
         goto done;
@@ -270,27 +270,27 @@ static BOOL WININET_SetAuthorization( HINTERNET hRequest, LPWSTR username,
 
     if (proxy)
     {
-        appinfo_t *hIC = lpwhs->lpAppInfo;
+        appinfo_t *hIC = session->appInfo;
 
-        HeapFree(GetProcessHeap(), 0, hIC->lpszProxyUsername);
-        hIC->lpszProxyUsername = p;
+        HeapFree(GetProcessHeap(), 0, hIC->proxyUsername);
+        hIC->proxyUsername = p;
 
-        HeapFree(GetProcessHeap(), 0, hIC->lpszProxyPassword);
-        hIC->lpszProxyPassword = q;
+        HeapFree(GetProcessHeap(), 0, hIC->proxyPassword);
+        hIC->proxyPassword = q;
     }
     else
     {
-        HeapFree(GetProcessHeap(), 0, lpwhs->lpszUserName);
-        lpwhs->lpszUserName = p;
+        HeapFree(GetProcessHeap(), 0, session->userName);
+        session->userName = p;
 
-        HeapFree(GetProcessHeap(), 0, lpwhs->lpszPassword);
-        lpwhs->lpszPassword = q;
+        HeapFree(GetProcessHeap(), 0, session->password);
+        session->password = q;
     }
 
     ret = TRUE;
 
 done:
-    WININET_Release( &lpwhr->hdr );
+    WININET_Release( &request->hdr );
     return ret;
 }
 

@@ -27,3 +27,13 @@
 #define IDS_INDEX       2
 #define IDS_SEARCH      3
 #define IDS_FAVORITES   4
+#define IDS_HIDETABS    5
+#define IDS_SHOWTABS    6
+
+#define MENU_POPUP      1
+
+#define IDB_HHTOOLBAR   1000
+/* IDB_HHTOOLBAR bitmaps: */
+#define HH_STOP         0
+#define HH_REFRESH      1
+#define HH_HOME         2

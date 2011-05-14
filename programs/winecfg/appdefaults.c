@@ -29,6 +29,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
+#include "wine/unicode.h"
 #include "winecfg.h"
 #include "resource.h"
 
@@ -48,31 +49,33 @@ static const struct
     const char *szProductType;
 } win_versions[] =
 {
-    { "win7",    "Windows 7",      6,  1, 0x1DB1,VER_PLATFORM_WIN32_NT, "Service Pack 1", 1, 0, "WinNT"},
-    { "win2008", "Windows 2008",   6,  0, 0x1771,VER_PLATFORM_WIN32_NT, "Service Pack 1", 0, 0, "ServerNT"},
-    { "vista",   "Windows Vista",  6,  0, 0x1772,VER_PLATFORM_WIN32_NT, "Service Pack 2", 2, 0, "WinNT"},
-    { "win2003", "Windows 2003",   5,  2, 0xECE, VER_PLATFORM_WIN32_NT, "Service Pack 2", 2, 0, "ServerNT"},
-    { "winxp",   "Windows XP",     5,  1, 0xA28, VER_PLATFORM_WIN32_NT, "Service Pack 3", 3, 0, "WinNT"},
-    { "win2k",   "Windows 2000",   5,  0, 0x893, VER_PLATFORM_WIN32_NT, "Service Pack 4", 4, 0, "WinNT"},
-    { "winme",   "Windows ME",     4, 90, 0xBB8, VER_PLATFORM_WIN32_WINDOWS, " ", 0, 0, ""},
-    { "win98",   "Windows 98",     4, 10, 0x8AE, VER_PLATFORM_WIN32_WINDOWS, " A ", 0, 0, ""},
-    { "win95",   "Windows 95",     4,  0, 0x3B6, VER_PLATFORM_WIN32_WINDOWS, "", 0, 0, ""},
-    { "nt40",    "Windows NT 4.0", 4,  0, 0x565, VER_PLATFORM_WIN32_NT, "Service Pack 6a", 6, 0, "WinNT"},
-    { "nt351",   "Windows NT 3.5", 3, 51, 0x421, VER_PLATFORM_WIN32_NT, "Service Pack 2", 0, 0, "WinNT"},
-    { "win31",   "Windows 3.1",    2, 10,     0, VER_PLATFORM_WIN32s, "Win32s 1.3", 0, 0, ""},
-    { "win30",   "Windows 3.0",    3,  0,     0, VER_PLATFORM_WIN32s, "Win32s 1.3", 0, 0, ""},
-    { "win20",   "Windows 2.0",    2,  0,     0, VER_PLATFORM_WIN32s, "Win32s 1.3", 0, 0, ""}
+    { "win2008r2",   "Windows 2008 R2",   6,  1, 0x1DB1,VER_PLATFORM_WIN32_NT, "Service Pack 1", 1, 0, "ServerNT"},
+    { "win7",        "Windows 7",         6,  1, 0x1DB1,VER_PLATFORM_WIN32_NT, "Service Pack 1", 1, 0, "WinNT"},
+    { "win2008",     "Windows 2008",      6,  0, 0x1771,VER_PLATFORM_WIN32_NT, "Service Pack 1", 0, 0, "ServerNT"},
+    { "vista",       "Windows Vista",     6,  0, 0x1772,VER_PLATFORM_WIN32_NT, "Service Pack 2", 2, 0, "WinNT"},
+    { "win2003",     "Windows 2003",      5,  2, 0xECE, VER_PLATFORM_WIN32_NT, "Service Pack 2", 2, 0, "ServerNT"},
+    { "winxp",       "Windows XP",        5,  1, 0xA28, VER_PLATFORM_WIN32_NT, "Service Pack 3", 3, 0, "WinNT"},
+    { "win2k",       "Windows 2000",      5,  0, 0x893, VER_PLATFORM_WIN32_NT, "Service Pack 4", 4, 0, "WinNT"},
+    { "winme",       "Windows ME",        4, 90, 0xBB8, VER_PLATFORM_WIN32_WINDOWS, " ", 0, 0, ""},
+    { "win98",       "Windows 98",        4, 10, 0x8AE, VER_PLATFORM_WIN32_WINDOWS, " A ", 0, 0, ""},
+    { "win95",       "Windows 95",        4,  0, 0x3B6, VER_PLATFORM_WIN32_WINDOWS, "", 0, 0, ""},
+    { "nt40",        "Windows NT 4.0",    4,  0, 0x565, VER_PLATFORM_WIN32_NT, "Service Pack 6a", 6, 0, "WinNT"},
+    { "nt351",       "Windows NT 3.5",    3, 51, 0x421, VER_PLATFORM_WIN32_NT, "Service Pack 2", 0, 0, "WinNT"},
+    { "win31",       "Windows 3.1",       3, 10,     0, VER_PLATFORM_WIN32s, "Win32s 1.3", 0, 0, ""},
+    { "win30",       "Windows 3.0",       3,  0,     0, VER_PLATFORM_WIN32s, "Win32s 1.3", 0, 0, ""},
+    { "win20",       "Windows 2.0",       2,  0,     0, VER_PLATFORM_WIN32s, "Win32s 1.3", 0, 0, ""}
 };
 
 #define NB_VERSIONS (sizeof(win_versions)/sizeof(win_versions[0]))
 
 static const char szKey9x[] = "Software\\Microsoft\\Windows\\CurrentVersion";
 static const char szKeyNT[] = "Software\\Microsoft\\Windows NT\\CurrentVersion";
+static const char szKeyProdNT[] = "System\\CurrentControlSet\\Control\\ProductOptions";
 
 static int get_registry_version(void)
 {
     int i, best = -1, platform, major, minor = 0, build = 0;
-    char *p, *ver;
+    char *p, *ver, *type = NULL;
 
     if ((ver = get_reg_key( HKEY_LOCAL_MACHINE, szKeyNT, "CurrentVersion", NULL )))
     {
@@ -80,8 +83,10 @@ static int get_registry_version(void)
 
         platform = VER_PLATFORM_WIN32_NT;
 
-	build_str = get_reg_key( HKEY_LOCAL_MACHINE, szKeyNT, "CurrentBuildNumber", NULL );
+        build_str = get_reg_key( HKEY_LOCAL_MACHINE, szKeyNT, "CurrentBuildNumber", NULL );
         build = atoi(build_str);
+
+        type = get_reg_key( HKEY_LOCAL_MACHINE, szKeyProdNT, "ProductType", NULL );
     }
     else if ((ver = get_reg_key( HKEY_LOCAL_MACHINE, szKey9x, "VersionNumber", NULL )))
         platform = VER_PLATFORM_WIN32_WINDOWS;
@@ -106,6 +111,7 @@ static int get_registry_version(void)
     {
         if (win_versions[i].dwPlatformId != platform) continue;
         if (win_versions[i].dwMajorVersion != major) continue;
+        if (type && strcasecmp(win_versions[i].szProductType, type)) continue;
         best = i;
         if ((win_versions[i].dwMinorVersion == minor) &&
             (win_versions[i].dwBuildNumber == build))
@@ -311,9 +317,10 @@ static BOOL list_contains_file(HWND listview, WCHAR *filename)
 
 static void on_add_app_click(HWND dialog)
 {
+  static const WCHAR filterW[] = {'%','s','%','c','*','.','e','x','e',';','*','.','e','x','e','.','s','o','%','c',0};
   WCHAR filetitle[MAX_PATH];
   WCHAR file[MAX_PATH];
-  WCHAR programsFilter[100];
+  WCHAR programsFilter[100], filter[MAX_PATH];
   WCHAR selectExecutableStr[100];
   static const WCHAR pathC[] = { 'c',':','\\',0 };
 
@@ -327,9 +334,10 @@ static void on_add_app_click(HWND dialog)
       sizeof(selectExecutableStr)/sizeof(selectExecutableStr[0]));
   LoadStringW (GetModuleHandle (NULL), IDS_EXECUTABLE_FILTER, programsFilter,
       sizeof(programsFilter)/sizeof(programsFilter[0]));
+  snprintfW( filter, MAX_PATH, filterW, programsFilter, 0, 0 );
 
   ofn.lpstrTitle = selectExecutableStr;
-  ofn.lpstrFilter = programsFilter;
+  ofn.lpstrFilter = filter;
   ofn.lpstrFileTitle = filetitle;
   ofn.lpstrFileTitle[0] = '\0';
   ofn.nMaxFileTitle = sizeof(filetitle)/sizeof(filetitle[0]);
@@ -405,7 +413,6 @@ static void on_winver_change(HWND dialog)
     }
     else /* global version only */
     {
-        static const char szKeyProdNT[] = "System\\CurrentControlSet\\Control\\ProductOptions";
         static const char szKeyWindNT[] = "System\\CurrentControlSet\\Control\\Windows";
         static const char szKeyEnvNT[]  = "System\\CurrentControlSet\\Control\\Session Manager\\Environment";
         char Buffer[40];

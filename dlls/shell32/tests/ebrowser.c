@@ -94,8 +94,11 @@ static HRESULT ebrowser_initialize(IExplorerBrowser *peb)
 static HRESULT ebrowser_browse_to_desktop(IExplorerBrowser *peb)
 {
     LPITEMIDLIST pidl_desktop;
+    HRESULT hr;
     SHGetSpecialFolderLocation (hwnd, CSIDL_DESKTOP, &pidl_desktop);
-    return IExplorerBrowser_BrowseToIDList(peb, pidl_desktop, 0);
+    hr = IExplorerBrowser_BrowseToIDList(peb, pidl_desktop, 0);
+    ILFree(pidl_desktop);
+    return hr;
 }
 
 /* Process some messages */
@@ -746,8 +749,8 @@ static void test_initialization(void)
     if(0)
     {
         /* Crashes on Windows 7 */
-        hr = IExplorerBrowser_Initialize(peb, NULL, NULL, NULL);
-        hr = IExplorerBrowser_Initialize(peb, hwnd, NULL, NULL);
+        IExplorerBrowser_Initialize(peb, NULL, NULL, NULL);
+        IExplorerBrowser_Initialize(peb, hwnd, NULL, NULL);
     }
 
     ZeroMemory(&rc, sizeof(RECT));
@@ -1224,7 +1227,7 @@ static void test_Advise(void)
     {
         /* Using unadvise with a previously unadvised cookie results
          * in a crash. */
-        hr = IExplorerBrowser_Unadvise(peb, cookies[5]);
+        IExplorerBrowser_Unadvise(peb, cookies[5]);
     }
 
     /* Remove the rest. */
@@ -1563,7 +1566,7 @@ static void test_GetCurrentView(void)
     if(0)
     {
         /* Crashes under Windows 7 */
-        hr = IExplorerBrowser_GetCurrentView(peb, NULL, NULL);
+        IExplorerBrowser_GetCurrentView(peb, NULL, NULL);
     }
     hr = IExplorerBrowser_GetCurrentView(peb, NULL, (void**)&punk);
     ok(hr == E_FAIL, "Got 0x%08x\n", hr);
@@ -1706,6 +1709,8 @@ static void test_InputObject(void)
         process_msgs();
         hr = IInputObject_TranslateAcceleratorIO(pio, &msg_a);
         todo_wine ok(hr == (found ? S_OK : S_FALSE), "Got 0x%08x (%04x)\n", hr, i);
+        if(i == VK_F5)
+            Sleep(1000); /* Needed for w2k8 (64bit) */
     }
 
     process_msgs();

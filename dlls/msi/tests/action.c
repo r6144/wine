@@ -50,7 +50,6 @@ static HMODULE hsrclient;
 static BOOL (WINAPI *pSRRemoveRestorePoint)(DWORD);
 static BOOL (WINAPI *pSRSetRestorePointA)(RESTOREPOINTINFOA *, STATEMGRSTATUS *);
 
-static BOOL on_win9x;
 static BOOL is_wow64;
 static const BOOL is_64bit = sizeof(void *) > sizeof(int);
 
@@ -1361,6 +1360,95 @@ static const char rmi_install_exec_seq_dat[] =
     "PublishProduct\t\t5200\n"
     "InstallFinalize\t\t6000\n";
 
+static const char pa_file_dat[] =
+    "File\tComponent_\tFileName\tFileSize\tVersion\tLanguage\tAttributes\tSequence\n"
+    "s72\ts72\tl255\ti4\tS72\tS20\tI2\ti2\n"
+    "File\tFile\n"
+    "win32.txt\twin32\twin32.txt\t1000\t\t\t8192\t1\n"
+    "manifest.txt\twin32\tmanifest.txt\t1000\t\t\t8192\t1\n"
+    "win32_local.txt\twin32_local\twin32_local.txt\t1000\t\t\t8192\t1\n"
+    "manifest_local.txt\twin32_local\tmanifest_local.txt\t1000\t\t\t8192\t1\n"
+    "dotnet.txt\tdotnet\tdotnet.txt\t1000\t\t\t8192\t1\n"
+    "dotnet_local.txt\tdotnet_local\tdotnet_local.txt\t1000\t\t\t8192\t1\n"
+    "application_win32.txt\twin32_local\tapplication_win32.txt\t1000\t\t\t8192\t1\n"
+    "application_dotnet.txt\tdotnet_local\tapplication_dotnet.txt\t1000\t\t\t8192\t1\n";
+
+static const char pa_feature_dat[] =
+    "Feature\tFeature_Parent\tTitle\tDescription\tDisplay\tLevel\tDirectory_\tAttributes\n"
+    "s38\tS38\tL64\tL255\tI2\ti2\tS72\ti2\n"
+    "Feature\tFeature\n"
+    "assembly\t\t\tassembly feature\t1\t2\tMSITESTDIR\t0\n";
+
+static const char pa_feature_comp_dat[] =
+    "Feature_\tComponent_\n"
+    "s38\ts72\n"
+    "FeatureComponents\tFeature_\tComponent_\n"
+    "assembly\twin32\n"
+    "assembly\twin32_local\n"
+    "assembly\tdotnet\n"
+    "assembly\tdotnet_local\n";
+
+static const char pa_component_dat[] =
+    "Component\tComponentId\tDirectory_\tAttributes\tCondition\tKeyPath\n"
+    "s72\tS38\ts72\ti2\tS255\tS72\n"
+    "Component\tComponent\n"
+    "win32\t{F515549E-7E61-425D-AAC1-9BEF2E066D06}\tMSITESTDIR\t0\t\twin32.txt\n"
+    "win32_local\t{D34D3FBA-6789-4E57-AD1A-1281297DC201}\tMSITESTDIR\t0\t\twin32_local.txt\n"
+    "dotnet\t{8943164F-2B31-4C09-A894-493A8CBDE0A4}\tMSITESTDIR\t0\t\tdotnet.txt\n"
+    "dotnet_local\t{4E8567E8-8EAE-4E36-90F1-B99D33C663F8}\tMSITESTDIR\t0\t\tdotnet_local.txt\n";
+
+static const char pa_msi_assembly_dat[] =
+    "Component_\tFeature_\tFile_Manifest\tFile_Application\tAttributes\n"
+    "s72\ts38\tS72\tS72\tI2\n"
+    "MsiAssembly\tComponent_\n"
+    "win32\tassembly\tmanifest.txt\t\t1\n"
+    "win32_local\tassembly\tmanifest_local.txt\tapplication_win32.txt\t1\n"
+    "dotnet\tassembly\t\t\t0\n"
+    "dotnet_local\tassembly\t\tapplication_dotnet.txt\t0\n";
+
+static const char pa_msi_assembly_name_dat[] =
+    "Component_\tName\tValue\n"
+    "s72\ts255\ts255\n"
+    "MsiAssemblyName\tComponent_\tName\n"
+    "win32\tName\tWine.Win32.Assembly\n"
+    "win32\tprocessorArchitecture\tx86\n"
+    "win32\tpublicKeyToken\tabcdef0123456789\n"
+    "win32\ttype\twin32\n"
+    "win32\tversion\t1.0.0.0\n"
+    "win32_local\tName\tWine.Win32.Local.Assembly\n"
+    "win32_local\tprocessorArchitecture\tx86\n"
+    "win32_local\tpublicKeyToken\tabcdef0123456789\n"
+    "win32_local\ttype\twin32\n"
+    "win32_local\tversion\t1.0.0.0\n"
+    "dotnet\tName\tWine.Dotnet.Assembly\n"
+    "dotnet\tprocessorArchitecture\tMSIL\n"
+    "dotnet\tpublicKeyToken\tabcdef0123456789\n"
+    "dotnet\tculture\tneutral\n"
+    "dotnet\tversion\t1.0.0.0\n"
+    "dotnet_local\tName\tWine.Dotnet.Local.Assembly\n"
+    "dotnet_local\tprocessorArchitecture\tMSIL\n"
+    "dotnet_local\tpublicKeyToken\tabcdef0123456789\n"
+    "dotnet_local\tculture\tneutral\n"
+    "dotnet_local\tversion\t1.0.0.0\n";
+
+static const char pa_install_exec_seq_dat[] =
+    "Action\tCondition\tSequence\n"
+    "s72\tS255\tI2\n"
+    "InstallExecuteSequence\tAction\n"
+    "LaunchConditions\t\t100\n"
+    "CostInitialize\t\t800\n"
+    "FileCost\t\t900\n"
+    "CostFinalize\t\t1000\n"
+    "InstallValidate\t\t1400\n"
+    "InstallInitialize\t\t1500\n"
+    "ProcessComponents\t\t1600\n"
+    "MsiPublishAssemblies\t\t3000\n"
+    "MsiUnpublishAssemblies\t\t4000\n"
+    "RegisterProduct\t\t5000\n"
+    "PublishFeatures\t\t5100\n"
+    "PublishProduct\t\t5200\n"
+    "InstallFinalize\t\t6000\n";
+
 typedef struct _msi_table
 {
     const char *filename;
@@ -1704,6 +1792,20 @@ static const msi_table rmi_tables[] =
     ADD_TABLE(property)
 };
 
+static const msi_table pa_tables[] =
+{
+    ADD_TABLE(directory),
+    ADD_TABLE(pa_component),
+    ADD_TABLE(pa_feature),
+    ADD_TABLE(pa_feature_comp),
+    ADD_TABLE(pa_file),
+    ADD_TABLE(pa_msi_assembly),
+    ADD_TABLE(pa_msi_assembly_name),
+    ADD_TABLE(pa_install_exec_seq),
+    ADD_TABLE(media),
+    ADD_TABLE(property)
+};
+
 /* cabinet definitions */
 
 /* make the max size large so there is only one cab file */
@@ -1747,8 +1849,7 @@ static INT_PTR CDECL fci_open(char *pszFile, int oflag, int pmode, int *err, voi
     DWORD dwCreateDisposition = OPEN_EXISTING;
 
     dwAccess = GENERIC_READ | GENERIC_WRITE;
-    /* FILE_SHARE_DELETE is not supported by Windows Me/98/95 */
-    dwShareMode = FILE_SHARE_READ | FILE_SHARE_WRITE;
+    dwShareMode = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
 
     if (GetFileAttributesA(pszFile) != INVALID_FILE_ATTRIBUTES)
         dwCreateDisposition = OPEN_EXISTING;
@@ -1862,41 +1963,28 @@ static BOOL is_process_limited(void)
     return FALSE;
 }
 
-static BOOL check_win9x(void)
-{
-    SC_HANDLE scm;
-
-    scm = OpenSCManager(NULL, NULL, GENERIC_ALL);
-    if (!scm && (GetLastError() == ERROR_CALL_NOT_IMPLEMENTED))
-        return TRUE;
-
-    CloseServiceHandle(scm);
-
-    return FALSE;
-}
-
-static LPSTR get_user_sid(LPSTR *usersid)
+static char *get_user_sid(void)
 {
     HANDLE token;
-    BYTE buf[1024];
-    DWORD size;
-    PTOKEN_USER user;
+    DWORD size = 0;
+    TOKEN_USER *user;
+    char *usersid = NULL;
 
     if (!pConvertSidToStringSidA)
     {
         win_skip("ConvertSidToStringSidA is not available\n");
         return NULL;
     }
+    OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token);
+    GetTokenInformation(token, TokenUser, NULL, size, &size);
 
-    *usersid = NULL;
-    pOpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token);
-    size = sizeof(buf);
-    pGetTokenInformation(token, TokenUser, buf, size, &size);
-    user = (PTOKEN_USER)buf;
-    pConvertSidToStringSidA(user->User.Sid, usersid);
-    ok(*usersid != NULL, "pConvertSidToStringSidA failed lre=%d\n", GetLastError());
+    user = HeapAlloc(GetProcessHeap(), 0, size);
+    GetTokenInformation(token, TokenUser, user, size, &size);
+    pConvertSidToStringSidA(user->User.Sid, &usersid);
+    HeapFree(GetProcessHeap(), 0, user);
+
     CloseHandle(token);
-    return *usersid;
+    return usersid;
 }
 
 static BOOL CDECL get_temp_file(char *pszTempName, int cbTempName, void *pv)
@@ -2050,7 +2138,7 @@ static BOOL get_system_dirs(void)
 
     RegCloseKey(hkey);
 
-    if(GetWindowsDirectoryA(WINDOWS_DIR, MAX_PATH) != ERROR_SUCCESS)
+    if (!GetWindowsDirectoryA(WINDOWS_DIR, MAX_PATH))
         return FALSE;
 
     return TRUE;
@@ -2314,23 +2402,6 @@ static void check_reg_dword(HKEY prodkey, LPCSTR name, DWORD expected, DWORD lin
     ok_(__FILE__, line)(val == expected, "Expected %d, got %d\n", expected, val);
 }
 
-static void check_reg_dword2(HKEY prodkey, LPCSTR name, DWORD expected1, DWORD expected2, DWORD line)
-{
-    DWORD val, size, type;
-    LONG res;
-
-    size = sizeof(DWORD);
-    res = RegQueryValueExA(prodkey, name, NULL, &type, (LPBYTE)&val, &size);
-
-    if (res != ERROR_SUCCESS || type != REG_DWORD)
-    {
-        ok_(__FILE__, line)(FALSE, "Key doesn't exist or wrong type\n");
-        return;
-    }
-
-    ok_(__FILE__, line)(val == expected1 || val == expected2, "Expected %d or %d, got %d\n", expected1, expected2, val);
-}
-
 static void check_reg_dword3(HKEY prodkey, LPCSTR name, DWORD expected1, DWORD expected2, DWORD expected3, DWORD line)
 {
     DWORD val, size, type;
@@ -2347,6 +2418,25 @@ static void check_reg_dword3(HKEY prodkey, LPCSTR name, DWORD expected1, DWORD e
 
     ok_(__FILE__, line)(val == expected1 || val == expected2 || val == expected3,
                         "Expected %d, %d or %d, got %d\n", expected1, expected2, expected3, val);
+}
+
+static void check_reg_dword4(HKEY prodkey, LPCSTR name, DWORD expected1, DWORD expected2, DWORD expected3,
+                             DWORD expected4, DWORD line)
+{
+    DWORD val, size, type;
+    LONG res;
+
+    size = sizeof(DWORD);
+    res = RegQueryValueExA(prodkey, name, NULL, &type, (LPBYTE)&val, &size);
+
+    if (res != ERROR_SUCCESS || type != REG_DWORD)
+    {
+        ok_(__FILE__, line)(FALSE, "Key doesn't exist or wrong type\n");
+        return;
+    }
+
+    ok_(__FILE__, line)(val == expected1 || val == expected2 || val == expected3 || val == expected4,
+        "Expected %d, %d or %d or %d, got %d\n", expected1, expected2, expected3, expected4, val);
 }
 
 #define CHECK_REG_STR(prodkey, name, expected) \
@@ -2382,6 +2472,10 @@ static void check_reg_dword3(HKEY prodkey, LPCSTR name, DWORD expected1, DWORD e
 
 #define CHECK_DEL_REG_DWORD3(prodkey, name, expected1, expected2, expected3) \
     check_reg_dword3(prodkey, name, expected1, expected2, expected3, __LINE__); \
+    RegDeleteValueA(prodkey, name);
+
+#define CHECK_DEL_REG_DWORD4(prodkey, name, expected1, expected2, expected3, expected4) \
+    check_reg_dword4(prodkey, name, expected1, expected2, expected3, expected4, __LINE__); \
     RegDeleteValueA(prodkey, name);
 
 static void get_date_str(LPSTR date)
@@ -2422,7 +2516,7 @@ static void test_register_product(void)
         return;
     }
 
-    if (!get_user_sid(&usersid))
+    if (!(usersid = get_user_sid()))
         return;
 
     get_date_str(date);
@@ -2452,7 +2546,7 @@ static void test_register_product(void)
     res = RegOpenKeyA(HKEY_CURRENT_USER, userugkey, &hkey);
     ok(res == ERROR_FILE_NOT_FOUND, "Expected ERROR_FILE_NOT_FOUND, got %d\n", res);
 
-    if (is_64bit && !is_wow64)
+    if (is_64bit)
     {
         res = RegOpenKeyExA(HKEY_LOCAL_MACHINE, uninstall_32node, 0, KEY_ALL_ACCESS, &hkey);
         ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
@@ -2487,7 +2581,7 @@ static void test_register_product(void)
     CHECK_DEL_REG_DWORD(hkey, "WindowsInstaller", 1);
     todo_wine
     {
-        CHECK_DEL_REG_DWORD3(hkey, "EstimatedSize", 12, -12, 4);
+        CHECK_DEL_REG_DWORD4(hkey, "EstimatedSize", 12, -12, 4, 10);
     }
 
     delete_key(hkey, "", access);
@@ -2525,7 +2619,7 @@ static void test_register_product(void)
     CHECK_DEL_REG_DWORD(props, "WindowsInstaller", 1);
     todo_wine
     {
-        CHECK_DEL_REG_DWORD3(props, "EstimatedSize", 12, -12, 4);
+        CHECK_DEL_REG_DWORD4(props, "EstimatedSize", 12, -12, 4, 10);
     }
 
     delete_key(props, "", access);
@@ -2559,7 +2653,7 @@ static void test_register_product(void)
     res = RegOpenKeyExA(HKEY_LOCAL_MACHINE, userugkey, 0, access, &hkey);
     ok(res == ERROR_FILE_NOT_FOUND, "Expected ERROR_FILE_NOT_FOUND, got %d\n", res);
 
-    if (is_64bit && !is_wow64)
+    if (is_64bit)
     {
         res = RegOpenKeyExA(HKEY_LOCAL_MACHINE, uninstall_32node, 0, KEY_ALL_ACCESS, &hkey);
         ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
@@ -2594,7 +2688,7 @@ static void test_register_product(void)
     CHECK_DEL_REG_DWORD(hkey, "WindowsInstaller", 1);
     todo_wine
     {
-        CHECK_DEL_REG_DWORD3(hkey, "EstimatedSize", 12, -12, 4);
+        CHECK_DEL_REG_DWORD4(hkey, "EstimatedSize", 12, -12, 4, 10);
     }
 
     delete_key(hkey, "", access);
@@ -2632,7 +2726,7 @@ static void test_register_product(void)
     CHECK_DEL_REG_DWORD(props, "WindowsInstaller", 1);
     todo_wine
     {
-        CHECK_DEL_REG_DWORD3(props, "EstimatedSize", 12, -12, 4);
+        CHECK_DEL_REG_DWORD4(props, "EstimatedSize", 12, -12, 4, 10);
     }
 
     delete_key(props, "", access);
@@ -2687,8 +2781,8 @@ static void test_publish_product(void)
     static const CHAR badprod[] = "Software\\Microsoft\\Windows\\CurrentVersion"
                                   "\\Installer\\Products"
                                   "\\84A88FD7F6998CE40A22FB59F6B9C2BB";
-    static const CHAR machprod[] = "Installer\\Products\\84A88FD7F6998CE40A22FB59F6B9C2BB";
-    static const CHAR machup[] = "Installer\\UpgradeCodes\\51AAE0C44620A5E4788506E91F249BD2";
+    static const CHAR machprod[] = "Software\\Classes\\Installer\\Products\\84A88FD7F6998CE40A22FB59F6B9C2BB";
+    static const CHAR machup[] = "Software\\Classes\\Installer\\UpgradeCodes\\51AAE0C44620A5E4788506E91F249BD2";
 
     if (is_process_limited())
     {
@@ -2696,7 +2790,7 @@ static void test_publish_product(void)
         return;
     }
 
-    if (!get_user_sid(&usersid))
+    if (!(usersid = get_user_sid()))
         return;
 
     GetTempPath(MAX_PATH, temp);
@@ -2842,7 +2936,7 @@ currentuser:
     RegCloseKey(hkey);
 
 machprod:
-    res = RegOpenKeyExA(HKEY_CLASSES_ROOT, machprod, 0, access, &hkey);
+    res = RegOpenKeyExA(HKEY_LOCAL_MACHINE, machprod, 0, access, &hkey);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     CHECK_DEL_REG_STR(hkey, "ProductName", "MSITEST");
@@ -2869,7 +2963,8 @@ machprod:
 
     CHECK_DEL_REG_STR(net, "1", temp);
 
-    RegDeleteKeyA(net, "");
+    res = delete_key(net, "", access);
+    ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
     RegCloseKey(net);
 
     res = RegOpenKeyExA(sourcelist, "Media", 0, access, &media);
@@ -2877,19 +2972,23 @@ machprod:
 
     CHECK_DEL_REG_STR(media, "1", "DISK1;");
 
-    RegDeleteKeyA(media, "");
+    res = delete_key(media, "", access);
+    ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
     RegCloseKey(media);
-    RegDeleteKeyA(sourcelist, "");
+    res = delete_key(sourcelist, "", access);
+    ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
     RegCloseKey(sourcelist);
-    RegDeleteKeyA(hkey, "");
+    res = delete_key(hkey, "", access);
+    ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
     RegCloseKey(hkey);
 
-    res = RegOpenKeyExA(HKEY_CLASSES_ROOT, machup, 0, access, &hkey);
+    res = RegOpenKeyExA(HKEY_LOCAL_MACHINE, machup, 0, access, &hkey);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
     CHECK_DEL_REG_STR(hkey, "84A88FD7F6998CE40A22FB59F6B9C2BB", NULL);
 
-    RegDeleteKeyA(hkey, "");
+    res = delete_key(hkey, "", access);
+    ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
     RegCloseKey(hkey);
 
 error:
@@ -2910,9 +3009,12 @@ static void test_publish_features(void)
 
     static const CHAR cupath[] = "Software\\Microsoft\\Installer\\Features"
                                  "\\84A88FD7F6998CE40A22FB59F6B9C2BB";
-    static const CHAR udpath[] = "Software\\Microsoft\\Windows\\CurrentVersion"
-                                 "\\Installer\\UserData\\%s\\Products"
-                                 "\\84A88FD7F6998CE40A22FB59F6B9C2BB\\Features";
+    static const CHAR udfeatpath[] = "Software\\Microsoft\\Windows\\CurrentVersion"
+                                     "\\Installer\\UserData\\%s\\Products"
+                                     "\\84A88FD7F6998CE40A22FB59F6B9C2BB\\Features";
+    static const CHAR udpridpath[] = "Software\\Microsoft\\Windows\\CurrentVersion"
+                                     "\\Installer\\UserData\\%s\\Products"
+                                     "\\84A88FD7F6998CE40A22FB59F6B9C2BB";
     static const CHAR featkey[] = "Software\\Microsoft\\Windows\\CurrentVersion"
                                   "\\Installer\\Features";
     static const CHAR classfeat[] = "Software\\Classes\\Installer\\Features"
@@ -2924,7 +3026,7 @@ static void test_publish_features(void)
         return;
     }
 
-    if (!get_user_sid(&usersid))
+    if (!(usersid = get_user_sid()))
         return;
 
     CreateDirectoryA("msitest", NULL);
@@ -2962,10 +3064,10 @@ static void test_publish_features(void)
 
     RegDeleteValueA(hkey, "feature");
     RegDeleteValueA(hkey, "montecristo");
-    RegDeleteKeyA(hkey, "");
+    delete_key(hkey, "", access);
     RegCloseKey(hkey);
 
-    sprintf(keypath, udpath, usersid);
+    sprintf(keypath, udfeatpath, usersid);
     res = RegOpenKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, access, &hkey);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
@@ -2974,8 +3076,10 @@ static void test_publish_features(void)
 
     RegDeleteValueA(hkey, "feature");
     RegDeleteValueA(hkey, "montecristo");
-    RegDeleteKeyA(hkey, "");
+    delete_key(hkey, "", access);
     RegCloseKey(hkey);
+    sprintf(keypath, udpridpath, usersid);
+    delete_key(HKEY_LOCAL_MACHINE, keypath, access);
 
     /* PublishFeatures, machine */
     r = MsiInstallProductA(msifile, "PUBLISH_FEATURES=1 ALLUSERS=1");
@@ -2988,7 +3092,6 @@ static void test_publish_features(void)
 
     res = RegOpenKeyA(HKEY_CURRENT_USER, cupath, &hkey);
     ok(res == ERROR_FILE_NOT_FOUND, "Expected ERROR_FILE_NOT_FOUND, got %d\n", res);
-
     res = RegOpenKeyExA(HKEY_LOCAL_MACHINE, classfeat, 0, access, &hkey);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
@@ -2997,10 +3100,10 @@ static void test_publish_features(void)
 
     RegDeleteValueA(hkey, "feature");
     RegDeleteValueA(hkey, "montecristo");
-    RegDeleteKeyA(hkey, "");
+    delete_key(hkey, "", access);
     RegCloseKey(hkey);
 
-    sprintf(keypath, udpath, "S-1-5-18");
+    sprintf(keypath, udfeatpath, "S-1-5-18");
     res = RegOpenKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, access, &hkey);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
@@ -3009,8 +3112,10 @@ static void test_publish_features(void)
 
     RegDeleteValueA(hkey, "feature");
     RegDeleteValueA(hkey, "montecristo");
-    RegDeleteKeyA(hkey, "");
+    delete_key(hkey, "", access);
     RegCloseKey(hkey);
+    sprintf(keypath, udpridpath, "S-1-5-18");
+    delete_key(HKEY_LOCAL_MACHINE, keypath, access);
 
 error:
     DeleteFile(msifile);
@@ -3092,9 +3197,12 @@ static void test_register_user(void)
     CHAR keypath[MAX_PATH];
     REGSAM access = KEY_ALL_ACCESS;
 
-    static const CHAR keyfmt[] =
+    static const CHAR keypropsfmt[] =
         "Software\\Microsoft\\Windows\\CurrentVersion\\Installer\\"
         "UserData\\%s\\Products\\84A88FD7F6998CE40A22FB59F6B9C2BB\\InstallProperties";
+    static const CHAR keypridfmt[] =
+        "Software\\Microsoft\\Windows\\CurrentVersion\\Installer\\"
+        "UserData\\%s\\Products\\84A88FD7F6998CE40A22FB59F6B9C2BB";
 
     if (is_process_limited())
     {
@@ -3102,7 +3210,7 @@ static void test_register_user(void)
         return;
     }
 
-    if (!get_user_sid(&usersid))
+    if (!(usersid = get_user_sid()))
         return;
 
     get_owner_company(&owner, &company);
@@ -3128,7 +3236,7 @@ static void test_register_user(void)
     ok(delete_pf("msitest\\maximus", TRUE), "File not installed\n");
     ok(delete_pf("msitest", FALSE), "File not installed\n");
 
-    sprintf(keypath, keyfmt, usersid);
+    sprintf(keypath, keypropsfmt, usersid);
     res = RegOpenKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, access, &props);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
@@ -3141,6 +3249,8 @@ static void test_register_user(void)
     RegDeleteValueA(props, "RegOwner");
     delete_key(props, "", access);
     RegCloseKey(props);
+    sprintf(keypath, keypridfmt, usersid);
+    delete_key(HKEY_LOCAL_MACHINE, keypath, access);
 
     /* RegisterUser, machine */
     r = MsiInstallProductA(msifile, "REGISTER_USER=1 ALLUSERS=1");
@@ -3148,7 +3258,7 @@ static void test_register_user(void)
     ok(delete_pf("msitest\\maximus", TRUE), "File not installed\n");
     ok(delete_pf("msitest", FALSE), "File not installed\n");
 
-    sprintf(keypath, keyfmt, "S-1-5-18");
+    sprintf(keypath, keypropsfmt, "S-1-5-18");
     res = RegOpenKeyExA(HKEY_LOCAL_MACHINE, keypath, 0, access, &props);
     ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
 
@@ -3161,6 +3271,8 @@ static void test_register_user(void)
     RegDeleteValueA(props, "RegOwner");
     delete_key(props, "", access);
     RegCloseKey(props);
+    sprintf(keypath, keypridfmt, "S-1-5-18");
+    delete_key(HKEY_LOCAL_MACHINE, keypath, access);
 
 error:
     HeapFree(GetProcessHeap(), 0, company);
@@ -3196,7 +3308,7 @@ static void test_process_components(void)
         return;
     }
 
-    if (!get_user_sid(&usersid))
+    if (!(usersid = get_user_sid()))
         return;
 
     CreateDirectoryA("msitest", NULL);
@@ -3428,6 +3540,8 @@ static void test_publish(void)
     else
     {
         res = RegOpenKeyExA(uninstall, prodcode, 0, access, &prodkey);
+        if (is_wow64 && res == ERROR_FILE_NOT_FOUND) /* XP - Vista, Wow64 */
+            res = RegOpenKeyExA(uninstall, prodcode, 0, KEY_ALL_ACCESS, &prodkey);
         ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
     }
 
@@ -3455,7 +3569,7 @@ static void test_publish(void)
     CHECK_REG_DWORD(prodkey, "WindowsInstaller", 1);
     todo_wine
     {
-        CHECK_REG_DWORD2(prodkey, "EstimatedSize", 12, -12);
+        CHECK_REG_DWORD3(prodkey, "EstimatedSize", 12, -12, 10);
     }
 
     RegCloseKey(prodkey);
@@ -3502,7 +3616,7 @@ static void test_publish(void)
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
     ok(state == INSTALLSTATE_LOCAL, "Expected INSTALLSTATE_LOCAL, got %d\n", state);
 
-    if (is_64bit && !is_wow64)
+    if (is_64bit)
     {
         res = RegOpenKeyExA(uninstall_32node, prodcode, 0, KEY_ALL_ACCESS, &prodkey);
         ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
@@ -3537,7 +3651,7 @@ static void test_publish(void)
     CHECK_REG_DWORD(prodkey, "WindowsInstaller", 1);
     todo_wine
     {
-        CHECK_REG_DWORD2(prodkey, "EstimatedSize", 12, -12);
+        CHECK_REG_DWORD3(prodkey, "EstimatedSize", 12, -12, 10);
     }
 
     RegCloseKey(prodkey);
@@ -3585,7 +3699,7 @@ static void test_publish(void)
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
     ok(state == INSTALLSTATE_LOCAL, "Expected INSTALLSTATE_LOCAL, got %d\n", state);
 
-    if (is_64bit && !is_wow64)
+    if (is_64bit)
     {
         res = RegOpenKeyExA(uninstall_32node, prodcode, 0, KEY_ALL_ACCESS, &prodkey);
         ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
@@ -3620,7 +3734,7 @@ static void test_publish(void)
     CHECK_REG_DWORD(prodkey, "WindowsInstaller", 1);
     todo_wine
     {
-        CHECK_REG_DWORD2(prodkey, "EstimatedSize", 12, -12);
+        CHECK_REG_DWORD3(prodkey, "EstimatedSize", 12, -12, 10);
     }
 
     RegCloseKey(prodkey);
@@ -3645,7 +3759,7 @@ static void test_publish(void)
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
     ok(state == INSTALLSTATE_LOCAL, "Expected INSTALLSTATE_LOCAL, got %d\n", state);
 
-    if (is_64bit && !is_wow64)
+    if (is_64bit)
     {
         res = RegOpenKeyExA(uninstall_32node, prodcode, 0, KEY_ALL_ACCESS, &prodkey);
         ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
@@ -3680,7 +3794,7 @@ static void test_publish(void)
     CHECK_REG_DWORD(prodkey, "WindowsInstaller", 1);
     todo_wine
     {
-        CHECK_REG_DWORD2(prodkey, "EstimatedSize", 12, -12);
+        CHECK_REG_DWORD3(prodkey, "EstimatedSize", 12, -12, 10);
     }
 
     RegCloseKey(prodkey);
@@ -3705,7 +3819,7 @@ static void test_publish(void)
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
     ok(state == INSTALLSTATE_LOCAL, "Expected INSTALLSTATE_LOCAL, got %d\n", state);
 
-    if (is_64bit && !is_wow64)
+    if (is_64bit)
     {
         res = RegOpenKeyExA(uninstall_32node, prodcode, 0, KEY_ALL_ACCESS, &prodkey);
         ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
@@ -3740,7 +3854,7 @@ static void test_publish(void)
     CHECK_REG_DWORD(prodkey, "WindowsInstaller", 1);
     todo_wine
     {
-        CHECK_REG_DWORD2(prodkey, "EstimatedSize", 12, -20);
+        CHECK_REG_DWORD3(prodkey, "EstimatedSize", 12, -20, 10);
     }
 
     RegCloseKey(prodkey);
@@ -3788,7 +3902,7 @@ static void test_publish(void)
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
     ok(state == INSTALLSTATE_LOCAL, "Expected INSTALLSTATE_LOCAL, got %d\n", state);
 
-    if (is_64bit && !is_wow64)
+    if (is_64bit)
     {
         res = RegOpenKeyExA(uninstall_32node, prodcode, 0, KEY_ALL_ACCESS, &prodkey);
         ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
@@ -3823,7 +3937,7 @@ static void test_publish(void)
     CHECK_REG_DWORD(prodkey, "WindowsInstaller", 1);
     todo_wine
     {
-        CHECK_REG_DWORD2(prodkey, "EstimatedSize", 12, -12);
+        CHECK_REG_DWORD3(prodkey, "EstimatedSize", 12, -12, 10);
     }
 
     RegCloseKey(prodkey);
@@ -4436,7 +4550,7 @@ static void test_write_registry_values(void)
     ok(delete_pf("msitest\\augustus", TRUE), "File installed\n");
     ok(delete_pf("msitest", FALSE), "File installed\n");
 
-    if (is_64bit && !is_wow64)
+    if (is_64bit)
         res = RegOpenKeyExA(HKEY_LOCAL_MACHINE, "SOFTWARE\\Wow6432Node\\Wine\\msitest", 0, KEY_ALL_ACCESS, &hkey);
     else
         res = RegOpenKeyExA(HKEY_LOCAL_MACHINE, "SOFTWARE\\Wine\\msitest", 0, KEY_ALL_ACCESS, &hkey);
@@ -4484,11 +4598,6 @@ static void test_envvar(void)
     char buffer[16];
     UINT i;
 
-    if (on_win9x)
-    {
-        win_skip("Environment variables are handled differently on Win9x and WinMe\n");
-        return;
-    }
     if (is_process_limited())
     {
         skip("process is limited\n");
@@ -4658,11 +4767,6 @@ static void test_start_services(void)
     BOOL ret;
     DWORD error = ERROR_SUCCESS;
 
-    if (on_win9x)
-    {
-        win_skip("Services are not implemented on Win9x and WinMe\n");
-        return;
-    }
     scm = OpenSCManager(NULL, NULL, SC_MANAGER_ALL_ACCESS);
     if (!scm && GetLastError() == ERROR_ACCESS_DENIED)
     {
@@ -4740,11 +4844,6 @@ static void test_delete_services(void)
 {
     UINT r;
 
-    if (on_win9x)
-    {
-        win_skip("Services are not implemented on Win9x and WinMe\n");
-        return;
-    }
     if (is_process_limited())
     {
         skip("process is limited\n");
@@ -5219,7 +5318,7 @@ static void test_remove_registry_values(void)
     ok(res == ERROR_SUCCESS, "key removed\n");
     RegCloseKey(key);
 
-    if (is_64bit && !is_wow64)
+    if (is_64bit)
     {
         res = RegOpenKeyExA(HKEY_LOCAL_MACHINE, "Software\\Wow6432Node\\Wine\\key2", 0, KEY_ALL_ACCESS, &key);
         ok(res == ERROR_FILE_NOT_FOUND, "key not removed\n");
@@ -5237,7 +5336,7 @@ static void test_remove_registry_values(void)
     r = MsiInstallProductA(msifile, "REMOVE=ALL");
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %u\n", r);
 
-    if (is_64bit && !is_wow64)
+    if (is_64bit)
     {
         res = RegOpenKeyExA(HKEY_LOCAL_MACHINE, "Software\\Wow6432Node\\Wine\\key1", 0, KEY_ALL_ACCESS, &key);
         ok(res == ERROR_FILE_NOT_FOUND, "key not removed\n");
@@ -5256,7 +5355,7 @@ static void test_remove_registry_values(void)
     ok(res == ERROR_SUCCESS, "key removed\n");
     RegCloseKey(key);
 
-    if (is_64bit && !is_wow64)
+    if (is_64bit)
     {
         res = RegOpenKeyExA(HKEY_LOCAL_MACHINE, "Software\\Wow6432Node\\Wine\\keyB", 0, KEY_ALL_ACCESS, &key);
         ok(res == ERROR_FILE_NOT_FOUND, "key not removed\n");
@@ -5399,11 +5498,6 @@ static void test_remove_env_strings(void)
     DWORD type, size;
     char buffer[0x10];
 
-    if (on_win9x)
-    {
-        win_skip("Environment variables are handled differently on win9x and winme\n");
-        return;
-    }
     if (is_process_limited())
     {
         skip("process is limited\n");
@@ -5555,7 +5649,7 @@ static void test_register_class_info(void)
     }
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %u\n", r);
 
-    if (is_64bit && !is_wow64)
+    if (is_64bit)
         res = RegOpenKeyA(HKEY_CLASSES_ROOT, "Wow6432Node\\CLSID\\{110913E7-86D1-4BF3-9922-BA103FCDDDFA}", &hkey);
     else
         res = RegOpenKeyA(HKEY_CLASSES_ROOT, "CLSID\\{110913E7-86D1-4BF3-9922-BA103FCDDDFA}", &hkey);
@@ -5573,7 +5667,7 @@ static void test_register_class_info(void)
     r = MsiInstallProductA(msifile, "REMOVE=ALL");
     ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %u\n", r);
 
-    if (is_64bit && !is_wow64)
+    if (is_64bit)
         res = RegOpenKeyA(HKEY_CLASSES_ROOT, "Wow6432Node\\CLSID\\{110913E7-86D1-4BF3-9922-BA103FCDDDFA}", &hkey);
     else
         res = RegOpenKeyA(HKEY_CLASSES_ROOT, "CLSID\\{110913E7-86D1-4BF3-9922-BA103FCDDDFA}", &hkey);
@@ -5691,6 +5785,215 @@ error:
     DeleteFile(msifile);
 }
 
+static void test_publish_assemblies(void)
+{
+    static const char manifest[] =
+        "<assemblyIdentity type=\"win32\" name=\"Wine.Win32.Assembly\" "
+        "version=\"1.0.0.0\" publicKeyToken=\"abcdef0123456789\" "
+        "processorArchitecture=\"x86\"/>";
+    static const char manifest_local[] =
+        "<assemblyIdentity type=\"win32\" name=\"Wine.Win32.Local.Assembly\" "
+        "version=\"1.0.0.0\" publicKeyToken=\"abcdef0123456789\" "
+        "processorArchitecture=\"x86\"/>";
+    static const char classes_path_dotnet[] =
+        "Installer\\Assemblies\\Global";
+    static const char classes_path_dotnet_local[] =
+        "Installer\\Assemblies\\C:|Program Files|msitest|application_dotnet.txt";
+    static const char classes_path_dotnet_local_wow64[] =
+        "Installer\\Assemblies\\C:|Program Files (x86)|msitest|application_dotnet.txt";
+    static const char classes_path_win32[] =
+        "Installer\\Win32Assemblies\\Global";
+    static const char classes_path_win32_local[] =
+        "Installer\\Win32Assemblies\\C:|Program Files|msitest|application_win32.txt";
+    static const char classes_path_win32_local_wow64[] =
+        "Installer\\Win32Assemblies\\C:|Program Files (x86)|msitest|application_win32.txt";
+    static const char path_dotnet[] =
+        "Software\\Microsoft\\Installer\\Assemblies\\Global";
+    static const char path_dotnet_local[] =
+        "Software\\Microsoft\\Installer\\Assemblies\\C:|Program Files|msitest|application_dotnet.txt";
+    static const char path_dotnet_local_wow64[] =
+        "Software\\Microsoft\\Installer\\Assemblies\\C:|Program Files (x86)|msitest|application_dotnet.txt";
+    static const char path_win32[] =
+        "Software\\Microsoft\\Installer\\Win32Assemblies\\Global";
+    static const char path_win32_local[] =
+        "Software\\Microsoft\\Installer\\Win32Assemblies\\C:|Program Files|msitest|application_win32.txt";
+    static const char path_win32_local_wow64[] =
+        "Software\\Microsoft\\Installer\\Win32Assemblies\\C:|Program Files (x86)|msitest|application_win32.txt";
+    static const char name_dotnet[] =
+        "Wine.Dotnet.Assembly,processorArchitecture=\"MSIL\",publicKeyToken=\"abcdef0123456789\","
+        "version=\"1.0.0.0\",culture=\"neutral\"";
+    static const char name_dotnet_local[] =
+        "Wine.Dotnet.Local.Assembly,processorArchitecture=\"MSIL\",publicKeyToken=\"abcdef0123456789\","
+        "version=\"1.0.0.0\",culture=\"neutral\"";
+    static const char name_win32[] =
+        "Wine.Win32.Assembly,processorArchitecture=\"x86\",publicKeyToken=\"abcdef0123456789\","
+        "type=\"win32\",version=\"1.0.0.0\"";
+    static const char name_win32_local[] =
+        "Wine.Win32.Local.Assembly,processorArchitecture=\"x86\",publicKeyToken=\"abcdef0123456789\","
+        "type=\"win32\",version=\"1.0.0.0\"";
+    UINT r;
+    LONG res;
+    HKEY hkey;
+    const char *path;
+    int access;
+
+    if (is_process_limited())
+    {
+        skip("process is limited\n");
+        return;
+    }
+
+    create_test_files();
+    create_file("msitest\\win32.txt", 1000);
+    create_file("msitest\\win32_local.txt", 1000);
+    create_file("msitest\\dotnet.txt", 1000);
+    create_file("msitest\\dotnet_local.txt", 1000);
+    create_file_data("msitest\\manifest.txt", manifest, 0);
+    create_file_data("msitest\\manifest_local.txt", manifest_local, 0);
+    create_file("msitest\\application_win32.txt", 1000);
+    create_file("msitest\\application_dotnet.txt", 1000);
+    create_database(msifile, pa_tables, sizeof(pa_tables) / sizeof(msi_table));
+
+    MsiSetInternalUI(INSTALLUILEVEL_NONE, NULL);
+
+    r = MsiInstallProductA(msifile, NULL);
+    if (r == ERROR_INSTALL_PACKAGE_REJECTED)
+    {
+        skip("Not enough rights to perform tests\n");
+        goto done;
+    }
+    if (r == ERROR_INSTALL_FAILURE)
+    {
+        skip("No support for installing side-by-side assemblies\n");
+        goto done;
+    }
+    ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %u\n", r);
+
+    res = RegOpenKeyA(HKEY_CURRENT_USER, path_dotnet, &hkey);
+    ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
+    CHECK_REG_STR(hkey, name_dotnet, "rcHQPHq?CA@Uv-XqMI1e>Z'q,T*76M@=YEg6My?~]");
+    RegCloseKey(hkey);
+
+    path = (is_wow64 || is_64bit) ? path_dotnet_local_wow64 : path_dotnet_local;
+    res = RegOpenKeyA(HKEY_CURRENT_USER, path, &hkey);
+    ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
+    CHECK_REG_STR(hkey, name_dotnet_local, "rcHQPHq?CA@Uv-XqMI1e>LF,8A?0d.AW@vcZ$Cgox");
+    RegCloseKey(hkey);
+
+    res = RegOpenKeyA(HKEY_CURRENT_USER, path_win32, &hkey);
+    ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
+    CHECK_REG_STR(hkey, name_win32, "rcHQPHq?CA@Uv-XqMI1e>}NJjwR'%D9v1p!v{WV(%");
+    RegCloseKey(hkey);
+
+    path = (is_wow64 || is_64bit) ? path_win32_local_wow64 : path_win32_local;
+    res = RegOpenKeyA(HKEY_CURRENT_USER, path, &hkey);
+    ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
+    CHECK_REG_STR(hkey, name_win32_local, "rcHQPHq?CA@Uv-XqMI1e>C)Uvlj*53A)u(QQ9=)X!");
+    RegCloseKey(hkey);
+
+    r = MsiInstallProductA(msifile, "REMOVE=ALL");
+    ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %u\n", r);
+
+    res = RegOpenKeyA(HKEY_CURRENT_USER, path_dotnet, &hkey);
+    ok(res == ERROR_SUCCESS || res == ERROR_FILE_NOT_FOUND, "got %d\n", res);
+    if (res == ERROR_SUCCESS)
+    {
+        res = RegDeleteValueA(hkey, name_dotnet);
+        ok(res == ERROR_FILE_NOT_FOUND, "Expected ERROR_FILE_NOT_FOUND, got %d\n", res);
+        RegCloseKey(hkey);
+    }
+
+    path = (is_wow64 || is_64bit) ? path_dotnet_local_wow64 : path_dotnet_local;
+    res = RegOpenKeyA(HKEY_CURRENT_USER, path, &hkey);
+    ok(res == ERROR_FILE_NOT_FOUND, "Expected ERROR_FILE_NOT_FOUND, got %d\n", res);
+
+    res = RegOpenKeyA(HKEY_CURRENT_USER, path_win32, &hkey);
+    ok(res == ERROR_SUCCESS || res == ERROR_FILE_NOT_FOUND, "got %d\n", res);
+    if (res == ERROR_SUCCESS)
+    {
+        res = RegDeleteValueA(hkey, name_win32);
+        ok(res == ERROR_FILE_NOT_FOUND, "Expected ERROR_FILE_NOT_FOUND, got %d\n", res);
+        RegCloseKey(hkey);
+    }
+
+    path = (is_wow64 || is_64bit) ? path_win32_local_wow64 : path_win32_local;
+    res = RegOpenKeyA(HKEY_CURRENT_USER, path, &hkey);
+    ok(res == ERROR_FILE_NOT_FOUND, "Expected ERROR_FILE_NOT_FOUND, got %d\n", res);
+
+    r = MsiInstallProductA(msifile, "ALLUSERS=1");
+    ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %u\n", r);
+
+    access = KEY_QUERY_VALUE;
+    res = RegOpenKeyExA(HKEY_CLASSES_ROOT, classes_path_dotnet, 0, access, &hkey);
+    if (res == ERROR_FILE_NOT_FOUND && is_wow64) /* Vista WOW64 */
+    {
+        trace("Using 64-bit registry view for HKCR\\Installer\n");
+        access = KEY_QUERY_VALUE | KEY_WOW64_64KEY;
+        res = RegOpenKeyExA(HKEY_CLASSES_ROOT, classes_path_dotnet, 0, access, &hkey);
+    }
+    ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
+    CHECK_REG_STR(hkey, name_dotnet, "rcHQPHq?CA@Uv-XqMI1e>Z'q,T*76M@=YEg6My?~]");
+    RegCloseKey(hkey);
+
+    path = (is_wow64 || is_64bit) ? classes_path_dotnet_local_wow64 : classes_path_dotnet_local;
+    res = RegOpenKeyExA(HKEY_CLASSES_ROOT, path, 0, access, &hkey);
+    ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
+    CHECK_REG_STR(hkey, name_dotnet_local, "rcHQPHq?CA@Uv-XqMI1e>LF,8A?0d.AW@vcZ$Cgox");
+    RegCloseKey(hkey);
+
+    res = RegOpenKeyExA(HKEY_CLASSES_ROOT, classes_path_win32, 0, access, &hkey);
+    ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
+    CHECK_REG_STR(hkey, name_win32, "rcHQPHq?CA@Uv-XqMI1e>}NJjwR'%D9v1p!v{WV(%");
+    RegCloseKey(hkey);
+
+    path = (is_wow64 || is_64bit) ? classes_path_win32_local_wow64 : classes_path_win32_local;
+    res = RegOpenKeyExA(HKEY_CLASSES_ROOT, path, 0, access, &hkey);
+    ok(res == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", res);
+    CHECK_REG_STR(hkey, name_win32_local, "rcHQPHq?CA@Uv-XqMI1e>C)Uvlj*53A)u(QQ9=)X!");
+    RegCloseKey(hkey);
+
+    r = MsiInstallProductA(msifile, "REMOVE=ALL ALLUSERS=1");
+    ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %u\n", r);
+
+    res = RegOpenKeyA(HKEY_CLASSES_ROOT, classes_path_dotnet, &hkey);
+    ok(res == ERROR_SUCCESS || res == ERROR_FILE_NOT_FOUND, "got %d\n", res);
+    if (res == ERROR_SUCCESS)
+    {
+        res = RegDeleteValueA(hkey, name_dotnet);
+        ok(res == ERROR_FILE_NOT_FOUND, "Expected ERROR_FILE_NOT_FOUND, got %d\n", res);
+        RegCloseKey(hkey);
+    }
+
+    path = (is_wow64 || is_64bit) ? classes_path_dotnet_local_wow64 : classes_path_dotnet_local;
+    res = RegOpenKeyA(HKEY_CLASSES_ROOT, path, &hkey);
+    ok(res == ERROR_FILE_NOT_FOUND, "Expected ERROR_FILE_NOT_FOUND, got %d\n", res);
+
+    res = RegOpenKeyA(HKEY_CLASSES_ROOT, classes_path_win32, &hkey);
+    ok(res == ERROR_SUCCESS || res == ERROR_FILE_NOT_FOUND, "got %d\n", res);
+    if (res == ERROR_SUCCESS)
+    {
+        res = RegDeleteValueA(hkey, name_win32);
+        ok(res == ERROR_FILE_NOT_FOUND, "Expected ERROR_FILE_NOT_FOUND, got %d\n", res);
+        RegCloseKey(hkey);
+    }
+
+    path = (is_wow64 || is_64bit) ? classes_path_win32_local_wow64 : classes_path_win32_local;
+    res = RegOpenKeyA(HKEY_CLASSES_ROOT, path, &hkey);
+    ok(res == ERROR_FILE_NOT_FOUND, "Expected ERROR_FILE_NOT_FOUND, got %d\n", res);
+
+done:
+    DeleteFileA("msitest\\win32.txt");
+    DeleteFileA("msitest\\win32_local.txt");
+    DeleteFileA("msitest\\dotnet.txt");
+    DeleteFileA("msitest\\dotnet_local.txt");
+    DeleteFileA("msitest\\manifest.txt");
+    DeleteFileA("msitest\\manifest_local.txt");
+    DeleteFileA("msitest\\application_win32.txt");
+    DeleteFileA("msitest\\application_dotnet.txt");
+    delete_test_files();
+    DeleteFile(msifile);
+}
+
 START_TEST(action)
 {
     DWORD len;
@@ -5699,8 +6002,6 @@ START_TEST(action)
     BOOL ret = FALSE;
 
     init_functionpointers();
-
-    on_win9x = check_win9x();
 
     if (pIsWow64Process)
         pIsWow64Process(GetCurrentProcess(), &is_wow64);
@@ -5715,8 +6016,8 @@ START_TEST(action)
     if(len && (CURR_DIR[len - 1] == '\\'))
         CURR_DIR[len - 1] = 0;
 
-    get_system_dirs();
-    get_user_dirs();
+    ok(get_system_dirs(), "failed to retrieve system dirs\n");
+    ok(get_user_dirs(), "failed to retrieve user dirs\n");
 
     /* Create a restore point ourselves so we circumvent the multitude of restore points
      * that would have been created by all the installation and removal tests.
@@ -5769,6 +6070,7 @@ START_TEST(action)
     test_register_class_info();
     test_register_extension_info();
     test_register_mime_info();
+    test_publish_assemblies();
 
     DeleteFileA(log_file);
 

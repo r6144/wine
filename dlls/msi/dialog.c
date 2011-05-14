@@ -585,7 +585,7 @@ static void msi_dialog_update_controls( msi_dialog *dialog, LPCWSTR property )
 static void msi_dialog_set_property( MSIPACKAGE *package, LPCWSTR property, LPCWSTR value )
 {
     UINT r = msi_set_property( package->db, property, value );
-    if (r == ERROR_SUCCESS && !strcmpW( property, cszSourceDir ))
+    if (r == ERROR_SUCCESS && !strcmpW( property, szSourceDir ))
         msi_reset_folders( package, TRUE );
 }
 
@@ -2071,7 +2071,7 @@ static void
 msi_seltree_sync_item_state( HWND hwnd, MSIFEATURE *feature, HTREEITEM hItem )
 {
     TVITEMW tvi;
-    DWORD index = feature->Action;
+    DWORD index = feature->ActionRequest;
 
     TRACE("Feature %s -> %d %d %d\n", debugstr_w(feature->Title),
         feature->Installed, feature->Action, feature->ActionRequest);
@@ -2125,7 +2125,7 @@ static void
 msi_seltree_update_feature_installstate( HWND hwnd, HTREEITEM hItem,
         MSIPACKAGE *package, MSIFEATURE *feature, INSTALLSTATE state )
 {
-    msi_feature_set_state( package, feature, state );
+    feature->ActionRequest = state;
     msi_seltree_sync_item_state( hwnd, feature, hItem );
     ACTION_UpdateComponentStates( package, feature );
 }
@@ -2378,7 +2378,7 @@ static UINT msi_dialog_seltree_handler( msi_dialog *dialog,
     dir = MSI_RecordGetString( row, 7 );
     if (dir)
     {
-        folder = get_loaded_folder( dialog->package, dir );
+        folder = msi_get_loaded_folder( dialog->package, dir );
         if (!folder)
         {
             r = ERROR_FUNCTION_FAILED;

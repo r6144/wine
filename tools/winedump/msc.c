@@ -202,7 +202,7 @@ static const char* full_value_string(const struct full_value* fv)
 static int numeric_leaf(int* value, const unsigned short int* leaf)
 {
     struct full_value fv;
-    int len = len = full_numeric_leaf(&fv, leaf);
+    int len = full_numeric_leaf(&fv, leaf);
 
     switch (fv.type)
     {
@@ -1101,16 +1101,15 @@ int codeview_dump_symbols(const void* root, unsigned long size)
             break;
 
         /* Additional function information */
-        case S_FUNCINFO_V2:
-            printf("\tFunction info V2 unk1:%x unk2:%x unk3:%x unk4:%x unk5:%x unk6:%x flags:%04x unk7:%x\n",
-                   sym->func_info_v2.unknown1,
-                   sym->func_info_v2.unknown2,
-                   sym->func_info_v2.unknown3,
-                   sym->func_info_v2.unknown4,
-                   sym->func_info_v2.unknown5,
-                   sym->func_info_v2.unknown6,
-                   sym->func_info_v2.flags,
-                   sym->func_info_v2.unknown7);
+        case S_FRAMEINFO_V2:
+            printf("\tS-Frame-Info V2: frame-size:%x unk2:%x unk3:%x saved-regs-sz:%x eh(%04x:%08x) flags:%08x\n",
+                   sym->frame_info_v2.sz_frame,
+                   sym->frame_info_v2.unknown2,
+                   sym->frame_info_v2.unknown3,
+                   sym->frame_info_v2.sz_saved_regs,
+                   sym->frame_info_v2.eh_sect,
+                   sym->frame_info_v2.eh_offset,
+                   sym->frame_info_v2.flags);
             break;
 
         case S_SECUCOOKIE_V3:
@@ -1351,6 +1350,29 @@ int codeview_dump_symbols(const void* root, unsigned long size)
         case S_ENTRYPOINT_V3:
             printf("\tSEntryPoint: id=%x '%s'\n",
                    *(const unsigned*)((const char*)sym + 4), (const char*)sym + 8);
+            break;
+
+        case S_LTHREAD_V1:
+        case S_GTHREAD_V1:
+            printf("\tS-Thread %s Var V1 '%s' seg=%04x offset=%08x type=%x\n",
+                   sym->generic.id == S_LTHREAD_V1 ? "global" : "local",
+                   p_string(&sym->thread_v1.p_name),
+                   sym->thread_v1.segment, sym->thread_v1.offset, sym->thread_v1.symtype);
+            break;
+
+        case S_LTHREAD_V2:
+        case S_GTHREAD_V2:
+            printf("\tS-Thread %s Var V2 '%s' seg=%04x offset=%08x type=%x\n",
+                   sym->generic.id == S_LTHREAD_V2 ? "global" : "local",
+                   p_string(&sym->thread_v2.p_name),
+                   sym->thread_v2.segment, sym->thread_v2.offset, sym->thread_v2.symtype);
+            break;
+
+        case S_LTHREAD_V3:
+        case S_GTHREAD_V3:
+            printf("\tS-Thread %s Var V3 '%s' seg=%04x offset=%08x type=%x\n",
+                   sym->generic.id == S_LTHREAD_V3 ? "global" : "local", sym->thread_v3.name,
+                   sym->thread_v3.segment, sym->thread_v3.offset, sym->thread_v3.symtype);
             break;
 
         default:

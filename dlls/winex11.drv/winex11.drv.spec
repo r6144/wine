@@ -30,6 +30,7 @@
 @ cdecl GetTextMetrics(ptr ptr) X11DRV_GetTextMetrics
 @ cdecl LineTo(ptr long long) X11DRV_LineTo
 @ cdecl PaintRgn(ptr long) X11DRV_PaintRgn
+@ cdecl PatBlt(ptr long long long long long) X11DRV_PatBlt
 @ cdecl Pie(ptr long long long long long long long long) X11DRV_Pie
 @ cdecl PolyPolygon(ptr ptr ptr long) X11DRV_PolyPolygon
 @ cdecl PolyPolyline(ptr ptr ptr long) X11DRV_PolyPolyline
@@ -69,7 +70,6 @@
 @ cdecl GetKeyboardLayoutName(ptr) X11DRV_GetKeyboardLayoutName
 @ cdecl LoadKeyboardLayout(wstr long) X11DRV_LoadKeyboardLayout
 @ cdecl MapVirtualKeyEx(long long long) X11DRV_MapVirtualKeyEx
-@ cdecl SendInput(long ptr long) X11DRV_SendInput
 @ cdecl ToUnicodeEx(long long ptr ptr long long long) X11DRV_ToUnicodeEx
 @ cdecl UnloadKeyboardLayout(long) X11DRV_UnloadKeyboardLayout
 @ cdecl VkKeyScanEx(long long) X11DRV_VkKeyScanEx
@@ -93,11 +93,9 @@
 @ cdecl EndClipboardUpdate() X11DRV_EndClipboardUpdate
 @ cdecl EnumClipboardFormats(long) X11DRV_EnumClipboardFormats
 @ cdecl GetClipboardData(long) X11DRV_GetClipboardData
-@ cdecl GetClipboardFormatName(long ptr long) X11DRV_GetClipboardFormatName
 @ cdecl GetDC(long long long ptr ptr long) X11DRV_GetDC
 @ cdecl IsClipboardFormatAvailable(long) X11DRV_IsClipboardFormatAvailable
 @ cdecl MsgWaitForMultipleObjectsEx(long ptr long long long) X11DRV_MsgWaitForMultipleObjectsEx
-@ cdecl RegisterClipboardFormat(wstr) X11DRV_RegisterClipboardFormat
 @ cdecl ReleaseDC(long long) X11DRV_ReleaseDC
 @ cdecl ScrollDC(long long long ptr ptr long ptr) X11DRV_ScrollDC
 @ cdecl SetClipboardData(long long long) X11DRV_SetClipboardData

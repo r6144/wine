@@ -129,7 +129,7 @@ LPWINE_DRIVER	DRIVER_FindFromHDrvr(HDRVR hDrvr)
 static inline LRESULT DRIVER_SendMessage(LPWINE_DRIVER lpDrv, UINT msg,
                                          LPARAM lParam1, LPARAM lParam2)
 {
-    LRESULT		ret = 0;
+    LRESULT		ret;
 
     TRACE("Before call32 proc=%p drvrID=%08lx hDrv=%p wMsg=%04x p1=%08lx p2=%08lx\n",
           lpDrv->lpDrvProc, lpDrv->dwDriverID, lpDrv, msg, lParam1, lParam2);
@@ -531,35 +531,49 @@ LRESULT WINAPI DefDriverProc(DWORD_PTR dwDriverIdentifier, HDRVR hDrv,
 }
 
 /**************************************************************************
+ *				DRIVER_getCallback		[internal]
+ */
+static const char* DRIVER_getCallback(DWORD uFlags)
+{
+    switch(uFlags & DCB_TYPEMASK) {
+    case DCB_NULL:     return "null";
+    case DCB_WINDOW:   return "window";
+    case DCB_TASK:     return "task";
+    case DCB_EVENT:    return "event";
+    case DCB_FUNCTION: return "32bit function";
+    default:           return "UNKNOWN";
+    }
+}
+
+/**************************************************************************
  * 				DriverCallback			[WINMM.@]
  */
 BOOL WINAPI DriverCallback(DWORD_PTR dwCallBack, DWORD uFlags, HDRVR hDev,
 			   DWORD wMsg, DWORD_PTR dwUser, DWORD_PTR dwParam1,
 			   DWORD_PTR dwParam2)
 {
-    TRACE("(%08lX, %04X, %p, %04X, %08lX, %08lX, %08lX)\n",
-	  dwCallBack, uFlags, hDev, wMsg, dwUser, dwParam1, dwParam2);
+    BOOL ret = FALSE;
+    TRACE("(%08lX, %s %04X, %p, %04X, %08lX, %08lX, %08lX)\n",
+	  dwCallBack, DRIVER_getCallback(uFlags), uFlags, hDev, wMsg, dwUser, dwParam1, dwParam2);
+    if (!dwCallBack)
+	return ret;
 
     switch (uFlags & DCB_TYPEMASK) {
     case DCB_NULL:
-	TRACE("Null !\n");
-	break;
+	/* Native returns FALSE = no notification, not TRUE */
+	return ret;
     case DCB_WINDOW:
-	TRACE("Window(%04lX) handle=%p!\n", dwCallBack, hDev);
-	PostMessageA((HWND)dwCallBack, wMsg, (WPARAM)hDev, dwParam1);
+	ret = PostMessageA((HWND)dwCallBack, wMsg, (WPARAM)hDev, dwParam1);
 	break;
     case DCB_TASK: /* aka DCB_THREAD */
-	TRACE("Task(%04lx) !\n", dwCallBack);
-	PostThreadMessageA(dwCallBack, wMsg, (WPARAM)hDev, dwParam1);
+	ret = PostThreadMessageA(dwCallBack, wMsg, (WPARAM)hDev, dwParam1);
 	break;
     case DCB_FUNCTION:
-	TRACE("Function (32 bit) !\n");
-	if (dwCallBack)
-	    ((LPDRVCALLBACK)dwCallBack)(hDev, wMsg, dwUser, dwParam1, dwParam2);
+	((LPDRVCALLBACK)dwCallBack)(hDev, wMsg, dwUser, dwParam1, dwParam2);
+	ret = TRUE;
 	break;
     case DCB_EVENT:
-	TRACE("Event(%08lx) !\n", dwCallBack);
-	SetEvent((HANDLE)dwCallBack);
+	ret = SetEvent((HANDLE)dwCallBack);
 	break;
 #if 0
         /* FIXME: for now only usable in mmsystem.dll16
@@ -591,8 +605,11 @@ BOOL WINAPI DriverCallback(DWORD_PTR dwCallBack, DWORD uFlags, HDRVR hDev,
 	WARN("Unknown callback type %d\n", uFlags & DCB_TYPEMASK);
 	return FALSE;
     }
-    TRACE("Done\n");
-    return TRUE;
+    if (ret)
+	TRACE("Done\n");
+    else
+	WARN("Notification failure\n");
+    return ret;
 }
 
 /******************************************************************

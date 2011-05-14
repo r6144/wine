@@ -180,8 +180,8 @@ static LRESULT CALLBACK MAIN_MainWndProc(HWND hWnd, UINT msg,
       break;
 
     case WM_COMMAND:
-      if (wParam < PM_FIRST_CHILD){
-	MAIN_MenuCommand(hWnd, wParam, lParam);
+      if (LOWORD(wParam) < PM_FIRST_CHILD){
+	MAIN_MenuCommand(hWnd, LOWORD(wParam), lParam);
       }
       break;
 
@@ -296,6 +296,14 @@ static VOID MAIN_MenuCommand(HWND hWnd, WPARAM wParam, LPARAM lParam)
       break;
 
       /* Menu Windows */
+    case PM_OVERLAP:
+      SendMessageW(Globals.hMDIWnd, WM_MDICASCADE, 0, 0);
+      break;
+
+    case PM_SIDE_BY_SIDE:
+      SendMessageW(Globals.hMDIWnd, WM_MDITILE, MDITILE_VERTICAL, 0);
+      break;
+
     case PM_ARRANGE:
 
       if (hActiveGroupWnd && !IsIconic(hActiveGroupWnd))
@@ -308,15 +316,6 @@ static VOID MAIN_MenuCommand(HWND hWnd, WPARAM wParam, LPARAM lParam)
     case PM_CONTENTS:
       if (!WinHelp(Globals.hMainWnd, "progman.hlp", HELP_CONTENTS, 0))
 	MAIN_MessageBoxIDS(IDS_WINHELP_ERROR, IDS_ERROR, MB_OK);
-      break;
-
-    case PM_HELPONHELP:
-      if (!WinHelp(Globals.hMainWnd, "progman.hlp", HELP_HELPONHELP, 0))
-	MAIN_MessageBoxIDS(IDS_WINHELP_ERROR, IDS_ERROR, MB_OK);
-      break;
-
-    case PM_TUTORIAL:
-      WinExec("wintutor.exe", SW_SHOWNORMAL);
       break;
 
     case PM_ABOUT_WINE:

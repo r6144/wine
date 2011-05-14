@@ -2061,6 +2061,7 @@ static void test_LocalizedNames(void)
     DWORD res;
     HANDLE file;
     STRRET strret;
+    BOOL ret;
 
     static const char desktopini_contents1[] =
         "[.ShellClassInfo]\r\n"
@@ -2080,10 +2081,10 @@ static void test_LocalizedNames(void)
     file = CreateFileA(".\\testfolder\\desktop.ini", GENERIC_WRITE, 0, NULL,
                          CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     ok(file != INVALID_HANDLE_VALUE, "CreateFileA failed %i\n", GetLastError());
-    ok(WriteFile(file, desktopini_contents1, strlen(desktopini_contents1), &res, NULL) &&
-       WriteFile(file, resourcefile, strlen(resourcefile), &res, NULL) &&
-       WriteFile(file, desktopini_contents2, strlen(desktopini_contents2), &res, NULL),
-       "WriteFile failed %i\n", GetLastError());
+    ret = WriteFile(file, desktopini_contents1, strlen(desktopini_contents1), &res, NULL) &&
+          WriteFile(file, resourcefile, strlen(resourcefile), &res, NULL) &&
+          WriteFile(file, desktopini_contents2, strlen(desktopini_contents2), &res, NULL);
+    ok(ret, "WriteFile failed %i\n", GetLastError());
     CloseHandle(file);
 
     /* get IShellFolder for parent */
@@ -2368,7 +2369,7 @@ static void test_SHCreateShellItem(void)
         if(0)
         {
             /* Crashes under windows 7 */
-            ret = pSHCreateItemFromParsingName(NULL, NULL, &IID_IShellItem, NULL);
+            pSHCreateItemFromParsingName(NULL, NULL, &IID_IShellItem, NULL);
         }
 
         shellitem = (void*)0xdeadbeef;
@@ -2410,7 +2411,7 @@ static void test_SHCreateShellItem(void)
         if(0)
         {
             /* Crashes under win7 */
-            ret = pSHCreateItemFromIDList(NULL, &IID_IShellItem, NULL);
+            pSHCreateItemFromIDList(NULL, &IID_IShellItem, NULL);
         }
 
         ret = pSHCreateItemFromIDList(NULL, &IID_IShellItem, (void**)&shellitem);
@@ -2496,7 +2497,7 @@ static void test_SHGetNameFromIDList(void)
     if(0)
     {
         /* Crashes under win7 */
-        hres = pSHGetNameFromIDList(NULL, 0, NULL);
+        pSHGetNameFromIDList(NULL, 0, NULL);
     }
 
     hres = pSHGetNameFromIDList(NULL, 0, &name_string);
@@ -2638,7 +2639,7 @@ static void test_SHGetItemFromDataObject(void)
     if(0)
     {
         /* Crashes under win7 */
-        hres = pSHGetItemFromDataObject(NULL, 0, &IID_IShellItem, NULL);
+        pSHGetItemFromDataObject(NULL, 0, &IID_IShellItem, NULL);
     }
 
     hres = pSHGetItemFromDataObject(NULL, 0, &IID_IShellItem, (void**)&psv);
@@ -2783,9 +2784,10 @@ static void test_ShellItemCompare(void)
     hr = IShellFolder_BindToObject(psf_desktop, pidl_cwd, NULL, &IID_IShellFolder, (void**)&psf_current);
     ok(SUCCEEDED(hr), "BindToObject returned %x\n", hr);
     IShellFolder_Release(psf_desktop);
+    ILFree(pidl_cwd);
 
     /* Generate ShellItems for the files */
-    ZeroMemory(&psi, sizeof(IShellItem*)*9);
+    memset(&psi, 0, sizeof(psi));
     failed = FALSE;
     for(i = 0; i < 9; i++)
     {
@@ -2828,9 +2830,9 @@ static void test_ShellItemCompare(void)
     if(0)
     {
         /* Crashes on native (win7, winxp) */
-        hr = IShellItem_Compare(psi_a, NULL, 0, NULL);
-        hr = IShellItem_Compare(psi_a, psi_b, 0, NULL);
-        hr = IShellItem_Compare(psi_a, NULL, 0, &order);
+        IShellItem_Compare(psi_a, NULL, 0, NULL);
+        IShellItem_Compare(psi_a, psi_b, 0, NULL);
+        IShellItem_Compare(psi_a, NULL, 0, &order);
     }
 
     /* Basics */
@@ -2963,7 +2965,7 @@ cleanup:
 /**************************************************************/
 /* IUnknown implementation for counting QueryInterface calls. */
 typedef struct {
-    const IUnknownVtbl *lpVtbl;
+    IUnknown IUnknown_iface;
     struct if_count {
         REFIID id;
         LONG count;
@@ -2971,9 +2973,14 @@ typedef struct {
     LONG unknown;
 } IUnknownImpl;
 
+static inline IUnknownImpl *impl_from_IUnknown(IUnknown *iface)
+{
+    return CONTAINING_RECORD(iface, IUnknownImpl, IUnknown_iface);
+}
+
 static HRESULT WINAPI unk_fnQueryInterface(IUnknown *iunk, REFIID riid, void** punk)
 {
-    IUnknownImpl *This = (IUnknownImpl*)iunk;
+    IUnknownImpl *This = impl_from_IUnknown(iunk);
     UINT i, found;
     for(i = found = 0; This->ifaces[i].id != NULL; i++)
     {
@@ -3040,7 +3047,7 @@ static void test_SHGetIDListFromObject(void)
     ok(hres == E_NOINTERFACE, "Got %x\n", hres);
 
     punkimpl = HeapAlloc(GetProcessHeap(), 0, sizeof(IUnknownImpl));
-    punkimpl->lpVtbl = &vt_IUnknown;
+    punkimpl->IUnknown_iface.lpVtbl = &vt_IUnknown;
     punkimpl->ifaces = ifaces;
     punkimpl->unknown = 0;
 
@@ -3202,16 +3209,16 @@ static void test_SHGetItemFromObject(void)
     if(0)
     {
         /* Crashes with Windows 7 */
-        hres = pSHGetItemFromObject((IUnknown*)psfdesktop, &IID_IUnknown, NULL);
-        hres = pSHGetItemFromObject(NULL, &IID_IUnknown, NULL);
-        hres = pSHGetItemFromObject((IUnknown*)psfdesktop, NULL, (void**)&punk);
+        pSHGetItemFromObject((IUnknown*)psfdesktop, &IID_IUnknown, NULL);
+        pSHGetItemFromObject(NULL, &IID_IUnknown, NULL);
+        pSHGetItemFromObject((IUnknown*)psfdesktop, NULL, (void**)&punk);
     }
 
     hres = pSHGetItemFromObject(NULL, &IID_IUnknown, (void**)&punk);
     ok(hres == E_NOINTERFACE, "Got 0x%08x\n", hres);
 
     punkimpl = HeapAlloc(GetProcessHeap(), 0, sizeof(IUnknownImpl));
-    punkimpl->lpVtbl = &vt_IUnknown;
+    punkimpl->IUnknown_iface.lpVtbl = &vt_IUnknown;
     punkimpl->ifaces = ifaces;
     punkimpl->unknown = 0;
 
@@ -3338,7 +3345,7 @@ static void test_SHCreateShellItemArray(void)
             if(0)
             {
                 /* Crashes in Windows 7 */
-                hr = IShellItemArray_GetCount(psia, NULL);
+                IShellItemArray_GetCount(psia, NULL);
             }
 
             IShellItemArray_GetCount(psia, &numitems);
@@ -3382,9 +3389,9 @@ static void test_SHCreateShellItemArray(void)
         if(0)
         {
             /* Crashes under Windows 7 */
-            hr = pSHCreateShellItemArrayFromShellItem(NULL, &IID_IShellItemArray, NULL);
-            hr = pSHCreateShellItemArrayFromShellItem(NULL, &IID_IShellItemArray, (void**)&psia);
-            hr = pSHCreateShellItemArrayFromShellItem(psi, &IID_IShellItemArray, NULL);
+            pSHCreateShellItemArrayFromShellItem(NULL, &IID_IShellItemArray, NULL);
+            pSHCreateShellItemArrayFromShellItem(NULL, &IID_IShellItemArray, (void**)&psia);
+            pSHCreateShellItemArrayFromShellItem(psi, &IID_IShellItemArray, NULL);
         }
 
         hr = pSHCreateItemFromIDList(pidl_testdir, &IID_IShellItem, (void**)&psi);
@@ -3435,7 +3442,7 @@ static void test_SHCreateShellItemArray(void)
         if(0)
         {
             /* Crashes under Windows 7 */
-            hr = pSHCreateShellItemArrayFromDataObject(NULL, &IID_IShellItemArray, NULL);
+            pSHCreateShellItemArrayFromDataObject(NULL, &IID_IShellItemArray, NULL);
         }
         hr = pSHCreateShellItemArrayFromDataObject(NULL, &IID_IShellItemArray, (void**)&psia);
         ok(hr == E_INVALIDARG, "Got 0x%08x\n", hr);
@@ -3475,6 +3482,7 @@ static void test_SHCreateShellItemArray(void)
                         {
                             UINT count_sia, i;
                             hr = IShellItemArray_GetCount(psia, &count_sia);
+                            ok(hr == S_OK, "Got 0x%08x\n", hr);
                             ok(count_sia == count, "Counts differ (%d, %d)\n", count, count_sia);
                             for(i = 0; i < count_sia; i++)
                             {
@@ -3546,8 +3554,8 @@ static void test_ShellItemBindToHandler(void)
         if(0)
         {
             /* Crashes under Windows 7 */
-            hr = IShellItem_BindToHandler(psi, NULL, NULL, NULL, NULL);
-            hr = IShellItem_BindToHandler(psi, NULL, &IID_IUnknown, &IID_IUnknown, NULL);
+            IShellItem_BindToHandler(psi, NULL, NULL, NULL, NULL);
+            IShellItem_BindToHandler(psi, NULL, &IID_IUnknown, &IID_IUnknown, NULL);
         }
         hr = IShellItem_BindToHandler(psi, NULL, &IID_IUnknown, &IID_IUnknown, (void**)&punk);
         ok(hr == MK_E_NOOBJECT, "Got 0x%08x\n", hr);
@@ -3670,7 +3678,7 @@ static void test_ShellItemBindToHandler(void)
     pILFree(pidl_desktop);
 }
 
-void test_ShellItemGetAttributes(void)
+static void test_ShellItemGetAttributes(void)
 {
     IShellItem *psi;
     LPITEMIDLIST pidl_desktop;
@@ -3693,15 +3701,14 @@ void test_ShellItemGetAttributes(void)
     }
     if(FAILED(hr))
     {
-        skip("Skipping tests.");
+        skip("Skipping tests.\n");
         return;
     }
 
     if(0)
     {
         /* Crashes on native (Win 7) */
-        hr = IShellItem_GetAttributes(psi, 0, NULL);
-        ok(hr == S_OK, "Got 0x%08x\n", hr);
+        IShellItem_GetAttributes(psi, 0, NULL);
     }
 
     /* Test GetAttributes on the desktop folder. */
@@ -3731,9 +3738,9 @@ static void test_SHParseDisplayName(void)
 if (0)
 {
     /* crashes on native */
-    hr = pSHParseDisplayName(NULL, NULL, NULL, 0, NULL);
+    pSHParseDisplayName(NULL, NULL, NULL, 0, NULL);
     nameW[0] = 0;
-    hr = pSHParseDisplayName(nameW, NULL, NULL, 0, NULL);
+    pSHParseDisplayName(nameW, NULL, NULL, 0, NULL);
 }
 
     pidl1 = (LPITEMIDLIST)0xdeadbeef;
@@ -3790,7 +3797,7 @@ static void test_desktop_IPersist(void)
     if (0)
     {
         /* crashes on native */
-        hr = IPersist_GetClassID(persist, NULL);
+        IPersist_GetClassID(persist, NULL);
     }
         memset(&clsid, 0, sizeof(clsid));
         hr = IPersist_GetClassID(persist, &clsid);
@@ -3976,6 +3983,7 @@ static void r_verify_pidl(unsigned l, LPCITEMIDLIST pidl, const WCHAR *path)
             ok_(__FILE__,l)(lstrcmpW(path, U(filename).pOleStr) == 0,
                     "didn't get expected path (%s), instead: %s\n",
                      wine_dbgstr_w(path), wine_dbgstr_w(U(filename).pOleStr));
+            SHFree(U(filename).pOleStr);
         }else if(filename.uType == STRRET_CSTR){
             ok_(__FILE__,l)(strcmp_wa(path, U(filename).cStr) == 0,
                     "didn't get expected path (%s), instead: %s\n",
@@ -4060,7 +4068,7 @@ static HRESULT WINAPI fsbd_GetFindData_nul(IFileSystemBindData *fsbd,
 static HRESULT WINAPI fsbd_GetFindData_junk(IFileSystemBindData *fsbd,
         WIN32_FIND_DATAW *pfd)
 {
-    memset(pfd, 0xdeadbeef, sizeof(WIN32_FIND_DATAW));
+    memset(pfd, 0xef, sizeof(WIN32_FIND_DATAW));
     return S_OK;
 }
 
@@ -4432,12 +4440,16 @@ static void test_SHChangeNotify(void)
             SHChangeNotify(exp_data->signal, SHCNF_PATHW | SHCNF_FLUSH, path1, path2);
             do_events();
             ok(exp_data->missing_events == 0, "%s: Expected wndproc to be called\n", exp_data->id);
+
+            HeapFree(GetProcessHeap(), 0, path1);
+            HeapFree(GetProcessHeap(), 0, path2);
         }
     }
 
     SHChangeNotifyDeregister(notifyID);
     DestroyWindow(wnd);
 
+    ILFree((LPITEMIDLIST)entries[0].pidl);
     br = RemoveDirectoryA(root_dirA);
     ok(br == TRUE, "RemoveDirectory failed: %d\n", GetLastError());
 }

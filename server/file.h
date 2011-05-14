@@ -24,6 +24,7 @@
 #include "object.h"
 
 struct fd;
+struct mapping;
 struct async_queue;
 struct completion;
 
@@ -60,6 +61,7 @@ extern struct fd *create_anonymous_fd( const struct fd_ops *fd_user_ops,
                                        int unix_fd, struct object *user, unsigned int options );
 extern struct fd *dup_fd_object( struct fd *orig, unsigned int access, unsigned int sharing,
                                  unsigned int options );
+extern struct fd *get_fd_object_for_mapping( struct fd *fd, unsigned int access, unsigned int sharing );
 extern void *get_fd_user( struct fd *fd );
 extern void set_fd_user( struct fd *fd, const struct fd_ops *ops, struct object *user );
 extern unsigned int get_fd_options( struct fd *fd );
@@ -116,10 +118,19 @@ extern struct file *get_file_obj( struct process *process, obj_handle_t handle,
 extern int get_file_unix_fd( struct file *file );
 extern int is_same_file( struct file *file1, struct file *file2 );
 extern struct file *create_file_for_fd( int fd, unsigned int access, unsigned int sharing );
-extern struct file *grab_file_unless_removable( struct file *file );
+extern struct file *create_file_for_fd_obj( struct fd *fd, unsigned int access, unsigned int sharing );
 extern void file_set_error(void);
 extern struct security_descriptor *mode_to_sd( mode_t mode, const SID *user, const SID *group );
 extern mode_t sd_to_mode( const struct security_descriptor *sd, const SID *owner );
+
+/* file mapping functions */
+
+extern struct mapping *get_mapping_obj( struct process *process, obj_handle_t handle,
+                                        unsigned int access );
+extern obj_handle_t open_mapping_file( struct process *process, struct mapping *mapping,
+                                       unsigned int access, unsigned int sharing );
+extern struct mapping *grab_mapping_unless_removable( struct mapping *mapping );
+extern int get_page_size(void);
 
 /* change notification functions */
 

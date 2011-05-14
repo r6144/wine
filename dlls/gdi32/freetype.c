@@ -262,6 +262,7 @@ struct enum_data
 typedef struct tagFace {
     struct list entry;
     WCHAR *StyleName;
+    const WCHAR *FullName;
     char *file;
     void *font_data_ptr;
     DWORD font_data_size;
@@ -353,6 +354,17 @@ typedef struct {
     const WCHAR *font_name;
     struct list links;
 } SYSTEM_LINKS;
+
+struct enum_charset_element {
+    DWORD mask;
+    DWORD charset;
+    LPCWSTR name;
+};
+
+struct enum_charset_list {
+    DWORD total;
+    struct enum_charset_element element[32];
+};
 
 #define GM_BLOCK_SIZE 128
 #define FONT_GM(font,idx) (&(font)->gm[(idx) / GM_BLOCK_SIZE][(idx) % GM_BLOCK_SIZE])
@@ -470,8 +482,6 @@ struct font_mapping
 };
 
 static struct list mappings_list = LIST_INIT( mappings_list );
-
-static BOOL have_installed_roman_font = FALSE; /* CreateFontInstance will fail if this is still FALSE */
 
 static CRITICAL_SECTION freetype_cs;
 static CRITICAL_SECTION_DEBUG critsect_debug =
@@ -1086,32 +1096,32 @@ static BOOL get_name_table_entry(FT_Face ft_face, FT_SfntName *req)
     return FALSE;
 }
 
-static WCHAR *get_familyname(FT_Face ft_face)
+static WCHAR *get_face_name(FT_Face ft_face, FT_UShort name_id, FT_UShort language_id)
 {
-    WCHAR *family = NULL;
+    WCHAR *ret = NULL;
     FT_SfntName name;
 
     name.platform_id = TT_PLATFORM_MICROSOFT;
     name.encoding_id = TT_MS_ID_UNICODE_CS;
-    name.language_id = GetUserDefaultLCID();
-    name.name_id     = TT_NAME_ID_FONT_FAMILY;
+    name.language_id = language_id;
+    name.name_id     = name_id;
 
     if(get_name_table_entry(ft_face, &name))
     {
         FT_UInt i;
 
         /* String is not nul terminated and string_len is a byte length. */
-        family = HeapAlloc(GetProcessHeap(), 0, name.string_len + 2);
+        ret = HeapAlloc(GetProcessHeap(), 0, name.string_len + 2);
         for(i = 0; i < name.string_len / 2; i++)
         {
             WORD *tmp = (WORD *)&name.string[i * 2];
-            family[i] = GET_BE_WORD(*tmp);
+            ret[i] = GET_BE_WORD(*tmp);
         }
-        family[i] = 0;
-        TRACE("Got localised name %s\n", debugstr_w(family));
+        ret[i] = 0;
+        TRACE("Got localised name %s\n", debugstr_w(ret));
     }
 
-    return family;
+    return ret;
 }
 
 
@@ -1322,7 +1332,7 @@ static INT AddFontToList(const char *file, void *font_data_ptr, DWORD font_data_
 
         if (target_family)
         {
-            localised_family = get_familyname(ft_face);
+            localised_family = get_face_name(ft_face, TT_NAME_ID_FONT_FAMILY, GetUserDefaultLCID());
             if (localised_family && strcmpiW(localised_family,target_family)!=0)
             {
                 TRACE("Skipping Index %i: Incorrect Family name for replacement\n",(INT)face_index);
@@ -1351,7 +1361,7 @@ static INT AddFontToList(const char *file, void *font_data_ptr, DWORD font_data_
 
             localised_family = NULL;
             if(!fake_family) {
-                localised_family = get_familyname(ft_face);
+                localised_family = get_face_name(ft_face, TT_NAME_ID_FONT_FAMILY, GetUserDefaultLCID());
                 if(localised_family && !strcmpiW(localised_family, english_family)) {
                     HeapFree(GetProcessHeap(), 0, localised_family);
                     localised_family = NULL;
@@ -1452,6 +1462,7 @@ static INT AddFontToList(const char *file, void *font_data_ptr, DWORD font_data_
             face = HeapAlloc(GetProcessHeap(), 0, sizeof(*face));
             face->cached_enum_data = NULL;
             face->StyleName = StyleW;
+            face->FullName = get_face_name(ft_face, TT_NAME_ID_FULL_NAME, TT_MS_LANGID_ENGLISH_UNITED_STATES);
             if (file)
             {
                 face->file = strdupA(file);
@@ -1522,9 +1533,6 @@ static INT AddFontToList(const char *file, void *font_data_ptr, DWORD font_data_
                     }
                 }
             }
-
-            if (!(face->fs.fsCsb[0] & FS_SYMBOL))
-                have_installed_roman_font = TRUE;
 
             AddFaceToFamily(face, family);
 
@@ -3086,18 +3094,18 @@ static void free_font(GdiFont *font)
     LIST_FOR_EACH_SAFE(cursor, cursor2, &font->child_fonts)
     {
         CHILD_FONT *child = LIST_ENTRY(cursor, CHILD_FONT, entry);
-        struct list *first_hfont;
-        HFONTLIST *hfontlist;
         list_remove(cursor);
         if(child->font)
-        {
-            first_hfont = list_head(&child->font->hfontlist);
-            hfontlist = LIST_ENTRY(first_hfont, HFONTLIST, entry);
-            DeleteObject(hfontlist->hfont);
-            HeapFree(GetProcessHeap(), 0, hfontlist);
             free_font(child->font);
-        }
         HeapFree(GetProcessHeap(), 0, child);
+    }
+
+    LIST_FOR_EACH_SAFE(cursor, cursor2, &font->hfontlist)
+    {
+        HFONTLIST *hfontlist = LIST_ENTRY(cursor, HFONTLIST, entry);
+        DeleteObject(hfontlist->hfont);
+        list_remove(&hfontlist->entry);
+        HeapFree(GetProcessHeap(), 0, hfontlist);
     }
 
     if (font->ft_face) pFT_Done_Face(font->ft_face);
@@ -3559,12 +3567,6 @@ GdiFont *WineEngCreateFontInstance(DC *dc, HFONT hfont)
         LeaveCriticalSection( &freetype_cs );
 	return NULL;
     }
-    if(!have_installed_roman_font)
-    {
-	TRACE("No roman font installed\n");
-        LeaveCriticalSection( &freetype_cs );
-	return NULL;
-    }
 
     ret = alloc_font();
 
@@ -3646,6 +3648,20 @@ GdiFont *WineEngCreateFontInstance(DC *dc, HFONT hfont)
                 }
             }
 	}
+
+        /* Search by full face name. */
+        LIST_FOR_EACH(family_elem_ptr, &font_list) {
+            family = LIST_ENTRY(family_elem_ptr, Family, entry);
+            LIST_FOR_EACH(face_elem_ptr, &family->faces) {
+                face = LIST_ENTRY(face_elem_ptr, Face, entry);
+                if(face->FullName && !strcmpiW(face->FullName, FaceName) &&
+                   ((csi.fs.fsCsb[0] & (face->fs.fsCsb[0] | face->fs_links.fsCsb[0])) || !csi.fs.fsCsb[0]))
+                {
+                    if(face->scalable || can_use_bitmap)
+                        goto found_face;
+                }
+            }
+        }
 
         /*
 	 * Try check the SystemLink list first for a replacement font.
@@ -3803,6 +3819,9 @@ found:
     ret->fake_italic = (it && !(face->ntmFlags & NTM_ITALIC));
     ret->fake_bold = (bd && !(face->ntmFlags & NTM_BOLD));
 
+found_face:
+    height = lf.lfHeight;
+
     ret->fs = face->fs;
 
     if(csi.fs.fsCsb[0]) {
@@ -3920,6 +3939,13 @@ static void dump_gdi_font_list(void)
         TRACE("gdiFont=%p %s %d\n",
               gdiFont, debugstr_w(gdiFont->font_desc.lf.lfFaceName), gdiFont->font_desc.lf.lfHeight);
     }
+
+    TRACE("---------- Child gdiFont Cache ----------\n");
+    LIST_FOR_EACH(elem_ptr, &child_font_list) {
+        gdiFont = LIST_ENTRY(elem_ptr, struct tagGdiFont, entry);
+        TRACE("gdiFont=%p %s %d\n",
+              gdiFont, debugstr_w(gdiFont->font_desc.lf.lfFaceName), gdiFont->font_desc.lf.lfHeight);
+    }
 }
 
 /*************************************************************
@@ -3941,14 +3967,16 @@ BOOL WineEngDestroyFontInstance(HFONT handle)
 
     LIST_FOR_EACH_ENTRY(gdiFont, &child_font_list, struct tagGdiFont, entry)
     {
-        struct list *first_hfont = list_head(&gdiFont->hfontlist);
-        hflist = LIST_ENTRY(first_hfont, HFONTLIST, entry);
-        if(hflist->hfont == handle)
-        {
-            TRACE("removing child font %p from child list\n", gdiFont);
-            list_remove(&gdiFont->entry);
-            LeaveCriticalSection( &freetype_cs );
-            return TRUE;
+        hfontlist_elem_ptr = list_head(&gdiFont->hfontlist);
+        while(hfontlist_elem_ptr) {
+            hflist = LIST_ENTRY(hfontlist_elem_ptr, struct tagHFONTLIST, entry);
+            hfontlist_elem_ptr = list_next(&gdiFont->hfontlist, hfontlist_elem_ptr);
+            if(hflist->hfont == handle) {
+                TRACE("removing child font %p from child list\n", gdiFont);
+                list_remove(&gdiFont->entry);
+                LeaveCriticalSection( &freetype_cs );
+                return TRUE;
+            }
         }
     }
 
@@ -3991,6 +4019,59 @@ BOOL WineEngDestroyFontInstance(HFONT handle)
     }
     LeaveCriticalSection( &freetype_cs );
     return ret;
+}
+
+/***************************************************
+ * create_enum_charset_list
+ *
+ * This function creates charset enumeration list because in DEFAULT_CHARSET
+ * case, the ANSI codepage's charset takes precedence over other charsets.
+ * This function works as a filter other than DEFAULT_CHARSET case.
+ */
+static DWORD create_enum_charset_list(DWORD charset, struct enum_charset_list *list)
+{
+    CHARSETINFO csi;
+    DWORD n = 0;
+
+    if (TranslateCharsetInfo(ULongToPtr(charset), &csi, TCI_SRCCHARSET) &&
+        csi.fs.fsCsb[0] != 0) {
+        list->element[n].mask    = csi.fs.fsCsb[0];
+        list->element[n].charset = csi.ciCharset;
+        list->element[n].name    = ElfScriptsW[ffs(csi.fs.fsCsb[0]) - 1];
+        n++;
+    }
+    else { /* charset is DEFAULT_CHARSET or invalid. */
+        INT acp, i;
+
+        /* Set the current codepage's charset as the first element. */
+        acp = GetACP();
+        if (TranslateCharsetInfo((DWORD*)(INT_PTR)acp, &csi, TCI_SRCCODEPAGE) &&
+            csi.fs.fsCsb[0] != 0) {
+            list->element[n].mask    = csi.fs.fsCsb[0];
+            list->element[n].charset = csi.ciCharset;
+            list->element[n].name    = ElfScriptsW[ffs(csi.fs.fsCsb[0]) - 1];
+            n++;
+        }
+
+        /* Fill out left elements. */
+        for (i = 0; i < 32; i++) {
+            FONTSIGNATURE fs;
+            fs.fsCsb[0] = 1L << i;
+            fs.fsCsb[1] = 0;
+            if (n > 0 && fs.fsCsb[0] == list->element[0].mask)
+                continue; /* skip, already added. */
+            if (!TranslateCharsetInfo(fs.fsCsb, &csi, TCI_SRCFONTSIG))
+                continue; /* skip, this is an invalid fsCsb bit. */
+
+            list->element[n].mask    = fs.fsCsb[0];
+            list->element[n].charset = csi.ciCharset;
+            list->element[n].name    = ElfScriptsW[i];
+            n++;
+        }
+    }
+    list->total = n;
+
+    return n;
 }
 
 static void GetEnumStructs(Face *face, LPENUMLOGFONTEXW pelf,
@@ -4095,6 +4176,91 @@ static void GetEnumStructs(Face *face, LPENUMLOGFONTEXW pelf,
     free_font(font);
 }
 
+static BOOL family_matches(Family *family, const LOGFONTW *lf)
+{
+    struct list *face_elem_ptr;
+
+    if (!strcmpiW(lf->lfFaceName, family->FamilyName)) return TRUE;
+
+    LIST_FOR_EACH(face_elem_ptr, &family->faces)
+    {
+        static const WCHAR spaceW[] = { ' ',0 };
+        WCHAR full_family_name[LF_FULLFACESIZE];
+        Face *face = LIST_ENTRY(face_elem_ptr, Face, entry);
+
+        if (strlenW(family->FamilyName) + strlenW(face->StyleName) + 2 > LF_FULLFACESIZE)
+        {
+            FIXME("Length of %s + %s + 2 is longer than LF_FULLFACESIZE\n",
+                  debugstr_w(family->FamilyName), debugstr_w(face->StyleName));
+            continue;
+        }
+
+        strcpyW(full_family_name, family->FamilyName);
+        strcatW(full_family_name, spaceW);
+        strcatW(full_family_name, face->StyleName);
+        if (!strcmpiW(lf->lfFaceName, full_family_name)) return TRUE;
+    }
+
+    return FALSE;
+}
+
+static BOOL face_matches(Face *face, const LOGFONTW *lf)
+{
+    static const WCHAR spaceW[] = { ' ',0 };
+    WCHAR full_family_name[LF_FULLFACESIZE];
+
+    if (!strcmpiW(lf->lfFaceName, face->family->FamilyName)) return TRUE;
+
+    if (strlenW(face->family->FamilyName) + strlenW(face->StyleName) + 2 > LF_FULLFACESIZE)
+    {
+        FIXME("Length of %s + %s + 2 is longer than LF_FULLFACESIZE\n",
+              debugstr_w(face->family->FamilyName), debugstr_w(face->StyleName));
+        return FALSE;
+    }
+
+    strcpyW(full_family_name, face->family->FamilyName);
+    strcatW(full_family_name, spaceW);
+    strcatW(full_family_name, face->StyleName);
+    return !strcmpiW(lf->lfFaceName, full_family_name);
+}
+
+static BOOL enum_face_charsets(Face *face, struct enum_charset_list *list,
+                               FONTENUMPROCW proc, LPARAM lparam)
+{
+    ENUMLOGFONTEXW elf;
+    NEWTEXTMETRICEXW ntm;
+    DWORD type = 0;
+    int i;
+
+    GetEnumStructs(face, &elf, &ntm, &type);
+    for(i = 0; i < list->total; i++) {
+        if(!face->scalable && face->fs.fsCsb[0] == 0) { /* OEM bitmap */
+            elf.elfLogFont.lfCharSet = ntm.ntmTm.tmCharSet = OEM_CHARSET;
+            strcpyW(elf.elfScript, OEM_DOSW);
+            i = 32; /* break out of loop */
+        } else if(!(face->fs.fsCsb[0] & list->element[i].mask))
+            continue;
+        else {
+            elf.elfLogFont.lfCharSet = ntm.ntmTm.tmCharSet = list->element[i].charset;
+            if(list->element[i].name)
+                strcpyW(elf.elfScript, list->element[i].name);
+            else
+                FIXME("Unknown elfscript for bit %d\n", ffs(list->element[i].mask) - 1);
+        }
+        TRACE("enuming face %s full %s style %s charset = %d type %d script %s it %d weight %d ntmflags %08x\n",
+              debugstr_w(elf.elfLogFont.lfFaceName),
+              debugstr_w(elf.elfFullName), debugstr_w(elf.elfStyle),
+              list->element[i].charset, type, debugstr_w(elf.elfScript),
+              elf.elfLogFont.lfItalic, elf.elfLogFont.lfWeight,
+              ntm.ntmTm.ntmFlags);
+        /* release section before callback (FIXME) */
+        LeaveCriticalSection( &freetype_cs );
+        if (!proc(&elf.elfLogFont, (TEXTMETRICW *)&ntm, type, lparam)) return FALSE;
+        EnterCriticalSection( &freetype_cs );
+    }
+    return TRUE;
+}
+
 /*************************************************************
  * WineEngEnumFonts
  *
@@ -4104,13 +4270,8 @@ DWORD WineEngEnumFonts(LPLOGFONTW plf, FONTENUMPROCW proc, LPARAM lparam)
     Family *family;
     Face *face;
     struct list *family_elem_ptr, *face_elem_ptr;
-    ENUMLOGFONTEXW elf;
-    NEWTEXTMETRICEXW ntm;
-    DWORD type;
-    FONTSIGNATURE fs;
-    CHARSETINFO csi;
     LOGFONTW lf;
-    int i;
+    struct enum_charset_list enum_charsets;
 
     if (!plf)
     {
@@ -4121,6 +4282,8 @@ DWORD WineEngEnumFonts(LPLOGFONTW plf, FONTENUMPROCW proc, LPARAM lparam)
     }
 
     TRACE("facename = %s charset %d\n", debugstr_w(plf->lfFaceName), plf->lfCharSet);
+
+    create_enum_charset_list(plf->lfCharSet, &enum_charsets);
 
     GDI_CheckNotLock();
     EnterCriticalSection( &freetype_cs );
@@ -4138,44 +4301,11 @@ DWORD WineEngEnumFonts(LPLOGFONTW plf, FONTENUMPROCW proc, LPARAM lparam)
 
         LIST_FOR_EACH(family_elem_ptr, &font_list) {
             family = LIST_ENTRY(family_elem_ptr, Family, entry);
-            if(!strcmpiW(plf->lfFaceName, family->FamilyName)) {
+            if(family_matches(family, plf)) {
                 LIST_FOR_EACH(face_elem_ptr, &family->faces) {
                     face = LIST_ENTRY(face_elem_ptr, Face, entry);
-                    GetEnumStructs(face, &elf, &ntm, &type);
-                    for(i = 0; i < 32; i++) {
-                        if(!face->scalable && face->fs.fsCsb[0] == 0) { /* OEM bitmap */
-                            elf.elfLogFont.lfCharSet = ntm.ntmTm.tmCharSet = OEM_CHARSET;
-                            strcpyW(elf.elfScript, OEM_DOSW);
-                            i = 32; /* break out of loop */
-                        } else if(!(face->fs.fsCsb[0] & (1L << i)))
-                            continue;
-                        else {
-                            fs.fsCsb[0] = 1L << i;
-                            fs.fsCsb[1] = 0;
-                            if(!TranslateCharsetInfo(fs.fsCsb, &csi,
-                                                     TCI_SRCFONTSIG))
-                                csi.ciCharset = DEFAULT_CHARSET;
-                            if(i == 31) csi.ciCharset = SYMBOL_CHARSET;
-                            if(csi.ciCharset != DEFAULT_CHARSET) {
-                                elf.elfLogFont.lfCharSet =
-                                    ntm.ntmTm.tmCharSet = csi.ciCharset;
-                                if(ElfScriptsW[i])
-                                    strcpyW(elf.elfScript, ElfScriptsW[i]);
-                                else
-                                    FIXME("Unknown elfscript for bit %d\n", i);
-                            }
-                        }
-                        TRACE("enuming face %s full %s style %s charset %d type %d script %s it %d weight %d ntmflags %08x\n",
-                              debugstr_w(elf.elfLogFont.lfFaceName),
-                              debugstr_w(elf.elfFullName), debugstr_w(elf.elfStyle),
-                              csi.ciCharset, type, debugstr_w(elf.elfScript),
-                              elf.elfLogFont.lfItalic, elf.elfLogFont.lfWeight,
-                              ntm.ntmTm.ntmFlags);
-                        /* release section before callback (FIXME) */
-                        LeaveCriticalSection( &freetype_cs );
-                        if (!proc(&elf.elfLogFont, (TEXTMETRICW *)&ntm, type, lparam)) return 0;
-                        EnterCriticalSection( &freetype_cs );
-		    }
+                    if (!face_matches(face, plf)) continue;
+                    if (!enum_face_charsets(face, &enum_charsets, proc, lparam)) return 0;
 		}
 	    }
 	}
@@ -4184,41 +4314,7 @@ DWORD WineEngEnumFonts(LPLOGFONTW plf, FONTENUMPROCW proc, LPARAM lparam)
             family = LIST_ENTRY(family_elem_ptr, Family, entry);
             face_elem_ptr = list_head(&family->faces);
             face = LIST_ENTRY(face_elem_ptr, Face, entry);
-            GetEnumStructs(face, &elf, &ntm, &type);
-            for(i = 0; i < 32; i++) {
-                if(!face->scalable && face->fs.fsCsb[0] == 0) { /* OEM bitmap */
-                    elf.elfLogFont.lfCharSet = ntm.ntmTm.tmCharSet = OEM_CHARSET;
-                    strcpyW(elf.elfScript, OEM_DOSW);
-                    i = 32; /* break out of loop */
-	        } else if(!(face->fs.fsCsb[0] & (1L << i)))
-                    continue;
-                else {
-		    fs.fsCsb[0] = 1L << i;
-		    fs.fsCsb[1] = 0;
-		    if(!TranslateCharsetInfo(fs.fsCsb, &csi,
-					     TCI_SRCFONTSIG))
-		        csi.ciCharset = DEFAULT_CHARSET;
-		    if(i == 31) csi.ciCharset = SYMBOL_CHARSET;
-		    if(csi.ciCharset != DEFAULT_CHARSET) {
-		        elf.elfLogFont.lfCharSet = ntm.ntmTm.tmCharSet =
-			  csi.ciCharset;
-			  if(ElfScriptsW[i])
-			      strcpyW(elf.elfScript, ElfScriptsW[i]);
-			  else
-			      FIXME("Unknown elfscript for bit %d\n", i);
-                    }
-                }
-                TRACE("enuming face %s full %s style %s charset = %d type %d script %s it %d weight %d ntmflags %08x\n",
-                      debugstr_w(elf.elfLogFont.lfFaceName),
-                      debugstr_w(elf.elfFullName), debugstr_w(elf.elfStyle),
-                      csi.ciCharset, type, debugstr_w(elf.elfScript),
-                      elf.elfLogFont.lfItalic, elf.elfLogFont.lfWeight,
-                      ntm.ntmTm.ntmFlags);
-                /* release section before callback (FIXME) */
-                LeaveCriticalSection( &freetype_cs );
-                if (!proc(&elf.elfLogFont, (TEXTMETRICW *)&ntm, type, lparam)) return 0;
-                EnterCriticalSection( &freetype_cs );
-	    }
+            if (!enum_face_charsets(face, &enum_charsets, proc, lparam)) return 0;
 	}
     }
     LeaveCriticalSection( &freetype_cs );
@@ -4516,9 +4612,16 @@ static FT_UInt get_glyph_index(const GdiFont *font, UINT glyph)
         return get_GSUB_vert_glyph(font,ret);
     }
 
-    if(font->ft_face->charmap->encoding == FT_ENCODING_MS_SYMBOL && glyph < 0x100)
-        glyph = glyph + 0xf000;
-    glyphId = pFT_Get_Char_Index(font->ft_face, glyph);
+    if(font->ft_face->charmap->encoding == FT_ENCODING_MS_SYMBOL)
+    {
+        if (glyph < 0x100) glyph += 0xf000;
+        /* there is a number of old pre-Unicode "broken" TTFs, which
+           do have symbols at U+00XX instead of U+f0XX */
+        if (!(glyphId = pFT_Get_Char_Index(font->ft_face, glyph)))
+            glyphId = pFT_Get_Char_Index(font->ft_face, glyph-0xf000);
+    }
+    else glyphId = pFT_Get_Char_Index(font->ft_face, glyph);
+
     return get_GSUB_vert_glyph(font,glyphId);
 }
 
@@ -4902,14 +5005,10 @@ DWORD WineEngGetGlyphOutline(GdiFont *incoming_font, UINT glyph, UINT format,
             BYTE *src = ft_face->glyph->bitmap.buffer, *dst = buf;
             INT h = ft_face->glyph->bitmap.rows;
             INT x;
+            memset( buf, 0, needed );
             while(h--) {
-                for(x = 0; x < pitch; x++)
-                {
-                    if(x < ft_face->glyph->bitmap.width)
-                        dst[x] = (src[x / 8] & (1 << ( (7 - (x % 8))))) ? 0xff : 0;
-                    else
-                        dst[x] = 0;
-                }
+                for(x = 0; x < pitch && x < ft_face->glyph->bitmap.width; x++)
+                    if (src[x / 8] & (1 << ( (7 - (x % 8))))) dst[x] = 0xff;
                 src += ft_face->glyph->bitmap.pitch;
                 dst += pitch;
             }
@@ -4988,9 +5087,10 @@ DWORD WineEngGetGlyphOutline(GdiFont *incoming_font, UINT glyph, UINT format,
             src = ft_face->glyph->bitmap.buffer;
             src_pitch = ft_face->glyph->bitmap.pitch;
 
+            height = min( height, ft_face->glyph->bitmap.rows );
             while ( height-- )
             {
-                for (x = 0; x < width; x++)
+                for (x = 0; x < width && x < ft_face->glyph->bitmap.width; x++)
                 {
                     if ( src[x / 8] & (1 << ( (7 - (x % 8)))) )
                         ((unsigned int *)dst)[x] = ~0u;

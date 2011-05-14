@@ -80,7 +80,6 @@ static const USER_DRIVER *load_driver(void)
         GET_USER_FUNC(GetKeyboardLayoutName);
         GET_USER_FUNC(LoadKeyboardLayout);
         GET_USER_FUNC(MapVirtualKeyEx);
-        GET_USER_FUNC(SendInput);
         GET_USER_FUNC(ToUnicodeEx);
         GET_USER_FUNC(UnloadKeyboardLayout);
         GET_USER_FUNC(VkKeyScanEx);
@@ -99,8 +98,6 @@ static const USER_DRIVER *load_driver(void)
         GET_USER_FUNC(CountClipboardFormats);
         GET_USER_FUNC(EnumClipboardFormats);
         GET_USER_FUNC(IsClipboardFormatAvailable);
-        GET_USER_FUNC(RegisterClipboardFormat);
-        GET_USER_FUNC(GetClipboardFormatName);
         GET_USER_FUNC(EndClipboardUpdate);
         GET_USER_FUNC(ChangeDisplaySettingsEx);
         GET_USER_FUNC(EnumDisplayMonitors);
@@ -168,7 +165,7 @@ static void CDECL nulldrv_Beep(void)
 
 static SHORT CDECL nulldrv_GetAsyncKeyState( INT key )
 {
-    return 0;
+    return -1;
 }
 
 static INT CDECL nulldrv_GetKeyNameText( LONG lparam, LPWSTR buffer, INT size )
@@ -176,7 +173,7 @@ static INT CDECL nulldrv_GetKeyNameText( LONG lparam, LPWSTR buffer, INT size )
     return 0;
 }
 
-static HKL CDECL nulldrv_GetKeyboardLayout( DWORD layout )
+static HKL CDECL nulldrv_GetKeyboardLayout( DWORD thread_id )
 {
     return 0;
 }
@@ -192,11 +189,6 @@ static HKL CDECL nulldrv_LoadKeyboardLayout( LPCWSTR name, UINT flags )
 }
 
 static UINT CDECL nulldrv_MapVirtualKeyEx( UINT code, UINT type, HKL layout )
-{
-    return 0;
-}
-
-static UINT CDECL nulldrv_SendInput( UINT count, LPINPUT inputs, int size )
 {
     return 0;
 }
@@ -281,19 +273,9 @@ static HANDLE CDECL nulldrv_GetClipboardData( UINT format )
     return 0;
 }
 
-static INT CDECL nulldrv_GetClipboardFormatName( UINT format, LPWSTR buffer, UINT len )
-{
-    return FALSE;
-}
-
 static BOOL CDECL nulldrv_IsClipboardFormatAvailable( UINT format )
 {
     return FALSE;
-}
-
-static UINT CDECL nulldrv_RegisterClipboardFormat( LPCWSTR name )
-{
-    return 0;
 }
 
 static BOOL CDECL nulldrv_SetClipboardData( UINT format, HANDLE handle, BOOL owner )
@@ -448,7 +430,6 @@ static USER_DRIVER null_driver =
     nulldrv_GetKeyboardLayoutName,
     nulldrv_LoadKeyboardLayout,
     nulldrv_MapVirtualKeyEx,
-    nulldrv_SendInput,
     nulldrv_ToUnicodeEx,
     nulldrv_UnloadKeyboardLayout,
     nulldrv_VkKeyScanEx,
@@ -469,9 +450,7 @@ static USER_DRIVER null_driver =
     nulldrv_EndClipboardUpdate,
     nulldrv_EnumClipboardFormats,
     nulldrv_GetClipboardData,
-    nulldrv_GetClipboardFormatName,
     nulldrv_IsClipboardFormatAvailable,
-    nulldrv_RegisterClipboardFormat,
     nulldrv_SetClipboardData,
     /* display modes */
     nulldrv_ChangeDisplaySettingsEx,
@@ -529,9 +508,9 @@ static INT CDECL loaderdrv_GetKeyNameText( LONG lparam, LPWSTR buffer, INT size 
     return load_driver()->pGetKeyNameText( lparam, buffer, size );
 }
 
-static HKL CDECL loaderdrv_GetKeyboardLayout( DWORD layout )
+static HKL CDECL loaderdrv_GetKeyboardLayout( DWORD thread_id )
 {
-    return load_driver()->pGetKeyboardLayout( layout );
+    return load_driver()->pGetKeyboardLayout( thread_id );
 }
 
 static BOOL CDECL loaderdrv_GetKeyboardLayoutName( LPWSTR name )
@@ -547,11 +526,6 @@ static HKL CDECL loaderdrv_LoadKeyboardLayout( LPCWSTR name, UINT flags )
 static UINT CDECL loaderdrv_MapVirtualKeyEx( UINT code, UINT type, HKL layout )
 {
     return load_driver()->pMapVirtualKeyEx( code, type, layout );
-}
-
-static UINT CDECL loaderdrv_SendInput( UINT count, LPINPUT inputs, int size )
-{
-    return load_driver()->pSendInput( count, inputs, size );
 }
 
 static INT CDECL loaderdrv_ToUnicodeEx( UINT virt, UINT scan, const BYTE *state, LPWSTR str,
@@ -640,19 +614,9 @@ static HANDLE CDECL loaderdrv_GetClipboardData( UINT format )
     return load_driver()->pGetClipboardData( format );
 }
 
-static INT CDECL loaderdrv_GetClipboardFormatName( UINT format, LPWSTR buffer, UINT len )
-{
-    return load_driver()->pGetClipboardFormatName( format, buffer, len );
-}
-
 static BOOL CDECL loaderdrv_IsClipboardFormatAvailable( UINT format )
 {
     return load_driver()->pIsClipboardFormatAvailable( format );
-}
-
-static UINT CDECL loaderdrv_RegisterClipboardFormat( LPCWSTR name )
-{
-    return load_driver()->pRegisterClipboardFormat( name );
 }
 
 static BOOL CDECL loaderdrv_SetClipboardData( UINT format, HANDLE handle, BOOL owner )
@@ -801,7 +765,6 @@ static USER_DRIVER lazy_load_driver =
     loaderdrv_GetKeyboardLayoutName,
     loaderdrv_LoadKeyboardLayout,
     loaderdrv_MapVirtualKeyEx,
-    loaderdrv_SendInput,
     loaderdrv_ToUnicodeEx,
     loaderdrv_UnloadKeyboardLayout,
     loaderdrv_VkKeyScanEx,
@@ -822,9 +785,7 @@ static USER_DRIVER lazy_load_driver =
     loaderdrv_EndClipboardUpdate,
     loaderdrv_EnumClipboardFormats,
     loaderdrv_GetClipboardData,
-    loaderdrv_GetClipboardFormatName,
     loaderdrv_IsClipboardFormatAvailable,
-    loaderdrv_RegisterClipboardFormat,
     loaderdrv_SetClipboardData,
     /* display modes */
     loaderdrv_ChangeDisplaySettingsEx,

@@ -866,7 +866,7 @@ static BOOL MDI_AugmentFrameMenu( HWND frame, HWND hChild )
     if (!hIcon)
         hIcon = (HICON)SendMessageW(hChild, WM_GETICON, ICON_BIG, 0);
     if (!hIcon)
-        hIcon = LoadImageW(0, MAKEINTRESOURCEW(IDI_WINLOGO), IMAGE_ICON, 0, 0, LR_DEFAULTCOLOR);
+        hIcon = LoadImageW(0, MAKEINTRESOURCEW(IDI_WINLOGO), IMAGE_ICON, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_DEFAULTCOLOR);
     if (hIcon)
     {
       HDC hMemDC;
@@ -1464,7 +1464,7 @@ LRESULT WINAPI DefMDIChildProcW( HWND hwnd, UINT message,
         return 0;
 
     case WM_MENUCHAR:
-        return 0x00010000; /* MDI children don't have menu bars */
+        return MAKELRESULT( 0, MNC_CLOSE ); /* MDI children don't have menu bars */
 
     case WM_CLOSE:
         SendMessageW( client, WM_MDIDESTROY, (WPARAM)hwnd, 0 );

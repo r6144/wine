@@ -249,8 +249,8 @@ static void     doChild(const char* file, const char* option)
     STARTUPINFOA        siA;
     STARTUPINFOW        siW;
     int                 i;
-    char*               ptrA;
-    WCHAR*              ptrW;
+    char                *ptrA, *ptrA_save;
+    WCHAR               *ptrW, *ptrW_save;
     char                bufA[MAX_PATH];
     WCHAR               bufW[MAX_PATH];
     HANDLE              hFile = CreateFileA(file, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, 0);
@@ -311,7 +311,7 @@ static void     doChild(const char* file, const char* option)
     childPrintf(hFile, "CommandLineW=%s\n\n", encodeW(GetCommandLineW()));
 
     /* output of environment (Ansi) */
-    ptrA = GetEnvironmentStringsA();
+    ptrA_save = ptrA = GetEnvironmentStringsA();
     if (ptrA)
     {
         char    env_var[MAX_LISTED_ENV_VAR];
@@ -326,10 +326,11 @@ static void     doChild(const char* file, const char* option)
             ptrA += strlen(ptrA) + 1;
         }
         childPrintf(hFile, "len=%d\n\n", i);
+        FreeEnvironmentStringsA(ptrA_save);
     }
 
     /* output of environment (Unicode) */
-    ptrW = GetEnvironmentStringsW();
+    ptrW_save = ptrW = GetEnvironmentStringsW();
     if (ptrW)
     {
         WCHAR   env_var[MAX_LISTED_ENV_VAR];
@@ -345,6 +346,7 @@ static void     doChild(const char* file, const char* option)
             ptrW += lstrlenW(ptrW) + 1;
         }
         childPrintf(hFile, "len=%d\n\n", i);
+        FreeEnvironmentStringsW(ptrW_save);
     }
 
     childPrintf(hFile, "[Misc]\n");
@@ -1100,10 +1102,11 @@ static void test_Environment(void)
     char                buffer[MAX_PATH];
     PROCESS_INFORMATION	info;
     STARTUPINFOA	startup;
-    char*               child_env;
+    char                *child_env;
     int                 child_env_len;
-    char*               ptr;
-    char*               env;
+    char                *ptr;
+    char                *ptr2;
+    char                *env;
     int                 slen;
 
     memset(&startup, 0, sizeof(startup));
@@ -1119,8 +1122,9 @@ static void test_Environment(void)
     ok(WaitForSingleObject(info.hProcess, 30000) == WAIT_OBJECT_0, "Child process termination\n");
     /* child process has changed result file, so let profile functions know about it */
     WritePrivateProfileStringA(NULL, NULL, NULL, resfile);
-    
-    cmpEnvironment(GetEnvironmentStringsA());
+
+    env = GetEnvironmentStringsA();
+    cmpEnvironment(env);
     release_memory();
     assert(DeleteFileA(resfile) != 0);
 
@@ -1132,9 +1136,9 @@ static void test_Environment(void)
     /* the basics */
     get_file_name(resfile);
     sprintf(buffer, "\"%s\" tests/process.c \"%s\"", selfname, resfile);
-    
+
     child_env_len = 0;
-    ptr = GetEnvironmentStringsA();
+    ptr = env;
     while(*ptr)
     {
         slen = strlen(ptr)+1;
@@ -1144,7 +1148,7 @@ static void test_Environment(void)
     /* Add space for additional environment variables */
     child_env_len += 256;
     child_env = HeapAlloc(GetProcessHeap(), 0, child_env_len);
-    
+
     ptr = child_env;
     sprintf(ptr, "=%c:=%s", 'C', "C:\\FOO\\BAR");
     ptr += strlen(ptr) + 1;
@@ -1159,13 +1163,13 @@ static void test_Environment(void)
      * - PATH (already set above)
      * - the directory definitions (=[A-Z]:=)
      */
-    for (env = GetEnvironmentStringsA(); *env; env += strlen(env) + 1)
+    for (ptr2 = env; *ptr2; ptr2 += strlen(ptr2) + 1)
     {
-        if (strncmp(env, "PATH=", 5) != 0 &&
-            strncmp(env, "WINELOADER=", 11) != 0 &&
-            !is_str_env_drive_dir(env))
+        if (strncmp(ptr2, "PATH=", 5) != 0 &&
+            strncmp(ptr2, "WINELOADER=", 11) != 0 &&
+            !is_str_env_drive_dir(ptr2))
         {
-            strcpy(ptr, env);
+            strcpy(ptr, ptr2);
             ptr += strlen(ptr) + 1;
         }
     }
@@ -1175,10 +1179,11 @@ static void test_Environment(void)
     ok(WaitForSingleObject(info.hProcess, 30000) == WAIT_OBJECT_0, "Child process termination\n");
     /* child process has changed result file, so let profile functions know about it */
     WritePrivateProfileStringA(NULL, NULL, NULL, resfile);
-    
+
     cmpEnvironment(child_env);
 
     HeapFree(GetProcessHeap(), 0, child_env);
+    FreeEnvironmentStringsA(env);
     release_memory();
     assert(DeleteFileA(resfile) != 0);
 }
@@ -1518,6 +1523,7 @@ static void test_OpenProcess(void)
     void *addr1;
     MEMORY_BASIC_INFORMATION info;
     SIZE_T dummy, read_bytes;
+    BOOL ret;
 
     /* not exported in all windows versions */
     if ((!pVirtualAllocEx) || (!pVirtualFreeEx)) {
@@ -1542,8 +1548,8 @@ static void test_OpenProcess(void)
 
     read_bytes = 0xdeadbeef;
     SetLastError(0xdeadbeef);
-    ok(ReadProcessMemory(hproc, test_OpenProcess, &dummy, sizeof(dummy), &read_bytes),
-       "ReadProcessMemory error %d\n", GetLastError());
+    ret = ReadProcessMemory(hproc, test_OpenProcess, &dummy, sizeof(dummy), &read_bytes);
+    ok(ret, "ReadProcessMemory error %d\n", GetLastError());
     ok(read_bytes == sizeof(dummy), "wrong read bytes %ld\n", read_bytes);
 
     CloseHandle(hproc);
@@ -1573,8 +1579,8 @@ static void test_OpenProcess(void)
     hproc = OpenProcess(PROCESS_QUERY_INFORMATION, FALSE, GetCurrentProcessId());
 
     memset(&info, 0xcc, sizeof(info));
-    ok(VirtualQueryEx(hproc, addr1, &info, sizeof(info)) == sizeof(info),
-       "VirtualQueryEx error %d\n", GetLastError());
+    read_bytes = VirtualQueryEx(hproc, addr1, &info, sizeof(info));
+    ok(read_bytes == sizeof(info), "VirtualQueryEx error %d\n", GetLastError());
 
     ok(info.BaseAddress == addr1, "%p != %p\n", info.BaseAddress, addr1);
     ok(info.AllocationBase == addr1, "%p != %p\n", info.AllocationBase, addr1);

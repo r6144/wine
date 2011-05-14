@@ -43,25 +43,6 @@ DECLARE_INTERFACE_(IDirectDrawFactory, IUnknown)
 #define IDirectDrawFactory_DirectDrawEnumerate(p,a,b)  (p)->lpVtbl->_DirectDrawEnumerate(p,a,b)
 #endif
 
-/******************************************************************************
- * DirectDraw ClassFactory implementation - incomplete
- ******************************************************************************/
-typedef struct
-{
-    const IClassFactoryVtbl *lpVtbl;
-    LONG ref;
-    HRESULT (*pfnCreateInstance)(IUnknown *pUnkOuter, REFIID iid, LPVOID *ppObj);
-} IClassFactoryImpl;
-
-
-/******************************************************************************
- * DirectDrawFactory implementation
- ******************************************************************************/
-typedef struct
-{
-    const IDirectDrawFactoryVtbl *lpVtbl;
-    LONG ref;
-} IDirectDrawFactoryImpl;
 
 HRESULT WINAPI IDirectDrawFactoryImpl_CreateDirectDraw(IDirectDrawFactory* iface,
     GUID * pGUID, HWND hWnd, DWORD dwCoopLevelFlags, DWORD dwReserved, IUnknown *pUnkOuter,
@@ -75,10 +56,10 @@ void DDSD2_to_DDSD(const DDSURFACEDESC2 *in, DDSURFACEDESC *out);
  ******************************************************************************/
 typedef struct
 {
-    const IDirectDrawVtbl *IDirectDraw_Vtbl;
-    const IDirectDraw2Vtbl *IDirectDraw2_Vtbl;
-    const IDirectDraw3Vtbl *IDirectDraw3_Vtbl;
-    const IDirectDraw4Vtbl *IDirectDraw4_Vtbl;
+    IDirectDraw IDirectDraw_iface;
+    IDirectDraw2 IDirectDraw2_iface;
+    IDirectDraw3 IDirectDraw3_iface;
+    IDirectDraw4 IDirectDraw4_iface;
     LONG ref;
 
     /* The interface we're forwarding to */
@@ -93,7 +74,7 @@ IDirectDraw4 *dd_get_inner(IDirectDraw4 *outer);
  ******************************************************************************/
 typedef struct
 {
-    const IDirectDrawSurface3Vtbl *IDirectDrawSurface3_Vtbl;
+    IDirectDrawSurface3 IDirectDrawSurface3_iface;
     const IDirectDrawSurface4Vtbl *IDirectDrawSurface4_Vtbl;
     LONG ref;
 

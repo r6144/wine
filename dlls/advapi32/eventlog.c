@@ -235,6 +235,21 @@ BOOL WINAPI DeregisterEventSource( HANDLE hEventLog )
 }
 
 /******************************************************************************
+ * EnableTraceEx [ADVAPI32.@]
+ */
+ULONG WINAPI EnableTraceEx( LPCGUID provider, LPCGUID source, TRACEHANDLE hSession, ULONG enable,
+                            UCHAR level, ULONGLONG anykeyword, ULONGLONG allkeyword, ULONG enableprop,
+                            PEVENT_FILTER_DESCRIPTOR filterdesc )
+{
+    FIXME("(%s, %s, %s, %d, %c, %s, %s, %d, %p): stub\n", debugstr_guid(provider),
+            debugstr_guid(source), wine_dbgstr_longlong(hSession), enable, level,
+            wine_dbgstr_longlong(anykeyword), wine_dbgstr_longlong(allkeyword),
+            enableprop, filterdesc);
+
+    return ERROR_SUCCESS;
+}
+
+/******************************************************************************
  * EnableTrace [ADVAPI32.@]
  */
 ULONG WINAPI EnableTrace( ULONG enable, ULONG flag, ULONG level, LPCGUID guid, TRACEHANDLE hSession )
@@ -735,10 +750,10 @@ ULONG WINAPI RegisterTraceGuidsW( WMIDPREQUEST RequestAddress,
                 PTRACE_GUID_REGISTRATION TraceGuidReg, LPCWSTR MofImagePath,
                 LPCWSTR MofResourceName, PTRACEHANDLE RegistrationHandle )
 {
-    FIXME("(%p, %p, %s, %u, %p, %s, %s, %p,)\n", RequestAddress, RequestContext,
+    FIXME("(%p, %p, %s, %u, %p, %s, %s, %p,): stub\n", RequestAddress, RequestContext,
           debugstr_guid(ControlGuid), GuidCount, TraceGuidReg, debugstr_w(MofImagePath),
           debugstr_w(MofResourceName), RegistrationHandle);
-    return ERROR_CALL_NOT_IMPLEMENTED;
+    return ERROR_SUCCESS;
 }
 
 /******************************************************************************
@@ -754,10 +769,10 @@ ULONG WINAPI RegisterTraceGuidsA( WMIDPREQUEST RequestAddress,
                 PTRACE_GUID_REGISTRATION TraceGuidReg, LPCSTR MofImagePath,
                 LPCSTR MofResourceName, PTRACEHANDLE RegistrationHandle )
 {
-    FIXME("(%p, %p, %s, %u, %p, %s, %s, %p,)\n", RequestAddress, RequestContext,
+    FIXME("(%p, %p, %s, %u, %p, %s, %s, %p,): stub\n", RequestAddress, RequestContext,
           debugstr_guid(ControlGuid), GuidCount, TraceGuidReg, debugstr_a(MofImagePath),
           debugstr_a(MofResourceName), RegistrationHandle);
-    return ERROR_CALL_NOT_IMPLEMENTED;
+    return ERROR_SUCCESS;
 }
 
 /******************************************************************************
@@ -834,5 +849,34 @@ BOOLEAN WINAPI EventEnabled( REGHANDLE handle, PCEVENT_DESCRIPTOR descriptor )
 ULONG WINAPI QueryTraceW( TRACEHANDLE handle, LPCWSTR sessionname, PEVENT_TRACE_PROPERTIES properties )
 {
     FIXME("%s %s %p: stub\n", wine_dbgstr_longlong(handle), debugstr_w(sessionname), properties);
+    return ERROR_CALL_NOT_IMPLEMENTED;
+}
+
+/******************************************************************************
+ * OpenTraceA [ADVAPI32.@]
+ */
+TRACEHANDLE WINAPI OpenTraceA( PEVENT_TRACE_LOGFILEA logfile )
+{
+    FIXME("%p: stub\n", logfile);
+    SetLastError(ERROR_ACCESS_DENIED);
+    return INVALID_PROCESSTRACE_HANDLE;
+}
+
+/******************************************************************************
+ * OpenTraceW [ADVAPI32.@]
+ */
+TRACEHANDLE WINAPI OpenTraceW( PEVENT_TRACE_LOGFILEW logfile )
+{
+    FIXME("%p: stub\n", logfile);
+    SetLastError(ERROR_ACCESS_DENIED);
+    return INVALID_PROCESSTRACE_HANDLE;
+}
+
+/******************************************************************************
+ * ProcessTrace [ADVAPI32.@]
+ */
+ULONG WINAPI ProcessTrace( PTRACEHANDLE HandleArray, ULONG HandleCount, LPFILETIME StartTime, LPFILETIME EndTime)
+{
+    FIXME("%p %u %p %p: stub\n", HandleArray, HandleCount, StartTime, EndTime);
     return ERROR_CALL_NOT_IMPLEMENTED;
 }

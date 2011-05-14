@@ -16,8 +16,8 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
-#ifndef __WINE_DSOUND_H
-#define __WINE_DSOUND_H
+#ifndef __DSOUND_INCLUDED__
+#define __DSOUND_INCLUDED__
 
 #ifndef DIRECTSOUND_VERSION
 #define DIRECTSOUND_VERSION 0x0900
@@ -231,6 +231,8 @@ typedef const DSCAPS *LPCDSCAPS;
 #define DSBFREQUENCY_MIN            100
 #define DSBFREQUENCY_MAX            200000
 #define DSBFREQUENCY_ORIGINAL       0
+
+#define DSBNOTIFICATIONS_MAX        100000U
 
 typedef struct _DSBCAPS
 {
@@ -1192,4 +1194,4 @@ DECLARE_INTERFACE_(IDirectSoundFullDuplex,IUnknown)
 } /* extern "C" */
 #endif /* defined(__cplusplus) */
 
-#endif /* __WINE_DSOUND_H */
+#endif /* __DSOUND_INCLUDED__ */

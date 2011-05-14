@@ -181,6 +181,7 @@ static void travellog_remove_entry(ExplorerBrowserImpl *This, travellog_entry *e
     TRACE("Removing %p\n", entry);
 
     list_remove(&entry->entry);
+    ILFree(entry->pidl);
     HeapFree(GetProcessHeap(), 0, entry);
     This->travellog_count--;
 }
@@ -1952,7 +1953,7 @@ static HRESULT WINAPI NSTCEvents_fnOnGetDefaultIconIndex(INameSpaceTreeControlEv
 }
 
 
-const INameSpaceTreeControlEventsVtbl vt_INameSpaceTreeControlEvents =  {
+static const INameSpaceTreeControlEventsVtbl vt_INameSpaceTreeControlEvents =  {
     NSTCEvents_fnQueryInterface,
     NSTCEvents_fnAddRef,
     NSTCEvents_fnRelease,

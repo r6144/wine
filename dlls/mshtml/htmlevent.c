@@ -83,6 +83,9 @@ static const WCHAR onloadW[] = {'o','n','l','o','a','d',0};
 static const WCHAR mousedownW[] = {'m','o','u','s','e','d','o','w','n',0};
 static const WCHAR onmousedownW[] = {'o','n','m','o','u','s','e','d','o','w','n',0};
 
+static const WCHAR mousemoveW[] = {'m','o','u','s','e','m','o','v','e',0};
+static const WCHAR onmousemoveW[] = {'o','n','m','o','u','s','e','m','o','v','e',0};
+
 static const WCHAR mouseoutW[] = {'m','o','u','s','e','o','u','t',0};
 static const WCHAR onmouseoutW[] = {'o','n','m','o','u','s','e','o','u','t',0};
 
@@ -103,6 +106,9 @@ static const WCHAR onresizeW[] = {'o','n','r','e','s','i','z','e',0};
 
 static const WCHAR selectstartW[] = {'s','e','l','e','c','t','s','t','a','r','t',0};
 static const WCHAR onselectstartW[] = {'o','n','s','e','l','e','c','t','s','t','a','r','t',0};
+
+static const WCHAR submitW[] = {'s','u','b','m','i','t',0};
+static const WCHAR onsubmitW[] = {'o','n','s','u','b','m','i','t',0};
 
 static const WCHAR HTMLEventsW[] = {'H','T','M','L','E','v','e','n','t','s',0};
 static const WCHAR KeyboardEventW[] = {'K','e','y','b','o','a','r','d','E','v','e','n','t',0};
@@ -134,6 +140,7 @@ typedef struct {
 #define EVENT_BUBBLE             0x0002
 #define EVENT_FORWARDBODY        0x0004
 #define EVENT_NODEHANDLER        0x0008
+#define EVENT_CANCELABLE         0x0010
 
 static const event_info_t event_info[] = {
     {beforeunloadW,      onbeforeunloadW,      EVENTT_NONE,   DISPID_EVMETH_ONBEFOREUNLOAD,
@@ -143,15 +150,15 @@ static const event_info_t event_info[] = {
     {changeW,            onchangeW,            EVENTT_HTML,   DISPID_EVMETH_ONCHANGE,
         EVENT_DEFAULTLISTENER|EVENT_BUBBLE},
     {clickW,             onclickW,             EVENTT_MOUSE,  DISPID_EVMETH_ONCLICK,
-        EVENT_DEFAULTLISTENER|EVENT_BUBBLE},
+        EVENT_DEFAULTLISTENER|EVENT_BUBBLE|EVENT_CANCELABLE},
     {contextmenuW,       oncontextmenuW,       EVENTT_MOUSE,  DISPID_EVMETH_ONCONTEXTMENU,
-        EVENT_BUBBLE},
+        EVENT_BUBBLE|EVENT_CANCELABLE},
     {dblclickW,          ondblclickW,          EVENTT_MOUSE,  DISPID_EVMETH_ONDBLCLICK,
-        EVENT_DEFAULTLISTENER|EVENT_BUBBLE},
+        EVENT_DEFAULTLISTENER|EVENT_BUBBLE|EVENT_CANCELABLE},
     {dragW,              ondragW,              EVENTT_MOUSE,  DISPID_EVMETH_ONDRAG,
-        0},
+        EVENT_CANCELABLE},
     {dragstartW,         ondragstartW,         EVENTT_MOUSE,  DISPID_EVMETH_ONDRAGSTART,
-        0},
+        EVENT_CANCELABLE},
     {focusW,             onfocusW,             EVENTT_HTML,   DISPID_EVMETH_ONFOCUS,
         EVENT_DEFAULTLISTENER},
     {keydownW,           onkeydownW,           EVENTT_KEY,    DISPID_EVMETH_ONKEYDOWN,
@@ -162,6 +169,8 @@ static const event_info_t event_info[] = {
         EVENT_NODEHANDLER},
     {mousedownW,         onmousedownW,         EVENTT_MOUSE,  DISPID_EVMETH_ONMOUSEDOWN,
         EVENT_DEFAULTLISTENER|EVENT_BUBBLE},
+    {mousemoveW,         onmousemoveW,         EVENTT_MOUSE,  DISPID_EVMETH_ONMOUSEMOVE,
+        EVENT_DEFAULTLISTENER|EVENT_BUBBLE},
     {mouseoutW,          onmouseoutW,          EVENTT_MOUSE,  DISPID_EVMETH_ONMOUSEOUT,
         EVENT_DEFAULTLISTENER|EVENT_BUBBLE},
     {mouseoverW,         onmouseoverW,         EVENTT_MOUSE,  DISPID_EVMETH_ONMOUSEOVER,
@@ -169,13 +178,15 @@ static const event_info_t event_info[] = {
     {mouseupW,           onmouseupW,           EVENTT_MOUSE,  DISPID_EVMETH_ONMOUSEUP,
         EVENT_DEFAULTLISTENER|EVENT_BUBBLE},
     {pasteW,             onpasteW,             EVENTT_NONE,   DISPID_EVMETH_ONPASTE,
-        0},
+        EVENT_CANCELABLE},
     {readystatechangeW,  onreadystatechangeW,  EVENTT_NONE,   DISPID_EVMETH_ONREADYSTATECHANGE,
         0},
     {resizeW,            onresizeW,            EVENTT_NONE,   DISPID_EVMETH_ONRESIZE,
         EVENT_DEFAULTLISTENER|EVENT_BUBBLE},
     {selectstartW,       onselectstartW,       EVENTT_MOUSE,  DISPID_EVMETH_ONSELECTSTART,
-        0}
+        EVENT_CANCELABLE},
+    {submitW,            onsubmitW,            EVENTT_HTML,   DISPID_EVMETH_ONSUBMIT,
+        EVENT_DEFAULTLISTENER|EVENT_BUBBLE|EVENT_CANCELABLE}
 };
 
 static const eventid_t node_handled_list[] = { EVENTID_LOAD };
@@ -227,6 +238,7 @@ typedef struct {
     HTMLDOMNode *target;
     const event_info_t *type;
     nsIDOMEvent *nsevent;
+    BOOL prevent_default;
 } HTMLEventObj;
 
 static inline HTMLEventObj *impl_from_IHTMLEventObj(IHTMLEventObj *iface)
@@ -277,6 +289,8 @@ static ULONG WINAPI HTMLEventObj_Release(IHTMLEventObj *iface)
     TRACE("(%p) ref=%d\n", This, ref);
 
     if(!ref) {
+        if(This->target)
+            IHTMLDOMNode_Release(&This->target->IHTMLDOMNode_iface);
         if(This->nsevent)
             nsIDOMEvent_Release(This->nsevent);
         release_dispex(&This->dispex);
@@ -289,14 +303,14 @@ static ULONG WINAPI HTMLEventObj_Release(IHTMLEventObj *iface)
 static HRESULT WINAPI HTMLEventObj_GetTypeInfoCount(IHTMLEventObj *iface, UINT *pctinfo)
 {
     HTMLEventObj *This = impl_from_IHTMLEventObj(iface);
-    return IDispatchEx_GetTypeInfoCount(DISPATCHEX(&This->dispex), pctinfo);
+    return IDispatchEx_GetTypeInfoCount(&This->dispex.IDispatchEx_iface, pctinfo);
 }
 
 static HRESULT WINAPI HTMLEventObj_GetTypeInfo(IHTMLEventObj *iface, UINT iTInfo,
                                               LCID lcid, ITypeInfo **ppTInfo)
 {
     HTMLEventObj *This = impl_from_IHTMLEventObj(iface);
-    return IDispatchEx_GetTypeInfo(DISPATCHEX(&This->dispex), iTInfo, lcid, ppTInfo);
+    return IDispatchEx_GetTypeInfo(&This->dispex.IDispatchEx_iface, iTInfo, lcid, ppTInfo);
 }
 
 static HRESULT WINAPI HTMLEventObj_GetIDsOfNames(IHTMLEventObj *iface, REFIID riid,
@@ -304,7 +318,8 @@ static HRESULT WINAPI HTMLEventObj_GetIDsOfNames(IHTMLEventObj *iface, REFIID ri
                                                 LCID lcid, DISPID *rgDispId)
 {
     HTMLEventObj *This = impl_from_IHTMLEventObj(iface);
-    return IDispatchEx_GetIDsOfNames(DISPATCHEX(&This->dispex), riid, rgszNames, cNames, lcid, rgDispId);
+    return IDispatchEx_GetIDsOfNames(&This->dispex.IDispatchEx_iface, riid, rgszNames, cNames,
+            lcid, rgDispId);
 }
 
 static HRESULT WINAPI HTMLEventObj_Invoke(IHTMLEventObj *iface, DISPID dispIdMember,
@@ -312,7 +327,7 @@ static HRESULT WINAPI HTMLEventObj_Invoke(IHTMLEventObj *iface, DISPID dispIdMem
                             VARIANT *pVarResult, EXCEPINFO *pExcepInfo, UINT *puArgErr)
 {
     HTMLEventObj *This = impl_from_IHTMLEventObj(iface);
-    return IDispatchEx_Invoke(DISPATCHEX(&This->dispex), dispIdMember, riid, lcid,
+    return IDispatchEx_Invoke(&This->dispex.IDispatchEx_iface, dispIdMember, riid, lcid,
             wFlags, pDispParams, pVarResult, pExcepInfo, puArgErr);
 }
 
@@ -322,7 +337,8 @@ static HRESULT WINAPI HTMLEventObj_get_srcElement(IHTMLEventObj *iface, IHTMLEle
 
     TRACE("(%p)->(%p)\n", This, p);
 
-    return IHTMLDOMNode_QueryInterface(HTMLDOMNODE(This->target), &IID_IHTMLElement, (void**)p);
+    return IHTMLDOMNode_QueryInterface(&This->target->IHTMLDOMNode_iface, &IID_IHTMLElement,
+            (void**)p);
 }
 
 static HRESULT WINAPI HTMLEventObj_get_altKey(IHTMLEventObj *iface, VARIANT_BOOL *p)
@@ -735,11 +751,11 @@ static dispex_static_data_t HTMLEventObj_dispex = {
     HTMLEventObj_iface_tids
 };
 
-static IHTMLEventObj *create_event(HTMLDOMNode *target, eventid_t eid, nsIDOMEvent *nsevent)
+static HTMLEventObj *create_event(HTMLDOMNode *target, eventid_t eid, nsIDOMEvent *nsevent)
 {
     HTMLEventObj *ret;
 
-    ret = heap_alloc(sizeof(*ret));
+    ret = heap_alloc_zero(sizeof(*ret));
     if(!ret)
         return NULL;
 
@@ -772,30 +788,42 @@ static IHTMLEventObj *create_event(HTMLDOMNode *target, eventid_t eid, nsIDOMEve
     }
 
     ret->target = target;
-    IHTMLDOMNode_AddRef(HTMLDOMNODE(target));
+    IHTMLDOMNode_AddRef(&target->IHTMLDOMNode_iface);
 
     init_dispex(&ret->dispex, (IUnknown*)&ret->IHTMLEventObj_iface, &HTMLEventObj_dispex);
 
-    return &ret->IHTMLEventObj_iface;
+    return ret;
 }
 
-static HRESULT call_cp_func(IDispatch *disp, DISPID dispid)
+static HRESULT call_disp_func(IDispatch *disp, DISPPARAMS *dp, VARIANT *retv)
+{
+    IDispatchEx *dispex;
+    EXCEPINFO ei;
+    HRESULT hres;
+
+    memset(&ei, 0, sizeof(ei));
+
+    hres = IDispatch_QueryInterface(disp, &IID_IDispatchEx, (void**)&dispex);
+    if(SUCCEEDED(hres)) {
+        hres = IDispatchEx_InvokeEx(dispex, 0, GetUserDefaultLCID(), DISPATCH_METHOD, dp, retv, &ei, NULL);
+        IDispatchEx_Release(dispex);
+    }else {
+        TRACE("Could not get IDispatchEx interface: %08x\n", hres);
+        hres = IDispatch_Invoke(disp, 0, &IID_NULL, GetUserDefaultLCID(), DISPATCH_METHOD,
+                dp, retv, &ei, NULL);
+    }
+
+    return hres;
+}
+
+static HRESULT call_cp_func(IDispatch *disp, DISPID dispid, VARIANT *retv)
 {
     DISPPARAMS dp = {NULL,NULL,0,0};
     ULONG argerr;
     EXCEPINFO ei;
-    VARIANT vres;
-    HRESULT hres;
 
-    V_VT(&vres) = VT_EMPTY;
     memset(&ei, 0, sizeof(ei));
-    hres = IDispatch_Invoke(disp, dispid, &IID_NULL, 0, DISPATCH_METHOD, &dp, &vres, &ei, &argerr);
-    if(SUCCEEDED(hres) && V_VT(&vres) != VT_EMPTY) {
-        FIXME("handle result %s\n", debugstr_variant(&vres));
-        VariantClear(&vres);
-    }
-
-    return hres;
+    return IDispatch_Invoke(disp, dispid, &IID_NULL, 0, DISPATCH_METHOD, &dp, retv, &ei, &argerr);
 }
 
 static BOOL is_cp_event(cp_static_data_t *data, DISPID dispid)
@@ -828,10 +856,12 @@ static BOOL is_cp_event(cp_static_data_t *data, DISPID dispid)
     return FALSE;
 }
 
-static void call_event_handlers(HTMLDocumentNode *doc, IHTMLEventObj *event_obj, event_target_t *event_target,
+static void call_event_handlers(HTMLDocumentNode *doc, HTMLEventObj *event_obj, event_target_t *event_target,
         ConnectionPointContainer *cp_container, eventid_t eid, IDispatch *this_obj)
 {
+    const BOOL cancelable = event_info[eid].flags & EVENT_CANCELABLE;
     handler_vector_t *handler_vector = NULL;
+    VARIANT v;
     int i;
     HRESULT hres;
 
@@ -845,13 +875,25 @@ static void call_event_handlers(HTMLDocumentNode *doc, IHTMLEventObj *event_obj,
 
         V_VT(&arg) = VT_DISPATCH;
         V_DISPATCH(&arg) = this_obj;
+        V_VT(&v) = VT_EMPTY;
 
         TRACE("%s >>>\n", debugstr_w(event_info[eid].name));
-        hres = call_disp_func(handler_vector->handler_prop, &dp);
-        if(hres == S_OK)
-            TRACE("%s <<<\n", debugstr_w(event_info[eid].name));
-        else
+        hres = call_disp_func(handler_vector->handler_prop, &dp, &v);
+        if(hres == S_OK) {
+            TRACE("%s <<< %s\n", debugstr_w(event_info[eid].name), debugstr_variant(&v));
+
+            if(cancelable) {
+                if(V_VT(&v) == VT_BOOL) {
+                    if(!V_BOOL(&v))
+                        event_obj->prevent_default = TRUE;
+                }else if(V_VT(&v) != VT_EMPTY) {
+                    FIXME("unhandled result %s\n", debugstr_variant(&v));
+                }
+            }
+            VariantClear(&v);
+        }else {
             WARN("%s <<< %08x\n", debugstr_w(event_info[eid].name), hres);
+        }
     }
 
     if(handler_vector && handler_vector->handler_cnt) {
@@ -864,12 +906,25 @@ static void call_event_handlers(HTMLDocumentNode *doc, IHTMLEventObj *event_obj,
         i = handler_vector->handler_cnt;
         while(i--) {
             if(handler_vector->handlers[i]) {
+                V_VT(&v) = VT_EMPTY;
+
                 TRACE("%s [%d] >>>\n", debugstr_w(event_info[eid].name), i);
-                hres = call_disp_func(handler_vector->handlers[i], &dp);
-                if(hres == S_OK)
+                hres = call_disp_func(handler_vector->handlers[i], &dp, &v);
+                if(hres == S_OK) {
                     TRACE("%s [%d] <<<\n", debugstr_w(event_info[eid].name), i);
-                else
+
+                    if(cancelable) {
+                        if(V_VT(&v) == VT_BOOL) {
+                            if(!V_BOOL(&v))
+                                event_obj->prevent_default = TRUE;
+                        }else if(V_VT(&v) != VT_EMPTY) {
+                            FIXME("unhandled result %s\n", debugstr_variant(&v));
+                        }
+                    }
+                    VariantClear(&v);
+                }else {
                     WARN("%s [%d] <<< %08x\n", debugstr_w(event_info[eid].name), i, hres);
+                }
             }
         }
     }
@@ -886,12 +941,25 @@ static void call_event_handlers(HTMLDocumentNode *doc, IHTMLEventObj *event_obj,
                     if(!cp->sinks[i].disp)
                         continue;
 
+                    V_VT(&v) = VT_EMPTY;
+
                     TRACE("cp %s [%d] >>>\n", debugstr_w(event_info[eid].name), i);
-                    hres = call_cp_func(cp->sinks[i].disp, event_info[eid].dispid);
-                    if(hres == S_OK)
+                    hres = call_cp_func(cp->sinks[i].disp, event_info[eid].dispid, &v);
+                    if(hres == S_OK) {
                         TRACE("cp %s [%d] <<<\n", debugstr_w(event_info[eid].name), i);
-                    else
+
+                        if(cancelable) {
+                            if(V_VT(&v) == VT_BOOL) {
+                                if(!V_BOOL(&v))
+                                    event_obj->prevent_default = TRUE;
+                            }else if(V_VT(&v) != VT_EMPTY) {
+                                FIXME("unhandled result %s\n", debugstr_variant(&v));
+                            }
+                        }
+                        VariantClear(&v);
+                    }else {
                         WARN("cp %s [%d] <<< %08x\n", debugstr_w(event_info[eid].name), i, hres);
+                    }
                 }
             }
         }
@@ -900,7 +968,8 @@ static void call_event_handlers(HTMLDocumentNode *doc, IHTMLEventObj *event_obj,
 
 void fire_event(HTMLDocumentNode *doc, eventid_t eid, BOOL set_event, nsIDOMNode *target, nsIDOMEvent *nsevent)
 {
-    IHTMLEventObj *prev_event, *event_obj = NULL;
+    HTMLEventObj *event_obj = NULL;
+    IHTMLEventObj *prev_event;
     nsIDOMNode *parent, *nsnode;
     HTMLDOMNode *node;
     PRUint16 node_type;
@@ -915,8 +984,10 @@ void fire_event(HTMLDocumentNode *doc, eventid_t eid, BOOL set_event, nsIDOMNode
             return;
 
         event_obj = create_event(node, eid, nsevent);
+        doc->basedoc.window->event = &event_obj->IHTMLEventObj_iface;
+    }else {
+        doc->basedoc.window->event = NULL;
     }
-    doc->basedoc.window->event = event_obj;
 
     nsIDOMNode_GetNodeType(target, &node_type);
     nsnode = target;
@@ -927,8 +998,8 @@ void fire_event(HTMLDocumentNode *doc, eventid_t eid, BOOL set_event, nsIDOMNode
         do {
             hres = get_node(doc, nsnode, FALSE, &node);
             if(SUCCEEDED(hres) && node)
-                call_event_handlers(doc, event_obj, *get_node_event_target(node), node->cp_container, eid,
-                        (IDispatch*)HTMLDOMNODE(node));
+                call_event_handlers(doc, event_obj, *get_node_event_target(node),
+                        node->cp_container, eid, (IDispatch*)&node->IHTMLDOMNode_iface);
 
             if(!(event_info[eid].flags & EVENT_BUBBLE))
                 break;
@@ -954,8 +1025,8 @@ void fire_event(HTMLDocumentNode *doc, eventid_t eid, BOOL set_event, nsIDOMNode
             if(NS_SUCCEEDED(nsres) && nsbody) {
                 hres = get_node(doc, (nsIDOMNode*)nsbody, FALSE, &node);
                 if(SUCCEEDED(hres) && node)
-                    call_event_handlers(doc, event_obj, *get_node_event_target(node), node->cp_container,
-                            eid, (IDispatch*)HTMLDOMNODE(node));
+                    call_event_handlers(doc, event_obj, *get_node_event_target(node),
+                            node->cp_container, eid, (IDispatch*)&node->IHTMLDOMNode_iface);
                 nsIDOMHTMLElement_Release(nsbody);
             }else {
                 ERR("Could not get body: %08x\n", nsres);
@@ -973,9 +1044,15 @@ void fire_event(HTMLDocumentNode *doc, eventid_t eid, BOOL set_event, nsIDOMNode
     if(nsnode)
         nsIDOMNode_Release(nsnode);
 
-    if(event_obj)
-        IHTMLEventObj_Release(event_obj);
     doc->basedoc.window->event = prev_event;
+
+    if(event_obj) {
+        if(event_obj->prevent_default && nsevent) {
+            TRACE("calling PreventDefault\n");
+            nsIDOMEvent_PreventDefault(nsevent);
+        }
+        IHTMLEventObj_Release(&event_obj->IHTMLEventObj_iface);
+    }
 }
 
 HRESULT dispatch_event(HTMLDOMNode *node, const WCHAR *event_name, VARIANT *event_obj, VARIANT_BOOL *cancelled)
@@ -1268,7 +1345,8 @@ void release_event_target(event_target_t *event_target)
             if(event_target->event_table[i]->handler_prop)
                 IDispatch_Release(event_target->event_table[i]->handler_prop);
             for(j=0; j < event_target->event_table[i]->handler_cnt; j++)
-                IDispatch_Release(event_target->event_table[i]->handlers[j]);
+                if(event_target->event_table[i]->handlers[j])
+                    IDispatch_Release(event_target->event_table[i]->handlers[j]);
         }
     }
 

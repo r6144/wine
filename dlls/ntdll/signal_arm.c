@@ -2,7 +2,7 @@
  * ARM signal handling routines
  *
  * Copyright 2002 Marcus Meissner, SuSE Linux AG
- * Copyright 2010 André Hentschel
+ * Copyright 2010, 2011 André Hentschel
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -93,6 +93,16 @@ static inline int dispatch_signal(unsigned int sig)
     return handlers[sig](sig);
 }
 
+/*******************************************************************
+ *         is_valid_frame
+ */
+static inline BOOL is_valid_frame( void *frame )
+{
+    if ((ULONG_PTR)frame & 3) return FALSE;
+    return (frame >= NtCurrentTeb()->Tib.StackLimit &&
+            (void **)frame < (void **)NtCurrentTeb()->Tib.StackBase - 1);
+}
+
 /***********************************************************************
  *           save_context
  *
@@ -105,6 +115,7 @@ static void save_context( CONTEXT *context, const ucontext_t *sigcontext )
     C(0); C(1); C(2); C(3); C(4); C(5); C(6); C(7); C(8); C(9); C(10);
 #undef C
 
+    context->ContextFlags = CONTEXT_FULL;
     context->Sp   = SP_sig(sigcontext);   /* Stack pointer */
     context->Lr   = LR_sig(sigcontext);   /* Link register */
     context->Pc   = PC_sig(sigcontext);   /* Program Counter */
@@ -160,11 +171,34 @@ static inline void restore_fpu( CONTEXT *context, const ucontext_t *sigcontext )
 /***********************************************************************
  *		RtlCaptureContext (NTDLL.@)
  */
-void WINAPI RtlCaptureContext( CONTEXT *context )
-{
-    FIXME("not implemented\n");
-    memset( context, 0, sizeof(*context) );
-}
+/* FIXME: Use the Stack instead of the actual register values */
+__ASM_STDCALL_FUNC( RtlCaptureContext, 4,
+                    ".arm\n\t"
+                    "stmfd SP!, {r1}\n\t"
+                    "mov r1, #0x40\n\t"     /* CONTEXT_ARM */
+                    "add r1, r1, #0x3\n\t"  /* CONTEXT_FULL */
+                    "str r1, [r0]\n\t"      /* context->ContextFlags */
+                    "ldmfd SP!, {r1}\n\t"
+                    "str r0, [r0, #0x4]\n\t"   /* context->R0 */
+                    "str r1, [r0, #0x8]\n\t"   /* context->R1 */
+                    "str r2, [r0, #0xc]\n\t"   /* context->R2 */
+                    "str r3, [r0, #0x10]\n\t"  /* context->R3 */
+                    "str r4, [r0, #0x14]\n\t"  /* context->R4 */
+                    "str r5, [r0, #0x18]\n\t"  /* context->R5 */
+                    "str r6, [r0, #0x1c]\n\t"  /* context->R6 */
+                    "str r7, [r0, #0x20]\n\t"  /* context->R7 */
+                    "str r8, [r0, #0x24]\n\t"  /* context->R8 */
+                    "str r9, [r0, #0x28]\n\t"  /* context->R9 */
+                    "str r10, [r0, #0x2c]\n\t" /* context->R10 */
+                    "str r11, [r0, #0x30]\n\t" /* context->Fp */
+                    "str IP, [r0, #0x34]\n\t"  /* context->Ip */
+                    "str SP, [r0, #0x38]\n\t"  /* context->Sp */
+                    "str LR, [r0, #0x3c]\n\t"  /* context->Lr */
+                    "str LR, [r0, #0x40]\n\t"  /* context->Pc */
+                    "mrs r1, CPSR\n\t"
+                    "str r1, [r0, #0x44]\n\t"  /* context->Cpsr */
+                    "mov PC, LR\n"
+                    )
 
 
 /***********************************************************************
@@ -186,6 +220,7 @@ void set_cpu_context( const CONTEXT *context )
  */
 void copy_context( CONTEXT *to, const CONTEXT *from, DWORD flags )
 {
+    flags &= ~CONTEXT_ARM;  /* get rid of CPU id */
     if (flags & CONTEXT_CONTROL)
     {
         to->Sp      = from->Sp;
@@ -219,7 +254,7 @@ void copy_context( CONTEXT *to, const CONTEXT *from, DWORD flags )
  */
 NTSTATUS context_to_server( context_t *to, const CONTEXT *from )
 {
-    DWORD flags = from->ContextFlags;  /* no CPU id? */
+    DWORD flags = from->ContextFlags & ~CONTEXT_ARM;  /* get rid of CPU id */
 
     memset( to, 0, sizeof(*to) );
     to->cpu = CPU_ARM;
@@ -262,7 +297,7 @@ NTSTATUS context_from_server( CONTEXT *to, const context_t *from )
 {
     if (from->cpu != CPU_ARM) return STATUS_INVALID_PARAMETER;
 
-    to->ContextFlags = 0;  /* no CPU id? */
+    to->ContextFlags = CONTEXT_ARM;
     if (from->flags & SERVER_CTX_CONTROL)
     {
         to->ContextFlags |= CONTEXT_CONTROL;
@@ -299,14 +334,49 @@ NTSTATUS context_from_server( CONTEXT *to, const context_t *from )
  */
 static NTSTATUS call_stack_handlers( EXCEPTION_RECORD *rec, CONTEXT *context )
 {
-    EXCEPTION_POINTERS ptrs;
+    EXCEPTION_REGISTRATION_RECORD *frame, *dispatch, *nested_frame;
+    DWORD res;
 
-    FIXME( "not implemented on ARM, exceptioncode: %x\n", rec->ExceptionCode );
+    frame = NtCurrentTeb()->Tib.ExceptionList;
+    nested_frame = NULL;
+    while (frame != (EXCEPTION_REGISTRATION_RECORD*)~0UL)
+    {
+        /* Check frame address */
+        if (!is_valid_frame( frame ))
+        {
+            rec->ExceptionFlags |= EH_STACK_INVALID;
+            break;
+        }
 
-    /* hack: call unhandled exception filter directly */
-    ptrs.ExceptionRecord = rec;
-    ptrs.ContextRecord = context;
-    unhandled_exception_filter( &ptrs );
+        /* Call handler */
+        TRACE( "calling handler at %p code=%x flags=%x\n",
+               frame->Handler, rec->ExceptionCode, rec->ExceptionFlags );
+        res = frame->Handler( rec, frame, context, &dispatch );
+        TRACE( "handler at %p returned %x\n", frame->Handler, res );
+
+        if (frame == nested_frame)
+        {
+            /* no longer nested */
+            nested_frame = NULL;
+            rec->ExceptionFlags &= ~EH_NESTED_CALL;
+        }
+
+        switch(res)
+        {
+        case ExceptionContinueExecution:
+            if (!(rec->ExceptionFlags & EH_NONCONTINUABLE)) return STATUS_SUCCESS;
+            return STATUS_NONCONTINUABLE_EXCEPTION;
+        case ExceptionContinueSearch:
+            break;
+        case ExceptionNestedException:
+            if (nested_frame < dispatch) nested_frame = dispatch;
+            rec->ExceptionFlags |= EH_NESTED_CALL;
+            break;
+        default:
+            return STATUS_INVALID_DISPOSITION;
+        }
+        frame = frame->Prev;
+    }
     return STATUS_UNHANDLED_EXCEPTION;
 }
 
@@ -339,7 +409,12 @@ static NTSTATUS raise_exception( EXCEPTION_RECORD *rec, CONTEXT *context, BOOL f
         }
         else
         {
-            /* FIXME: dump context */
+            TRACE(" Pc:%04x Sp:%04x Lr:%04x Cpsr:%04x r0:%04x r1:%04x r2:%04x r3:%04x\n",
+                  context->Pc, context->Sp, context->Lr, context->Cpsr,
+                  context->R0, context->R1, context->R2, context->R3);
+            TRACE(" r4:%04x r5:%04x  r6:%04x  r7:%04x r8:%04x r9:%04x r10:%04x Fp:%04x Ip:%04x\n",
+                  context->R4, context->R5, context->R6, context->R7, context->R8,
+                  context->R9, context->R10, context->Fp, context->Ip );
         }
 
         status = send_debug_event( rec, TRUE, context );
@@ -493,7 +568,7 @@ static void fpe_handler( int signal, siginfo_t *siginfo, void *sigcontext )
     }
     rec.ExceptionFlags   = EXCEPTION_CONTINUABLE;
     rec.ExceptionRecord  = NULL;
-    /*rec.ExceptionAddress = (LPVOID)context.Iar;*/
+    rec.ExceptionAddress = (LPVOID)context.Pc;
     rec.NumberParameters = 0;
     status = raise_exception( &rec, &context, TRUE );
     if (status) raise_status( status, &rec );
@@ -519,7 +594,7 @@ static void int_handler( int signal, siginfo_t *siginfo, void *sigcontext )
         rec.ExceptionCode    = CONTROL_C_EXIT;
         rec.ExceptionFlags   = EXCEPTION_CONTINUABLE;
         rec.ExceptionRecord  = NULL;
-        /*rec.ExceptionAddress = (LPVOID)context.Iar;*/
+        rec.ExceptionAddress = (LPVOID)context.Pc;
         rec.NumberParameters = 0;
         status = raise_exception( &rec, &context, TRUE );
         if (status) raise_status( status, &rec );
@@ -543,7 +618,7 @@ static void abrt_handler( int signal, siginfo_t *siginfo, void *sigcontext )
     rec.ExceptionCode    = EXCEPTION_WINE_ASSERTION;
     rec.ExceptionFlags   = EH_NONCONTINUABLE;
     rec.ExceptionRecord  = NULL;
-    /*rec.ExceptionAddress = (LPVOID)context.Iar;*/
+    rec.ExceptionAddress = (LPVOID)context.Pc;
     rec.NumberParameters = 0;
     status = raise_exception( &rec, &context, TRUE );
     if (status) raise_status( status, &rec );
@@ -726,7 +801,7 @@ void WINAPI RtlRaiseException( EXCEPTION_RECORD *rec )
     NTSTATUS status;
 
     RtlCaptureContext( &context );
-    /*rec->ExceptionAddress = (void *)context.Iar;*/
+    rec->ExceptionAddress = (LPVOID)context.Pc;
     status = raise_exception( rec, &context, TRUE );
     if (status) raise_status( status, rec );
 }

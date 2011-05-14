@@ -20,6 +20,7 @@
 
 #include <stdarg.h>
 #include <fcntl.h>
+#include <stdio.h>
 #ifdef HAVE_UNISTD_H
 # include <unistd.h>
 #endif
@@ -39,6 +40,7 @@
 #include "wininet.h"
 #include "shellapi.h"
 #include "urlmon.h"
+#include "msi.h"
 
 #include "appwiz.h"
 #include "res.h"
@@ -49,17 +51,20 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(appwizcpl);
 
-#define GECKO_VERSION "1.1.0"
+#define GECKO_VERSION "1.2.0"
 
 #ifdef __i386__
 #define ARCH_STRING "x86"
+#define GECKO_SHA "6964d1877668ab7da07a60f6dcf23fb0e261a808"
 #elif defined(__x86_64__)
 #define ARCH_STRING "x86_64"
+#define GECKO_SHA "3ac3c3e880e40f7763824866372ffc56128f0abd"
 #else
 #define ARCH_STRING ""
+#define GECKO_SHA "???"
 #endif
 
-#define GECKO_FILE_NAME "wine_gecko-" GECKO_VERSION "-" ARCH_STRING ".cab"
+#define GECKO_FILE_NAME "wine_gecko-" GECKO_VERSION "-" ARCH_STRING ".msi"
 
 static const WCHAR mshtml_keyW[] =
     {'S','o','f','t','w','a','r','e',
@@ -82,6 +87,67 @@ static inline char *heap_strdupWtoA(LPCWSTR str)
     return ret;
 }
 
+/* SHA definitions are copied from advapi32. They aren't available in headers. */
+
+typedef struct {
+   ULONG Unknown[6];
+   ULONG State[5];
+   ULONG Count[2];
+   UCHAR Buffer[64];
+} SHA_CTX, *PSHA_CTX;
+
+void WINAPI A_SHAInit(PSHA_CTX);
+void WINAPI A_SHAUpdate(PSHA_CTX,const unsigned char*,UINT);
+void WINAPI A_SHAFinal(PSHA_CTX,PULONG);
+
+static BOOL sha_check(const WCHAR *file_name)
+{
+    const unsigned char *file_map;
+    HANDLE file, map;
+    ULONG sha[5];
+    char buf[2*sizeof(sha)+1];
+    SHA_CTX ctx;
+    DWORD size, i;
+
+    file = CreateFileW(file_name, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_READONLY, NULL);
+    if(file == INVALID_HANDLE_VALUE)
+        return FALSE;
+
+    size = GetFileSize(file, NULL);
+
+    map = CreateFileMappingW(file, NULL, PAGE_READONLY, 0, 0, NULL);
+    CloseHandle(file);
+    if(!map)
+        return FALSE;
+
+    file_map = MapViewOfFile(map, FILE_MAP_READ, 0, 0, 0);
+    CloseHandle(map);
+    if(!file_map)
+        return FALSE;
+
+    A_SHAInit(&ctx);
+    A_SHAUpdate(&ctx, file_map, size);
+    A_SHAFinal(&ctx, sha);
+
+    UnmapViewOfFile(file_map);
+
+    for(i=0; i < sizeof(sha); i++)
+        sprintf(buf + i*2, "%02x", *((unsigned char*)sha+i));
+
+    if(strcmp(buf, GECKO_SHA)) {
+        WCHAR message[256];
+
+        WARN("Got %s, expected %s\n", buf, GECKO_SHA);
+
+        if(LoadStringW(hInst, IDS_INVALID_SHA, message, sizeof(message)/sizeof(WCHAR)))
+            MessageBoxW(NULL, message, NULL, MB_ICONERROR);
+
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
 static void set_status(DWORD id)
 {
     HWND status = GetDlgItem(install_dialog, ID_DWL_STATUS);
@@ -91,89 +157,16 @@ static void set_status(DWORD id)
     SendMessageW(status, WM_SETTEXT, 0, (LPARAM)buf);
 }
 
-static void set_registry(const WCHAR *install_dir)
+static BOOL install_file(const WCHAR *file_name)
 {
-    WCHAR mshtml_key[100];
-    LPWSTR gecko_path;
-    HKEY hkey;
-    DWORD res, len;
+    ULONG res;
 
-    static const WCHAR wszGeckoPath[] = {'G','e','c','k','o','P','a','t','h',0};
-    static const WCHAR wszWineGecko[] = {'w','i','n','e','_','g','e','c','k','o',0};
-
-    memcpy(mshtml_key, mshtml_keyW, sizeof(mshtml_keyW));
-    mshtml_key[sizeof(mshtml_keyW)/sizeof(WCHAR)-1] = '\\';
-    MultiByteToWideChar(CP_ACP, 0, GECKO_VERSION, sizeof(GECKO_VERSION),
-            mshtml_key+sizeof(mshtml_keyW)/sizeof(WCHAR),
-            (sizeof(mshtml_key)-sizeof(mshtml_keyW))/sizeof(WCHAR));
-
-    /* @@ Wine registry key: HKCU\Software\Wine\MSHTML\<version> */
-    res = RegCreateKeyW(HKEY_CURRENT_USER, mshtml_key, &hkey);
+    res = MsiInstallProductW(file_name, NULL);
     if(res != ERROR_SUCCESS) {
-        ERR("Faild to create MSHTML key: %d\n", res);
-        return;
-    }
-
-    len = strlenW(install_dir);
-    gecko_path = heap_alloc((len+1)*sizeof(WCHAR)+sizeof(wszWineGecko));
-    memcpy(gecko_path, install_dir, len*sizeof(WCHAR));
-
-    if (len && gecko_path[len-1] != '\\')
-        gecko_path[len++] = '\\';
-
-    memcpy(gecko_path+len, wszWineGecko, sizeof(wszWineGecko));
-
-    res = RegSetValueExW(hkey, wszGeckoPath, 0, REG_SZ, (LPVOID)gecko_path,
-                       len*sizeof(WCHAR)+sizeof(wszWineGecko));
-    heap_free(gecko_path);
-    RegCloseKey(hkey);
-    if(res != ERROR_SUCCESS)
-        ERR("Failed to set GeckoPath value: %08x\n", res);
-}
-
-static BOOL install_cab(LPCWSTR file_name)
-{
-    char *install_dir_a, *file_name_a;
-    WCHAR install_dir[MAX_PATH];
-    DWORD res, len;
-    HRESULT hres;
-
-    static const WCHAR gecko_subdirW[] = {'\\','g','e','c','k','o','\\',0};
-
-    TRACE("(%s)\n", debugstr_w(file_name));
-
-    GetSystemDirectoryW(install_dir, sizeof(install_dir)/sizeof(WCHAR));
-    strcatW(install_dir, gecko_subdirW);
-    res = CreateDirectoryW(install_dir, NULL);
-    if(!res && GetLastError() != ERROR_ALREADY_EXISTS) {
-        ERR("Could not create directory: %08u\n", GetLastError());
+        ERR("MsiInstallProduct failed: %u\n", res);
         return FALSE;
     }
 
-    len = strlenW(install_dir);
-    MultiByteToWideChar(CP_ACP, 0, GECKO_VERSION, -1, install_dir+len, sizeof(install_dir)/sizeof(WCHAR)-len);
-    res = CreateDirectoryW(install_dir, NULL);
-    if(!res && GetLastError() != ERROR_ALREADY_EXISTS) {
-        ERR("Could not create directory: %08u\n", GetLastError());
-        return FALSE;
-    }
-
-
-    /* FIXME: Use ExtractFilesW once it's implemented */
-    file_name_a = heap_strdupWtoA(file_name);
-    install_dir_a = heap_strdupWtoA(install_dir);
-    if(file_name_a && install_dir_a)
-        hres = ExtractFilesA(file_name_a, install_dir_a, 0, NULL, NULL, 0);
-    else
-        hres = E_OUTOFMEMORY;
-    heap_free(file_name_a);
-    heap_free(install_dir_a);
-    if(FAILED(hres)) {
-        ERR("Could not extract package: %08x\n", hres);
-        return FALSE;
-    }
-
-    set_registry(install_dir);
     return TRUE;
 }
 
@@ -211,7 +204,7 @@ static BOOL install_from_unix_file(const char *file_name)
 	MultiByteToWideChar( CP_ACP, 0, file_name, -1, dos_file_name, res);
     }
 
-    ret = install_cab(dos_file_name);
+    ret = install_file(dos_file_name);
 
     heap_free(dos_file_name);
     return ret;
@@ -447,7 +440,8 @@ static DWORD WINAPI download_proc(PVOID arg)
         return 0;
     }
 
-    install_cab(tmp_file);
+    if(sha_check(tmp_file))
+        install_file(tmp_file);
     DeleteFileW(tmp_file);
     EndDialog(install_dialog, 0);
     return 0;

@@ -48,12 +48,10 @@
 #define ID_FILE_COPY                    107
 #define ID_FILE_DELETE                  108
 #define ID_FILE_EXIT                    115
-#define ID_FORMAT_DISK                  203
 #define ID_CONNECT_NETWORK_DRIVE        252
 #define ID_DISCONNECT_NETWORK_DRIVE     253
 #define ID_VIEW_NAME                    401
 #define ID_VIEW_ALL_ATTRIBUTES          402
-#define ID_VIEW_SELECTED_ATTRIBUTES     403
 #define ID_VIEW_SORT_NAME               404
 #define ID_VIEW_SORT_TYPE               405
 #define ID_VIEW_SORT_SIZE               406
@@ -75,7 +73,6 @@
 #define ID_WINDOW_TILE_HORZ             0xE133
 #define ID_WINDOW_TILE_VERT             0xE134
 #define ID_WINDOW_SPLIT                 0xE135
-#define ID_HELP_USING                   0xE144
 #define ID_HELP                         0xE146
 
 #define IDC_VIEW_PATTERN                1000
@@ -102,7 +99,6 @@
 
 /* winefile extensions */
 
-#define ID_WINDOW_AUTOSORT              0x8003
 #define ID_VIEW_FULLSCREEN              0x8004
 #define ID_PREFERRED_SIZES              0x8005
 

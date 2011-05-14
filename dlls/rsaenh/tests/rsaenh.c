@@ -662,6 +662,8 @@ static void test_hashes(void)
                    sizeof(signed_ssl3_shamd5_hash));
         printBytes("got", pbSigValue, len);
     }
+    result = CryptDestroyKey(hKeyExchangeKey);
+    ok(result, "CryptDestroyKey failed 0x%08x\n", GetLastError());
     result = CryptDestroyHash(hHash);
     ok(result, "CryptDestroyHash failed 0x%08x\n", GetLastError());
     result = CryptReleaseContext(prov, 0);
@@ -945,10 +947,12 @@ static void test_aes(int keylen)
 
     for (i=0; i<sizeof(pbData); i++) pbData[i] = (unsigned char)i;
 
-    /* AES provider doesn't support salt */
+    /* Does AES provider support salt? */
     result = CryptGetKeyParam(hKey, KP_SALT, NULL, &dwLen, 0);
     ok((!result && GetLastError() == NTE_BAD_KEY) || result /* Win7 */,
        "expected NTE_BAD_KEY, got %08x\n", GetLastError());
+    if (result)
+        ok(!dwLen, "unexpected salt length %d\n", dwLen);
 
     dwLen = 13;
     result = CryptEncrypt(hKey, 0, TRUE, 0, pbData, &dwLen, 16);
@@ -1246,6 +1250,7 @@ static void test_rc2(void)
         dwKeyLen = 1025;
         SetLastError(0xdeadbeef);
         result = CryptSetKeyParam(hKey, KP_EFFECTIVE_KEYLEN, (LPBYTE)&dwKeyLen, 0);
+        ok(!result, "CryptSetKeyParam failed: %08x\n", GetLastError());
 
         dwLen = sizeof(dwKeyLen);
         CryptGetKeyParam(hKey, KP_KEYLEN, (BYTE *)&dwKeyLen, &dwLen, 0);
@@ -2151,6 +2156,115 @@ static void test_import_export(void)
 
     CryptDestroyKey(hPrivKey);
 }
+
+static void test_import_hmac(void)
+{
+    /* Test cases from RFC 2202, section 3 */
+    static const struct rfc2202_test_case {
+        const char *key;
+        DWORD key_len;
+        const char *data;
+        const DWORD data_len;
+        const char *digest;
+    } cases[] = {
+        { "\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b"
+          "\x0b\x0b\x0b\x0b", 20,
+          "Hi There", 8,
+          "\xb6\x17\x31\x86\x55\x05\x72\x64\xe2\x8b\xc0\xb6\xfb\x37\x8c\x8e"
+          "\xf1\x46\xbe\x00" },
+        { "Jefe", 4,
+          "what do ya want for nothing?", 28,
+          "\xef\xfc\xdf\x6a\xe5\xeb\x2f\xa2\xd2\x74\x16\xd5\xf1\x84\xdf\x9c"
+          "\x25\x9a\x7c\x79" },
+        { "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
+          "\xaa\xaa\xaa\xaa", 20,
+          "\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd"
+          "\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd"
+          "\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd\xdd"
+          "\xdd\xdd", 50,
+          "\x12\x5d\x73\x42\xb9\xac\x11\xcd\x91\xa3\x9a\xf4\x8a\xa1\x7b\x4f"
+          "\x63\xf1\x75\xd3" },
+        { "\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f\x10"
+          "\x11\x12\x13\x14\x15\x16\x17\x18\x19", 25,
+          "\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd"
+          "\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd"
+          "\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd\xcd"
+          "\xcd\xcd", 50,
+          "\x4c\x90\x07\xF4\x02\x62\x50\xc6\xbc\x84\x14\xf9\xbf\x50\xc8\x6c"
+          "\x2d\x72\x35\xda" },
+        { "\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c"
+          "\x0c\x0c\x0c\x0c", 20,
+          "Test With Truncation", 20,
+          "\x4c\x1a\x03\x42\x4b\x55\xe0\x7f\xe7\xf2\x7b\xe1\xd5\x8b\xb9\x32"
+          "\x4a\x9a\x5a\x04" },
+        { "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
+          "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
+          "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
+          "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
+          "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa",
+          80,
+          "Test Using Larger Than Block-Size Key - Hash Key First", 54,
+          "\xaa\x4a\xe5\xe1\x52\x72\xd0\x0e\x95\x70\x56\x37\xce\x8a\x3b\x55"
+          "\xed\x40\x21\x12" },
+        { "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
+          "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
+          "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
+          "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa"
+          "\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa\xaa",
+          80,
+          "Test Using Larger Than Block-Size Key and Larger "
+          "Than One Block-Size Data", 73,
+          "\xe8\xe9\x9D\x0f\x45\x23\x7d\x78\x6d\x6b\xba\xa7\x96\x5c\x78\x08"
+          "\xbb\xff\x1a\x91" }
+    };
+    DWORD i;
+
+    for (i = 0; i < sizeof(cases) / sizeof(cases[0]); i++)
+    {
+        const struct rfc2202_test_case *test_case = &cases[i];
+        DWORD size = sizeof(BLOBHEADER) + sizeof(DWORD) + test_case->key_len;
+        BYTE *blob = HeapAlloc(GetProcessHeap(), 0, size);
+
+        if (blob)
+        {
+            BLOBHEADER *header = (BLOBHEADER *)blob;
+            DWORD *key_len = (DWORD *)(header + 1);
+            BYTE *key_bytes = (BYTE *)(key_len + 1);
+            BOOL result;
+            HCRYPTKEY key;
+
+            header->bType = PLAINTEXTKEYBLOB;
+            header->bVersion = CUR_BLOB_VERSION;
+            header->reserved = 0;
+            header->aiKeyAlg = CALG_RC2;
+            *key_len = test_case->key_len;
+            memcpy(key_bytes, test_case->key, *key_len);
+            result = CryptImportKey(hProv, blob, size, 0, CRYPT_IPSEC_HMAC_KEY, &key);
+            ok(result || broken(GetLastError() == NTE_BAD_FLAGS /* Win2k */), "CryptImportKey failed on test case %d: %08x\n", i, GetLastError());
+            if (result)
+            {
+                HCRYPTHASH hash;
+                HMAC_INFO hmac_info = { CALG_SHA1, 0 };
+                BYTE digest[20];
+                DWORD digest_size;
+
+                result = CryptCreateHash(hProv, CALG_HMAC, key, 0, &hash);
+                ok(result, "CryptCreateHash failed on test case %d: %08x\n", i, GetLastError());
+                result = CryptSetHashParam(hash, HP_HMAC_INFO, (BYTE *)&hmac_info, 0);
+                ok(result, "CryptSetHashParam failed on test case %d: %08x\n", i, GetLastError());
+                result = CryptHashData(hash, (const BYTE *)test_case->data, test_case->data_len, 0);
+                ok(result, "CryptHashData failed on test case %d: %08x\n", i, GetLastError());
+                digest_size = sizeof(digest);
+                result = CryptGetHashParam(hash, HP_HASHVAL, digest, &digest_size, 0);
+                ok(result, "CryptGetHashParam failed on test case %d: %08x\n", i, GetLastError());
+                ok(!memcmp(digest, test_case->digest, sizeof(digest)), "Unexpected value on test case %d\n", i);
+                CryptDestroyHash(hash);
+                CryptDestroyKey(key);
+            }
+            HeapFree(GetProcessHeap(), 0, blob);
+        }
+    }
+}
         
 static void test_schannel_provider(void)
 {
@@ -2227,7 +2341,16 @@ static void test_schannel_provider(void)
     result = CryptImportKey(hProv, abTLS1Master, dwLen, hRSAKey, 0, &hMasterSecret);
     ok (result, "%08x\n", GetLastError());
     if (!result) return;    
-   
+
+    /* Deriving a hash from the master secret. This is due to the CryptoAPI architecture.
+     * (Keys can only be derived from hashes, not from other keys.)
+     * The hash can't be created yet because the key doesn't have the client
+     * random or server random set.
+     */
+    result = CryptCreateHash(hProv, CALG_SCHANNEL_MASTER_HASH, hMasterSecret, 0, &hMasterHash);
+    ok (!result && GetLastError() == ERROR_INVALID_PARAMETER,
+        "expected ERROR_INVALID_PARAMETER, got %08x\n", GetLastError());
+
     /* Setting the TLS1 client and server random parameters, as well as the 
      * MAC and encryption algorithm parameters. */
     data_blob.cbData = 33;
@@ -2241,7 +2364,20 @@ static void test_schannel_provider(void)
     result = CryptSetKeyParam(hMasterSecret, KP_SERVER_RANDOM, (BYTE*)&data_blob, 0);
     ok (result, "%08x\n", GetLastError());
     if (!result) return;
-    
+
+    result = CryptCreateHash(hProv, CALG_SCHANNEL_MASTER_HASH, hMasterSecret, 0, &hMasterHash);
+    ok (result, "%08x\n", GetLastError());
+    if (!result) return;
+
+    /* Deriving the server write encryption key from the master hash can't
+     * succeed before the encryption key algorithm is set.
+     */
+    result = CryptDeriveKey(hProv, CALG_SCHANNEL_ENC_KEY, hMasterHash, CRYPT_SERVER, &hServerWriteKey);
+    ok (!result && GetLastError() == NTE_BAD_FLAGS,
+        "expected NTE_BAD_FLAGS, got %08x\n", GetLastError());
+
+    CryptDestroyHash(hMasterHash);
+
     saSChannelAlg.dwUse = SCHANNEL_ENC_KEY;
     saSChannelAlg.Algid = CALG_DES;
     saSChannelAlg.cBits = 64;
@@ -2260,8 +2396,6 @@ static void test_schannel_provider(void)
     ok (result, "%08x\n", GetLastError());
     if (!result) return;
 
-    /* Deriving a hash from the master secret. This is due to the CryptoAPI architecture.
-     * (Keys can only be derived from hashes, not from other keys.) */
     result = CryptCreateHash(hProv, CALG_SCHANNEL_MASTER_HASH, hMasterSecret, 0, &hMasterHash);
     ok (result, "%08x\n", GetLastError());
     if (!result) return;
@@ -2372,6 +2506,7 @@ static void test_rsa_round_trip(void)
     exportedKey = HeapAlloc(GetProcessHeap(), 0, keyLen);
     result = CryptExportKey(keyExchangeKey, 0, PRIVATEKEYBLOB, 0, exportedKey,
                             &keyLen);
+    ok(result, "CryptExportKey failed: %08x\n", GetLastError());
     /* destroy the key... */
     CryptDestroyKey(keyExchangeKey);
     CryptDestroyKey(signKey);
@@ -2811,22 +2946,23 @@ static void test_key_initialization(void)
     {
         result = CryptAcquireContext(&prov1, szContainer, szProvider, PROV_RSA_FULL,
                                      CRYPT_NEWKEYSET);
-        ok(result, "%08x\n", GetLastError());
+        ok(result, "CryptAcquireContext failed: %08x\n", GetLastError());
     }
     dwLen = (DWORD)sizeof(abPlainPrivateKey);
     result = CryptImportKey(prov1, abPlainPrivateKey, dwLen, 0, 0, &hKeyExchangeKey);
+    ok(result, "CryptImportKey failed: %08x\n", GetLastError());
 
     dwLen = (DWORD)sizeof(abSessionKey);
     result = CryptImportKey(prov1, abSessionKey, dwLen, hKeyExchangeKey, 0, &hSessionKey);
-    ok(result, "%08x\n", GetLastError());
+    ok(result, "CryptImportKey failed: %08x\n", GetLastError());
 
     /* Once the key has been imported, subsequently acquiring a context with
      * the same name will allow retrieving the key.
      */
     result = CryptAcquireContext(&prov2, szContainer, szProvider, PROV_RSA_FULL, 0);
-    ok(result, "%08x\n", GetLastError());
+    ok(result, "CryptAcquireContext failed: %08x\n", GetLastError());
     result = CryptGetUserKey(prov2, AT_KEYEXCHANGE, &hKey);
-    ok(result, "%08x\n", GetLastError());
+    ok(result, "CryptGetUserKey failed: %08x\n", GetLastError());
     if (result) CryptDestroyKey(hKey);
     CryptReleaseContext(prov2, 0);
 
@@ -2856,6 +2992,7 @@ START_TEST(rsaenh)
     test_verify_signature();
     test_rsa_encrypt();
     test_import_export();
+    test_import_hmac();
     test_enum_container();
     clean_up_base_environment();
     test_key_permissions();

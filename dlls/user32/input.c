@@ -34,6 +34,8 @@
 
 #define NONAMELESSUNION
 #define NONAMELESSSTRUCT
+#include "ntstatus.h"
+#define WIN32_NO_STATUS
 #include "windef.h"
 #include "winbase.h"
 #include "wingdi.h"
@@ -115,43 +117,93 @@ BOOL set_capture_window( HWND hwnd, UINT gui_flags, HWND *prev_ret )
 
 
 /***********************************************************************
+ *		__wine_send_input  (USER32.@)
+ *
+ * Internal SendInput function to allow the graphics driver to inject real events.
+ */
+BOOL CDECL __wine_send_input( HWND hwnd, const INPUT *input )
+{
+    NTSTATUS status = send_hardware_message( hwnd, input, 0 );
+    if (status) SetLastError( RtlNtStatusToDosError(status) );
+    return !status;
+}
+
+
+/***********************************************************************
+ *		update_mouse_coords
+ *
+ * Helper for SendInput.
+ */
+static void update_mouse_coords( INPUT *input )
+{
+    if (!(input->u.mi.dwFlags & MOUSEEVENTF_MOVE)) return;
+
+    if (input->u.mi.dwFlags & MOUSEEVENTF_ABSOLUTE)
+    {
+        input->u.mi.dx = (input->u.mi.dx * GetSystemMetrics( SM_CXSCREEN )) >> 16;
+        input->u.mi.dy = (input->u.mi.dy * GetSystemMetrics( SM_CYSCREEN )) >> 16;
+    }
+    else
+    {
+        int accel[3];
+
+        /* dx and dy can be negative numbers for relative movements */
+        SystemParametersInfoW(SPI_GETMOUSE, 0, accel, 0);
+
+        if (!accel[2]) return;
+
+        if (abs(input->u.mi.dx) > accel[0])
+        {
+            input->u.mi.dx *= 2;
+            if ((abs(input->u.mi.dx) > accel[1]) && (accel[2] == 2)) input->u.mi.dx *= 2;
+        }
+        if (abs(input->u.mi.dy) > accel[0])
+        {
+            input->u.mi.dy *= 2;
+            if ((abs(input->u.mi.dy) > accel[1]) && (accel[2] == 2)) input->u.mi.dy *= 2;
+        }
+    }
+}
+
+/***********************************************************************
  *		SendInput  (USER32.@)
  */
 UINT WINAPI SendInput( UINT count, LPINPUT inputs, int size )
 {
-    if (TRACE_ON(win))
+    UINT i;
+    NTSTATUS status;
+
+    for (i = 0; i < count; i++)
     {
-        UINT i;
-
-        for (i = 0; i < count; i++)
+        if (inputs[i].type == INPUT_MOUSE)
         {
-            switch(inputs[i].type)
+            /* we need to update the coordinates to what the server expects */
+            INPUT input = inputs[i];
+            update_mouse_coords( &input );
+            if (!(status = send_hardware_message( 0, &input, SEND_HWMSG_INJECTED )))
             {
-            case INPUT_MOUSE:
-                TRACE("mouse: dx %d, dy %d, data %x, flags %x, time %u, info %lx\n",
-                      inputs[i].u.mi.dx, inputs[i].u.mi.dy, inputs[i].u.mi.mouseData,
-                      inputs[i].u.mi.dwFlags, inputs[i].u.mi.time, inputs[i].u.mi.dwExtraInfo);
-                break;
-
-            case INPUT_KEYBOARD:
-                TRACE("keyboard: vk %X, scan %x, flags %x, time %u, info %lx\n",
-                      inputs[i].u.ki.wVk, inputs[i].u.ki.wScan, inputs[i].u.ki.dwFlags,
-                      inputs[i].u.ki.time, inputs[i].u.ki.dwExtraInfo);
-                break;
-
-            case INPUT_HARDWARE:
-                TRACE("hardware: msg %d, wParamL %x, wParamH %x\n",
-                      inputs[i].u.hi.uMsg, inputs[i].u.hi.wParamL, inputs[i].u.hi.wParamH);
-                break;
-
-            default:
-                FIXME("unknown input type %u\n", inputs[i].type);
-                break;
+                if ((input.u.mi.dwFlags & MOUSEEVENTF_MOVE) &&
+                    ((input.u.mi.dwFlags & MOUSEEVENTF_ABSOLUTE) || input.u.mi.dx || input.u.mi.dy))
+                {
+                    /* we have to actually move the cursor */
+                    POINT pt;
+                    GetCursorPos( &pt );
+                    if (!(input.u.mi.dwFlags & MOUSEEVENTF_ABSOLUTE) ||
+                        pt.x != input.u.mi.dx  || pt.y != input.u.mi.dy)
+                        USER_Driver->pSetCursorPos( pt.x, pt.y );
+                }
             }
+        }
+        else status = send_hardware_message( 0, &inputs[i], SEND_HWMSG_INJECTED );
+
+        if (status)
+        {
+            SetLastError( RtlNtStatusToDosError(status) );
+            break;
         }
     }
 
-    return USER_Driver->pSendInput( count, inputs, size );
+    return i;
 }
 
 
@@ -197,8 +249,25 @@ void WINAPI mouse_event( DWORD dwFlags, DWORD dx, DWORD dy,
  */
 BOOL WINAPI DECLSPEC_HOTPATCH GetCursorPos( POINT *pt )
 {
+    BOOL ret;
+    DWORD last_change;
+
     if (!pt) return FALSE;
-    return USER_Driver->pGetCursorPos( pt );
+
+    SERVER_START_REQ( set_cursor )
+    {
+        if ((ret = !wine_server_call( req )))
+        {
+            pt->x = reply->new_x;
+            pt->y = reply->new_y;
+            last_change = reply->last_change;
+        }
+    }
+    SERVER_END_REQ;
+
+    /* query new position from graphics driver if we haven't updated recently */
+    if (ret && GetTickCount() - last_change > 100) ret = USER_Driver->pGetCursorPos( pt );
+    return ret;
 }
 
 
@@ -231,7 +300,25 @@ BOOL WINAPI GetCursorInfo( PCURSORINFO pci )
  */
 BOOL WINAPI DECLSPEC_HOTPATCH SetCursorPos( INT x, INT y )
 {
-    return USER_Driver->pSetCursorPos( x, y );
+    BOOL ret;
+    INT prev_x, prev_y, new_x, new_y;
+
+    SERVER_START_REQ( set_cursor )
+    {
+        req->flags = SET_CURSOR_POS;
+        req->x     = x;
+        req->y     = y;
+        if ((ret = !wine_server_call( req )))
+        {
+            prev_x = reply->prev_x;
+            prev_y = reply->prev_y;
+            new_x  = reply->new_x;
+            new_y  = reply->new_y;
+        }
+    }
+    SERVER_END_REQ;
+    if (ret && (prev_x != new_x || prev_y != new_y)) USER_Driver->pSetCursorPos( new_x, new_y );
+    return ret;
 }
 
 
@@ -285,11 +372,28 @@ HWND WINAPI GetCapture(void)
  * bit set to 1 if currently pressed, low-order bit set to 1 if key has
  * been pressed.
  */
-SHORT WINAPI DECLSPEC_HOTPATCH GetAsyncKeyState(INT nKey)
+SHORT WINAPI DECLSPEC_HOTPATCH GetAsyncKeyState( INT key )
 {
-    if (nKey < 0 || nKey > 256)
-        return 0;
-    return USER_Driver->pGetAsyncKeyState( nKey );
+    SHORT ret;
+
+    if (key < 0 || key >= 256) return 0;
+
+    if ((ret = USER_Driver->pGetAsyncKeyState( key )) == -1)
+    {
+        ret = 0;
+        SERVER_START_REQ( get_key_state )
+        {
+            req->tid = 0;
+            req->key = key;
+            if (!wine_server_call( req ))
+            {
+                if (reply->state & 0x40) ret |= 0x0001;
+                if (reply->state & 0x80) ret |= 0x8000;
+            }
+        }
+        SERVER_END_REQ;
+    }
+    return ret;
 }
 
 
@@ -686,11 +790,11 @@ UINT WINAPI GetKBCodePage(void)
  *
  *        - device handle for keyboard layout defaulted to
  *          the language id. This is the way Windows default works.
- *        - the thread identifier (dwLayout) is also ignored.
+ *        - the thread identifier is also ignored.
  */
-HKL WINAPI GetKeyboardLayout(DWORD dwLayout)
+HKL WINAPI GetKeyboardLayout(DWORD thread_id)
 {
-    return USER_Driver->pGetKeyboardLayout(dwLayout);
+    return USER_Driver->pGetKeyboardLayout(thread_id);
 }
 
 /****************************************************************************
@@ -1106,11 +1210,11 @@ TrackMouseEvent (TRACKMOUSEEVENT *ptme)
         return FALSE;
     }
 
-    hover_time = ptme->dwHoverTime;
+    hover_time = (ptme->dwFlags & TME_HOVER) ? ptme->dwHoverTime : HOVER_DEFAULT;
 
-    /* if HOVER_DEFAULT was specified replace this with the systems current value.
+    /* if HOVER_DEFAULT was specified replace this with the system's current value.
      * TME_LEAVE doesn't need to specify hover time so use default */
-    if (hover_time == HOVER_DEFAULT || hover_time == 0 || !(ptme->dwHoverTime&TME_HOVER))
+    if (hover_time == HOVER_DEFAULT || hover_time == 0)
         SystemParametersInfoW(SPI_GETMOUSEHOVERTIME, 0, &hover_time, 0);
 
     GetCursorPos(&pos);

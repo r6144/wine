@@ -133,6 +133,7 @@ static const struct StaticPixelFormatDesc formats[] =
     {WINED3DFMT_INTZ,                       0x0,        0x0,        0x0,        0x0,        4,      24,     8},
     {WINED3DFMT_NVHU,                       0x0,        0x0,        0x0,        0x0,        2,      0,      0},
     {WINED3DFMT_NVHS,                       0x0,        0x0,        0x0,        0x0,        2,      0,      0},
+    {WINED3DFMT_NULL,                       0xff000000, 0x000000ff, 0x0000ff00, 0x00ff0000, 4,      0,      0},
 };
 
 struct wined3d_format_base_flags
@@ -157,6 +158,8 @@ static const struct wined3d_format_base_flags format_base_flags[] =
     {WINED3DFMT_MULTI2_ARGB8,       WINED3DFMT_FLAG_FOURCC},
     {WINED3DFMT_G8R8_G8B8,          WINED3DFMT_FLAG_FOURCC},
     {WINED3DFMT_R8G8_B8G8,          WINED3DFMT_FLAG_FOURCC},
+    {WINED3DFMT_INTZ,               WINED3DFMT_FLAG_FOURCC},
+    {WINED3DFMT_NULL,               WINED3DFMT_FLAG_FOURCC},
     {WINED3DFMT_P8_UINT,            WINED3DFMT_FLAG_GETDC},
     {WINED3DFMT_B8G8R8_UNORM,       WINED3DFMT_FLAG_GETDC},
     {WINED3DFMT_B8G8R8A8_UNORM,     WINED3DFMT_FLAG_GETDC},
@@ -867,6 +870,10 @@ static const struct wined3d_format_texture_info format_texture_info[] =
             WINED3DFMT_FLAG_POSTPIXELSHADER_BLENDING | WINED3DFMT_FLAG_FILTERING | WINED3DFMT_FLAG_DEPTH
             | WINED3DFMT_FLAG_STENCIL,
             ARB_FRAMEBUFFER_OBJECT,     NULL},
+    {WINED3DFMT_NULL,                   GL_RGBA8,                         GL_RGBA8,                               0,
+            GL_RGBA,                    GL_UNSIGNED_INT_8_8_8_8_REV,      0,
+            WINED3DFMT_FLAG_RENDERTARGET,
+            ARB_FRAMEBUFFER_OBJECT,     NULL},
 };
 
 static inline int getFmtIdx(enum wined3d_format_id format_id)
@@ -1189,6 +1196,20 @@ static BOOL init_format_texture_info(struct wined3d_gl_info *gl_info)
         format->color_fixup = COLOR_FIXUP_IDENTITY;
         format->flags |= format_texture_info[i].flags;
         format->heightscale = 1.0f;
+
+        if (format->glGammaInternal != format->glInternal)
+        {
+            /* Filter sRGB capabilities if EXT_texture_sRGB is not supported. */
+            if (!gl_info->supported[EXT_TEXTURE_SRGB])
+            {
+                format->glGammaInternal = format->glInternal;
+                format->flags &= ~(WINED3DFMT_FLAG_SRGB_READ | WINED3DFMT_FLAG_SRGB_WRITE);
+            }
+            else if (gl_info->supported[EXT_TEXTURE_SRGB_DECODE])
+            {
+                format->glInternal = format->glGammaInternal;
+            }
+        }
 
         /* Texture conversion stuff */
         format->convert = format_texture_info[i].convert;
@@ -1739,6 +1760,7 @@ const char *debug_d3dformat(enum wined3d_format_id format_id)
         FMT_TO_STR(WINED3DFMT_B8G8R8A8_UNORM);
         FMT_TO_STR(WINED3DFMT_B8G8R8X8_UNORM);
         FMT_TO_STR(WINED3DFMT_INTZ);
+        FMT_TO_STR(WINED3DFMT_NULL);
 #undef FMT_TO_STR
         default:
         {
@@ -1940,7 +1962,6 @@ const char *debug_d3drenderstate(WINED3DRENDERSTATETYPE state)
         D3DSTATE_TO_STR(WINED3DRS_EDGEANTIALIAS);
         D3DSTATE_TO_STR(WINED3DRS_COLORKEYENABLE);
         D3DSTATE_TO_STR(WINED3DRS_MIPMAPLODBIAS);
-        D3DSTATE_TO_STR(WINED3DRS_ZBIAS);
         D3DSTATE_TO_STR(WINED3DRS_RANGEFOGENABLE);
         D3DSTATE_TO_STR(WINED3DRS_ANISOTROPY);
         D3DSTATE_TO_STR(WINED3DRS_FLUSHBATCH);
@@ -2212,6 +2233,8 @@ const char *debug_d3dstate(DWORD state)
         return "STATE_MATERIAL";
     if (STATE_IS_FRONTFACE(state))
         return "STATE_FRONTFACE";
+    if (STATE_IS_POINTSPRITECOORDORIGIN(state))
+        return "STATE_POINTSPRITECOORDORIGIN";
 
     return wine_dbg_sprintf("UNKNOWN_STATE(%#x)", state);
 }
@@ -2710,7 +2733,8 @@ DWORD get_flexible_vertex_size(DWORD d3dvtVertexType) {
     return size;
 }
 
-void gen_ffp_frag_op(IWineD3DStateBlockImpl *stateblock, struct ffp_frag_settings *settings, BOOL ignore_textype) {
+void gen_ffp_frag_op(struct wined3d_stateblock *stateblock, struct ffp_frag_settings *settings, BOOL ignore_textype)
+{
 #define ARG1 0x01
 #define ARG2 0x02
 #define ARG0 0x04
@@ -2747,12 +2771,13 @@ void gen_ffp_frag_op(IWineD3DStateBlockImpl *stateblock, struct ffp_frag_setting
     DWORD ttff;
     DWORD cop, aop, carg0, carg1, carg2, aarg0, aarg1, aarg2;
     IWineD3DDeviceImpl *device = stateblock->device;
-    IWineD3DSurfaceImpl *rt = device->render_targets[0];
+    struct wined3d_surface *rt = device->render_targets[0];
     const struct wined3d_gl_info *gl_info = &device->adapter->gl_info;
 
     for (i = 0; i < gl_info->limits.texture_stages; ++i)
     {
-        IWineD3DBaseTextureImpl *texture;
+        const struct wined3d_texture *texture;
+
         settings->op[i].padding = 0;
         if (stateblock->state.texture_states[i][WINED3DTSS_COLOROP] == WINED3DTOP_DISABLE)
         {
@@ -2777,7 +2802,7 @@ void gen_ffp_frag_op(IWineD3DStateBlockImpl *stateblock, struct ffp_frag_setting
             }
             else
             {
-                switch (texture->baseTexture.target)
+                switch (texture->target)
                 {
                     case GL_TEXTURE_1D:
                         settings->op[i].tex_type = tex_1d;
@@ -2834,12 +2859,14 @@ void gen_ffp_frag_op(IWineD3DStateBlockImpl *stateblock, struct ffp_frag_setting
 
         if (!i && stateblock->state.textures[0] && stateblock->state.render_states[WINED3DRS_COLORKEYENABLE])
         {
-            IWineD3DBaseTextureImpl *texture = stateblock->state.textures[0];
-            GLenum texture_dimensions = texture->baseTexture.target;
+            GLenum texture_dimensions;
+
+            texture = stateblock->state.textures[0];
+            texture_dimensions = texture->target;
 
             if (texture_dimensions == GL_TEXTURE_2D || texture_dimensions == GL_TEXTURE_RECTANGLE_ARB)
             {
-                IWineD3DSurfaceImpl *surf = (IWineD3DSurfaceImpl *)texture->baseTexture.sub_resources[0];
+                struct wined3d_surface *surf = surface_from_resource(texture->sub_resources[0]);
 
                 if (surf->CKeyFlags & WINEDDSD_CKSRCBLT && !surf->resource.format->alpha_mask)
                 {
@@ -3000,11 +3027,11 @@ void add_ffp_frag_shader(struct wine_rb_tree *shaders, struct ffp_frag_desc *des
  * Requires the caller to activate the correct unit before
  */
 /* GL locking is done by the caller (state handler) */
-void texture_activate_dimensions(IWineD3DBaseTextureImpl *texture, const struct wined3d_gl_info *gl_info)
+void texture_activate_dimensions(const struct wined3d_texture *texture, const struct wined3d_gl_info *gl_info)
 {
     if (texture)
     {
-        switch (texture->baseTexture.target)
+        switch (texture->target)
         {
             case GL_TEXTURE_2D:
                 glDisable(GL_TEXTURE_3D);
@@ -3085,7 +3112,7 @@ void texture_activate_dimensions(IWineD3DBaseTextureImpl *texture, const struct 
 }
 
 /* GL locking is done by the caller (state handler) */
-void sampler_texdim(DWORD state, IWineD3DStateBlockImpl *stateblock, struct wined3d_context *context)
+void sampler_texdim(DWORD state, struct wined3d_stateblock *stateblock, struct wined3d_context *context)
 {
     DWORD sampler = state - STATE_SAMPLER(0);
     DWORD mapped_stage = stateblock->device->texUnitMap[sampler];
@@ -3183,7 +3210,7 @@ void select_shader_mode(const struct wined3d_gl_info *gl_info, int *ps_selected,
     else *ps_selected = SHADER_NONE;
 }
 
-const struct blit_shader *wined3d_select_blitter(const struct wined3d_gl_info *gl_info, enum blit_operation blit_op,
+const struct blit_shader *wined3d_select_blitter(const struct wined3d_gl_info *gl_info, enum wined3d_blit_op blit_op,
         const RECT *src_rect, DWORD src_usage, WINED3DPOOL src_pool, const struct wined3d_format *src_format,
         const RECT *dst_rect, DWORD dst_usage, WINED3DPOOL dst_pool, const struct wined3d_format *dst_format)
 {

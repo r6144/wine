@@ -42,6 +42,10 @@
 #ifdef HAVE_SYS_POLL_H
 # include <sys/poll.h>
 #endif
+#ifdef HAVE_SYS_ERRNO_H
+#include <sys/errno.h>
+#endif
+#include <sys/soundcard.h>
 
 #include "windef.h"
 #include "winbase.h"
@@ -52,14 +56,11 @@
 #include "mmreg.h"
 #include "dsound.h"
 #include "dsdriver.h"
-#include "oss.h"
 #include "wine/debug.h"
 
 #include "audio.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(dscapture);
-
-#ifdef HAVE_OSS
 
 /*======================================================================*
  *           Low level DSOUND capture definitions                       *
@@ -1327,5 +1328,3 @@ DWORD widDsDesc(UINT wDevID, PDSDRIVERDESC desc)
     memcpy(desc, &(WInDev[wDevID].ossdev.ds_desc), sizeof(DSDRIVERDESC));
     return MMSYSERR_NOERROR;
 }
-
-#endif /* HAVE_OSS */

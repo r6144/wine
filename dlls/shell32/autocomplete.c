@@ -67,7 +67,8 @@ typedef struct
     const IAutoComplete2Vtbl  *lpVtbl;
     const IAutoCompleteDropDownVtbl *lpDropDownVtbl;
     LONG ref;
-    BOOL  enabled;
+    BOOL initialized;
+    BOOL enabled;
     HWND hwndEdit;
     HWND hwndListBox;
     WNDPROC wpOrigEditProc;
@@ -81,7 +82,9 @@ typedef struct
 static const IAutoComplete2Vtbl acvt;
 static const IAutoCompleteDropDownVtbl acdropdownvt;
 
-
+static const WCHAR autocomplete_propertyW[] = {'W','i','n','e',' ','A','u','t','o',
+                                               'c','o','m','p','l','e','t','e',' ',
+                                               'c','o','n','t','r','o','l',0};
 /*
   converts This to an interface pointer
 */
@@ -121,33 +124,27 @@ static void create_listbox(IAutoCompleteImpl *This)
 HRESULT WINAPI IAutoComplete_Constructor(IUnknown * pUnkOuter, REFIID riid, LPVOID * ppv)
 {
     IAutoCompleteImpl *lpac;
+    HRESULT hr;
 
     if (pUnkOuter && !IsEqualIID (riid, &IID_IUnknown))
-	return CLASS_E_NOAGGREGATION;
+        return CLASS_E_NOAGGREGATION;
 
     lpac = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(IAutoCompleteImpl));
-    if (!lpac) 
-	return E_OUTOFMEMORY;
+    if (!lpac)
+        return E_OUTOFMEMORY;
 
     lpac->ref = 1;
     lpac->lpVtbl = &acvt;
     lpac->lpDropDownVtbl = &acdropdownvt;
     lpac->enabled = TRUE;
-    lpac->enumstr = NULL;
     lpac->options = ACO_AUTOAPPEND;
-    lpac->wpOrigEditProc = NULL;
-    lpac->hwndListBox = NULL;
-    lpac->txtbackup = NULL;
-    lpac->quickComplete = NULL;
-    
-    if (FAILED (IUnknown_QueryInterface (_IUnknown_ (lpac), riid, ppv))) {
-	IUnknown_Release (_IUnknown_ (lpac));
-	return E_NOINTERFACE;
-    }
-    
+
+    hr = IUnknown_QueryInterface(_IUnknown_ (lpac), riid, ppv);
+    IUnknown_Release(_IUnknown_ (lpac));
+
     TRACE("-- (%p)->\n",lpac);
 
-    return S_OK;
+    return hr;
 }
 
 /**************************************************************************
@@ -206,18 +203,16 @@ static ULONG WINAPI IAutoComplete2_fnRelease(
 {
     IAutoCompleteImpl *This = (IAutoCompleteImpl *)iface;
     ULONG refCount = InterlockedDecrement(&This->ref);
-    
+
     TRACE("(%p)->(%u)\n", This, refCount + 1);
 
     if (!refCount) {
-	TRACE(" destroying IAutoComplete(%p)\n",This);
+        TRACE("destroying IAutoComplete(%p)\n", This);
         HeapFree(GetProcessHeap(), 0, This->quickComplete);
         HeapFree(GetProcessHeap(), 0, This->txtbackup);
-	if (This->hwndListBox)
-	    DestroyWindow(This->hwndListBox);
-	if (This->enumstr)
-	    IEnumString_Release(This->enumstr);
-	HeapFree(GetProcessHeap(), 0, This);
+        if (This->enumstr)
+            IEnumString_Release(This->enumstr);
+        HeapFree(GetProcessHeap(), 0, This);
     }
     return refCount;
 }
@@ -252,23 +247,35 @@ static HRESULT WINAPI IAutoComplete2_fnInit(
 {
     IAutoCompleteImpl *This = (IAutoCompleteImpl *)iface;
 
-    TRACE("(%p)->(0x%08lx, %p, %s, %s)\n", 
-	  This, (long)hwndEdit, punkACL, debugstr_w(pwzsRegKeyPath), debugstr_w(pwszQuickComplete));
+    TRACE("(%p)->(%p, %p, %s, %s)\n",
+	  This, hwndEdit, punkACL, debugstr_w(pwzsRegKeyPath), debugstr_w(pwszQuickComplete));
 
     if (This->options & ACO_SEARCH) FIXME(" ACO_SEARCH not supported\n");
     if (This->options & ACO_FILTERPREFIXES) FIXME(" ACO_FILTERPREFIXES not supported\n");
     if (This->options & ACO_USETAB) FIXME(" ACO_USETAB not supported\n");
     if (This->options & ACO_RTLREADING) FIXME(" ACO_RTLREADING not supported\n");
 
-    This->hwndEdit = hwndEdit;
+    if (!hwndEdit || !punkACL)
+        return E_INVALIDARG;
 
-    if (FAILED (IUnknown_QueryInterface (punkACL, &IID_IEnumString, (LPVOID*)&This->enumstr))) {
-	TRACE("No IEnumString interface\n");
-	return  E_NOINTERFACE;
+    if (This->initialized)
+    {
+        WARN("Autocompletion object is already initialized\n");
+        /* This->hwndEdit is set to NULL when the edit window is destroyed. */
+        return This->hwndEdit ? E_FAIL : E_UNEXPECTED;
     }
 
+    if (FAILED (IUnknown_QueryInterface (punkACL, &IID_IEnumString, (LPVOID*)&This->enumstr))) {
+        WARN("No IEnumString interface\n");
+        return E_NOINTERFACE;
+    }
+
+    This->initialized = TRUE;
+    This->hwndEdit = hwndEdit;
     This->wpOrigEditProc = (WNDPROC) SetWindowLongPtrW( hwndEdit, GWLP_WNDPROC, (LONG_PTR) ACEditSubclassProc);
-    SetWindowLongPtrW( hwndEdit, GWLP_USERDATA, (LONG_PTR)This);
+    /* Keep at least one reference to the object until the edit window is destroyed. */
+    IAutoComplete2_AddRef((IAutoComplete2 *)This);
+    SetPropW( hwndEdit, autocomplete_propertyW, This );
 
     if (This->options & ACO_AUTOSUGGEST)
         create_listbox(This);
@@ -459,7 +466,7 @@ static const IAutoCompleteDropDownVtbl acdropdownvt =
  */
 static LRESULT APIENTRY ACEditSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-    IAutoCompleteImpl *This = (IAutoCompleteImpl *)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
+    IAutoCompleteImpl *This = GetPropW(hwnd, autocomplete_propertyW);
     LPOLESTR strs;
     HRESULT hr;
     WCHAR hwndText[255];
@@ -619,7 +626,19 @@ static LRESULT APIENTRY ACEditSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, 
 		}
 	    }
 	    
-	    break; 
+	    break;
+	case WM_DESTROY:
+	{
+	    WNDPROC proc = This->wpOrigEditProc;
+
+	    RemovePropW(hwnd, autocomplete_propertyW);
+	    SetWindowLongPtrW(hwnd, GWLP_WNDPROC, (LONG_PTR)proc);
+	    This->hwndEdit = NULL;
+	    if (This->hwndListBox)
+		    DestroyWindow(This->hwndListBox);
+	    IAutoComplete2_Release((IAutoComplete2 *)This);
+	    return CallWindowProcW(proc, hwnd, uMsg, wParam, lParam);
+	}
 	default:
 	    return CallWindowProcW(This->wpOrigEditProc, hwnd, uMsg, wParam, lParam);
 	    

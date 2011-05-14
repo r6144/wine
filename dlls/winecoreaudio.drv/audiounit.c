@@ -20,11 +20,11 @@
 
 #include "config.h"
 
-#ifdef HAVE_AUDIOUNIT_AUDIOUNIT_H
-
 #define ULONG CoreFoundation_ULONG
 #define HRESULT CoreFoundation_HRESULT
+#ifndef HAVE_AUDIOUNIT_AUDIOCOMPONENT_H
 #include <CoreServices/CoreServices.h>
+#endif
 #include <AudioUnit/AudioUnit.h>
 #include <AudioToolbox/AudioToolbox.h>
 #undef ULONG
@@ -34,6 +34,40 @@
 #undef STDMETHODCALLTYPE
 #include "coreaudio.h"
 #include "wine/debug.h"
+
+#ifndef HAVE_AUDIOUNIT_AUDIOCOMPONENT_H
+/* Define new AudioComponent Manager functions for compatibility's sake */
+typedef Component AudioComponent;
+typedef ComponentDescription AudioComponentDescription;
+typedef ComponentInstance AudioComponentInstance;
+
+static inline AudioComponent AudioComponentFindNext(AudioComponent ac, AudioComponentDescription *desc)
+{
+    return FindNextComponent(ac, desc);
+}
+
+static inline OSStatus AudioComponentInstanceNew(AudioComponent ac, AudioComponentInstance *aci)
+{
+    return OpenAComponent(ac, aci);
+}
+
+static inline OSStatus AudioComponentInstanceDispose(AudioComponentInstance aci)
+{
+    return CloseComponent(aci);
+}
+#endif
+
+#ifndef HAVE_AUGRAPHADDNODE
+static inline OSStatus AUGraphAddNode(AUGraph graph, const AudioComponentDescription *desc, AUNode *node)
+{
+    return AUGraphNewNode(graph, desc, 0, NULL, node);
+}
+
+static inline OSStatus AUGraphNodeInfo(AUGraph graph, AUNode node, AudioComponentDescription *desc, AudioUnit *au)
+{
+    return AUGraphGetNodeInfo(graph, node, desc, 0, NULL, au);
+}
+#endif
 
 WINE_DEFAULT_DEBUG_CHANNEL(wave);
 WINE_DECLARE_DEBUG_CHANNEL(midi);
@@ -68,8 +102,8 @@ extern OSStatus CoreAudio_wiAudioUnitIOProc(void *inRefCon,
 int AudioUnit_CreateDefaultAudioUnit(void *wwo, AudioUnit *au)
 {
     OSStatus err;
-    Component comp;
-    ComponentDescription desc;
+    AudioComponent comp;
+    AudioComponentDescription desc;
     AURenderCallbackStruct callbackStruct;
 
     TRACE("\n");
@@ -80,11 +114,11 @@ int AudioUnit_CreateDefaultAudioUnit(void *wwo, AudioUnit *au)
     desc.componentFlags = 0;
     desc.componentFlagsMask = 0;
 
-    comp = FindNextComponent(NULL, &desc);
+    comp = AudioComponentFindNext(NULL, &desc);
     if (comp == NULL)
         return 0;
     
-    err = OpenAComponent(comp, au);
+    err = AudioComponentInstanceNew(comp, au);
     if (err != noErr || *au == NULL)
         return 0;
         
@@ -102,7 +136,7 @@ int AudioUnit_CreateDefaultAudioUnit(void *wwo, AudioUnit *au)
 
 int AudioUnit_CloseAudioUnit(AudioUnit au)
 {
-    OSStatus err = CloseComponent(au);
+    OSStatus err = AudioComponentInstanceDispose(au);
     return (err == noErr);
 }
 
@@ -170,11 +204,15 @@ int AudioUnit_GetInputDeviceSampleRate(void)
 {
     AudioDeviceID               defaultInputDevice;
     UInt32                      param;
+    AudioObjectPropertyAddress  propertyAddress;
     Float64                     sampleRate;
     OSStatus                    err;
 
     param = sizeof(defaultInputDevice);
-    err = AudioHardwareGetProperty(kAudioHardwarePropertyDefaultInputDevice, &param, &defaultInputDevice);
+    propertyAddress.mSelector = kAudioHardwarePropertyDefaultInputDevice;
+    propertyAddress.mScope = kAudioObjectPropertyScopeGlobal;
+    propertyAddress.mElement = kAudioObjectPropertyElementMaster;
+    err = AudioObjectGetPropertyData(kAudioObjectSystemObject, &propertyAddress, 0, NULL, &param, &defaultInputDevice);
     if (err != noErr || defaultInputDevice == kAudioDeviceUnknown)
     {
         ERR("Couldn't get the default audio input device ID: %08lx\n", err);
@@ -182,7 +220,9 @@ int AudioUnit_GetInputDeviceSampleRate(void)
     }
 
     param = sizeof(sampleRate);
-    err = AudioDeviceGetProperty(defaultInputDevice, 0, 1, kAudioDevicePropertyNominalSampleRate, &param, &sampleRate);
+    propertyAddress.mSelector = kAudioDevicePropertyNominalSampleRate;
+    propertyAddress.mScope = kAudioDevicePropertyScopeInput;
+    err = AudioObjectGetPropertyData(defaultInputDevice, &propertyAddress, 0, NULL, &param, &sampleRate);
     if (err != noErr)
     {
         ERR("Couldn't get the device sample rate: %08lx\n", err);
@@ -198,10 +238,11 @@ int AudioUnit_CreateInputUnit(void* wwi, AudioUnit* out_au,
         UInt32* outFrameCount)
 {
     OSStatus                    err = noErr;
-    ComponentDescription        description;
-    Component                   component;
+    AudioComponentDescription   description;
+    AudioComponent              component;
     AudioUnit                   au;
     UInt32                      param;
+    AudioObjectPropertyAddress  propertyAddress;
     AURenderCallbackStruct      callback;
     AudioDeviceID               defaultInputDevice;
     AudioStreamBasicDescription desiredFormat;
@@ -220,17 +261,17 @@ int AudioUnit_CreateInputUnit(void* wwi, AudioUnit* out_au,
     description.componentFlags          = 0;
     description.componentFlagsMask      = 0;
 
-    component = FindNextComponent(NULL, &description);
+    component = AudioComponentFindNext(NULL, &description);
     if (!component)
     {
-        ERR("FindNextComponent(kAudioUnitSubType_HALOutput) failed\n");
+        ERR("AudioComponentFindNext(kAudioUnitSubType_HALOutput) failed\n");
         return 0;
     }
 
-    err = OpenAComponent(component, &au);
+    err = AudioComponentInstanceNew(component, &au);
     if (err != noErr || au == NULL)
     {
-        ERR("OpenAComponent failed: %08lx\n", err);
+        ERR("AudioComponentInstanceNew failed: %08lx\n", err);
         return 0;
     }
 
@@ -267,7 +308,10 @@ int AudioUnit_CreateInputUnit(void* wwi, AudioUnit* out_au,
 
     /* Find the default input device */
     param = sizeof(defaultInputDevice);
-    err = AudioHardwareGetProperty(kAudioHardwarePropertyDefaultInputDevice, &param, &defaultInputDevice);
+    propertyAddress.mSelector = kAudioHardwarePropertyDefaultInputDevice;
+    propertyAddress.mScope = kAudioObjectPropertyScopeGlobal;
+    propertyAddress.mElement = kAudioObjectPropertyElementMaster;
+    err = AudioObjectGetPropertyData(kAudioObjectSystemObject, &propertyAddress, 0, NULL, &param, &defaultInputDevice);
     if (err != noErr || defaultInputDevice == kAudioDeviceUnknown)
     {
         ERR("Couldn't get the default audio device ID: %08lx\n", err);
@@ -343,7 +387,7 @@ int AudioUnit_CreateInputUnit(void* wwi, AudioUnit* out_au,
 
 error:
     if (au)
-        CloseComponent(au);
+        AudioComponentInstanceDispose(au);
     return 0;
 }
 
@@ -353,7 +397,7 @@ error:
 int SynthUnit_CreateDefaultSynthUnit(AUGraph *graph, AudioUnit *synth)
 {
     OSStatus err;
-    ComponentDescription desc;
+    AudioComponentDescription desc;
     AUNode synthNode;
     AUNode outNode;
 
@@ -372,10 +416,10 @@ int SynthUnit_CreateDefaultSynthUnit(AUGraph *graph, AudioUnit *synth)
     desc.componentType = kAudioUnitType_MusicDevice;
     desc.componentSubType = kAudioUnitSubType_DLSSynth;
 
-    err = AUGraphNewNode(*graph, &desc, 0, NULL, &synthNode);
+    err = AUGraphAddNode(*graph, &desc, &synthNode);
     if (err != noErr)
     {
-        ERR_(midi)("AUGraphNewNode cannot create synthNode : %s\n", wine_dbgstr_fourcc(err));
+        ERR_(midi)("AUGraphAddNode cannot create synthNode : %s\n", wine_dbgstr_fourcc(err));
         return 0;
     }
 
@@ -383,10 +427,10 @@ int SynthUnit_CreateDefaultSynthUnit(AUGraph *graph, AudioUnit *synth)
     desc.componentType = kAudioUnitType_Output;
     desc.componentSubType = kAudioUnitSubType_DefaultOutput;
 
-    err = AUGraphNewNode(*graph, &desc, 0, NULL, &outNode);
+    err = AUGraphAddNode(*graph, &desc, &outNode);
     if (err != noErr)
     {
-        ERR_(midi)("AUGraphNewNode cannot create outNode %s\n", wine_dbgstr_fourcc(err));
+        ERR_(midi)("AUGraphAddNode cannot create outNode %s\n", wine_dbgstr_fourcc(err));
         return 0;
     }
 
@@ -406,10 +450,10 @@ int SynthUnit_CreateDefaultSynthUnit(AUGraph *graph, AudioUnit *synth)
     }
 
     /* Get the synth unit */
-    err = AUGraphGetNodeInfo(*graph, synthNode, 0, 0, 0, synth);
+    err = AUGraphNodeInfo(*graph, synthNode, 0, synth);
     if (err != noErr)
     {
-        ERR_(midi)("AUGraphGetNodeInfo return %s\n", wine_dbgstr_fourcc(err));
+        ERR_(midi)("AUGraphNodeInfo return %s\n", wine_dbgstr_fourcc(err));
         return 0;
     }
 
@@ -457,5 +501,3 @@ int SynthUnit_Close(AUGraph graph)
 
     return 1;
 }
-
-#endif

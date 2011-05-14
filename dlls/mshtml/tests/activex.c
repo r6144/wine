@@ -101,7 +101,7 @@ static const char object_ax_str[] =
     "</object>"
     "</body></html>";
 
-static const REFIID pluginhost_iids[] = {
+static REFIID pluginhost_iids[] = {
     &IID_IOleClientSite,
     &IID_IAdviseSink,
     &IID_IAdviseSinkEx,
@@ -471,6 +471,7 @@ static HRESULT WINAPI PersistPropertyBag_Load(IPersistPropertyBag *face, IProper
     ok(hres == S_OK, "Read failed: %08x\n", hres);
     ok(V_VT(&v) == VT_BSTR, "V_VT(&v) = %d\n", V_VT(&v));
     ok(!strcmp_wa(V_BSTR(&v), "3"), "V_BSTR(v) = %s\n", wine_dbgstr_w(V_BSTR(&v)));
+    SysFreeString(V_BSTR(&v));
 
     V_VT(&v) = VT_I4;
     V_I4(&v) = 0xdeadbeef;
@@ -888,6 +889,7 @@ static HRESULT WINAPI OleObject_DoVerb(IOleObject *iface, LONG iVerb, LPMSG lpms
 
     ip_frame = NULL;
     ip_uiwindow = NULL;
+    frame_info.cb = sizeof(OLEINPLACEFRAMEINFO);
     hres = IOleInPlaceSiteEx_GetWindowContext(ip_site, &ip_frame, &ip_uiwindow, &pos_rect, &clip_rect, &frame_info);
     ok(hres == S_OK, "GetWindowContext failed: %08x\n", hres);
     ok(ip_frame != NULL, "ip_frame == NULL\n");
@@ -1280,6 +1282,7 @@ static void test_object_elem(IHTMLDocument2 *doc)
     CHECK_CALLED(Invoke_SECURITYCTX);
 
     hres = IHTMLObjectElement_QueryInterface(objelem, &IID_IDispatchEx, (void**)&dispex);
+    ok(hres == S_OK, "QueryInterface failed: %08x\n", hres);
     test_elem_dispex(dispex);
     IDispatchEx_Release(dispex);
 
@@ -1532,7 +1535,6 @@ static HRESULT WINAPI InPlaceSite_GetWindowContext(IOleInPlaceSite *iface,
     *lprcPosRect = rect;
     *lprcClipRect = rect;
 
-    lpFrameInfo->cb = sizeof(*lpFrameInfo);
     lpFrameInfo->fMDIApp = FALSE;
     lpFrameInfo->hwndFrame = container_hwnd;
     lpFrameInfo->haccel = NULL;

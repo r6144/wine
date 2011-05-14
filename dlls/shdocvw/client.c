@@ -83,13 +83,13 @@ static HRESULT WINAPI ClientSite_QueryInterface(IOleClientSite *iface, REFIID ri
 static ULONG WINAPI ClientSite_AddRef(IOleClientSite *iface)
 {
     DocHost *This = impl_from_IOleClientSite(iface);
-    return IDispatch_AddRef(This->disp);
+    return This->container_vtbl->addref(This);
 }
 
 static ULONG WINAPI ClientSite_Release(IOleClientSite *iface)
 {
     DocHost *This = impl_from_IOleClientSite(iface);
-    return IDispatch_Release(This->disp);
+    return This->container_vtbl->release(This);
 }
 
 static HRESULT WINAPI ClientSite_SaveObject(IOleClientSite *iface)
@@ -230,7 +230,6 @@ static HRESULT WINAPI InPlaceSite_GetWindowContext(IOleInPlaceSite *iface,
     GetClientRect(This->hwnd, lprcPosRect);
     *lprcClipRect = *lprcPosRect;
 
-    lpFrameInfo->cb = sizeof(*lpFrameInfo);
     lpFrameInfo->fMDIApp = FALSE;
     lpFrameInfo->hwndFrame = This->frame_hwnd;
     lpFrameInfo->haccel = NULL;
@@ -620,6 +619,21 @@ static HRESULT WINAPI ClServiceProvider_QueryService(IServiceProvider *iface, RE
     if(IsEqualGUID(&IID_IWebBrowserApp, guidService)) {
         TRACE("IWebBrowserApp service\n");
         return IDispatch_QueryInterface(This->disp, riid, ppv);
+    }
+
+    if(IsEqualGUID(&IID_IShellBrowser, guidService)) {
+        IShellBrowser *sb;
+        HRESULT hres;
+
+        TRACE("(%p)->(IID_IShellBrowser %s %p)\n", This, debugstr_guid(riid), ppv);
+
+        hres = ShellBrowser_Create(&sb);
+        if(FAILED(hres))
+            return hres;
+
+        hres = IShellBrowser_QueryInterface(sb, riid, ppv);
+        IShellBrowser_Release(sb);
+        return hres;
     }
 
     FIXME("(%p)->(%s %s %p)\n", This, debugstr_guid(guidService), debugstr_guid(riid), ppv);

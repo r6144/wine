@@ -1516,7 +1516,7 @@ BOOL     WINAPI SetupDiGetActualSectionToInstallW(HINF, PCWSTR, PWSTR, DWORD, PD
 #define         SetupDiGetActualSectionToInstall WINELIB_NAME_AW(SetupDiGetActualSectionToInstall)
 BOOL     WINAPI SetupDiGetActualSectionToInstallExA(HINF, PCSTR, PSTR, DWORD, PDWORD, PSTR *, PVOID);
 BOOL     WINAPI SetupDiGetActualSectionToInstallExW(HINF, PCWSTR, PWSTR, DWORD, PDWORD, PWSTR *, PVOID);
-#define         SetupDiGetActualSectionToInstallEx WINELIB_NAME_AW(SetupDiGetActualSectionToInstalExl)
+#define         SetupDiGetActualSectionToInstallEx WINELIB_NAME_AW(SetupDiGetActualSectionToInstallEx)
 BOOL     WINAPI SetupDiGetClassBitmapIndex(const GUID *, PINT);
 BOOL     WINAPI SetupDiGetClassDescriptionA(const GUID*, PSTR, DWORD, PDWORD);
 BOOL     WINAPI SetupDiGetClassDescriptionW(const GUID*, PWSTR, DWORD, PDWORD);
@@ -1635,6 +1635,7 @@ BOOL     WINAPI SetupDiSetDeviceRegistryPropertyW(HDEVINFO, PSP_DEVINFO_DATA, DW
 BOOL     WINAPI SetupDiSetDriverInstallParamsA(HDEVINFO, PSP_DEVINFO_DATA, PSP_DRVINFO_DATA_A, PSP_DRVINSTALL_PARAMS);
 BOOL     WINAPI SetupDiSetDriverInstallParamsW(HDEVINFO, PSP_DEVINFO_DATA, PSP_DRVINFO_DATA_W, PSP_DRVINSTALL_PARAMS);
 #define         SetupDiSetDriverInstallParams WINELIB_NAME_AW(SetupDiSetDriverInstallParams)
+BOOL     WINAPI SetupDiSetSelectedDevice(HDEVINFO, PSP_DEVINFO_DATA);
 BOOL     WINAPI SetupDiSetSelectedDriverA(HDEVINFO, PSP_DEVINFO_DATA, PSP_DRVINFO_DATA_A);
 BOOL     WINAPI SetupDiSetSelectedDriverW(HDEVINFO, PSP_DEVINFO_DATA, PSP_DRVINFO_DATA_W);
 #define         SetupDiSetSelectedDriver WINELIB_NAME_AW(SetupDiSetSelectedDriver)

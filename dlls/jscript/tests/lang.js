@@ -108,6 +108,11 @@ ok(typeof(testFunc1) === "function", "typeof(testFunc1) is not function");
 ok(typeof(String) === "function", "typeof(String) is not function");
 ok(typeof(ScriptEngine) === "function", "typeof(ScriptEngine) is not function");
 ok(typeof(this) === "object", "typeof(this) is not object");
+ok(typeof(doesnotexist) === "undefined", "typeof(doesnotexist) = " + typeof(doesnotexist));
+tmp = typeof((new Object()).doesnotexist);
+ok(tmp === "undefined", "typeof((new Object).doesnotexist = " + tmp);
+tmp = typeof(testObj.onlyDispID);
+ok(tmp === "unknown", "typeof(testObj.onlyDispID) = " + tmp);
 
 ok(testFunc1(true, "test") === true, "testFunc1 not returned true");
 
@@ -942,6 +947,30 @@ ok((Infinity != NaN) === true, "(Infinity != NaN) !== true");
 ok((Infinity != NaN) === true, "(Infinity != NaN) !== true");
 ok((0 == NaN) === false, "(0 === NaN) != false");
 
+// escape tests
+var escapeTests = [
+    ["\'", "\\'", 39],
+    ["\"", "\\\"", 34],
+    ["\\", "\\\\", 92],
+    ["\b", "\\b", 8],
+    ["\t", "\\t", 9],
+    ["\n", "\\n", 10],
+    ["\v", "\\v", 118],
+    ["\f", "\\f", 12],
+    ["\r", "\\r", 13],
+    ["\xf3", "\\xf3", 0xf3],
+    ["\u1234", "\\u1234", 0x1234],
+    ["\a", "\\a", 97],
+    ["\?", "\\?", 63]
+];
+
+for(i=0; i<escapeTests.length; i++) {
+    tmp = escapeTests[i][0].charCodeAt(0);
+    ok(tmp === escapeTests[i][2], "escaped '" + escapeTests[i][1] + "' = " + tmp + " expected " + escapeTests[i][2]);
+}
+
+tmp = !+"\v1";
+ok(tmp === true, '!+"\v1" = ' + tmp);
 
 ok(typeof(testFunc2) === "function", "typeof(testFunc2) = " + typeof(testFunc2));
 tmp = testFunc2(1);
@@ -1032,8 +1061,6 @@ if(false) {
 }
 
 ok(in_if_false(), "in_if_false failed");
-
-ok(typeof(doesnotexist) === "undefined", "typeof(doesnotexist) = " + typeof(doesnotexist));
 
 (function() { newValue = 1; })();
 ok(newValue === 1, "newValue = " + newValue);

@@ -1561,6 +1561,7 @@ static void test_enum_svc(void)
     neededW = 0xdeadbeef;
     ret = pEnumServicesStatusExW(scm_handle, 0, SERVICE_WIN32, SERVICE_STATE_ALL,
                                  NULL, 0, &neededW, &returnedW, NULL, NULL);
+    ok(!ret, "Expected failure\n");
     ok(neededW == needed, "Expected needed buffersize to be the same for A- and W-calls\n");
 
     /* Store the needed bytes */
@@ -1840,9 +1841,10 @@ static void test_sequence(void)
     }
     ok(!strcmp(config->lpServiceStartName, localsystem), "Expected 'LocalSystem', got '%s'\n", config->lpServiceStartName);
     ok(!strcmp(config->lpDisplayName, displayname), "Expected '%s', got '%s'\n", displayname, config->lpDisplayName);
-    
-    ok(ChangeServiceConfigA(svc_handle, SERVICE_NO_CHANGE, SERVICE_NO_CHANGE, SERVICE_ERROR_NORMAL, NULL, "TestGroup2", NULL, NULL, NULL, NULL, displayname2),
-        "ChangeServiceConfig failed (err=%d)\n", GetLastError());
+
+    ret = ChangeServiceConfigA(svc_handle, SERVICE_NO_CHANGE, SERVICE_NO_CHANGE, SERVICE_ERROR_NORMAL, NULL, "TestGroup2",
+                               NULL, NULL, NULL, NULL, displayname2);
+    ok(ret, "ChangeServiceConfig failed (err=%d)\n", GetLastError());
 
     QueryServiceConfigA(svc_handle, NULL, 0, &needed);
     config = HeapReAlloc(GetProcessHeap(), 0, config, needed);

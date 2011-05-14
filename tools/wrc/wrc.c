@@ -69,8 +69,9 @@ static const char usage[] =
 	"   --no-use-temp-file         Ignored for compatibility with windres\n"
 	"   --nostdinc                 Disables searching the standard include path\n"
 	"   -o, --output=FILE          Output to file (default is infile.res)\n"
-	"   -O, --output-format=FORMAT The output format (either `res' or `res16`)\n"
+	"   -O, --output-format=FORMAT The output format (`po', `pot', `res', or `res16`)\n"
 	"   --pedantic                 Enable pedantic warnings\n"
+	"   --po-dir=DIR               Directory containing po files for translations\n"
 	"   --preprocessor             Specifies the preprocessor to use, including arguments\n"
 	"   -r                         Ignored for compatibility with rc\n"
 	"   -U, --undefine id          Undefine preprocessor identifier id\n"
@@ -148,7 +149,7 @@ static int pointer_size = sizeof(void *);
 
 static int verify_translations_mode;
 
-char *output_name = NULL;	/* The name given by the -o option */
+static char *output_name;	/* The name given by the -o option */
 char *input_name = NULL;	/* The name given on the command-line */
 static char *temp_name = NULL;	/* Temporary file for preprocess pipe */
 
@@ -171,6 +172,7 @@ enum long_options_values
     LONG_OPT_NOSTDINC = 1,
     LONG_OPT_TMPFILE,
     LONG_OPT_NOTMPFILE,
+    LONG_OPT_PO_DIR,
     LONG_OPT_PREPROCESSOR,
     LONG_OPT_VERSION,
     LONG_OPT_DEBUG,
@@ -195,6 +197,7 @@ static const struct option long_options[] = {
 	{ "output", 1, NULL, 'o' },
 	{ "output-format", 1, NULL, 'O' },
 	{ "pedantic", 0, NULL, LONG_OPT_PEDANTIC },
+	{ "po-dir", 1, NULL, LONG_OPT_PO_DIR },
 	{ "preprocessor", 1, NULL, LONG_OPT_PREPROCESSOR },
 	{ "target", 1, NULL, 'F' },
 	{ "undefine", 1, NULL, 'U' },
@@ -270,12 +273,7 @@ static int load_file( const char *input_name, const char *output_name )
             exit(0);
         }
 
-        if (output_name && output_name[0])
-        {
-            name = xmalloc( strlen(output_name) + 8 );
-            strcpy( name, output_name );
-            strcat( name, ".XXXXXX" );
-        }
+        if (output_name && output_name[0]) name = strmake( "%s.XXXXXX", output_name );
         else name = xstrdup( "wrc.XXXXXX" );
 
         if ((fd = mkstemps( name, 0 )) == -1)
@@ -338,6 +336,8 @@ int main(int argc,char *argv[])
 	int nb_files = 0;
 	int i;
 	int cmdlen;
+        int po_mode = 0;
+        char *po_dir = NULL;
         char **files = xmalloc( argc * sizeof(*files) );
 
 	signal(SIGSEGV, segvhandler);
@@ -381,6 +381,9 @@ int main(int argc,char *argv[])
 			break;
 		case LONG_OPT_NOTMPFILE:
 			if (debuglevel) warning("--no-use-temp-file option not yet supported, ignored.\n");
+			break;
+		case LONG_OPT_PO_DIR:
+			po_dir = xstrdup( optarg );
 			break;
 		case LONG_OPT_PREPROCESSOR:
 			if (strcmp(optarg, "cat") == 0) no_preprocess = 1;
@@ -467,7 +470,9 @@ int main(int argc,char *argv[])
 			else error("Too many output files.\n");
 			break;
 		case 'O':
-			if (strcmp(optarg, "res16") == 0) win32 = 0;
+			if (strcmp(optarg, "po") == 0) po_mode = 1;
+			else if (strcmp(optarg, "pot") == 0) po_mode = 2;
+			else if (strcmp(optarg, "res16") == 0) win32 = 0;
 			else if (strcmp(optarg, "res")) warning("Output format %s not supported.\n", optarg);
 			break;
 		case 'r':
@@ -529,20 +534,10 @@ int main(int argc,char *argv[])
         for (i = 0; i < nb_files; i++)
         {
             input_name = files[i];
-            if(!output_name && !preprocess_only)
-            {
-		output_name = dup_basename(input_name, ".rc");
-		strcat(output_name, ".res");
-            }
             if (load_file( input_name, output_name )) exit(1);
         }
 	/* stdin special case. NULL means "stdin" for wpp. */
-        if (nb_files == 0)
-        {
-            if(!output_name && !preprocess_only)
-		output_name = strdup("wrc.tab.res");
-            if (load_file( NULL, output_name )) exit(1);
-        }
+        if (nb_files == 0 && load_file( NULL, output_name )) exit(1);
 
 	if(debuglevel & DEBUGLEVEL_DUMP)
 		dump_resources(resource_top);
@@ -552,11 +547,32 @@ int main(int argc,char *argv[])
 		verify_translations(resource_top);
 		exit(0);
 	}
+	if (po_mode)
+	{
+            if (po_mode == 2)  /* pot file */
+            {
+                if (!output_name)
+                {
+                    output_name = dup_basename( nb_files ? files[0] : NULL, ".rc" );
+                    strcat( output_name, ".pot" );
+                }
+                write_pot_file( output_name );
+            }
+            else write_po_files( output_name );
+            output_name = NULL;
+            exit(0);
+	}
+        if (po_dir) add_translations( po_dir );
 
 	/* Convert the internal lists to binary data */
 	resources2res(resource_top);
 
 	chat("Writing .res-file\n");
+        if (!output_name)
+        {
+            output_name = dup_basename( nb_files ? files[0] : NULL, ".rc" );
+            strcat(output_name, ".res");
+        }
 	write_resfile(output_name, resource_top);
 	output_name = NULL;
 

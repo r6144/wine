@@ -22,7 +22,6 @@
 #include <windows.h>
 #include <wine/test.h>
 
-#include "initguid.h"
 #include "shlguid.h"
 #define COBJMACROS
 #include "shobjidl.h"
@@ -142,9 +141,7 @@ static void test_DialogCancel(void)
     else
     {
         ok(0 == result, "expected 0, got %d\n", result);
-        ok(0 == CommDlgExtendedError() ||
-           broken(CDERR_INITIALIZATION == CommDlgExtendedError()), /* win9x */
-           "expected 0, got %d\n", CommDlgExtendedError());
+        ok(0 == CommDlgExtendedError(), "expected 0, got %d\n", CommDlgExtendedError());
     }
 
     SetLastError(0xdeadbeef);
@@ -154,9 +151,7 @@ static void test_DialogCancel(void)
     else
     {
         ok(0 == result, "expected 0, got %d\n", result);
-        ok(0 == CommDlgExtendedError() ||
-           broken(CDERR_INITIALIZATION == CommDlgExtendedError()), /* win9x */
-           "expected 0, got %d\n", CommDlgExtendedError());
+        ok(0 == CommDlgExtendedError(), "expected 0, got %d\n", CommDlgExtendedError());
     }
 }
 
@@ -219,7 +214,7 @@ static UINT_PTR CALLBACK create_view_window2_hook(HWND dlg, UINT msg, WPARAM wPa
             hr = IShellView2_DestroyViewWindow(shell_view2);
             ok(SUCCEEDED(hr), "DestroyViewWindow returned %#x\n", hr);
 
-            /* XP and W2K3 need this. On Win9x and W2K the call to DestroyWindow() fails and has
+            /* XP and W2K3 need this. On W2K the call to DestroyWindow() fails and has
              * no side effects. NT4 doesn't get here. (FIXME: Vista doesn't get here yet).
              */
             DestroyWindow(view_params.hwndView);
@@ -231,9 +226,7 @@ static UINT_PTR CALLBACK create_view_window2_hook(HWND dlg, UINT msg, WPARAM wPa
 
             hr = IShellView2_GetCurrentInfo(shell_view2, &folder_settings);
             ok(SUCCEEDED(hr), "GetCurrentInfo returned %#x\n", hr);
-            ok(folder_settings.ViewMode == FVM_DETAILS ||
-               broken(folder_settings.ViewMode == FVM_LIST), /* Win9x */
-               "view mode is %d, expected FVM_DETAILS\n",
+            ok(folder_settings.ViewMode == FVM_DETAILS, "view mode is %d, expected FVM_DETAILS\n",
                folder_settings.ViewMode);
 
 cleanup:
@@ -433,8 +426,7 @@ static LONG_PTR WINAPI resize_template_hook(HWND dlg, UINT msg, WPARAM wParam, L
                             /* sized horizontal and moved vertical */
                             case cmb1:
                             case edt1:
-                                ok( TESTRECTS( ctrlrcs[i], rc, 0, 10, 10, 0) ||
-                                    broken(TESTRECTS( ctrlrcs[i], rc, 0, 10, 0, 0)),/*win98*/
+                                ok( TESTRECTS( ctrlrcs[i], rc, 0, 10, 10, 0),
                                     "control id %03x should have sized horizontally and moved vertically, before %d,%d-%d,%d after  %d,%d-%d,%d\n",
                                     ctrlids[i], ctrlrcs[i].left, ctrlrcs[i].top,
                                     ctrlrcs[i].right, ctrlrcs[i].bottom,
@@ -451,8 +443,7 @@ static LONG_PTR WINAPI resize_template_hook(HWND dlg, UINT msg, WPARAM wParam, L
                             /* moved horizontal and vertical */
                             case IDCANCEL:
                             case pshHelp:
-                                ok( TESTRECTS( ctrlrcs[i], rc, 10, 10, 0, 0) ||
-                                    broken(TESTRECTS( ctrlrcs[i], rc, 0, 10, 0, 0)),/*win98*/
+                                ok( TESTRECTS( ctrlrcs[i], rc, 10, 10, 0, 0),
                                     "control id %03x should have moved horizontally and vertically, before %d,%d-%d,%d after  %d,%d-%d,%d\n",
                                     ctrlids[i], ctrlrcs[i].left, ctrlrcs[i].top,
                                     ctrlrcs[i].right, ctrlrcs[i].bottom,
@@ -647,8 +638,10 @@ static void test_ok(void)
     char curdir[MAX_PATH];
     int i;
     DWORD ret;
+    BOOL cdret;
 
-    ok(GetCurrentDirectoryA(sizeof(curdir), curdir) != 0, "Failed to get current dir err %d\n", GetLastError());
+    cdret = GetCurrentDirectoryA(sizeof(curdir), curdir);
+    ok(cdret, "Failed to get current dir err %d\n", GetLastError());
     if (!GetTempFileNameA(".", "txt", 0, tmpfilename)) {
         skip("Failed to create a temporary file name\n");
         return;
@@ -671,7 +664,8 @@ static void test_ok(void)
         ok(ret == ok_testcases[i].expclose, "testid %d: GetOpenFileName returned %#x\n", i, ret);
         ret = CommDlgExtendedError();
         ok(!ret, "CommDlgExtendedError returned %#x\n", ret);
-        ok(SetCurrentDirectoryA(curdir), "Failed to restore current dir err %d\n", GetLastError());
+        cdret = SetCurrentDirectoryA(curdir);
+        ok(cdret, "Failed to restore current dir err %d\n", GetLastError());
     }
     ret =  DeleteFileA( tmpfilename);
     ok( ret, "Failed to delete temporary file %s err %d\n", tmpfilename, GetLastError());
@@ -762,7 +756,7 @@ static LONG_PTR WINAPI template_hook_arrange(HWND dlgChild, UINT msg, WPARAM wPa
                 /* special case: there is a control with id stc32 */
                 /* expected height */
                 expecty = posz0[withhelp].cy;
-                if( rcStc32.bottom - rcStc32.top > clrcParent.bottom) {
+                if( rcStc32.bottom - rcStc32.top + (withhelp ? 0 : fixhelp) > clrcParent.bottom) {
                     expecty +=  clrcChild.bottom -  clrcParent.bottom;
                     if( !withhelp) expecty += fixhelp;
                 }
@@ -1049,6 +1043,15 @@ static UINT_PTR WINAPI test_extension_wndproc(HWND dlg, UINT msg, WPARAM wParam,
     return FALSE;
 }
 
+static const char *defext_filters[] = {
+    "TestFilter (*.pt*)\0*.pt*\0",
+    "TestFilter (*.ab?)\0*.ab?\0",
+    "TestFilter (*.*)\0*.*\0",
+    NULL    /* is a test, not an endmark! */
+};
+
+#define ARRAY_SIZE(a) (sizeof(a)/sizeof((a)[0]))
+
 static void test_extension(void)
 {
     OPENFILENAME ofn = { sizeof(OPENFILENAME)};
@@ -1056,9 +1059,12 @@ static void test_extension(void)
     char curdir[MAX_PATH];
     char *filename_ptr;
     const char *test_file_name = "deadbeef";
+    const char **cur_filter;
     DWORD ret;
+    BOOL boolret;
 
-    ok(GetCurrentDirectoryA(sizeof(curdir), curdir) != 0, "Failed to get current dir err %d\n", GetLastError());
+    boolret = GetCurrentDirectoryA(sizeof(curdir), curdir);
+    ok(boolret, "Failed to get current dir err %d\n", GetLastError());
 
     /* Ignore .* extension */
     ofn.lStructSize = sizeof(ofn);
@@ -1070,16 +1076,22 @@ static void test_extension(void)
     ofn.lpstrInitialDir = curdir;
     ofn.lpfnHook = test_extension_wndproc;
     ofn.nFileExtension = 0;
-    ofn.lpstrFilter = "All Files (*.*)\0*.*\0";
-    strcpy(filename, test_file_name);
 
-    ret = GetSaveFileNameA(&ofn);
-    filename_ptr = ofn.lpstrFile + strlen( ofn.lpstrFile ) - strlen( test_file_name );
-    ok(1 == ret, "expected 1, got %d\n", ret);
-    ok(strlen(ofn.lpstrFile) >= strlen(test_file_name), "Filename %s is too short\n", ofn.lpstrFile );
-    ok( strcmp(filename_ptr, test_file_name) == 0,
-        "Filename is %s, expected %s\n", filename_ptr, test_file_name );
+    for (cur_filter = defext_filters; cur_filter < defext_filters + ARRAY_SIZE(defext_filters); cur_filter++) {
+        ofn.lpstrFilter = *cur_filter;
+        strcpy(filename, test_file_name);
+        boolret = GetSaveFileNameA(&ofn);
+        ok(boolret, "expected true\n");
+        ret = CommDlgExtendedError();
+        ok(!ret, "CommDlgExtendedError returned %#x\n", ret);
+        filename_ptr = ofn.lpstrFile + strlen( ofn.lpstrFile ) - strlen( test_file_name );
+        ok( strlen(ofn.lpstrFile) >= strlen(test_file_name), "Filename %s is too short\n", ofn.lpstrFile );
+        ok( strcmp(filename_ptr, test_file_name) == 0,
+            "Filename is %s, expected %s\n", filename_ptr, test_file_name );
+    }
 }
+
+#undef ARRAY_SIZE
 
 START_TEST(filedlg)
 {

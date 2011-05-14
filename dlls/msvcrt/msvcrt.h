@@ -74,6 +74,7 @@ typedef int MSVCRT_clock_t;
 typedef int MSVCRT___time32_t;
 typedef __int64 DECLSPEC_ALIGN(8) MSVCRT___time64_t;
 typedef __int64 DECLSPEC_ALIGN(8) MSVCRT_fpos_t;
+typedef int MSVCRT_mbstate_t;
 
 typedef void (*__cdecl MSVCRT_terminate_handler)(void);
 typedef void (*__cdecl MSVCRT_terminate_function)(void);
@@ -85,8 +86,9 @@ typedef unsigned int (__stdcall *MSVCRT__beginthreadex_start_routine_t)(void *);
 typedef int (*__cdecl MSVCRT__onexit_t)(void);
 typedef void (__cdecl *MSVCRT_invalid_parameter_handler)(const MSVCRT_wchar_t*, const MSVCRT_wchar_t*, const MSVCRT_wchar_t*, unsigned, MSVCRT_uintptr_t);
 typedef void (__cdecl *MSVCRT_purecall_handler)(void);
+typedef void (__cdecl *MSVCRT_security_error_handler)(int, void *);
 
-typedef struct {long double x;} MSVCRT__LDOUBLE;
+typedef struct {ULONG x80[3];} MSVCRT__LDOUBLE; /* Intel 80 bit FP format has sizeof() 12 */
 
 struct MSVCRT_tm {
     int tm_sec;
@@ -166,6 +168,7 @@ extern char* __cdecl __unDNameEx(char *,const char*,int,malloc_func_t,free_func_
 extern void msvcrt_init_mt_locks(void);
 extern void msvcrt_free_mt_locks(void);
 
+extern void msvcrt_init_math(void);
 extern void msvcrt_init_io(void);
 extern void msvcrt_free_io(void);
 extern void msvcrt_init_console(void);
@@ -304,6 +307,36 @@ struct MSVCRT___JUMP_BUFFER {
     unsigned long Cookie;
     unsigned long UnwindFunc;
     unsigned long UnwindData[6];
+};
+#elif defined(__x86_64__)
+struct MSVCRT__SETJMP_FLOAT128
+{
+    unsigned __int64 DECLSPEC_ALIGN(16) Part[2];
+};
+struct MSVCRT___JUMP_BUFFER
+{
+    unsigned __int64 Frame;
+    unsigned __int64 Rbx;
+    unsigned __int64 Rsp;
+    unsigned __int64 Rbp;
+    unsigned __int64 Rsi;
+    unsigned __int64 Rdi;
+    unsigned __int64 R12;
+    unsigned __int64 R13;
+    unsigned __int64 R14;
+    unsigned __int64 R15;
+    unsigned __int64 Rip;
+    unsigned __int64 Spare;
+    struct MSVCRT__SETJMP_FLOAT128 Xmm6;
+    struct MSVCRT__SETJMP_FLOAT128 Xmm7;
+    struct MSVCRT__SETJMP_FLOAT128 Xmm8;
+    struct MSVCRT__SETJMP_FLOAT128 Xmm9;
+    struct MSVCRT__SETJMP_FLOAT128 Xmm10;
+    struct MSVCRT__SETJMP_FLOAT128 Xmm11;
+    struct MSVCRT__SETJMP_FLOAT128 Xmm12;
+    struct MSVCRT__SETJMP_FLOAT128 Xmm13;
+    struct MSVCRT__SETJMP_FLOAT128 Xmm14;
+    struct MSVCRT__SETJMP_FLOAT128 Xmm15;
 };
 #endif /* __i386__ */
 
@@ -567,6 +600,8 @@ struct MSVCRT__stat64 {
 #define MSVCRT__USEDENTRY      1
 
 #define MSVCRT__OUT_TO_DEFAULT 0
+#define MSVCRT__OUT_TO_STDERR  1
+#define MSVCRT__OUT_TO_MSGBOX  2
 #define MSVCRT__REPORT_ERRMODE 3
 
 /* ASCII char classification table - binary compatible */
@@ -732,6 +767,13 @@ typedef void (__cdecl *MSVCRT___sighandler_t)(int);
 
 #define _MAX__TIME64_T    (((MSVCRT___time64_t)0x00000007 << 32) | 0x93406FFF)
 
+/* _set_abort_behavior codes */
+#define MSVCRT__WRITE_ABORT_MSG    1
+#define MSVCRT__CALL_REPORTFAULT   2
+
+/* _get_output_format return code */
+#define MSVCRT__TWO_DIGIT_EXPONENT 0x1
+
 void  __cdecl    MSVCRT_free(void*);
 void* __cdecl    MSVCRT_malloc(MSVCRT_size_t);
 void* __cdecl    MSVCRT_calloc(MSVCRT_size_t,MSVCRT_size_t);
@@ -763,6 +805,7 @@ MSVCRT_FILE*   __cdecl MSVCRT__wfdopen(int, const MSVCRT_wchar_t *);
 int            __cdecl MSVCRT_vsnprintf(char *str, MSVCRT_size_t len, const char *format, __ms_va_list valist);
 int            __cdecl MSVCRT_vsnwprintf(MSVCRT_wchar_t *str, MSVCRT_size_t len,
                                        const MSVCRT_wchar_t *format, __ms_va_list valist );
+int            __cdecl MSVCRT__snwprintf(MSVCRT_wchar_t*, unsigned int, const MSVCRT_wchar_t*, ...);
 int            __cdecl MSVCRT_sprintf(char*,const char*,...);
 int            __cdecl MSVCRT__scprintf(const char*,...);
 int            __cdecl MSVCRT_raise(int sig);
@@ -830,6 +873,7 @@ int            __cdecl MSVCRT__write(int,const void*,unsigned int);
 int            __cdecl _getch(void);
 int            __cdecl _ismbblead(unsigned int);
 int            __cdecl _ismbstrail(const unsigned char* start, const unsigned char* str);
+MSVCRT_size_t  __cdecl MSVCRT_mbstowcs(MSVCRT_wchar_t*,const char*,MSVCRT_size_t);
 MSVCRT_intptr_t __cdecl MSVCRT__spawnve(int,const char*,const char* const *,const char* const *);
 MSVCRT_intptr_t __cdecl MSVRT__spawnvpe(int,const char*,const char* const *,const char* const *);
 MSVCRT_intptr_t __cdecl _wspawnve(int,const MSVCRT_wchar_t*,const MSVCRT_wchar_t* const *,const MSVCRT_wchar_t* const *);
@@ -842,6 +886,7 @@ char* __cdecl    _strset(char*,int);
 int __cdecl      _ungetch(int);
 int __cdecl      _cputs(const char*);
 int __cdecl      _cprintf(const char*,...);
+int __cdecl      _cwprintf(const MSVCRT_wchar_t*,...);
 char*** __cdecl  __p__environ(void);
 int*    __cdecl  __p___mb_cur_max(void);
 unsigned int*  __cdecl __p__fmode(void);
@@ -859,6 +904,8 @@ void __cdecl    _wsearchenv(const MSVCRT_wchar_t*, const MSVCRT_wchar_t*, MSVCRT
 MSVCRT_intptr_t __cdecl MSVCRT__spawnvpe(int, const char*, const char* const*, const char* const*);
 void __cdecl MSVCRT__invalid_parameter(const MSVCRT_wchar_t *expr, const MSVCRT_wchar_t *func,
                                        const MSVCRT_wchar_t *file, unsigned int line, MSVCRT_uintptr_t arg);
+int __cdecl      MSVCRT__toupper_l(int,MSVCRT__locale_t);
+int __cdecl      MSVCRT__tolower_l(int,MSVCRT__locale_t);
 
 /* Maybe one day we'll enable the invalid parameter handlers with the full set of information (msvcrXXd)
  *      #define MSVCRT_INVALID_PMT(x) MSVCRT_call_invalid_parameter_handler(x, __FUNCTION__, __FILE__, __LINE__, 0)
@@ -872,22 +919,29 @@ void __cdecl MSVCRT__invalid_parameter(const MSVCRT_wchar_t *expr, const MSVCRT_
 #define MSVCRT_CHECK_PMT(x)   ((x) || (MSVCRT_INVALID_PMT(0),FALSE))
 #endif
 
-typedef struct pf_output_t
+#define MSVCRT__ARGMAX 100
+typedef int (*puts_clbk_a)(void*, int, const char*);
+typedef int (*puts_clbk_w)(void*, int, const MSVCRT_wchar_t*);
+typedef union _printf_arg
 {
-    int used;
-    int len;
-    BOOL unicode;
-    union {
-        LPWSTR W;
-        LPSTR  A;
-    } buf;
-    union {
-        LPWSTR W;
-        LPSTR  A;
-    } grow;
-} pf_output;
+    void *get_ptr;
+    int get_int;
+    LONGLONG get_longlong;
+    double get_double;
+} printf_arg;
+typedef printf_arg (*args_clbk)(void*, int, int, __ms_va_list*);
+int pf_printf_a(puts_clbk_a, void*, const char*, MSVCRT__locale_t,
+        BOOL, BOOL, args_clbk, void*, __ms_va_list*);
+int pf_printf_w(puts_clbk_w, void*, const MSVCRT_wchar_t*, MSVCRT__locale_t,
+        BOOL, BOOL, args_clbk, void*, __ms_va_list*);
+printf_arg arg_clbk_valist(void*, int, int, __ms_va_list*);
 
-int pf_vsnprintf( pf_output *out, const WCHAR *format,
-                  MSVCRT__locale_t locale, BOOL valid, __ms_va_list valist );
+#define MSVCRT__OVERFLOW  3
+#define MSVCRT__UNDERFLOW 4
+
+typedef struct
+{
+    float f;
+} MSVCRT__CRT_FLOAT;
 
 #endif /* __WINE_MSVCRT_H */

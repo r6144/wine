@@ -54,7 +54,7 @@ static const WCHAR about_blankW[] = {'a','b','o','u','t',':','b','l','a','n','k'
 static const char *request_method_strings[] = {"GET", "PUT", "POST"};
 
 struct  nsWineURI {
-    const nsIURLVtbl *lpIURLVtbl;
+    nsIURL nsIURL_iface;
 
     LONG ref;
 
@@ -68,9 +68,6 @@ struct  nsWineURI {
     IUriBuilder *uri_builder;
     BOOL is_doc_uri;
 };
-
-#define NSURI(x)  ((nsIURI*)  &(x)->lpIURLVtbl)
-#define NSURL(x)  ((nsIURL*)  &(x)->lpIURLVtbl)
 
 static nsresult create_uri(nsIURI*,HTMLWindow*,NSContainer*,nsWineURI**);
 
@@ -152,7 +149,7 @@ static BOOL before_async_open(nsChannel *channel, NSContainer *container)
     if(!hlnf && !exec_shldocvw_67(doc, channel->uri->wine_url))
         return FALSE;
 
-    hres = hlink_frame_navigate(&doc->basedoc, channel->uri->wine_url, channel->post_data_stream, hlnf, &cancel);
+    hres = hlink_frame_navigate(&doc->basedoc, channel->uri->wine_url, channel, hlnf, &cancel);
     return FAILED(hres) || cancel;
 }
 
@@ -179,7 +176,7 @@ HRESULT load_nsuri(HTMLWindow *window, nsWineURI *uri, nsChannelBSC *channelbsc,
     uri->channel_bsc = channelbsc;
     doc = window->doc;
     doc->skip_mutation_notif = TRUE;
-    nsres = nsIDocShell_LoadURI(doc_shell, NSURI(uri), NULL, flags, FALSE);
+    nsres = nsIDocShell_LoadURI(doc_shell, (nsIURI*)&uri->nsIURL_iface, NULL, flags, FALSE);
     if(doc == window->doc)
         doc->skip_mutation_notif = FALSE;
     uri->channel_bsc = NULL;
@@ -192,7 +189,7 @@ HRESULT load_nsuri(HTMLWindow *window, nsWineURI *uri, nsChannelBSC *channelbsc,
     return S_OK;
 }
 
-HRESULT set_wine_url(nsWineURI *This, LPCWSTR url)
+static HRESULT set_wine_url(nsWineURI *This, LPCWSTR url)
 {
     TRACE("(%p)->(%s)\n", This, debugstr_w(url));
 
@@ -218,11 +215,11 @@ static void set_uri_nscontainer(nsWineURI *This, NSContainer *nscontainer)
         if(This->container == nscontainer)
             return;
         TRACE("Changing %p -> %p\n", This->container, nscontainer);
-        nsIWebBrowserChrome_Release(NSWBCHROME(This->container));
+        nsIWebBrowserChrome_Release(&This->container->nsIWebBrowserChrome_iface);
     }
 
     if(nscontainer)
-        nsIWebBrowserChrome_AddRef(NSWBCHROME(nscontainer));
+        nsIWebBrowserChrome_AddRef(&nscontainer->nsIWebBrowserChrome_iface);
     This->container = nscontainer;
 }
 
@@ -397,37 +394,40 @@ static void free_http_headers(struct list *list)
     }
 }
 
-#define NSCHANNEL_THIS(iface) DEFINE_THIS(nsChannel, HttpChannel, iface)
+static inline nsChannel *impl_from_nsIHttpChannel(nsIHttpChannel *iface)
+{
+    return CONTAINING_RECORD(iface, nsChannel, nsIHttpChannel_iface);
+}
 
 static nsresult NSAPI nsChannel_QueryInterface(nsIHttpChannel *iface, nsIIDRef riid, void **result)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
 
     if(IsEqualGUID(&IID_nsISupports, riid)) {
         TRACE("(%p)->(IID_nsISupports %p)\n", This, result);
-        *result = NSCHANNEL(This);
+        *result = &This->nsIHttpChannel_iface;
     }else if(IsEqualGUID(&IID_nsIRequest, riid)) {
         TRACE("(%p)->(IID_nsIRequest %p)\n", This, result);
-        *result = NSCHANNEL(This);
+        *result = &This->nsIHttpChannel_iface;
     }else if(IsEqualGUID(&IID_nsIChannel, riid)) {
         TRACE("(%p)->(IID_nsIChannel %p)\n", This, result);
-        *result = NSCHANNEL(This);
+        *result = &This->nsIHttpChannel_iface;
     }else if(IsEqualGUID(&IID_nsIHttpChannel, riid)) {
         TRACE("(%p)->(IID_nsIHttpChannel %p)\n", This, result);
-        *result = is_http_channel(This) ? NSHTTPCHANNEL(This) : NULL;
+        *result = is_http_channel(This) ? &This->nsIHttpChannel_iface : NULL;
     }else if(IsEqualGUID(&IID_nsIUploadChannel, riid)) {
         TRACE("(%p)->(IID_nsIUploadChannel %p)\n", This, result);
-        *result = NSUPCHANNEL(This);
+        *result = &This->nsIUploadChannel_iface;
     }else if(IsEqualGUID(&IID_nsIHttpChannelInternal, riid)) {
         TRACE("(%p)->(IID_nsIHttpChannelInternal %p)\n", This, result);
-        *result = is_http_channel(This) ? NSHTTPINTERNAL(This) : NULL;
+        *result = is_http_channel(This) ? &This->nsIHttpChannelInternal_iface : NULL;
     }else {
         TRACE("(%p)->(%s %p)\n", This, debugstr_guid(riid), result);
         *result = NULL;
     }
 
     if(*result) {
-        nsIChannel_AddRef(NSCHANNEL(This));
+        nsIChannel_AddRef(&This->nsIHttpChannel_iface);
         return NS_OK;
     }
 
@@ -436,7 +436,7 @@ static nsresult NSAPI nsChannel_QueryInterface(nsIHttpChannel *iface, nsIIDRef r
 
 static nsrefcnt NSAPI nsChannel_AddRef(nsIHttpChannel *iface)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
     nsrefcnt ref = InterlockedIncrement(&This->ref);
 
     TRACE("(%p) ref=%d\n", This, ref);
@@ -446,11 +446,11 @@ static nsrefcnt NSAPI nsChannel_AddRef(nsIHttpChannel *iface)
 
 static nsrefcnt NSAPI nsChannel_Release(nsIHttpChannel *iface)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
     LONG ref = InterlockedDecrement(&This->ref);
 
     if(!ref) {
-        nsIURI_Release(NSURI(This->uri));
+        nsIURI_Release(&This->uri->nsIURL_iface);
         if(This->owner)
             nsISupports_Release(This->owner);
         if(This->post_data_stream)
@@ -477,16 +477,16 @@ static nsrefcnt NSAPI nsChannel_Release(nsIHttpChannel *iface)
 
 static nsresult NSAPI nsChannel_GetName(nsIHttpChannel *iface, nsACString *aName)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
 
     TRACE("(%p)->(%p)\n", This, aName);
 
-    return nsIURI_GetSpec(NSURI(This->uri), aName);
+    return nsIURI_GetSpec(&This->uri->nsIURL_iface, aName);
 }
 
 static nsresult NSAPI nsChannel_IsPending(nsIHttpChannel *iface, PRBool *_retval)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
 
     FIXME("(%p)->(%p)\n", This, _retval);
 
@@ -495,7 +495,7 @@ static nsresult NSAPI nsChannel_IsPending(nsIHttpChannel *iface, PRBool *_retval
 
 static nsresult NSAPI nsChannel_GetStatus(nsIHttpChannel *iface, nsresult *aStatus)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
 
     WARN("(%p)->(%p) returning NS_OK\n", This, aStatus);
 
@@ -504,7 +504,7 @@ static nsresult NSAPI nsChannel_GetStatus(nsIHttpChannel *iface, nsresult *aStat
 
 static nsresult NSAPI nsChannel_Cancel(nsIHttpChannel *iface, nsresult aStatus)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
 
     FIXME("(%p)->(%08x)\n", This, aStatus);
 
@@ -513,7 +513,7 @@ static nsresult NSAPI nsChannel_Cancel(nsIHttpChannel *iface, nsresult aStatus)
 
 static nsresult NSAPI nsChannel_Suspend(nsIHttpChannel *iface)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
 
     FIXME("(%p)\n", This);
 
@@ -522,7 +522,7 @@ static nsresult NSAPI nsChannel_Suspend(nsIHttpChannel *iface)
 
 static nsresult NSAPI nsChannel_Resume(nsIHttpChannel *iface)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
 
     FIXME("(%p)\n", This);
 
@@ -531,7 +531,7 @@ static nsresult NSAPI nsChannel_Resume(nsIHttpChannel *iface)
 
 static nsresult NSAPI nsChannel_GetLoadGroup(nsIHttpChannel *iface, nsILoadGroup **aLoadGroup)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
 
     TRACE("(%p)->(%p)\n", This, aLoadGroup);
 
@@ -544,7 +544,7 @@ static nsresult NSAPI nsChannel_GetLoadGroup(nsIHttpChannel *iface, nsILoadGroup
 
 static nsresult NSAPI nsChannel_SetLoadGroup(nsIHttpChannel *iface, nsILoadGroup *aLoadGroup)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
 
     TRACE("(%p)->(%p)\n", This, aLoadGroup);
 
@@ -559,7 +559,7 @@ static nsresult NSAPI nsChannel_SetLoadGroup(nsIHttpChannel *iface, nsILoadGroup
 
 static nsresult NSAPI nsChannel_GetLoadFlags(nsIHttpChannel *iface, nsLoadFlags *aLoadFlags)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
 
     TRACE("(%p)->(%p)\n", This, aLoadFlags);
 
@@ -569,7 +569,7 @@ static nsresult NSAPI nsChannel_GetLoadFlags(nsIHttpChannel *iface, nsLoadFlags 
 
 static nsresult NSAPI nsChannel_SetLoadFlags(nsIHttpChannel *iface, nsLoadFlags aLoadFlags)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
 
     TRACE("(%p)->(%08x)\n", This, aLoadFlags);
 
@@ -579,7 +579,7 @@ static nsresult NSAPI nsChannel_SetLoadFlags(nsIHttpChannel *iface, nsLoadFlags 
 
 static nsresult NSAPI nsChannel_GetOriginalURI(nsIHttpChannel *iface, nsIURI **aOriginalURI)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
 
     TRACE("(%p)->(%p)\n", This, aOriginalURI);
 
@@ -592,7 +592,7 @@ static nsresult NSAPI nsChannel_GetOriginalURI(nsIHttpChannel *iface, nsIURI **a
 
 static nsresult NSAPI nsChannel_SetOriginalURI(nsIHttpChannel *iface, nsIURI *aOriginalURI)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
 
     TRACE("(%p)->(%p)\n", This, aOriginalURI);
 
@@ -606,11 +606,11 @@ static nsresult NSAPI nsChannel_SetOriginalURI(nsIHttpChannel *iface, nsIURI *aO
 
 static nsresult NSAPI nsChannel_GetURI(nsIHttpChannel *iface, nsIURI **aURI)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
 
     TRACE("(%p)->(%p)\n", This, aURI);
 
-    nsIURI_AddRef(NSURI(This->uri));
+    nsIURI_AddRef(&This->uri->nsIURL_iface);
     *aURI = (nsIURI*)This->uri;
 
     return NS_OK;
@@ -618,7 +618,7 @@ static nsresult NSAPI nsChannel_GetURI(nsIHttpChannel *iface, nsIURI **aURI)
 
 static nsresult NSAPI nsChannel_GetOwner(nsIHttpChannel *iface, nsISupports **aOwner)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
 
     TRACE("(%p)->(%p)\n", This, aOwner);
 
@@ -631,7 +631,7 @@ static nsresult NSAPI nsChannel_GetOwner(nsIHttpChannel *iface, nsISupports **aO
 
 static nsresult NSAPI nsChannel_SetOwner(nsIHttpChannel *iface, nsISupports *aOwner)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
 
     TRACE("(%p)->(%p)\n", This, aOwner);
 
@@ -647,7 +647,7 @@ static nsresult NSAPI nsChannel_SetOwner(nsIHttpChannel *iface, nsISupports *aOw
 static nsresult NSAPI nsChannel_GetNotificationCallbacks(nsIHttpChannel *iface,
         nsIInterfaceRequestor **aNotificationCallbacks)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
 
     TRACE("(%p)->(%p)\n", This, aNotificationCallbacks);
 
@@ -661,7 +661,7 @@ static nsresult NSAPI nsChannel_GetNotificationCallbacks(nsIHttpChannel *iface,
 static nsresult NSAPI nsChannel_SetNotificationCallbacks(nsIHttpChannel *iface,
         nsIInterfaceRequestor *aNotificationCallbacks)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
 
     TRACE("(%p)->(%p)\n", This, aNotificationCallbacks);
 
@@ -677,7 +677,7 @@ static nsresult NSAPI nsChannel_SetNotificationCallbacks(nsIHttpChannel *iface,
 
 static nsresult NSAPI nsChannel_GetSecurityInfo(nsIHttpChannel *iface, nsISupports **aSecurityInfo)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
 
     TRACE("(%p)->(%p)\n", This, aSecurityInfo);
 
@@ -686,7 +686,7 @@ static nsresult NSAPI nsChannel_GetSecurityInfo(nsIHttpChannel *iface, nsISuppor
 
 static nsresult NSAPI nsChannel_GetContentType(nsIHttpChannel *iface, nsACString *aContentType)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
 
     TRACE("(%p)->(%p)\n", This, aContentType);
 
@@ -702,7 +702,7 @@ static nsresult NSAPI nsChannel_GetContentType(nsIHttpChannel *iface, nsACString
 static nsresult NSAPI nsChannel_SetContentType(nsIHttpChannel *iface,
                                                const nsACString *aContentType)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
     const char *content_type;
 
     TRACE("(%p)->(%s)\n", This, debugstr_nsacstr(aContentType));
@@ -717,7 +717,7 @@ static nsresult NSAPI nsChannel_SetContentType(nsIHttpChannel *iface,
 static nsresult NSAPI nsChannel_GetContentCharset(nsIHttpChannel *iface,
                                                   nsACString *aContentCharset)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
 
     TRACE("(%p)->(%p)\n", This, aContentCharset);
 
@@ -733,7 +733,7 @@ static nsresult NSAPI nsChannel_GetContentCharset(nsIHttpChannel *iface,
 static nsresult NSAPI nsChannel_SetContentCharset(nsIHttpChannel *iface,
                                                   const nsACString *aContentCharset)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
 
     FIXME("(%p)->(%s)\n", This, debugstr_nsacstr(aContentCharset));
 
@@ -742,7 +742,7 @@ static nsresult NSAPI nsChannel_SetContentCharset(nsIHttpChannel *iface,
 
 static nsresult NSAPI nsChannel_GetContentLength(nsIHttpChannel *iface, PRInt32 *aContentLength)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
 
     FIXME("(%p)->(%p)\n", This, aContentLength);
 
@@ -751,7 +751,7 @@ static nsresult NSAPI nsChannel_GetContentLength(nsIHttpChannel *iface, PRInt32 
 
 static nsresult NSAPI nsChannel_SetContentLength(nsIHttpChannel *iface, PRInt32 aContentLength)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
 
     FIXME("(%p)->(%d)\n", This, aContentLength);
 
@@ -760,7 +760,7 @@ static nsresult NSAPI nsChannel_SetContentLength(nsIHttpChannel *iface, PRInt32 
 
 static nsresult NSAPI nsChannel_Open(nsIHttpChannel *iface, nsIInputStream **_retval)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
 
     FIXME("(%p)->(%p)\n", This, _retval);
 
@@ -808,8 +808,8 @@ static HTMLWindow *get_window_from_load_group(nsChannel *This)
 
     window = wine_uri->window_ref ? wine_uri->window_ref->window : NULL;
     if(window)
-        IHTMLWindow2_AddRef(HTMLWINDOW2(window));
-    nsIURI_Release(NSURI(wine_uri));
+        IHTMLWindow2_AddRef(&window->IHTMLWindow2_iface);
+    nsIURI_Release(&wine_uri->nsIURL_iface);
 
     return window;
 }
@@ -858,7 +858,7 @@ static HTMLWindow *get_channel_window(nsChannel *This)
     nsIDOMWindow_Release(nswindow);
 
     if(window)
-        IHTMLWindow2_AddRef(HTMLWINDOW2(window));
+        IHTMLWindow2_AddRef(&window->IHTMLWindow2_iface);
     else
         FIXME("NULL window for %p\n", nswindow);
     return window;
@@ -920,7 +920,7 @@ static nsresult async_open(nsChannel *This, HTMLWindow *window, BOOL is_doc_chan
 static nsresult NSAPI nsChannel_AsyncOpen(nsIHttpChannel *iface, nsIStreamListener *aListener,
                                           nsISupports *aContext)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
     HTMLWindow *window = NULL;
     BOOL open = TRUE;
     nsresult nsres = NS_OK;
@@ -948,7 +948,7 @@ static nsresult NSAPI nsChannel_AsyncOpen(nsIHttpChannel *iface, nsIStreamListen
     if(!window) {
         if(This->uri->window_ref && This->uri->window_ref->window) {
             window = This->uri->window_ref->window;
-            IHTMLWindow2_AddRef(HTMLWINDOW2(window));
+            IHTMLWindow2_AddRef(&window->IHTMLWindow2_iface);
         }else {
             /* FIXME: Analyze removing get_window_from_load_group call */
             if(This->load_group)
@@ -988,18 +988,19 @@ static nsresult NSAPI nsChannel_AsyncOpen(nsIHttpChannel *iface, nsIStreamListen
         nsres = async_open(This, window, This->uri->is_doc_uri, aListener, aContext);
 
     if(NS_SUCCEEDED(nsres) && This->load_group) {
-        nsres = nsILoadGroup_AddRequest(This->load_group, (nsIRequest*)NSCHANNEL(This), aContext);
+        nsres = nsILoadGroup_AddRequest(This->load_group, (nsIRequest*)&This->nsIHttpChannel_iface,
+                aContext);
         if(NS_FAILED(nsres))
             ERR("AddRequest failed: %08x\n", nsres);
     }
 
-    IHTMLWindow2_Release(HTMLWINDOW2(window));
+    IHTMLWindow2_Release(&window->IHTMLWindow2_iface);
     return nsres;
 }
 
 static nsresult NSAPI nsChannel_GetRequestMethod(nsIHttpChannel *iface, nsACString *aRequestMethod)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
 
     TRACE("(%p)->(%p)\n", This, aRequestMethod);
 
@@ -1010,7 +1011,7 @@ static nsresult NSAPI nsChannel_GetRequestMethod(nsIHttpChannel *iface, nsACStri
 static nsresult NSAPI nsChannel_SetRequestMethod(nsIHttpChannel *iface,
                                                  const nsACString *aRequestMethod)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
     const char *method;
     unsigned i;
 
@@ -1030,7 +1031,7 @@ static nsresult NSAPI nsChannel_SetRequestMethod(nsIHttpChannel *iface,
 
 static nsresult NSAPI nsChannel_GetReferrer(nsIHttpChannel *iface, nsIURI **aReferrer)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
 
     TRACE("(%p)->(%p)\n", This, aReferrer);
 
@@ -1042,7 +1043,7 @@ static nsresult NSAPI nsChannel_GetReferrer(nsIHttpChannel *iface, nsIURI **aRef
 
 static nsresult NSAPI nsChannel_SetReferrer(nsIHttpChannel *iface, nsIURI *aReferrer)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
 
     TRACE("(%p)->(%p)\n", This, aReferrer);
 
@@ -1057,7 +1058,7 @@ static nsresult NSAPI nsChannel_SetReferrer(nsIHttpChannel *iface, nsIURI *aRefe
 static nsresult NSAPI nsChannel_GetRequestHeader(nsIHttpChannel *iface,
          const nsACString *aHeader, nsACString *_retval)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
 
     TRACE("(%p)->(%s %p)\n", This, debugstr_nsacstr(aHeader), _retval);
 
@@ -1067,7 +1068,7 @@ static nsresult NSAPI nsChannel_GetRequestHeader(nsIHttpChannel *iface,
 static nsresult NSAPI nsChannel_SetRequestHeader(nsIHttpChannel *iface,
          const nsACString *aHeader, const nsACString *aValue, PRBool aMerge)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
 
     TRACE("(%p)->(%s %s %x)\n", This, debugstr_nsacstr(aHeader), debugstr_nsacstr(aValue), aMerge);
 
@@ -1080,7 +1081,7 @@ static nsresult NSAPI nsChannel_SetRequestHeader(nsIHttpChannel *iface,
 static nsresult NSAPI nsChannel_VisitRequestHeaders(nsIHttpChannel *iface,
                                                     nsIHttpHeaderVisitor *aVisitor)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
 
     FIXME("(%p)->(%p)\n", This, aVisitor);
 
@@ -1089,7 +1090,7 @@ static nsresult NSAPI nsChannel_VisitRequestHeaders(nsIHttpChannel *iface,
 
 static nsresult NSAPI nsChannel_GetAllowPipelining(nsIHttpChannel *iface, PRBool *aAllowPipelining)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
 
     FIXME("(%p)->(%p)\n", This, aAllowPipelining);
 
@@ -1098,7 +1099,7 @@ static nsresult NSAPI nsChannel_GetAllowPipelining(nsIHttpChannel *iface, PRBool
 
 static nsresult NSAPI nsChannel_SetAllowPipelining(nsIHttpChannel *iface, PRBool aAllowPipelining)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
 
     FIXME("(%p)->(%x)\n", This, aAllowPipelining);
 
@@ -1107,7 +1108,7 @@ static nsresult NSAPI nsChannel_SetAllowPipelining(nsIHttpChannel *iface, PRBool
 
 static nsresult NSAPI nsChannel_GetRedirectionLimit(nsIHttpChannel *iface, PRUint32 *aRedirectionLimit)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
 
     FIXME("(%p)->(%p)\n", This, aRedirectionLimit);
 
@@ -1116,7 +1117,7 @@ static nsresult NSAPI nsChannel_GetRedirectionLimit(nsIHttpChannel *iface, PRUin
 
 static nsresult NSAPI nsChannel_SetRedirectionLimit(nsIHttpChannel *iface, PRUint32 aRedirectionLimit)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
 
     FIXME("(%p)->(%u)\n", This, aRedirectionLimit);
 
@@ -1125,7 +1126,7 @@ static nsresult NSAPI nsChannel_SetRedirectionLimit(nsIHttpChannel *iface, PRUin
 
 static nsresult NSAPI nsChannel_GetResponseStatus(nsIHttpChannel *iface, PRUint32 *aResponseStatus)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
 
     TRACE("(%p)->(%p)\n", This, aResponseStatus);
 
@@ -1141,7 +1142,7 @@ static nsresult NSAPI nsChannel_GetResponseStatus(nsIHttpChannel *iface, PRUint3
 static nsresult NSAPI nsChannel_GetResponseStatusText(nsIHttpChannel *iface,
                                                       nsACString *aResponseStatusText)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
 
     FIXME("(%p)->(%p)\n", This, aResponseStatusText);
 
@@ -1151,7 +1152,7 @@ static nsresult NSAPI nsChannel_GetResponseStatusText(nsIHttpChannel *iface,
 static nsresult NSAPI nsChannel_GetRequestSucceeded(nsIHttpChannel *iface,
                                                     PRBool *aRequestSucceeded)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
 
     TRACE("(%p)->(%p)\n", This, aRequestSucceeded);
 
@@ -1166,7 +1167,7 @@ static nsresult NSAPI nsChannel_GetRequestSucceeded(nsIHttpChannel *iface,
 static nsresult NSAPI nsChannel_GetResponseHeader(nsIHttpChannel *iface,
          const nsACString *header, nsACString *_retval)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
 
     TRACE("(%p)->(%s %p)\n", This, debugstr_nsacstr(header), _retval);
 
@@ -1176,7 +1177,7 @@ static nsresult NSAPI nsChannel_GetResponseHeader(nsIHttpChannel *iface,
 static nsresult NSAPI nsChannel_SetResponseHeader(nsIHttpChannel *iface,
         const nsACString *header, const nsACString *value, PRBool merge)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
 
     FIXME("(%p)->(%s %s %x)\n", This, debugstr_nsacstr(header), debugstr_nsacstr(value), merge);
 
@@ -1186,7 +1187,7 @@ static nsresult NSAPI nsChannel_SetResponseHeader(nsIHttpChannel *iface,
 static nsresult NSAPI nsChannel_VisitResponseHeaders(nsIHttpChannel *iface,
         nsIHttpHeaderVisitor *aVisitor)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
 
     TRACE("(%p)->(%p)\n", This, aVisitor);
 
@@ -1195,7 +1196,7 @@ static nsresult NSAPI nsChannel_VisitResponseHeaders(nsIHttpChannel *iface,
 
 static nsresult NSAPI nsChannel_IsNoStoreResponse(nsIHttpChannel *iface, PRBool *_retval)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
     http_header_t *header;
 
     static const WCHAR cache_controlW[] = {'C','a','c','h','e','-','C','o','n','t','r','o','l'};
@@ -1210,14 +1211,12 @@ static nsresult NSAPI nsChannel_IsNoStoreResponse(nsIHttpChannel *iface, PRBool 
 
 static nsresult NSAPI nsChannel_IsNoCacheResponse(nsIHttpChannel *iface, PRBool *_retval)
 {
-    nsChannel *This = NSCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannel(iface);
 
     FIXME("(%p)->(%p)\n", This, _retval);
 
     return NS_ERROR_NOT_IMPLEMENTED;
 }
-
-#undef NSCHANNEL_THIS
 
 static const nsIHttpChannelVtbl nsChannelVtbl = {
     nsChannel_QueryInterface,
@@ -1270,37 +1269,42 @@ static const nsIHttpChannelVtbl nsChannelVtbl = {
     nsChannel_IsNoCacheResponse
 };
 
-#define NSUPCHANNEL_THIS(iface) DEFINE_THIS(nsChannel, UploadChannel, iface)
+static inline nsChannel *impl_from_nsIUploadChannel(nsIUploadChannel *iface)
+{
+    return CONTAINING_RECORD(iface, nsChannel, nsIUploadChannel_iface);
+}
 
 static nsresult NSAPI nsUploadChannel_QueryInterface(nsIUploadChannel *iface, nsIIDRef riid,
         void **result)
 {
-    nsChannel *This = NSUPCHANNEL_THIS(iface);
-    return nsIChannel_QueryInterface(NSCHANNEL(This), riid, result);
+    nsChannel *This = impl_from_nsIUploadChannel(iface);
+    return nsIChannel_QueryInterface(&This->nsIHttpChannel_iface, riid, result);
 }
 
 static nsrefcnt NSAPI nsUploadChannel_AddRef(nsIUploadChannel *iface)
 {
-    nsChannel *This = NSUPCHANNEL_THIS(iface);
-    return nsIChannel_AddRef(NSCHANNEL(This));
+    nsChannel *This = impl_from_nsIUploadChannel(iface);
+    return nsIChannel_AddRef(&This->nsIHttpChannel_iface);
 }
 
 static nsrefcnt NSAPI nsUploadChannel_Release(nsIUploadChannel *iface)
 {
-    nsChannel *This = NSUPCHANNEL_THIS(iface);
-    return nsIChannel_Release(NSCHANNEL(This));
+    nsChannel *This = impl_from_nsIUploadChannel(iface);
+    return nsIChannel_Release(&This->nsIHttpChannel_iface);
 }
 
 static nsresult NSAPI nsUploadChannel_SetUploadStream(nsIUploadChannel *iface,
         nsIInputStream *aStream, const nsACString *aContentType, PRInt32 aContentLength)
 {
-    nsChannel *This = NSUPCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIUploadChannel(iface);
     const char *content_type;
 
     static const WCHAR content_typeW[] =
         {'C','o','n','t','e','n','t','-','T','y','p','e',0};
 
     TRACE("(%p)->(%p %s %d)\n", This, aStream, debugstr_nsacstr(aContentType), aContentLength);
+
+    This->post_data_contains_headers = TRUE;
 
     if(aContentType) {
         nsACString_GetData(aContentType, &content_type);
@@ -1314,6 +1318,7 @@ static nsresult NSAPI nsUploadChannel_SetUploadStream(nsIUploadChannel *iface,
             set_http_header(&This->request_headers, content_typeW,
                     sizeof(content_typeW)/sizeof(WCHAR), ct, strlenW(ct));
             heap_free(ct);
+            This->post_data_contains_headers = FALSE;
         }
     }
 
@@ -1336,7 +1341,7 @@ static nsresult NSAPI nsUploadChannel_SetUploadStream(nsIUploadChannel *iface,
 static nsresult NSAPI nsUploadChannel_GetUploadStream(nsIUploadChannel *iface,
         nsIInputStream **aUploadStream)
 {
-    nsChannel *This = NSUPCHANNEL_THIS(iface);
+    nsChannel *This = impl_from_nsIUploadChannel(iface);
 
     TRACE("(%p)->(%p)\n", This, aUploadStream);
 
@@ -1347,8 +1352,6 @@ static nsresult NSAPI nsUploadChannel_GetUploadStream(nsIUploadChannel *iface,
     return NS_OK;
 }
 
-#undef NSUPCHANNEL_THIS
-
 static const nsIUploadChannelVtbl nsUploadChannelVtbl = {
     nsUploadChannel_QueryInterface,
     nsUploadChannel_AddRef,
@@ -1357,30 +1360,33 @@ static const nsIUploadChannelVtbl nsUploadChannelVtbl = {
     nsUploadChannel_GetUploadStream
 };
 
-#define NSHTTPINTERNAL_THIS(iface) DEFINE_THIS(nsChannel, IHttpChannelInternal, iface)
+static inline nsChannel *impl_from_nsIHttpChannelInternal(nsIHttpChannelInternal *iface)
+{
+    return CONTAINING_RECORD(iface, nsChannel, nsIHttpChannelInternal_iface);
+}
 
 static nsresult NSAPI nsHttpChannelInternal_QueryInterface(nsIHttpChannelInternal *iface, nsIIDRef riid,
         void **result)
 {
-    nsChannel *This = NSHTTPINTERNAL_THIS(iface);
-    return nsIChannel_QueryInterface(NSCHANNEL(This), riid, result);
+    nsChannel *This = impl_from_nsIHttpChannelInternal(iface);
+    return nsIChannel_QueryInterface(&This->nsIHttpChannel_iface, riid, result);
 }
 
 static nsrefcnt NSAPI nsHttpChannelInternal_AddRef(nsIHttpChannelInternal *iface)
 {
-    nsChannel *This = NSHTTPINTERNAL_THIS(iface);
-    return nsIChannel_AddRef(NSCHANNEL(This));
+    nsChannel *This = impl_from_nsIHttpChannelInternal(iface);
+    return nsIChannel_AddRef(&This->nsIHttpChannel_iface);
 }
 
 static nsrefcnt NSAPI nsHttpChannelInternal_Release(nsIHttpChannelInternal *iface)
 {
-    nsChannel *This = NSHTTPINTERNAL_THIS(iface);
-    return nsIChannel_Release(NSCHANNEL(This));
+    nsChannel *This = impl_from_nsIHttpChannelInternal(iface);
+    return nsIChannel_Release(&This->nsIHttpChannel_iface);
 }
 
 static nsresult NSAPI nsHttpChannelInternal_GetDocumentURI(nsIHttpChannelInternal *iface, nsIURI **aDocumentURI)
 {
-    nsChannel *This = NSHTTPINTERNAL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannelInternal(iface);
 
     FIXME("(%p)->()\n", This);
 
@@ -1389,7 +1395,7 @@ static nsresult NSAPI nsHttpChannelInternal_GetDocumentURI(nsIHttpChannelInterna
 
 static nsresult NSAPI nsHttpChannelInternal_SetDocumentURI(nsIHttpChannelInternal *iface, nsIURI *aDocumentURI)
 {
-    nsChannel *This = NSHTTPINTERNAL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannelInternal(iface);
 
     FIXME("(%p)->()\n", This);
 
@@ -1398,7 +1404,7 @@ static nsresult NSAPI nsHttpChannelInternal_SetDocumentURI(nsIHttpChannelInterna
 
 static nsresult NSAPI nsHttpChannelInternal_GetRequestVersion(nsIHttpChannelInternal *iface, PRUint32 *major, PRUint32 *minor)
 {
-    nsChannel *This = NSHTTPINTERNAL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannelInternal(iface);
 
     FIXME("(%p)->()\n", This);
 
@@ -1407,7 +1413,7 @@ static nsresult NSAPI nsHttpChannelInternal_GetRequestVersion(nsIHttpChannelInte
 
 static nsresult NSAPI nsHttpChannelInternal_GetResponseVersion(nsIHttpChannelInternal *iface, PRUint32 *major, PRUint32 *minor)
 {
-    nsChannel *This = NSHTTPINTERNAL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannelInternal(iface);
 
     FIXME("(%p)->()\n", This);
 
@@ -1416,7 +1422,7 @@ static nsresult NSAPI nsHttpChannelInternal_GetResponseVersion(nsIHttpChannelInt
 
 static nsresult NSAPI nsHttpChannelInternal_SetCookie(nsIHttpChannelInternal *iface, const char *aCookieHeader)
 {
-    nsChannel *This = NSHTTPINTERNAL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannelInternal(iface);
 
     FIXME("(%p)->()\n", This);
 
@@ -1425,7 +1431,7 @@ static nsresult NSAPI nsHttpChannelInternal_SetCookie(nsIHttpChannelInternal *if
 
 static nsresult NSAPI nsHttpChannelInternal_SetupFallbackChannel(nsIHttpChannelInternal *iface, const char *aFallbackKey)
 {
-    nsChannel *This = NSHTTPINTERNAL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannelInternal(iface);
 
     FIXME("(%p)->()\n", This);
 
@@ -1434,7 +1440,7 @@ static nsresult NSAPI nsHttpChannelInternal_SetupFallbackChannel(nsIHttpChannelI
 
 static nsresult NSAPI nsHttpChannelInternal_GetForceAllowThirdPartyCookie(nsIHttpChannelInternal *iface, PRBool *aForceThirdPartyCookie)
 {
-    nsChannel *This = NSHTTPINTERNAL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannelInternal(iface);
 
     FIXME("(%p)->()\n", This);
 
@@ -1443,7 +1449,7 @@ static nsresult NSAPI nsHttpChannelInternal_GetForceAllowThirdPartyCookie(nsIHtt
 
 static nsresult NSAPI nsHttpChannelInternal_SetForceAllowThirdPartyCookie(nsIHttpChannelInternal *iface, PRBool aForceThirdPartyCookie)
 {
-    nsChannel *This = NSHTTPINTERNAL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannelInternal(iface);
 
     FIXME("(%p)->()\n", This);
 
@@ -1452,14 +1458,30 @@ static nsresult NSAPI nsHttpChannelInternal_SetForceAllowThirdPartyCookie(nsIHtt
 
 static nsresult NSAPI nsHttpChannelInternal_GetCanceled(nsIHttpChannelInternal *iface, PRBool *aCanceled)
 {
-    nsChannel *This = NSHTTPINTERNAL_THIS(iface);
+    nsChannel *This = impl_from_nsIHttpChannelInternal(iface);
 
     FIXME("(%p)->(%p)\n", This, aCanceled);
 
     return NS_ERROR_NOT_IMPLEMENTED;
 }
 
-#undef NSHTTPINTERNAL_THIS
+static nsresult NSAPI nsHttpChannelInternal_GetChannelIsForDownload(nsIHttpChannelInternal *iface, PRBool *aCanceled)
+{
+    nsChannel *This = impl_from_nsIHttpChannelInternal(iface);
+
+    FIXME("(%p)->(%p)\n", This, aCanceled);
+
+    return NS_ERROR_NOT_IMPLEMENTED;
+}
+
+static nsresult NSAPI nsHttpChannelInternal_SetChannelIsForDownload(nsIHttpChannelInternal *iface, PRBool aCanceled)
+{
+    nsChannel *This = impl_from_nsIHttpChannelInternal(iface);
+
+    FIXME("(%p)->(%x)\n", This, aCanceled);
+
+    return NS_ERROR_NOT_IMPLEMENTED;
+}
 
 static const nsIHttpChannelInternalVtbl nsHttpChannelInternalVtbl = {
     nsHttpChannelInternal_QueryInterface,
@@ -1473,7 +1495,9 @@ static const nsIHttpChannelInternalVtbl nsHttpChannelInternalVtbl = {
     nsHttpChannelInternal_SetupFallbackChannel,
     nsHttpChannelInternal_GetForceAllowThirdPartyCookie,
     nsHttpChannelInternal_SetForceAllowThirdPartyCookie,
-    nsHttpChannelInternal_GetCanceled
+    nsHttpChannelInternal_GetCanceled,
+    nsHttpChannelInternal_GetChannelIsForDownload,
+    nsHttpChannelInternal_SetChannelIsForDownload
 };
 
 static BOOL ensure_uri(nsWineURI *This)
@@ -1572,30 +1596,33 @@ static nsresult get_uri_string(nsWineURI *This, Uri_PROPERTY prop, nsACString *r
     return NS_OK;
 }
 
-#define NSURI_THIS(iface) DEFINE_THIS(nsWineURI, IURL, iface)
+static inline nsWineURI *impl_from_nsIURL(nsIURL *iface)
+{
+    return CONTAINING_RECORD(iface, nsWineURI, nsIURL_iface);
+}
 
 static nsresult NSAPI nsURI_QueryInterface(nsIURL *iface, nsIIDRef riid, void **result)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
 
     *result = NULL;
 
     if(IsEqualGUID(&IID_nsISupports, riid)) {
         TRACE("(%p)->(IID_nsISupports %p)\n", This, result);
-        *result = NSURI(This);
+        *result = &This->nsIURL_iface;
     }else if(IsEqualGUID(&IID_nsIURI, riid)) {
         TRACE("(%p)->(IID_nsIURI %p)\n", This, result);
-        *result = NSURI(This);
+        *result = &This->nsIURL_iface;
     }else if(IsEqualGUID(&IID_nsIURL, riid)) {
         TRACE("(%p)->(IID_nsIURL %p)\n", This, result);
-        *result = NSURL(This);
+        *result = &This->nsIURL_iface;
     }else if(IsEqualGUID(&IID_nsWineURI, riid)) {
         TRACE("(%p)->(IID_nsWineURI %p)\n", This, result);
         *result = This;
     }
 
     if(*result) {
-        nsIURI_AddRef(NSURI(This));
+        nsIURI_AddRef(&This->nsIURL_iface);
         return NS_OK;
     }
 
@@ -1605,7 +1632,7 @@ static nsresult NSAPI nsURI_QueryInterface(nsIURL *iface, nsIIDRef riid, void **
 
 static nsrefcnt NSAPI nsURI_AddRef(nsIURL *iface)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
     LONG ref = InterlockedIncrement(&This->ref);
 
     TRACE("(%p) ref=%d\n", This, ref);
@@ -1615,7 +1642,7 @@ static nsrefcnt NSAPI nsURI_AddRef(nsIURL *iface)
 
 static nsrefcnt NSAPI nsURI_Release(nsIURL *iface)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
     LONG ref = InterlockedDecrement(&This->ref);
 
     TRACE("(%p) ref=%d\n", This, ref);
@@ -1624,7 +1651,7 @@ static nsrefcnt NSAPI nsURI_Release(nsIURL *iface)
         if(This->window_ref)
             windowref_release(This->window_ref);
         if(This->container)
-            nsIWebBrowserChrome_Release(NSWBCHROME(This->container));
+            nsIWebBrowserChrome_Release(&This->container->nsIWebBrowserChrome_iface);
         if(This->nsurl)
             nsIURL_Release(This->nsurl);
         if(This->nsuri)
@@ -1640,7 +1667,7 @@ static nsrefcnt NSAPI nsURI_Release(nsIURL *iface)
 
 static nsresult NSAPI nsURI_GetSpec(nsIURL *iface, nsACString *aSpec)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
 
     TRACE("(%p)->(%p)\n", This, aSpec);
 
@@ -1649,22 +1676,40 @@ static nsresult NSAPI nsURI_GetSpec(nsIURL *iface, nsACString *aSpec)
 
 static nsresult NSAPI nsURI_SetSpec(nsIURL *iface, const nsACString *aSpec)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
+    const char *speca;
+    WCHAR *spec;
+    IUri *uri;
+    HRESULT hres;
 
-    TRACE("(%p)->(%p)\n", This, debugstr_nsacstr(aSpec));
+    TRACE("(%p)->(%s)\n", This, debugstr_nsacstr(aSpec));
 
-    if(This->nsuri) {
-        invalidate_uri(This);
-        return nsIURI_SetSpec(This->nsuri, aSpec);
+    nsACString_GetData(aSpec, &speca);
+    spec = heap_strdupAtoW(speca);
+    if(!spec)
+        return NS_ERROR_OUT_OF_MEMORY;
+
+    hres = CreateUri(spec, 0, 0, &uri);
+    heap_free(spec);
+    if(FAILED(hres)) {
+        WARN("CreateUri failed: %08x\n", hres);
+        return NS_ERROR_FAILURE;
     }
 
-    FIXME("default action not implemented\n");
-    return NS_ERROR_NOT_IMPLEMENTED;
+    invalidate_uri(This);
+    if(This->uri_builder) {
+        IUriBuilder_Release(This->uri_builder);
+        This->uri_builder = NULL;
+    }
+
+    This->uri = uri;
+    sync_wine_url(This);
+    return NS_OK;
 }
 
 static nsresult NSAPI nsURI_GetPrePath(nsIURL *iface, nsACString *aPrePath)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
 
     TRACE("(%p)->(%p)\n", This, aPrePath);
 
@@ -1677,7 +1722,7 @@ static nsresult NSAPI nsURI_GetPrePath(nsIURL *iface, nsACString *aPrePath)
 
 static nsresult NSAPI nsURI_GetScheme(nsIURL *iface, nsACString *aScheme)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
     DWORD scheme;
     HRESULT hres;
 
@@ -1702,22 +1747,33 @@ static nsresult NSAPI nsURI_GetScheme(nsIURL *iface, nsACString *aScheme)
 
 static nsresult NSAPI nsURI_SetScheme(nsIURL *iface, const nsACString *aScheme)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
+    const char *schemea;
+    WCHAR *scheme;
+    HRESULT hres;
 
     TRACE("(%p)->(%s)\n", This, debugstr_nsacstr(aScheme));
 
-    if(This->nsuri) {
-        invalidate_uri(This);
-        return nsIURI_SetScheme(This->nsuri, aScheme);
-    }
+    if(!ensure_uri_builder(This))
+        return NS_ERROR_UNEXPECTED;
 
-    FIXME("default action not implemented\n");
-    return NS_ERROR_NOT_IMPLEMENTED;
+    nsACString_GetData(aScheme, &schemea);
+    scheme = heap_strdupAtoW(schemea);
+    if(!scheme)
+        return NS_ERROR_OUT_OF_MEMORY;
+
+    hres = IUriBuilder_SetSchemeName(This->uri_builder, scheme);
+    heap_free(scheme);
+    if(FAILED(hres))
+        return NS_ERROR_UNEXPECTED;
+
+    sync_wine_url(This);
+    return NS_OK;
 }
 
 static nsresult NSAPI nsURI_GetUserPass(nsIURL *iface, nsACString *aUserPass)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
 
     TRACE("(%p)->(%p)\n", This, aUserPass);
 
@@ -1729,7 +1785,7 @@ static nsresult NSAPI nsURI_GetUserPass(nsIURL *iface, nsACString *aUserPass)
 
 static nsresult NSAPI nsURI_SetUserPass(nsIURL *iface, const nsACString *aUserPass)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
 
     TRACE("(%p)->(%s)\n", This, debugstr_nsacstr(aUserPass));
 
@@ -1744,72 +1800,83 @@ static nsresult NSAPI nsURI_SetUserPass(nsIURL *iface, const nsACString *aUserPa
 
 static nsresult NSAPI nsURI_GetUsername(nsIURL *iface, nsACString *aUsername)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
 
     TRACE("(%p)->(%p)\n", This, aUsername);
 
-    if(This->nsuri)
-        return nsIURI_GetUsername(This->nsuri, aUsername);
-
-    FIXME("default action not implemented\n");
-    return NS_ERROR_NOT_IMPLEMENTED;
+    return get_uri_string(This, Uri_PROPERTY_USER_NAME, aUsername);
 }
 
 static nsresult NSAPI nsURI_SetUsername(nsIURL *iface, const nsACString *aUsername)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
+    const char *usera;
+    WCHAR *user;
+    HRESULT hres;
 
     TRACE("(%p)->(%s)\n", This, debugstr_nsacstr(aUsername));
 
-    if(This->nsuri) {
-        invalidate_uri(This);
-        return nsIURI_SetUsername(This->nsuri, aUsername);
-    }
+    if(!ensure_uri_builder(This))
+        return NS_ERROR_UNEXPECTED;
 
-    FIXME("default action not implemented\n");
-    return NS_ERROR_NOT_IMPLEMENTED;
+    nsACString_GetData(aUsername, &usera);
+    user = heap_strdupAtoW(usera);
+    if(!user)
+        return NS_ERROR_OUT_OF_MEMORY;
+
+    hres = IUriBuilder_SetUserName(This->uri_builder, user);
+    heap_free(user);
+    if(FAILED(hres))
+        return NS_ERROR_UNEXPECTED;
+
+    sync_wine_url(This);
+    return NS_OK;
 }
 
 static nsresult NSAPI nsURI_GetPassword(nsIURL *iface, nsACString *aPassword)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
 
     TRACE("(%p)->(%p)\n", This, aPassword);
 
-    if(This->nsuri)
-        return nsIURI_GetPassword(This->nsuri, aPassword);
-
-    FIXME("default action not implemented\n");
-    return NS_ERROR_NOT_IMPLEMENTED;
+    return get_uri_string(This, Uri_PROPERTY_PASSWORD, aPassword);
 }
 
 static nsresult NSAPI nsURI_SetPassword(nsIURL *iface, const nsACString *aPassword)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
+    const char *passa;
+    WCHAR *pass;
+    HRESULT hres;
 
     TRACE("(%p)->(%s)\n", This, debugstr_nsacstr(aPassword));
 
-    if(This->nsuri) {
-        invalidate_uri(This);
-        return nsIURI_SetPassword(This->nsuri, aPassword);
-    }
+    if(!ensure_uri_builder(This))
+        return NS_ERROR_UNEXPECTED;
 
-    FIXME("default action not implemented\n");
-    return NS_ERROR_NOT_IMPLEMENTED;
+    nsACString_GetData(aPassword, &passa);
+    pass = heap_strdupAtoW(passa);
+    if(!pass)
+        return NS_ERROR_OUT_OF_MEMORY;
+
+    hres = IUriBuilder_SetPassword(This->uri_builder, pass);
+    heap_free(pass);
+    if(FAILED(hres))
+        return NS_ERROR_UNEXPECTED;
+
+    sync_wine_url(This);
+    return NS_OK;
 }
 
 static nsresult NSAPI nsURI_GetHostPort(nsIURL *iface, nsACString *aHostPort)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
     const WCHAR *ptr;
     char *vala;
     BSTR val;
     HRESULT hres;
 
     TRACE("(%p)->(%p)\n", This, aHostPort);
-
-    if(This->nsuri)
-        return nsIURI_GetHostPort(This->nsuri, aHostPort);
 
     if(!ensure_uri(This))
         return NS_ERROR_UNEXPECTED;
@@ -1837,49 +1904,52 @@ static nsresult NSAPI nsURI_GetHostPort(nsIURL *iface, nsACString *aHostPort)
 
 static nsresult NSAPI nsURI_SetHostPort(nsIURL *iface, const nsACString *aHostPort)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
 
-    TRACE("(%p)->(%s)\n", This, debugstr_nsacstr(aHostPort));
+    WARN("(%p)->(%s)\n", This, debugstr_nsacstr(aHostPort));
 
-    if(This->nsuri) {
-        invalidate_uri(This);
-        return nsIURI_SetHostPort(This->nsuri, aHostPort);
-    }
-
-    FIXME("default action not implemented\n");
+    /* Not implemented by Gecko */
     return NS_ERROR_NOT_IMPLEMENTED;
 }
 
 static nsresult NSAPI nsURI_GetHost(nsIURL *iface, nsACString *aHost)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
 
     TRACE("(%p)->(%p)\n", This, aHost);
-
-    if(This->nsuri)
-        return nsIURI_GetHost(This->nsuri, aHost);
 
     return get_uri_string(This, Uri_PROPERTY_HOST, aHost);
 }
 
 static nsresult NSAPI nsURI_SetHost(nsIURL *iface, const nsACString *aHost)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
+    const char *hosta;
+    WCHAR *host;
+    HRESULT hres;
 
     TRACE("(%p)->(%s)\n", This, debugstr_nsacstr(aHost));
 
-    if(This->nsuri) {
-        invalidate_uri(This);
-        return nsIURI_SetHost(This->nsuri, aHost);
-    }
+    if(!ensure_uri_builder(This))
+        return NS_ERROR_UNEXPECTED;
 
-    FIXME("default action not implemented\n");
-    return NS_ERROR_NOT_IMPLEMENTED;
+    nsACString_GetData(aHost, &hosta);
+    host = heap_strdupAtoW(hosta);
+    if(!host)
+        return NS_ERROR_OUT_OF_MEMORY;
+
+    hres = IUriBuilder_SetHost(This->uri_builder, host);
+    heap_free(host);
+    if(FAILED(hres))
+        return NS_ERROR_UNEXPECTED;
+
+    sync_wine_url(This);
+    return NS_OK;
 }
 
 static nsresult NSAPI nsURI_GetPort(nsIURL *iface, PRInt32 *aPort)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
     DWORD port;
     HRESULT hres;
 
@@ -1903,7 +1973,7 @@ static nsresult NSAPI nsURI_GetPort(nsIURL *iface, PRInt32 *aPort)
 
 static nsresult NSAPI nsURI_SetPort(nsIURL *iface, PRInt32 aPort)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
 
     TRACE("(%p)->(%d)\n", This, aPort);
 
@@ -1918,19 +1988,16 @@ static nsresult NSAPI nsURI_SetPort(nsIURL *iface, PRInt32 aPort)
 
 static nsresult NSAPI nsURI_GetPath(nsIURL *iface, nsACString *aPath)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
 
     TRACE("(%p)->(%p)\n", This, aPath);
-
-    if(This->nsuri)
-        return nsIURI_GetPath(This->nsuri, aPath);
 
     return get_uri_string(This, Uri_PROPERTY_PATH, aPath);
 }
 
 static nsresult NSAPI nsURI_SetPath(nsIURL *iface, const nsACString *aPath)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
     const char *patha;
     WCHAR *path;
     HRESULT hres;
@@ -1956,7 +2023,7 @@ static nsresult NSAPI nsURI_SetPath(nsIURL *iface, const nsACString *aPath)
 
 static nsresult NSAPI nsURI_Equals(nsIURL *iface, nsIURI *other, PRBool *_retval)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
     nsWineURI *other_obj;
     nsresult nsres;
     HRESULT hres;
@@ -1977,13 +2044,13 @@ static nsresult NSAPI nsURI_Equals(nsIURL *iface, nsIURI *other, PRBool *_retval
         nsres = NS_ERROR_UNEXPECTED;
     }
 
-    nsIURI_Release(NSURI(other_obj));
+    nsIURI_Release(&other_obj->nsIURL_iface);
     return nsres;
 }
 
 static nsresult NSAPI nsURI_SchemeIs(nsIURL *iface, const char *scheme, PRBool *_retval)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
     WCHAR buf[INTERNET_MAX_SCHEME_LENGTH];
     BSTR scheme_name;
     HRESULT hres;
@@ -1999,12 +2066,13 @@ static nsresult NSAPI nsURI_SchemeIs(nsIURL *iface, const char *scheme, PRBool *
 
     MultiByteToWideChar(CP_ACP, 0, scheme, -1, buf, sizeof(buf)/sizeof(WCHAR));
     *_retval = !strcmpW(scheme_name, buf);
+    SysFreeString(scheme_name);
     return NS_OK;
 }
 
 static nsresult NSAPI nsURI_Clone(nsIURL *iface, nsIURI **_retval)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
     nsIURI *nsuri = NULL;
     nsWineURI *wine_uri;
     nsresult nsres;
@@ -2032,62 +2100,66 @@ static nsresult NSAPI nsURI_Clone(nsIURL *iface, nsIURI **_retval)
     IUri_AddRef(wine_uri->uri);
     sync_wine_url(wine_uri);
 
-    *_retval = NSURI(wine_uri);
+    *_retval = (nsIURI*)&wine_uri->nsIURL_iface;
     return NS_OK;
 }
 
 static nsresult NSAPI nsURI_Resolve(nsIURL *iface, const nsACString *aRelativePath,
         nsACString *_retval)
 {
-    nsWineURI *This = NSURI_THIS(iface);
-    WCHAR url[INTERNET_MAX_URL_LENGTH];
+    nsWineURI *This = impl_from_nsIURL(iface);
     const char *patha;
+    IUri *new_uri;
     WCHAR *path;
-    char *urla;
-    DWORD len;
+    char *reta;
+    BSTR ret;
     HRESULT hres;
 
     TRACE("(%p)->(%s %p)\n", This, debugstr_nsacstr(aRelativePath), _retval);
 
-    if(This->nsuri)
-        return nsIURI_Resolve(This->nsuri, aRelativePath, _retval);
+    if(!ensure_uri(This))
+        return NS_ERROR_UNEXPECTED;
 
     nsACString_GetData(aRelativePath, &patha);
     path = heap_strdupAtoW(patha);
     if(!path)
         return NS_ERROR_OUT_OF_MEMORY;
 
-    hres = CoInternetCombineUrl(This->wine_url, path,
-                                URL_ESCAPE_SPACES_ONLY|URL_DONT_ESCAPE_EXTRA_INFO,
-                                url, sizeof(url)/sizeof(WCHAR), &len, 0);
+    hres = CoInternetCombineUrlEx(This->uri, path, URL_ESCAPE_SPACES_ONLY|URL_DONT_ESCAPE_EXTRA_INFO, &new_uri, 0);
     heap_free(path);
     if(FAILED(hres)) {
-        ERR("CoIntenetCombineUrl failed: %08x\n", hres);
+        ERR("CoIntenetCombineUrlEx failed: %08x\n", hres);
         return NS_ERROR_FAILURE;
     }
 
-    urla = heap_strdupWtoA(url);
-    if(!urla)
+    hres = IUri_GetDisplayUri(new_uri, &ret);
+    IUri_Release(new_uri);
+    if(FAILED(hres))
+        return NS_ERROR_FAILURE;
+
+    reta = heap_strdupWtoA(ret);
+    SysFreeString(ret);
+    if(!reta)
         return NS_ERROR_OUT_OF_MEMORY;
 
-    TRACE("returning %s\n", debugstr_a(urla));
-    nsACString_SetData(_retval, urla);
-    heap_free(urla);
+    TRACE("returning %s\n", debugstr_a(reta));
+    nsACString_SetData(_retval, reta);
+    heap_free(reta);
     return NS_OK;
 }
 
 static nsresult NSAPI nsURI_GetAsciiSpec(nsIURL *iface, nsACString *aAsciiSpec)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
 
     TRACE("(%p)->(%p)\n", This, aAsciiSpec);
 
-    return nsIURI_GetSpec(NSURI(This), aAsciiSpec);
+    return nsIURI_GetSpec(&This->nsIURL_iface, aAsciiSpec);
 }
 
 static nsresult NSAPI nsURI_GetAsciiHost(nsIURL *iface, nsACString *aAsciiHost)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
 
     TRACE("(%p)->(%p)\n", This, aAsciiHost);
 
@@ -2100,7 +2172,7 @@ static nsresult NSAPI nsURI_GetAsciiHost(nsIURL *iface, nsACString *aAsciiHost)
 
 static nsresult NSAPI nsURI_GetOriginCharset(nsIURL *iface, nsACString *aOriginCharset)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
 
     TRACE("(%p)->(%p)\n", This, aOriginCharset);
 
@@ -2113,35 +2185,25 @@ static nsresult NSAPI nsURI_GetOriginCharset(nsIURL *iface, nsACString *aOriginC
 
 static nsresult NSAPI nsURL_GetFilePath(nsIURL *iface, nsACString *aFilePath)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
 
     TRACE("(%p)->(%p)\n", This, aFilePath);
 
-    if(This->nsurl)
-        return nsIURL_GetFilePath(This->nsurl, aFilePath);
-
-    FIXME("default action not implemented\n");
-    return NS_ERROR_NOT_IMPLEMENTED;
+    return nsIURL_GetPath(&This->nsIURL_iface, aFilePath);
 }
 
 static nsresult NSAPI nsURL_SetFilePath(nsIURL *iface, const nsACString *aFilePath)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
 
     TRACE("(%p)->(%s)\n", This, debugstr_nsacstr(aFilePath));
 
-    if(This->nsurl) {
-        invalidate_uri(This);
-        return nsIURL_SetFilePath(This->nsurl, aFilePath);
-    }
-
-    FIXME("default action not implemented\n");
-    return NS_ERROR_NOT_IMPLEMENTED;
+    return nsIURL_SetPath(&This->nsIURL_iface, aFilePath);
 }
 
 static nsresult NSAPI nsURL_GetParam(nsIURL *iface, nsACString *aParam)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
 
     TRACE("(%p)->(%p)\n", This, aParam);
 
@@ -2154,34 +2216,26 @@ static nsresult NSAPI nsURL_GetParam(nsIURL *iface, nsACString *aParam)
 
 static nsresult NSAPI nsURL_SetParam(nsIURL *iface, const nsACString *aParam)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
 
-    TRACE("(%p)->(%s)\n", This, debugstr_nsacstr(aParam));
+    WARN("(%p)->(%s)\n", This, debugstr_nsacstr(aParam));
 
-    if(This->nsurl) {
-        invalidate_uri(This);
-        return nsIURL_SetParam(This->nsurl, aParam);
-    }
-
-    FIXME("default action not implemented\n");
+    /* Not implemented by Gecko */
     return NS_ERROR_NOT_IMPLEMENTED;
 }
 
 static nsresult NSAPI nsURL_GetQuery(nsIURL *iface, nsACString *aQuery)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
 
     TRACE("(%p)->(%p)\n", This, aQuery);
-
-    if(This->nsurl)
-        return nsIURL_GetQuery(This->nsurl, aQuery);
 
     return get_uri_string(This, Uri_PROPERTY_QUERY, aQuery);
 }
 
 static nsresult NSAPI nsURL_SetQuery(nsIURL *iface, const nsACString *aQuery)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
     const char *querya;
     WCHAR *query;
     HRESULT hres;
@@ -2207,40 +2261,59 @@ static nsresult NSAPI nsURL_SetQuery(nsIURL *iface, const nsACString *aQuery)
 
 static nsresult NSAPI nsURL_GetRef(nsIURL *iface, nsACString *aRef)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
+    char *refa = NULL;
+    BSTR ref;
+    HRESULT hres;
 
     TRACE("(%p)->(%p)\n", This, aRef);
 
-    if(This->nsurl)
-        return nsIURL_GetRef(This->nsurl, aRef);
+    if(!ensure_uri(This))
+        return NS_ERROR_UNEXPECTED;
 
-    FIXME("default action not implemented\n");
-    return NS_ERROR_NOT_IMPLEMENTED;
+    hres = IUri_GetFragment(This->uri, &ref);
+    if(FAILED(hres))
+        return NS_ERROR_UNEXPECTED;
+
+    refa = heap_strdupWtoA(ref);
+    SysFreeString(ref);
+    if(ref && !refa)
+        return NS_ERROR_OUT_OF_MEMORY;
+
+    nsACString_SetData(aRef, refa && *refa == '#' ? refa+1 : refa);
+    heap_free(refa);
+    return NS_OK;
 }
 
 static nsresult NSAPI nsURL_SetRef(nsIURL *iface, const nsACString *aRef)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
     const char *refa;
+    WCHAR *ref;
+    HRESULT hres;
 
     TRACE("(%p)->(%s)\n", This, debugstr_nsacstr(aRef));
 
-    if(This->nsurl) {
-        invalidate_uri(This);
-        return nsIURL_SetRef(This->nsurl, aRef);
-    }
+    if(!ensure_uri_builder(This))
+        return NS_ERROR_UNEXPECTED;
 
     nsACString_GetData(aRef, &refa);
-    if(!*refa)
-        return NS_OK;
+    ref = heap_strdupAtoW(refa);
+    if(!ref)
+        return NS_ERROR_OUT_OF_MEMORY;
 
-    FIXME("default action not implemented\n");
-    return NS_ERROR_NOT_IMPLEMENTED;
+    hres = IUriBuilder_SetFragment(This->uri_builder, ref);
+    heap_free(ref);
+    if(FAILED(hres))
+        return NS_ERROR_UNEXPECTED;
+
+    sync_wine_url(This);
+    return NS_OK;
 }
 
 static nsresult NSAPI nsURL_GetDirectory(nsIURL *iface, nsACString *aDirectory)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
 
     TRACE("(%p)->(%p)\n", This, aDirectory);
 
@@ -2253,22 +2326,17 @@ static nsresult NSAPI nsURL_GetDirectory(nsIURL *iface, nsACString *aDirectory)
 
 static nsresult NSAPI nsURL_SetDirectory(nsIURL *iface, const nsACString *aDirectory)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
 
-    TRACE("(%p)->(%s)\n", This, debugstr_nsacstr(aDirectory));
+    WARN("(%p)->(%s)\n", This, debugstr_nsacstr(aDirectory));
 
-    if(This->nsurl) {
-        invalidate_uri(This);
-        return nsIURL_SetDirectory(This->nsurl, aDirectory);
-    }
-
-    FIXME("default action not implemented\n");
+    /* Not implemented by Gecko */
     return NS_ERROR_NOT_IMPLEMENTED;
 }
 
 static nsresult NSAPI nsURL_GetFileName(nsIURL *iface, nsACString *aFileName)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
 
     TRACE("(%p)->(%p)\n", This, aFileName);
 
@@ -2281,7 +2349,7 @@ static nsresult NSAPI nsURL_GetFileName(nsIURL *iface, nsACString *aFileName)
 
 static nsresult NSAPI nsURL_SetFileName(nsIURL *iface, const nsACString *aFileName)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
 
     TRACE("(%p)->(%s)\n", This, debugstr_nsacstr(aFileName));
 
@@ -2296,7 +2364,7 @@ static nsresult NSAPI nsURL_SetFileName(nsIURL *iface, const nsACString *aFileNa
 
 static nsresult NSAPI nsURL_GetFileBaseName(nsIURL *iface, nsACString *aFileBaseName)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
 
     TRACE("(%p)->(%p)\n", This, aFileBaseName);
 
@@ -2309,7 +2377,7 @@ static nsresult NSAPI nsURL_GetFileBaseName(nsIURL *iface, nsACString *aFileBase
 
 static nsresult NSAPI nsURL_SetFileBaseName(nsIURL *iface, const nsACString *aFileBaseName)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
 
     TRACE("(%p)->(%s)\n", This, debugstr_nsacstr(aFileBaseName));
 
@@ -2324,7 +2392,7 @@ static nsresult NSAPI nsURL_SetFileBaseName(nsIURL *iface, const nsACString *aFi
 
 static nsresult NSAPI nsURL_GetFileExtension(nsIURL *iface, nsACString *aFileExtension)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
 
     TRACE("(%p)->(%p)\n", This, aFileExtension);
 
@@ -2337,7 +2405,7 @@ static nsresult NSAPI nsURL_GetFileExtension(nsIURL *iface, nsACString *aFileExt
 
 static nsresult NSAPI nsURL_SetFileExtension(nsIURL *iface, const nsACString *aFileExtension)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
 
     TRACE("(%p)->(%s)\n", This, debugstr_nsacstr(aFileExtension));
 
@@ -2352,7 +2420,7 @@ static nsresult NSAPI nsURL_SetFileExtension(nsIURL *iface, const nsACString *aF
 
 static nsresult NSAPI nsURL_GetCommonBaseSpec(nsIURL *iface, nsIURI *aURIToCompare, nsACString *_retval)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
 
     TRACE("(%p)->(%p %p)\n", This, aURIToCompare, _retval);
 
@@ -2365,7 +2433,7 @@ static nsresult NSAPI nsURL_GetCommonBaseSpec(nsIURL *iface, nsIURI *aURIToCompa
 
 static nsresult NSAPI nsURL_GetRelativeSpec(nsIURL *iface, nsIURI *aURIToCompare, nsACString *_retval)
 {
-    nsWineURI *This = NSURI_THIS(iface);
+    nsWineURI *This = impl_from_nsIURL(iface);
 
     TRACE("(%p)->(%p %p)\n", This, aURIToCompare, _retval);
 
@@ -2375,8 +2443,6 @@ static nsresult NSAPI nsURL_GetRelativeSpec(nsIURL *iface, nsIURI *aURIToCompare
     FIXME("default action not implemented\n");
     return NS_ERROR_NOT_IMPLEMENTED;
 }
-
-#undef NSURI_THIS
 
 static const nsIURLVtbl nsURLVtbl = {
     nsURI_QueryInterface,
@@ -2432,7 +2498,7 @@ static nsresult create_uri(nsIURI *nsuri, HTMLWindow *window, NSContainer *conta
 {
     nsWineURI *ret = heap_alloc_zero(sizeof(nsWineURI));
 
-    ret->lpIURLVtbl = &nsURLVtbl;
+    ret->nsIURL_iface.lpVtbl = &nsURLVtbl;
     ret->ref = 1;
     ret->nsuri = nsuri;
 
@@ -2463,31 +2529,116 @@ HRESULT create_doc_uri(HTMLWindow *window, WCHAR *url, nsWineURI **ret)
     return S_OK;
 }
 
+static nsresult create_nschannel(nsWineURI *uri, nsChannel **ret)
+{
+    nsChannel *channel;
+    HRESULT hres;
+
+    if(!ensure_uri(uri))
+        return NS_ERROR_UNEXPECTED;
+
+    channel = heap_alloc_zero(sizeof(nsChannel));
+    if(!channel)
+        return NS_ERROR_OUT_OF_MEMORY;
+
+    channel->nsIHttpChannel_iface.lpVtbl = &nsChannelVtbl;
+    channel->nsIUploadChannel_iface.lpVtbl = &nsUploadChannelVtbl;
+    channel->nsIHttpChannelInternal_iface.lpVtbl = &nsHttpChannelInternalVtbl;
+    channel->ref = 1;
+    channel->request_method = METHOD_GET;
+    list_init(&channel->response_headers);
+    list_init(&channel->request_headers);
+
+    nsIURL_AddRef(&uri->nsIURL_iface);
+    channel->uri = uri;
+
+    hres = IUri_GetScheme(uri->uri, &channel->url_scheme);
+    if(FAILED(hres))
+        channel->url_scheme = URL_SCHEME_UNKNOWN;
+
+    *ret = channel;
+    return NS_OK;
+}
+
+HRESULT create_redirect_nschannel(const WCHAR *url, nsChannel *orig_channel, nsChannel **ret)
+{
+    HTMLWindow *window = NULL;
+    nsChannel *channel;
+    nsWineURI *uri;
+    nsresult nsres;
+    HRESULT hres;
+
+    if(orig_channel->uri->window_ref)
+        window = orig_channel->uri->window_ref->window;
+    nsres = create_uri(NULL, window, NULL, &uri);
+    if(NS_FAILED(nsres))
+        return E_FAIL;
+
+    hres = CreateUri(url, 0, 0, &uri->uri);
+    if(SUCCEEDED(hres))
+        nsres = create_nschannel(uri, &channel);
+    sync_wine_url(uri);
+    nsIURL_Release(&uri->nsIURL_iface);
+    if(FAILED(hres))
+        return hres;
+    if(NS_FAILED(nsres))
+        return E_FAIL;
+
+    if(orig_channel->load_group) {
+        nsILoadGroup_AddRef(orig_channel->load_group);
+        channel->load_group = orig_channel->load_group;
+    }
+
+    if(orig_channel->notif_callback) {
+        nsIInterfaceRequestor_AddRef(orig_channel->notif_callback);
+        channel->notif_callback = orig_channel->notif_callback;
+    }
+
+    channel->load_flags = orig_channel->load_flags | LOAD_REPLACE;
+
+    if(orig_channel->request_method == METHOD_POST)
+        FIXME("unsupported POST method\n");
+
+    if(orig_channel->original_uri) {
+        nsIURI_AddRef(orig_channel->original_uri);
+        channel->original_uri = orig_channel->original_uri;
+    }
+
+    if(orig_channel->referrer) {
+        nsIURI_AddRef(orig_channel->referrer);
+        channel->referrer = orig_channel->referrer;
+    }
+
+    *ret = channel;
+    return S_OK;
+}
+
 typedef struct {
-    const nsIProtocolHandlerVtbl  *lpProtocolHandlerVtbl;
+    nsIProtocolHandler nsIProtocolHandler_iface;
 
     LONG ref;
 
     nsIProtocolHandler *nshandler;
 } nsProtocolHandler;
 
-#define NSPROTHANDLER(x)  ((nsIProtocolHandler*)  &(x)->lpProtocolHandlerVtbl)
-
-#define NSPROTHANDLER_THIS(iface) DEFINE_THIS(nsProtocolHandler, ProtocolHandler, iface)
+static inline nsProtocolHandler *impl_from_nsIProtocolHandler(nsIProtocolHandler *iface)
+{
+    return CONTAINING_RECORD(iface, nsProtocolHandler, nsIProtocolHandler_iface);
+}
 
 static nsresult NSAPI nsProtocolHandler_QueryInterface(nsIProtocolHandler *iface, nsIIDRef riid,
         void **result)
 {
-    nsProtocolHandler *This = NSPROTHANDLER_THIS(iface);
+    nsProtocolHandler *This = impl_from_nsIProtocolHandler(iface);
 
     *result = NULL;
 
     if(IsEqualGUID(&IID_nsISupports, riid)) {
         TRACE("(%p)->(IID_nsISupports %p)\n", This, result);
-        *result = NSPROTHANDLER(This);
+        *result = &This->nsIProtocolHandler_iface;
     }else if(IsEqualGUID(&IID_nsIProtocolHandler, riid)) {
         TRACE("(%p)->(IID_nsIProtocolHandler %p)\n", This, result);
-        *result = NSPROTHANDLER(This);
+        *result = &This->nsIProtocolHandler_iface;
     }else if(IsEqualGUID(&IID_nsIExternalProtocolHandler, riid)) {
         TRACE("(%p)->(IID_nsIExternalProtocolHandler %p), returning NULL\n", This, result);
         return NS_NOINTERFACE;
@@ -2504,7 +2655,7 @@ static nsresult NSAPI nsProtocolHandler_QueryInterface(nsIProtocolHandler *iface
 
 static nsrefcnt NSAPI nsProtocolHandler_AddRef(nsIProtocolHandler *iface)
 {
-    nsProtocolHandler *This = NSPROTHANDLER_THIS(iface);
+    nsProtocolHandler *This = impl_from_nsIProtocolHandler(iface);
     LONG ref = InterlockedIncrement(&This->ref);
 
     TRACE("(%p) ref=%d\n", This, ref);
@@ -2514,7 +2665,7 @@ static nsrefcnt NSAPI nsProtocolHandler_AddRef(nsIProtocolHandler *iface)
 
 static nsrefcnt NSAPI nsProtocolHandler_Release(nsIProtocolHandler *iface)
 {
-    nsProtocolHandler *This = NSPROTHANDLER_THIS(iface);
+    nsProtocolHandler *This = impl_from_nsIProtocolHandler(iface);
     LONG ref = InterlockedDecrement(&This->ref);
 
     TRACE("(%p) ref=%d\n", This, ref);
@@ -2530,7 +2681,7 @@ static nsrefcnt NSAPI nsProtocolHandler_Release(nsIProtocolHandler *iface)
 
 static nsresult NSAPI nsProtocolHandler_GetScheme(nsIProtocolHandler *iface, nsACString *aScheme)
 {
-    nsProtocolHandler *This = NSPROTHANDLER_THIS(iface);
+    nsProtocolHandler *This = impl_from_nsIProtocolHandler(iface);
 
     TRACE("(%p)->(%p)\n", This, aScheme);
 
@@ -2542,7 +2693,7 @@ static nsresult NSAPI nsProtocolHandler_GetScheme(nsIProtocolHandler *iface, nsA
 static nsresult NSAPI nsProtocolHandler_GetDefaultPort(nsIProtocolHandler *iface,
         PRInt32 *aDefaultPort)
 {
-    nsProtocolHandler *This = NSPROTHANDLER_THIS(iface);
+    nsProtocolHandler *This = impl_from_nsIProtocolHandler(iface);
 
     TRACE("(%p)->(%p)\n", This, aDefaultPort);
 
@@ -2554,7 +2705,7 @@ static nsresult NSAPI nsProtocolHandler_GetDefaultPort(nsIProtocolHandler *iface
 static nsresult NSAPI nsProtocolHandler_GetProtocolFlags(nsIProtocolHandler *iface,
                                                          PRUint32 *aProtocolFlags)
 {
-    nsProtocolHandler *This = NSPROTHANDLER_THIS(iface);
+    nsProtocolHandler *This = impl_from_nsIProtocolHandler(iface);
 
     TRACE("(%p)->(%p)\n", This, aProtocolFlags);
 
@@ -2566,7 +2717,7 @@ static nsresult NSAPI nsProtocolHandler_GetProtocolFlags(nsIProtocolHandler *ifa
 static nsresult NSAPI nsProtocolHandler_NewURI(nsIProtocolHandler *iface,
         const nsACString *aSpec, const char *aOriginCharset, nsIURI *aBaseURI, nsIURI **_retval)
 {
-    nsProtocolHandler *This = NSPROTHANDLER_THIS(iface);
+    nsProtocolHandler *This = impl_from_nsIProtocolHandler(iface);
 
     TRACE("((%p)->%s %s %p %p)\n", This, debugstr_nsacstr(aSpec), debugstr_a(aOriginCharset),
           aBaseURI, _retval);
@@ -2579,7 +2730,7 @@ static nsresult NSAPI nsProtocolHandler_NewURI(nsIProtocolHandler *iface,
 static nsresult NSAPI nsProtocolHandler_NewChannel(nsIProtocolHandler *iface,
         nsIURI *aURI, nsIChannel **_retval)
 {
-    nsProtocolHandler *This = NSPROTHANDLER_THIS(iface);
+    nsProtocolHandler *This = impl_from_nsIProtocolHandler(iface);
 
     TRACE("(%p)->(%p %p)\n", This, aURI, _retval);
 
@@ -2591,7 +2742,7 @@ static nsresult NSAPI nsProtocolHandler_NewChannel(nsIProtocolHandler *iface,
 static nsresult NSAPI nsProtocolHandler_AllowPort(nsIProtocolHandler *iface,
         PRInt32 port, const char *scheme, PRBool *_retval)
 {
-    nsProtocolHandler *This = NSPROTHANDLER_THIS(iface);
+    nsProtocolHandler *This = impl_from_nsIProtocolHandler(iface);
 
     TRACE("(%p)->(%d %s %p)\n", This, port, debugstr_a(scheme), _retval);
 
@@ -2599,8 +2750,6 @@ static nsresult NSAPI nsProtocolHandler_AllowPort(nsIProtocolHandler *iface,
         return nsIProtocolHandler_AllowPort(This->nshandler, port, scheme, _retval);
     return NS_ERROR_NOT_IMPLEMENTED;
 }
-
-#undef NSPROTHANDLER_THIS
 
 static const nsIProtocolHandlerVtbl nsProtocolHandlerVtbl = {
     nsProtocolHandler_QueryInterface,
@@ -2618,11 +2767,11 @@ static nsIProtocolHandler *create_protocol_handler(nsIProtocolHandler *nshandler
 {
     nsProtocolHandler *ret = heap_alloc(sizeof(nsProtocolHandler));
 
-    ret->lpProtocolHandlerVtbl = &nsProtocolHandlerVtbl;
+    ret->nsIProtocolHandler_iface.lpVtbl = &nsProtocolHandlerVtbl;
     ret->ref = 1;
     ret->nshandler = nshandler;
 
-    return NSPROTHANDLER(ret);
+    return &ret->nsIProtocolHandler_iface;
 }
 
 static nsresult NSAPI nsIOService_QueryInterface(nsIIOService*,nsIIDRef,void**);
@@ -2674,7 +2823,7 @@ static nsresult NSAPI nsIOService_GetProtocolFlags(nsIIOService *iface, const ch
 
 static BOOL is_gecko_special_uri(const char *spec)
 {
-    static const char *special_schemes[] = {"chrome:", "jar:", "resource:", "javascript:", "wyciwyg:"};
+    static const char *special_schemes[] = {"chrome:", "jar:", "moz-safe-about", "resource:", "javascript:", "wyciwyg:"};
     int i;
 
     for(i=0; i < sizeof(special_schemes)/sizeof(*special_schemes); i++) {
@@ -2696,13 +2845,13 @@ static nsresult NSAPI nsIOService_NewURI(nsIIOService *iface, const nsACString *
         const char *aOriginCharset, nsIURI *aBaseURI, nsIURI **_retval)
 {
     nsWineURI *wine_uri, *base_wine_uri = NULL;
-    const char *spec = NULL;
+    WCHAR new_spec[INTERNET_MAX_URL_LENGTH];
     HTMLWindow *window = NULL;
+    const char *spec = NULL;
     nsIURI *uri = NULL;
-    LPCWSTR base_wine_url = NULL;
-    nsACString spec_str;
+    IUri *urlmon_uri;
     nsresult nsres;
-
+    HRESULT hres;
 
     TRACE("(%s %s %p %p)\n", debugstr_nsacstr(aSpec), debugstr_a(aOriginCharset),
           aBaseURI, _retval);
@@ -2715,60 +2864,49 @@ static nsresult NSAPI nsIOService_NewURI(nsIIOService *iface, const nsACString *
         spec += 5;
 
     if(aBaseURI) {
-        PARSEDURLA parsed_url = {sizeof(PARSEDURLA)};
-
         nsres = nsIURI_QueryInterface(aBaseURI, &IID_nsWineURI, (void**)&base_wine_uri);
         if(NS_SUCCEEDED(nsres)) {
-            base_wine_url = base_wine_uri->wine_url;
-            if(base_wine_uri->window_ref && base_wine_uri->window_ref->window) {
+            if(!ensure_uri(base_wine_uri))
+                return NS_ERROR_UNEXPECTED;
+            if(base_wine_uri->window_ref)
                 window = base_wine_uri->window_ref->window;
-                IHTMLWindow2_AddRef(HTMLWINDOW2(window));
-            }
-            TRACE("base url: %s window: %p\n", debugstr_w(base_wine_url), window);
-        }else if(FAILED(ParseURLA(spec, &parsed_url))) {
-            TRACE("not wraping\n");
-            return nsIIOService_NewURI(nsio, aSpec, aOriginCharset, aBaseURI, _retval);
         }else {
             WARN("Could not get base nsWineURI: %08x\n", nsres);
         }
     }
 
-    nsACString_InitDepend(&spec_str, spec);
-    nsres = nsIIOService_NewURI(nsio, &spec_str, aOriginCharset, aBaseURI, &uri);
-    nsACString_Finish(&spec_str);
+    MultiByteToWideChar(CP_ACP, 0, spec, -1, new_spec, sizeof(new_spec)/sizeof(WCHAR));
+
+    if(base_wine_uri) {
+        hres = CoInternetCombineUrlEx(base_wine_uri->uri, new_spec, URL_ESCAPE_SPACES_ONLY|URL_DONT_ESCAPE_EXTRA_INFO,
+                &urlmon_uri, 0);
+        if(FAILED(hres))
+            WARN("CoInternetCombineUrlEx failed: %08x\n", hres);
+    }else {
+        hres = CreateUri(new_spec, 0, 0, &urlmon_uri);
+        if(FAILED(hres))
+            WARN("CreateUri failed: %08x\n", hres);
+    }
+
+    nsres = nsIIOService_NewURI(nsio, aSpec, aOriginCharset, aBaseURI, &uri);
     if(NS_FAILED(nsres))
         TRACE("NewURI failed: %08x\n", nsres);
 
-    nsres = create_uri(uri, window, NULL, &wine_uri);
-    *_retval = (nsIURI*)wine_uri;
-
-    if(window)
-        IHTMLWindow2_Release(HTMLWINDOW2(window));
-
-    if(base_wine_url) {
-        WCHAR url[INTERNET_MAX_URL_LENGTH], rel_url[INTERNET_MAX_URL_LENGTH];
-        DWORD len;
-        HRESULT hres;
-
-        MultiByteToWideChar(CP_ACP, 0, spec, -1, rel_url, sizeof(rel_url)/sizeof(WCHAR));
-
-        hres = CoInternetCombineUrl(base_wine_url, rel_url,
-                                    URL_ESCAPE_SPACES_ONLY|URL_DONT_ESCAPE_EXTRA_INFO,
-                                    url, sizeof(url)/sizeof(WCHAR), &len, 0);
-        if(SUCCEEDED(hres))
-            set_wine_url(wine_uri, url);
-        else
-             WARN("CoCombineUrl failed: %08x\n", hres);
-    }else {
-        WCHAR url[INTERNET_MAX_URL_LENGTH];
-
-        MultiByteToWideChar(CP_ACP, 0, spec, -1, url, sizeof(url)/sizeof(WCHAR));
-        set_wine_url(wine_uri, url);
+    if(FAILED(hres)) {
+        *_retval = uri;
+        return nsres;
     }
 
+    nsres = create_uri(uri, window, NULL, &wine_uri);
     if(base_wine_uri)
-        nsIURI_Release(NSURI(base_wine_uri));
+        nsIURI_Release(&base_wine_uri->nsIURL_iface);
+    if(NS_FAILED(nsres))
+        return nsres;
 
+    wine_uri->uri = urlmon_uri;
+
+    sync_wine_url(wine_uri);
+    *_retval = (nsIURI*)wine_uri;
     return nsres;
 }
 
@@ -2782,10 +2920,9 @@ static nsresult NSAPI nsIOService_NewFileURI(nsIIOService *iface, nsIFile *aFile
 static nsresult NSAPI nsIOService_NewChannelFromURI(nsIIOService *iface, nsIURI *aURI,
                                                      nsIChannel **_retval)
 {
-    nsChannel *ret;
     nsWineURI *wine_uri;
+    nsChannel *ret;
     nsresult nsres;
-    HRESULT hres;
 
     TRACE("(%p %p)\n", aURI, _retval);
 
@@ -2795,30 +2932,15 @@ static nsresult NSAPI nsIOService_NewChannelFromURI(nsIIOService *iface, nsIURI 
         return nsIIOService_NewChannelFromURI(nsio, aURI, _retval);
     }
 
-    if(!ensure_uri(wine_uri)) {
-        nsIURI_Release(NSURI(wine_uri));
-        return NS_ERROR_UNEXPECTED;
-    }
-
-    ret = heap_alloc_zero(sizeof(nsChannel));
-
-    ret->lpHttpChannelVtbl = &nsChannelVtbl;
-    ret->lpUploadChannelVtbl = &nsUploadChannelVtbl;
-    ret->lpIHttpChannelInternalVtbl = &nsHttpChannelInternalVtbl;
-    ret->ref = 1;
-    ret->uri = wine_uri;
-    ret->request_method = METHOD_GET;
-    list_init(&ret->response_headers);
-    list_init(&ret->request_headers);
+    nsres = create_nschannel(wine_uri, &ret);
+    nsIURL_Release(&wine_uri->nsIURL_iface);
+    if(NS_FAILED(nsres))
+        return nsres;
 
     nsIURI_AddRef(aURI);
     ret->original_uri = aURI;
 
-    hres = IUri_GetScheme(wine_uri->uri, &ret->url_scheme);
-    if(FAILED(hres))
-        ret->url_scheme = URL_SCHEME_UNKNOWN;
-
-    *_retval = NSCHANNEL(ret);
+    *_retval = (nsIChannel*)&ret->nsIHttpChannel_iface;
     return NS_OK;
 }
 
@@ -3099,7 +3221,7 @@ nsresult on_start_uri_open(NSContainer *nscontainer, nsIURI *uri, PRBool *_retva
         wine_uri->is_doc_uri = TRUE;
 
         if(!wine_uri->container) {
-            nsIWebBrowserChrome_AddRef(NSWBCHROME(nscontainer));
+            nsIWebBrowserChrome_AddRef(&nscontainer->nsIWebBrowserChrome_iface);
             wine_uri->container = nscontainer;
         }
 
@@ -3107,7 +3229,7 @@ nsresult on_start_uri_open(NSContainer *nscontainer, nsIURI *uri, PRBool *_retva
             *_retval = translate_url(nscontainer->doc, wine_uri);
     }
 
-    nsIURI_Release(NSURI(wine_uri));
+    nsIURI_Release(&wine_uri->nsIURL_iface);
     return NS_OK;
 }
 

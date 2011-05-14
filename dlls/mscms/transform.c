@@ -238,7 +238,7 @@ HTRANSFORM WINAPI CreateMultiProfileTransform( PHPROFILE profiles, DWORD nprofil
         if (out_format == TYPE_Lab_16) cmsconvert = cmsCreateLabProfile( NULL );
     }
 
-    cmsprofiles = HeapAlloc( GetProcessHeap(), 0, (nprofiles + 1) * sizeof(cmsHPROFILE *) );
+    cmsprofiles = HeapAlloc( GetProcessHeap(), 0, (nprofiles + 1) * sizeof(cmsHPROFILE) );
     if (cmsprofiles)
     {
         cmsprofiles[0] = profile0->cmsprofile;
@@ -384,6 +384,7 @@ BOOL WINAPI TranslateColors( HTRANSFORM handle, PCOLOR in, DWORD count,
             ret = FALSE;
             break;
         }
+        break;
     }
     case COLOR_Lab:
     {
@@ -399,6 +400,7 @@ BOOL WINAPI TranslateColors( HTRANSFORM handle, PCOLOR in, DWORD count,
             ret = FALSE;
             break;
         }
+        break;
     }
     case COLOR_GRAY:
     {
@@ -414,6 +416,7 @@ BOOL WINAPI TranslateColors( HTRANSFORM handle, PCOLOR in, DWORD count,
             ret = FALSE;
             break;
         }
+        break;
     }
     case COLOR_CMYK:
     {
@@ -429,6 +432,7 @@ BOOL WINAPI TranslateColors( HTRANSFORM handle, PCOLOR in, DWORD count,
             ret = FALSE;
             break;
         }
+        break;
     }
     case COLOR_XYZ:
     {
@@ -444,6 +448,7 @@ BOOL WINAPI TranslateColors( HTRANSFORM handle, PCOLOR in, DWORD count,
             ret = FALSE;
             break;
         }
+        break;
     }
     default:
         FIXME("unhandled input/output pair: %d/%d\n", input_type, output_type);

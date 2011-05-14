@@ -56,6 +56,26 @@ static void msvcrt_fttofd( const WIN32_FIND_DATAA *fd, struct MSVCRT__finddata_t
   strcpy(ft->name, fd->cFileName);
 }
 
+/* INTERNAL: Translate WIN32_FIND_DATAA to finddata32_t  */
+static void msvcrt_fttofd32( const WIN32_FIND_DATAA *fd, struct MSVCRT__finddata32_t* ft)
+{
+  DWORD dw;
+
+  if (fd->dwFileAttributes == FILE_ATTRIBUTE_NORMAL)
+    ft->attrib = 0;
+  else
+    ft->attrib = fd->dwFileAttributes;
+
+  RtlTimeToSecondsSince1970( (const LARGE_INTEGER *)&fd->ftCreationTime, &dw );
+  ft->time_create = dw;
+  RtlTimeToSecondsSince1970( (const LARGE_INTEGER *)&fd->ftLastAccessTime, &dw );
+  ft->time_access = dw;
+  RtlTimeToSecondsSince1970( (const LARGE_INTEGER *)&fd->ftLastWriteTime, &dw );
+  ft->time_write = dw;
+  ft->size = fd->nFileSizeLow;
+  strcpy(ft->name, fd->cFileName);
+}
+
 /* INTERNAL: Translate WIN32_FIND_DATAW to wfinddata_t  */
 static void msvcrt_wfttofd( const WIN32_FIND_DATAW *fd, struct MSVCRT__wfinddata_t* ft)
 {
@@ -114,6 +134,26 @@ static void msvcrt_fttofd64( const WIN32_FIND_DATAA *fd, struct MSVCRT__finddata
   ft->time_write = dw;
   ft->size = ((__int64)fd->nFileSizeHigh) << 32 | fd->nFileSizeLow;
   strcpy(ft->name, fd->cFileName);
+}
+
+/* INTERNAL: Translate WIN32_FIND_DATAW to wfinddata64_t  */
+static void msvcrt_wfttofd64( const WIN32_FIND_DATAW *fd, struct MSVCRT__wfinddata64_t* ft)
+{
+  DWORD dw;
+
+  if (fd->dwFileAttributes == FILE_ATTRIBUTE_NORMAL)
+    ft->attrib = 0;
+  else
+    ft->attrib = fd->dwFileAttributes;
+
+  RtlTimeToSecondsSince1970( (const LARGE_INTEGER *)&fd->ftCreationTime, &dw );
+  ft->time_create = dw;
+  RtlTimeToSecondsSince1970( (const LARGE_INTEGER *)&fd->ftLastAccessTime, &dw );
+  ft->time_access = dw;
+  RtlTimeToSecondsSince1970( (const LARGE_INTEGER *)&fd->ftLastWriteTime, &dw );
+  ft->time_write = dw;
+  ft->size = ((__int64)fd->nFileSizeHigh) << 32 | fd->nFileSizeLow;
+  strcpyW(ft->name, fd->cFileName);
 }
 
 /* INTERNAL: Translate WIN32_FIND_DATAA to finddata64i32_t  */
@@ -306,6 +346,25 @@ MSVCRT_intptr_t CDECL MSVCRT__findfirst(const char * fspec, struct MSVCRT__findd
 }
 
 /*********************************************************************
+ *              _findfirst32 (MSVCRT.@)
+ */
+MSVCRT_intptr_t CDECL MSVCRT__findfirst32(const char * fspec, struct MSVCRT__finddata32_t* ft)
+{
+  WIN32_FIND_DATAA find_data;
+  HANDLE hfind;
+
+  hfind  = FindFirstFileA(fspec, &find_data);
+  if (hfind == INVALID_HANDLE_VALUE)
+  {
+    msvcrt_set_errno(GetLastError());
+    return -1;
+  }
+  msvcrt_fttofd32(&find_data, ft);
+  TRACE(":got handle %p\n", hfind);
+  return (MSVCRT_intptr_t)hfind;
+}
+
+/*********************************************************************
  *		_wfindfirst (MSVCRT.@)
  *
  * Unicode version of _findfirst.
@@ -364,6 +423,27 @@ MSVCRT_intptr_t CDECL MSVCRT__findfirst64(const char * fspec, struct MSVCRT__fin
     return -1;
   }
   msvcrt_fttofd64(&find_data,ft);
+  TRACE(":got handle %p\n",hfind);
+  return (MSVCRT_intptr_t)hfind;
+}
+
+/*********************************************************************
+ *		_wfindfirst64 (MSVCRT.@)
+ *
+ * Unicode version of _findfirst64.
+ */
+MSVCRT_intptr_t CDECL MSVCRT__wfindfirst64(const MSVCRT_wchar_t * fspec, struct MSVCRT__wfinddata64_t* ft)
+{
+  WIN32_FIND_DATAW find_data;
+  HANDLE hfind;
+
+  hfind  = FindFirstFileW(fspec, &find_data);
+  if (hfind == INVALID_HANDLE_VALUE)
+  {
+    msvcrt_set_errno(GetLastError());
+    return -1;
+  }
+  msvcrt_wfttofd64(&find_data,ft);
   TRACE(":got handle %p\n",hfind);
   return (MSVCRT_intptr_t)hfind;
 }
@@ -462,6 +542,23 @@ int CDECL MSVCRT__findnext(MSVCRT_intptr_t hand, struct MSVCRT__finddata_t * ft)
 }
 
 /*********************************************************************
+ *               _findnext32 (MSVCRT.@)
+ */
+int CDECL MSVCRT__findnext32(MSVCRT_intptr_t hand, struct MSVCRT__finddata32_t * ft)
+{
+  WIN32_FIND_DATAA find_data;
+
+  if (!FindNextFileA((HANDLE)hand, &find_data))
+  {
+    *MSVCRT__errno() = MSVCRT_ENOENT;
+    return -1;
+  }
+
+  msvcrt_fttofd32(&find_data, ft);
+  return 0;
+}
+
+/*********************************************************************
  *		_wfindnext (MSVCRT.@)
  *
  * Unicode version of _findnext.
@@ -515,6 +612,25 @@ int CDECL MSVCRT__findnext64(long hand, struct MSVCRT__finddata64_t * ft)
   }
 
   msvcrt_fttofd64(&find_data,ft);
+  return 0;
+}
+
+/*********************************************************************
+ *		_wfindnext64 (MSVCRT.@)
+ *
+ * Unicode version of _wfindnext64.
+ */
+int CDECL MSVCRT__wfindnext64(MSVCRT_intptr_t hand, struct MSVCRT__wfinddata64_t * ft)
+{
+  WIN32_FIND_DATAW find_data;
+
+  if (!FindNextFileW((HANDLE)hand, &find_data))
+  {
+    *MSVCRT__errno() = MSVCRT_ENOENT;
+    return -1;
+  }
+
+  msvcrt_wfttofd64(&find_data,ft);
   return 0;
 }
 

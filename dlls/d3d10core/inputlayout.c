@@ -131,7 +131,7 @@ static ULONG STDMETHODCALLTYPE d3d10_input_layout_AddRef(ID3D10InputLayout *ifac
 
     if (refcount == 1)
     {
-        IWineD3DVertexDeclaration_AddRef(This->wined3d_decl);
+        wined3d_vertex_declaration_incref(This->wined3d_decl);
     }
 
     return refcount;
@@ -146,7 +146,7 @@ static ULONG STDMETHODCALLTYPE d3d10_input_layout_Release(ID3D10InputLayout *ifa
 
     if (!refcount)
     {
-        IWineD3DVertexDeclaration_Release(This->wined3d_decl);
+        wined3d_vertex_declaration_decref(This->wined3d_decl);
     }
 
     return refcount;
@@ -227,7 +227,7 @@ HRESULT d3d10_input_layout_init(struct d3d10_input_layout *layout, struct d3d10_
         return hr;
     }
 
-    hr = IWineD3DDevice_CreateVertexDeclaration(device->wined3d_device, wined3d_elements, wined3d_element_count,
+    hr = wined3d_vertex_declaration_create(device->wined3d_device, wined3d_elements, wined3d_element_count,
             layout, &d3d10_input_layout_wined3d_parent_ops, &layout->wined3d_decl);
     HeapFree(GetProcessHeap(), 0, wined3d_elements);
     if (FAILED(hr))

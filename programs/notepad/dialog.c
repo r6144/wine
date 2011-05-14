@@ -58,13 +58,21 @@ static void load_encoding_name(ENCODING enc, WCHAR* buffer, int length)
             LoadStringW(Globals.hInstance, STRING_UNICODE_BE, buffer, length);
             break;
 
-        default:
+        case ENCODING_UTF8:
+            LoadStringW(Globals.hInstance, STRING_UTF8, buffer, length);
+            break;
+
+        case ENCODING_ANSI:
         {
             CPINFOEXW cpi;
-            GetCPInfoExW((enc==ENCODING_UTF8) ? CP_UTF8 : CP_ACP, 0, &cpi);
+            GetCPInfoExW(CP_ACP, 0, &cpi);
             lstrcpynW(buffer, cpi.CodePageName, length);
             break;
         }
+
+        default:
+            assert(0 && "bad encoding in load_encoding_name");
+            break;
     }
 }
 
@@ -356,7 +364,7 @@ void DoOpenFile(LPCWSTR szFileName, ENCODING enc)
     if (!DoCloseFile())
 	return;
 
-    hFile = CreateFileW(szFileName, GENERIC_READ, FILE_SHARE_READ, NULL,
+    hFile = CreateFileW(szFileName, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
                         OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if(hFile == INVALID_HANDLE_VALUE)
     {
@@ -1178,16 +1186,6 @@ VOID DIALOG_Replace(VOID)
 VOID DIALOG_HelpContents(VOID)
 {
     WinHelpW(Globals.hMainWnd, helpfileW, HELP_INDEX, 0);
-}
-
-VOID DIALOG_HelpSearch(VOID)
-{
-        /* Search Help */
-}
-
-VOID DIALOG_HelpHelp(VOID)
-{
-    WinHelpW(Globals.hMainWnd, helpfileW, HELP_HELPONHELP, 0);
 }
 
 VOID DIALOG_HelpAboutNotepad(VOID)

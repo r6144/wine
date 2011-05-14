@@ -99,6 +99,13 @@ static inline BOOL is_uri_unescaped(WCHAR c)
     return c < 128 && uri_char_table[c] == 2;
 }
 
+/* Check that the character is one of the 69 nonblank characters as defined by ECMA-262 B.2.1 */
+static inline BOOL is_ecma_nonblank(const WCHAR c)
+{
+    return ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
+        c == '@' || c == '*' || c == '_' || c == '+' || c == '-' || c == '.' || c == '/');
+}
+
 static WCHAR int_to_char(int i)
 {
     if(i < 10)
@@ -290,8 +297,7 @@ static HRESULT JSGlobal_escape(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, D
     for(ptr=str; *ptr; ptr++) {
         if(*ptr > 0xff)
             len += 6;
-        else if(isalnum((char)*ptr) || *ptr=='*' || *ptr=='@' || *ptr=='-'
-                || *ptr=='_' || *ptr=='+' || *ptr=='.' || *ptr=='/')
+        else if(is_ecma_nonblank(*ptr))
             len++;
         else
             len += 3;
@@ -313,8 +319,7 @@ static HRESULT JSGlobal_escape(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, D
             ret[len++] = int_to_char((*ptr >> 4) & 0xf);
             ret[len++] = int_to_char(*ptr & 0xf);
         }
-        else if(isalnum((char)*ptr) || *ptr=='*' || *ptr=='@' || *ptr=='-'
-                || *ptr=='_' || *ptr=='+' || *ptr=='.' || *ptr=='/')
+        else if(is_ecma_nonblank(*ptr))
             ret[len++] = *ptr;
         else {
             ret[len++] = '%';
@@ -445,10 +450,10 @@ static INT char_to_int(WCHAR c)
 static HRESULT JSGlobal_parseInt(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, DISPPARAMS *dp,
         VARIANT *retv, jsexcept_t *ei, IServiceProvider *sp)
 {
+    BOOL neg = FALSE, empty = TRUE;
     DOUBLE ret = 0.0;
-    INT radix=10, i;
+    INT radix=0, i;
     WCHAR *ptr;
-    BOOL neg = FALSE;
     BSTR str;
     HRESULT hres;
 
@@ -462,11 +467,11 @@ static HRESULT JSGlobal_parseInt(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags,
         if(FAILED(hres))
             return hres;
 
-        if(!radix) {
-            radix = 10;
-        }else if(radix < 2 || radix > 36) {
+        if(radix && (radix < 2 || radix > 36)) {
             WARN("radix %d out of range\n", radix);
-            return E_FAIL;
+            if(retv)
+                num_set_nan(retv);
+            return S_OK;
         }
     }
 
@@ -484,20 +489,31 @@ static HRESULT JSGlobal_parseInt(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags,
         neg = TRUE;
         ptr++;
         break;
-    case '0':
-        ptr++;
-        if(*ptr == 'x' || *ptr == 'X') {
-            radix = 16;
-            ptr++;
+    }
+
+    if(!radix) {
+        if(*ptr == '0') {
+            if(ptr[1] == 'x' || ptr[1] == 'X') {
+                radix = 16;
+                ptr += 2;
+            }else {
+                radix = 8;
+                ptr++;
+                empty = FALSE;
+            }
+        }else {
+            radix = 10;
         }
     }
 
-    while(*ptr) {
-        i = char_to_int(*ptr++);
-        if(i > radix)
-            break;
-
-        ret = ret*radix + i;
+    i = char_to_int(*ptr++);
+    if(i < radix) {
+        do {
+            ret = ret*radix + i;
+            i = char_to_int(*ptr++);
+        }while(i < radix);
+    }else if(empty) {
+        ret = ret_nan();
     }
 
     SysFreeString(str);
@@ -706,29 +722,58 @@ static HRESULT JSGlobal_GetObject(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags
 static HRESULT JSGlobal_ScriptEngine(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, DISPPARAMS *dp,
         VARIANT *retv, jsexcept_t *ei, IServiceProvider *sp)
 {
-    FIXME("\n");
-    return E_NOTIMPL;
+    static const WCHAR JScriptW[] = {'J','S','c','r','i','p','t',0};
+
+    TRACE("\n");
+
+    if(retv) {
+        BSTR ret;
+
+        ret = SysAllocString(JScriptW);
+        if(!ret)
+            return E_OUTOFMEMORY;
+
+        V_VT(retv) = VT_BSTR;
+        V_BSTR(retv) = ret;
+    }
+
+    return S_OK;
 }
 
 static HRESULT JSGlobal_ScriptEngineMajorVersion(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, DISPPARAMS *dp,
         VARIANT *retv, jsexcept_t *ei, IServiceProvider *sp)
 {
-    FIXME("\n");
-    return E_NOTIMPL;
+    TRACE("\n");
+
+    if(retv) {
+        V_VT(retv) = VT_I4;
+        V_I4(retv) = JSCRIPT_MAJOR_VERSION;
+    }
+    return S_OK;
 }
 
 static HRESULT JSGlobal_ScriptEngineMinorVersion(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, DISPPARAMS *dp,
         VARIANT *retv, jsexcept_t *ei, IServiceProvider *sp)
 {
-    FIXME("\n");
-    return E_NOTIMPL;
+    TRACE("\n");
+
+    if(retv) {
+        V_VT(retv) = VT_I4;
+        V_I4(retv) = JSCRIPT_MINOR_VERSION;
+    }
+    return S_OK;
 }
 
 static HRESULT JSGlobal_ScriptEngineBuildVersion(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, DISPPARAMS *dp,
         VARIANT *retv, jsexcept_t *ei, IServiceProvider *sp)
 {
-    FIXME("\n");
-    return E_NOTIMPL;
+    TRACE("\n");
+
+    if(retv) {
+        V_VT(retv) = VT_I4;
+        V_I4(retv) = JSCRIPT_BUILD_VERSION;
+    }
+    return S_OK;
 }
 
 static HRESULT JSGlobal_CollectGarbage(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags, DISPPARAMS *dp,
@@ -774,7 +819,7 @@ static HRESULT JSGlobal_encodeURI(script_ctx_t *ctx, vdisp_t *jsthis, WORD flags
             i = WideCharToMultiByte(CP_UTF8, 0, ptr, 1, NULL, 0, NULL, NULL)*3;
             if(!i) {
                 SysFreeString(str);
-                return throw_uri_error(ctx, ei, IDS_URI_INVALID_CHAR, NULL);
+                return throw_uri_error(ctx, ei, JS_E_INVALID_URI_CHAR, NULL);
             }
 
             len += i;

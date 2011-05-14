@@ -30,10 +30,10 @@
 typedef struct IDirectInputImpl IDirectInputImpl;
 struct IDirectInputImpl
 {
-    const IDirectInput7AVtbl   *lpVtbl;
-    const IDirectInput7WVtbl   *lpVtbl7w;
-    const IDirectInput8AVtbl   *lpVtbl8a;
-    const IDirectInput8WVtbl   *lpVtbl8w;
+    IDirectInput7A              IDirectInput7A_iface;
+    IDirectInput7W              IDirectInput7W_iface;
+    IDirectInput8A              IDirectInput8A_iface;
+    IDirectInput8W              IDirectInput8W_iface;
 
     LONG                        ref;
 
@@ -50,8 +50,7 @@ struct dinput_device {
     const char *name;
     BOOL (*enum_deviceA)(DWORD dwDevType, DWORD dwFlags, LPDIDEVICEINSTANCEA lpddi, DWORD version, int id);
     BOOL (*enum_deviceW)(DWORD dwDevType, DWORD dwFlags, LPDIDEVICEINSTANCEW lpddi, DWORD version, int id);
-    HRESULT (*create_deviceA)(IDirectInputImpl *dinput, REFGUID rguid, REFIID riid, LPDIRECTINPUTDEVICEA* pdev);
-    HRESULT (*create_deviceW)(IDirectInputImpl *dinput, REFGUID rguid, REFIID riid, LPDIRECTINPUTDEVICEW* pdev);
+    HRESULT (*create_device)(IDirectInputImpl *dinput, REFGUID rguid, REFIID riid, LPVOID *pdev, int unicode);
 };
 
 extern const struct dinput_device mouse_device;
@@ -60,7 +59,7 @@ extern const struct dinput_device joystick_linux_device;
 extern const struct dinput_device joystick_linuxinput_device;
 extern const struct dinput_device joystick_osx_device;
 
-extern void check_dinput_hooks(LPDIRECTINPUTDEVICE8A);
+extern void check_dinput_hooks(LPDIRECTINPUTDEVICE8W);
 typedef int (*DI_EVENT_PROC)(LPDIRECTINPUTDEVICE8A, WPARAM, LPARAM);
 
 extern void _dump_diactionformatA(LPDIACTIONFORMATA);

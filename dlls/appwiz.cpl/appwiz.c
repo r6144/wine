@@ -145,43 +145,33 @@ static void FreeAppInfo(APPINFO *info)
  * Name       : ReadApplicationsFromRegistry
  * Description: Creates a linked list of uninstallable applications from the
  *              registry.
- * Parameters : root    - Which registry root to read from (HKCU/HKLM)
+ * Parameters : root    - Which registry root to read from
  * Returns    : TRUE if successful, FALSE otherwise
  */
 static BOOL ReadApplicationsFromRegistry(HKEY root)
 {
-    HKEY hkeyUninst, hkeyApp;
+    HKEY hkeyApp;
     int i, id = 0;
     DWORD sizeOfSubKeyName, displen, uninstlen;
     DWORD dwNoModify, dwType, value;
     WCHAR subKeyName[256];
-    WCHAR key_app[MAX_STRING_LEN];
-    WCHAR *p, *command;
+    WCHAR *command;
     APPINFO *info = NULL;
     LPWSTR iconPtr;
-    BOOL ret = FALSE;
-
-    if (RegOpenKeyExW(root, PathUninstallW, 0, KEY_READ, &hkeyUninst) !=
-      ERROR_SUCCESS)
-        return FALSE;
-
-    lstrcpyW(key_app, PathUninstallW);
-    lstrcatW(key_app, BackSlashW);
-    p = key_app+lstrlenW(PathUninstallW)+1;
 
     sizeOfSubKeyName = sizeof(subKeyName) / sizeof(subKeyName[0]);
 
-    for (i = 0; RegEnumKeyExW(hkeyUninst, i, subKeyName, &sizeOfSubKeyName, NULL,
+    for (i = 0; RegEnumKeyExW(root, i, subKeyName, &sizeOfSubKeyName, NULL,
         NULL, NULL, NULL) != ERROR_NO_MORE_ITEMS; ++i)
     {
-        lstrcpyW(p, subKeyName);
-        RegOpenKeyExW(root, key_app, 0, KEY_READ, &hkeyApp);
+        RegOpenKeyExW(root, subKeyName, 0, KEY_READ, &hkeyApp);
 
         displen = 0;
         uninstlen = 0;
         if (!RegQueryValueExW(hkeyApp, DisplayNameW, 0, 0, NULL, &displen))
         {
-            if (!RegQueryValueExW(hkeyApp, WindowsInstallerW, NULL, &dwType, NULL, &value)
+            DWORD size = sizeof(value);
+            if (!RegQueryValueExW(hkeyApp, WindowsInstallerW, NULL, &dwType, (LPBYTE)&value, &size)
                 && dwType == REG_DWORD && value == 1)
             {
                 static const WCHAR fmtW[] = {'m','s','i','e','x','e','c',' ','/','x','%','s',0};
@@ -282,7 +272,8 @@ static BOOL ReadApplicationsFromRegistry(HKEY root)
             /* Fetch the modify path */
             if (!dwNoModify)
             {
-                if (!RegQueryValueExW(hkeyApp, WindowsInstallerW, NULL, &dwType, NULL, &value)
+                size = sizeof(value);
+                if (!RegQueryValueExW(hkeyApp, WindowsInstallerW, NULL, &dwType, (LPBYTE)&value, &size)
                     && dwType == REG_DWORD && value == 1)
                 {
                     static const WCHAR fmtW[] = {'m','s','i','e','x','e','c',' ','/','i','%','s',0};
@@ -311,16 +302,11 @@ static BOOL ReadApplicationsFromRegistry(HKEY root)
         sizeOfSubKeyName = sizeof(subKeyName) / sizeof(subKeyName[0]);
     }
 
-    ret = TRUE;
-    goto end;
-
+    return TRUE;
 err:
     RegCloseKey(hkeyApp);
     if (info) FreeAppInfo(info);
-
-end:
-    RegCloseKey(hkeyUninst);
-    return ret;
+    return FALSE;
 }
 
 
@@ -444,14 +430,23 @@ static void UpdateButtons(HWND hWnd)
  */
 static void InstallProgram(HWND hWnd)
 {
+    static const WCHAR filters[] = {'%','s','%','c','*','i','n','s','t','a','l','*','.','e','x','e',';','*','s','e','t','u','p','*','.','e','x','e',';','*','.','m','s','i','%','c','%','s','%','c','*','.','e','x','e','%','c','%','s','%','c','*','.','*','%','c',0}
+;
     OPENFILENAMEW ofn;
     WCHAR titleW[MAX_STRING_LEN];
-    WCHAR FilterBufferW[MAX_STRING_LEN];
+    WCHAR filter_installs[MAX_STRING_LEN];
+    WCHAR filter_programs[MAX_STRING_LEN];
+    WCHAR filter_all[MAX_STRING_LEN];
+    WCHAR FilterBufferW[MAX_PATH];
     WCHAR FileNameBufferW[MAX_PATH];
 
     LoadStringW(hInst, IDS_CPL_TITLE, titleW, sizeof(titleW)/sizeof(WCHAR));
-    LoadStringW(hInst, IDS_INSTALL_FILTER, FilterBufferW, sizeof(FilterBufferW)/sizeof(WCHAR));
+    LoadStringW(hInst, IDS_FILTER_INSTALLS, filter_installs, sizeof(filter_installs)/sizeof(WCHAR));
+    LoadStringW(hInst, IDS_FILTER_PROGRAMS, filter_programs, sizeof(filter_programs)/sizeof(WCHAR));
+    LoadStringW(hInst, IDS_FILTER_ALL, filter_all, sizeof(filter_all)/sizeof(WCHAR));
 
+    snprintfW( FilterBufferW, MAX_PATH, filters, filter_installs, 0, 0,
+               filter_programs, 0, 0, filter_all, 0, 0 );
     memset(&ofn, 0, sizeof(OPENFILENAMEW));
     ofn.lStructSize = sizeof(OPENFILENAMEW);
     ofn.hwndOwner = hWnd;
@@ -762,7 +757,9 @@ static HIMAGELIST AddListViewImageList(HWND hWnd)
  */
 static HIMAGELIST ResetApplicationList(BOOL bFirstRun, HWND hWnd, HIMAGELIST hImageList)
 {
+    static const BOOL is_64bit = sizeof(void *) > sizeof(int);
     HWND hWndListView;
+    HKEY hkey;
 
     hWndListView = GetDlgItem(hWnd, IDL_PROGRAMS);
 
@@ -785,8 +782,22 @@ static HIMAGELIST ResetApplicationList(BOOL bFirstRun, HWND hWnd, HIMAGELIST hIm
     /* now create the image list and add the applications to the listview */
     hImageList = AddListViewImageList(hWndListView);
 
-    ReadApplicationsFromRegistry(HKEY_LOCAL_MACHINE);
-    ReadApplicationsFromRegistry(HKEY_CURRENT_USER);
+    if (!RegOpenKeyExW(HKEY_LOCAL_MACHINE, PathUninstallW, 0, KEY_READ, &hkey))
+    {
+        ReadApplicationsFromRegistry(hkey);
+        RegCloseKey(hkey);
+    }
+    if (is_64bit &&
+        !RegOpenKeyExW(HKEY_LOCAL_MACHINE, PathUninstallW, 0, KEY_READ|KEY_WOW64_32KEY, &hkey))
+    {
+        ReadApplicationsFromRegistry(hkey);
+        RegCloseKey(hkey);
+    }
+    if (!RegOpenKeyExW(HKEY_CURRENT_USER, PathUninstallW, 0, KEY_READ, &hkey))
+    {
+        ReadApplicationsFromRegistry(hkey);
+        RegCloseKey(hkey);
+    }
 
     AddApplicationsToList(hWndListView, hImageList);
     UpdateButtons(hWnd);

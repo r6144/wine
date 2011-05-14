@@ -109,6 +109,7 @@ static void test_TypeComp(void)
     BINDPTR bindptr;
     ITypeInfo *pTypeInfo;
     ITypeInfo *pFontTypeInfo;
+    ITypeComp *pTypeComp_tmp;
     static WCHAR wszStdFunctions[] = {'S','t','d','F','u','n','c','t','i','o','n','s',0};
     static WCHAR wszSavePicture[] = {'S','a','v','e','P','i','c','t','u','r','e',0};
     static WCHAR wszOLE_TRISTATE[] = {'O','L','E','_','T','R','I','S','T','A','T','E',0};
@@ -116,6 +117,7 @@ static void test_TypeComp(void)
     static WCHAR wszIUnknown[] = {'I','U','n','k','n','o','w','n',0};
     static WCHAR wszFont[] = {'F','o','n','t',0};
     static WCHAR wszGUID[] = {'G','U','I','D',0};
+    static WCHAR wszguid[] = {'g','u','i','d',0};
     static WCHAR wszStdPicture[] = {'S','t','d','P','i','c','t','u','r','e',0};
     static WCHAR wszOLE_COLOR[] = {'O','L','E','_','C','O','L','O','R',0};
     static WCHAR wszClone[] = {'C','l','o','n','e',0};
@@ -254,6 +256,52 @@ static void test_TypeComp(void)
         desckind);
     ok(!pTypeInfo, "pTypeInfo should have been set to NULL\n");
     ok(!bindptr.lptcomp, "bindptr should have been set to NULL\n");
+
+    /* test basic BindType argument handling */
+    ulHash = LHashValOfNameSys(SYS_WIN32, LOCALE_NEUTRAL, wszGUID);
+    hr = ITypeComp_BindType(pTypeComp, wszGUID, ulHash, NULL, NULL);
+    ok(hr == E_INVALIDARG, "Got %08x\n", hr);
+
+    ulHash = LHashValOfNameSys(SYS_WIN32, LOCALE_NEUTRAL, wszGUID);
+    pTypeInfo = (void*)0xdeadbeef;
+    hr = ITypeComp_BindType(pTypeComp, wszGUID, ulHash, &pTypeInfo, NULL);
+    ok(hr == E_INVALIDARG, "Got %08x\n", hr);
+    ok(pTypeInfo == (void*)0xdeadbeef, "Got %p\n", pTypeInfo);
+
+    ulHash = LHashValOfNameSys(SYS_WIN32, LOCALE_NEUTRAL, wszGUID);
+    pTypeComp_tmp = (void*)0xdeadbeef;
+    hr = ITypeComp_BindType(pTypeComp, wszGUID, ulHash, NULL, &pTypeComp_tmp);
+    ok(hr == E_INVALIDARG, "Got %08x\n", hr);
+    ok(pTypeComp_tmp == (void*)0xdeadbeef, "Got %p\n", pTypeComp_tmp);
+
+    ulHash = LHashValOfNameSys(SYS_WIN32, LOCALE_NEUTRAL, wszGUID);
+    pTypeComp_tmp = (void*)0xdeadbeef;
+    pTypeInfo = (void*)0xdeadbeef;
+    hr = ITypeComp_BindType(pTypeComp, NULL, ulHash, &pTypeInfo, &pTypeComp_tmp);
+    ok(hr == E_INVALIDARG, "Got %08x\n", hr);
+    ok(pTypeInfo == (void*)0xdeadbeef, "Got %p\n", pTypeInfo);
+    ok(pTypeComp_tmp == (void*)0xdeadbeef, "Got %p\n", pTypeComp_tmp);
+
+    ulHash = LHashValOfNameSys(SYS_WIN32, LOCALE_NEUTRAL, wszGUID);
+    pTypeComp_tmp = (void*)0xdeadbeef;
+    pTypeInfo = (void*)0xdeadbeef;
+    hr = ITypeComp_BindType(pTypeComp, wszGUID, ulHash, &pTypeInfo, &pTypeComp_tmp);
+    ok_ole_success(hr, ITypeComp_BindType);
+    ok(pTypeInfo != NULL, "Got NULL pTypeInfo\n");
+    todo_wine ok(pTypeComp_tmp == NULL, "Got pTypeComp_tmp %p\n", pTypeComp_tmp);
+    ITypeInfo_Release(pTypeInfo);
+    if(pTypeComp_tmp) ITypeComp_Release(pTypeComp_tmp); /* fixme */
+
+    /* test BindType case-insensitivity */
+    ulHash = LHashValOfNameSys(SYS_WIN32, LOCALE_NEUTRAL, wszguid);
+    pTypeComp_tmp = (void*)0xdeadbeef;
+    pTypeInfo = (void*)0xdeadbeef;
+    hr = ITypeComp_BindType(pTypeComp, wszguid, ulHash, &pTypeInfo, &pTypeComp_tmp);
+    ok_ole_success(hr, ITypeComp_BindType);
+    ok(pTypeInfo != NULL, "Got NULL pTypeInfo\n");
+    todo_wine ok(pTypeComp_tmp == NULL, "Got pTypeComp_tmp %p\n", pTypeComp_tmp);
+    ITypeInfo_Release(pTypeInfo);
+    if(pTypeComp_tmp) ITypeComp_Release(pTypeComp_tmp); /* fixme */
 
     ITypeComp_Release(pTypeComp);
 
@@ -569,9 +617,9 @@ static void test_TypeInfo(void)
     dispparams.cNamedArgs = 0;
     hr = ITypeInfo_Invoke(pTypeInfo, (void *)0xdeadbeef, dispidMember, DISPATCH_PROPERTYGET, &dispparams, NULL, NULL, NULL);
     ok(hr == DISP_E_MEMBERNOTFOUND, "ITypeInfo_Invoke should have returned DISP_E_MEMBERNOTFOUND instead of 0x%08x\n", hr);
-    /* correct member id -- correct flags -- cNamedArgs not bigger than cArgs
+    /* correct member id -- correct flags -- cNamedArgs not bigger than cArgs */
     hr = ITypeInfo_Invoke(pTypeInfo, (void *)0xdeadbeef, dispidMember, DISPATCH_METHOD, &dispparams, NULL, NULL, NULL);
-    ok(hr == 0x8002000e, "ITypeInfo_Invoke should have returned 0x8002000e instead of 0x%08x\n", hr); */
+    ok(hr == DISP_E_BADPARAMCOUNT, "ITypeInfo_Invoke should have returned DISP_E_BADPARAMCOUNT instead of 0x%08x\n", hr);
 
     /* correct member id -- wrong flags -- cNamedArgs bigger than cArgs */
     dispparams.cNamedArgs = 1;
@@ -1064,6 +1112,7 @@ if(use_midl_tlb) {
     hr = ITypeInfo_GetRefTypeInfo(pTI, href, &pTI_p);
     ok(hr == S_OK, "hr %08x\n", hr);
     hr = ITypeInfo_GetTypeAttr(pTI_p, &pTA);
+    ok(hr == S_OK, "got %08x\n", hr);
     ok(IsEqualGUID(&pTA->guid, &IID_IDispatch), "guid {%08x-....\n", pTA->guid.Data1);
     ITypeInfo_ReleaseTypeAttr(pTI_p, pTA);
     ITypeInfo_Release(pTI_p);
@@ -1098,6 +1147,7 @@ if(use_midl_tlb) {
     hr = ITypeInfo_GetRefTypeInfo(pTI, href, &pTI_p);
     ok(hr == S_OK, "hr %08x\n", hr);
     hr = ITypeInfo_GetTypeAttr(pTI_p, &pTA);
+    ok(hr == S_OK, "got %08x\n", hr);
     ok(IsEqualGUID(&pTA->guid, &IID_IDispatch), "guid {%08x-....\n", pTA->guid.Data1);
     ITypeInfo_ReleaseTypeAttr(pTI_p, pTA);
     ITypeInfo_Release(pTI_p);
@@ -1132,6 +1182,7 @@ if(use_midl_tlb) {
     hr = ITypeInfo_GetRefTypeInfo(pTI, href, &pTI_p);
     ok(hr == S_OK, "hr %08x\n", hr);
     hr = ITypeInfo_GetTypeAttr(pTI_p, &pTA);
+    ok(hr == S_OK, "got %08x\n", hr);
     ok(IsEqualGUID(&pTA->guid, &IID_IDispatch), "guid {%08x-....\n", pTA->guid.Data1);
     ITypeInfo_ReleaseTypeAttr(pTI_p, pTA);
     ITypeInfo_Release(pTI_p);
@@ -1161,6 +1212,7 @@ if(use_midl_tlb) {
     hr = ITypeInfo_GetRefTypeInfo(pTI, href, &pTI_p);
     ok(hr == S_OK, "hr %08x\n", hr);
     hr = ITypeInfo_GetTypeAttr(pTI_p, &pTA);
+    ok(hr == S_OK, "got %08x\n", hr);
     ok(IsEqualGUID(&pTA->guid, &IID_IDispatch), "guid {%08x-....\n", pTA->guid.Data1);
     ITypeInfo_ReleaseTypeAttr(pTI_p, pTA);
     ITypeInfo_Release(pTI_p);
@@ -1194,6 +1246,7 @@ if(use_midl_tlb) {
     hr = ITypeInfo_GetRefTypeInfo(pTI, href, &pTI_p);
     ok(hr == S_OK, "hr %08x\n", hr);
     hr = ITypeInfo_GetTypeAttr(pTI_p, &pTA);
+    ok(hr == S_OK, "got %08x\n", hr);
     ok(IsEqualGUID(&pTA->guid, &IID_IDispatch), "guid {%08x-....\n", pTA->guid.Data1);
     ITypeInfo_ReleaseTypeAttr(pTI_p, pTA);
     ITypeInfo_Release(pTI_p);
@@ -1230,6 +1283,7 @@ if(use_midl_tlb) {
     hr = ITypeInfo_GetRefTypeInfo(pTI, href, &pTI_p);
     ok(hr == S_OK, "hr %08x\n", hr);
     hr = ITypeInfo_GetTypeAttr(pTI_p, &pTA);
+    ok(hr == S_OK, "got %08x\n", hr);
     ok(IsEqualGUID(&pTA->guid, &IID_IDispatch), "guid {%08x-....\n", pTA->guid.Data1);
     ITypeInfo_ReleaseTypeAttr(pTI_p, pTA);
     ITypeInfo_Release(pTI_p);
@@ -1799,6 +1853,7 @@ static void test_CreateTypeLib(void) {
     V_BSTR(&paramdescex.varDefaultValue) = SysAllocString(defaultW);
     hres = ICreateTypeInfo_AddFuncDesc(createti, 3, &funcdesc);
     ok(hres == S_OK, "got %08x\n", hres);
+    SysFreeString(V_BSTR(&paramdescex.varDefaultValue));
 
     hres = ITypeInfo2_GetFuncDesc(ti2, 3, &pfuncdesc);
     ok(hres == S_OK, "got %08x\n", hres);
@@ -2708,6 +2763,8 @@ static void test_create_typelib_lcid(LCID lcid)
     ok(hr == S_OK, "got %08x\n", hr);
 
     hr = ICreateTypeLib2_SaveAllChanges(tl);
+    ok(hr == S_OK, "got %08x\n", hr);
+
     ICreateTypeLib2_Release(tl);
 
     file = CreateFileA( filename, GENERIC_READ, 0, NULL, OPEN_EXISTING, 0, 0 );
@@ -2929,6 +2986,132 @@ static void test_SetVarHelpContext(void)
     DeleteFileA(filenameA);
 }
 
+static void test_SetFuncAndParamNames(void)
+{
+    static OLECHAR nameW[] = {'n','a','m','e',0};
+    static OLECHAR prop[] = {'p','r','o','p',0};
+    static OLECHAR *propW[] = {prop};
+    CHAR filenameA[MAX_PATH];
+    WCHAR filenameW[MAX_PATH];
+    ICreateTypeLib2 *ctl;
+    ICreateTypeInfo *cti;
+    FUNCDESC funcdesc;
+    ELEMDESC edesc;
+    HRESULT hr;
+
+    GetTempFileNameA(".", "tlb", 0, filenameA);
+    MultiByteToWideChar(CP_ACP, 0, filenameA, -1, filenameW, MAX_PATH);
+
+    hr = CreateTypeLib2(SYS_WIN32, filenameW, &ctl);
+    ok(hr == S_OK, "got %08x\n", hr);
+
+    hr = ICreateTypeLib2_CreateTypeInfo(ctl, nameW, TKIND_DISPATCH, &cti);
+    ok(hr == S_OK, "got %08x\n", hr);
+
+    /* get method */
+    memset(&funcdesc, 0, sizeof(FUNCDESC));
+    funcdesc.funckind = FUNC_DISPATCH;
+    funcdesc.callconv = CC_STDCALL;
+    funcdesc.elemdescFunc.tdesc.vt = VT_VOID;
+    funcdesc.wFuncFlags = FUNCFLAG_FBINDABLE;
+
+    /* put method */
+    memset(&edesc, 0, sizeof(edesc));
+    edesc.tdesc.vt = VT_BSTR;
+    U(edesc).idldesc.dwReserved = 0;
+    U(edesc).idldesc.wIDLFlags = IDLFLAG_FIN;
+
+    funcdesc.lprgelemdescParam = &edesc;
+    funcdesc.invkind = INVOKE_PROPERTYPUT;
+    funcdesc.cParams = 1;
+
+    hr = ICreateTypeInfo_AddFuncDesc(cti, 0, &funcdesc);
+    ok(hr == S_OK, "got 0x%08x\n", hr);
+
+    /* setter name */
+    hr = ICreateTypeInfo_SetFuncAndParamNames(cti, 0, propW, 1);
+    ok(hr == S_OK, "got 0x%08x\n", hr);
+
+    /* putref method */
+    funcdesc.invkind = INVOKE_PROPERTYPUTREF;
+    hr = ICreateTypeInfo_AddFuncDesc(cti, 1, &funcdesc);
+    ok(hr == S_OK, "got 0x%08x\n", hr);
+
+    /* putref name */
+    hr = ICreateTypeInfo_SetFuncAndParamNames(cti, 1, propW, 1);
+    ok(hr == S_OK, "got 0x%08x\n", hr);
+
+    funcdesc.invkind = INVOKE_PROPERTYGET;
+    funcdesc.cParams = 0;
+    hr = ICreateTypeInfo_AddFuncDesc(cti, 2, &funcdesc);
+    ok(hr == S_OK, "got 0x%08x\n", hr);
+
+    /* getter name */
+    hr = ICreateTypeInfo_SetFuncAndParamNames(cti, 2, propW, 1);
+    ok(hr == S_OK, "got 0x%08x\n", hr);
+
+    ICreateTypeInfo_Release(cti);
+    ICreateTypeLib2_Release(ctl);
+    DeleteFileA(filenameA);
+}
+
+static void test_SetVarDocString(void)
+{
+    static OLECHAR nameW[] = {'n','a','m','e',0};
+    static OLECHAR doc1W[] = {'d','o','c','1',0};
+    static OLECHAR doc2W[] = {'d','o','c','2',0};
+    CHAR filenameA[MAX_PATH];
+    WCHAR filenameW[MAX_PATH];
+    ICreateTypeLib2 *ctl;
+    ICreateTypeInfo *cti;
+    VARDESC desc;
+    HRESULT hr;
+    VARIANT v;
+
+    GetTempFileNameA(".", "tlb", 0, filenameA);
+    MultiByteToWideChar(CP_ACP, 0, filenameA, -1, filenameW, MAX_PATH);
+
+    hr = CreateTypeLib2(SYS_WIN32, filenameW, &ctl);
+    ok(hr == S_OK, "got %08x\n", hr);
+
+    hr = ICreateTypeLib2_CreateTypeInfo(ctl, nameW, TKIND_ENUM, &cti);
+    ok(hr == S_OK, "got %08x\n", hr);
+
+    hr = ICreateTypeInfo_SetVarDocString(cti, 0, doc1W);
+    ok(hr == TYPE_E_ELEMENTNOTFOUND, "got %08x\n", hr);
+
+    hr = ICreateTypeInfo_SetVarDocString(cti, 0, NULL);
+    ok(hr == E_INVALIDARG, "got %08x\n", hr);
+
+    memset(&desc, 0, sizeof(desc));
+    desc.elemdescVar.tdesc.vt = VT_INT;
+    desc.varkind = VAR_CONST;
+
+    V_VT(&v) = VT_INT;
+    V_INT(&v) = 1;
+    U(desc).lpvarValue = &v;
+    hr = ICreateTypeInfo2_AddVarDesc(cti, 0, &desc);
+    ok(hr == S_OK, "got %08x\n", hr);
+
+    hr = ICreateTypeInfo_SetVarDocString(cti, 0, NULL);
+    ok(hr == E_INVALIDARG, "got %08x\n", hr);
+
+    hr = ICreateTypeInfo_SetVarDocString(cti, 0, doc1W);
+    ok(hr == S_OK, "got %08x\n", hr);
+
+    /* already set */
+    hr = ICreateTypeInfo_SetVarDocString(cti, 0, doc2W);
+    ok(hr == S_OK, "got %08x\n", hr);
+
+    /* wrong index now */
+    hr = ICreateTypeInfo2_SetVarDocString(cti, 1, doc1W);
+    ok(hr == TYPE_E_ELEMENTNOTFOUND, "got %08x\n", hr);
+
+    ICreateTypeInfo_Release(cti);
+    ICreateTypeLib2_Release(ctl);
+    DeleteFileA(filenameA);
+}
+
 START_TEST(typelib)
 {
     const char *filename;
@@ -2946,6 +3129,8 @@ START_TEST(typelib)
     test_inheritance();
     test_CreateTypeLib();
     test_SetVarHelpContext();
+    test_SetFuncAndParamNames();
+    test_SetVarDocString();
 
     if ((filename = create_test_typelib(2)))
     {

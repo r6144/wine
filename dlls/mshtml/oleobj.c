@@ -28,17 +28,16 @@
 #include "winuser.h"
 #include "ole2.h"
 #include "shlguid.h"
+#include "shdeprecated.h"
 #include "mshtmdid.h"
 #include "idispids.h"
 
 #include "wine/debug.h"
 
 #include "mshtml_private.h"
-#include "initguid.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(mshtml);
 
-DEFINE_OLEGUID(CGID_DocHostCmdPriv, 0x000214D4L, 0, 0);
 #define DOCHOST_DOCCANNAVIGATE  0
 
 /**********************************************************
@@ -99,6 +98,7 @@ static HRESULT WINAPI OleObject_SetClientSite(IOleObject *iface, IOleClientSite 
     HTMLDocument *This = impl_from_IOleObject(iface);
     IOleCommandTarget *cmdtrg = NULL;
     IOleWindow *ole_window;
+    IServiceProvider *sp;
     BOOL hostui_setup;
     VARIANT silent;
     HWND hwnd;
@@ -120,6 +120,11 @@ static HRESULT WINAPI OleObject_SetClientSite(IOleObject *iface, IOleClientSite 
         This->doc_obj->hostui = NULL;
     }
 
+    if(This->doc_obj->doc_object_service) {
+        IDocObjectService_Release(This->doc_obj->doc_object_service);
+        This->doc_obj->doc_object_service = NULL;
+    }
+
     memset(&This->doc_obj->hostinfo, 0, sizeof(DOCHOSTUIINFO));
 
     if(!pClientSite)
@@ -127,6 +132,25 @@ static HRESULT WINAPI OleObject_SetClientSite(IOleObject *iface, IOleClientSite 
 
     IOleClientSite_AddRef(pClientSite);
     This->doc_obj->client = pClientSite;
+
+    hres = IOleClientSite_QueryInterface(pClientSite, &IID_IServiceProvider, (void**)&sp);
+    if(SUCCEEDED(hres)) {
+        IBrowserService *browser_service;
+        IDocObjectService *doc_object_service;
+
+        hres = IServiceProvider_QueryService(sp, &IID_IShellBrowser,
+                &IID_IBrowserService, (void**)&browser_service);
+        if(SUCCEEDED(hres)) {
+            hres = IBrowserService_QueryInterface(browser_service,
+                    &IID_IDocObjectService, (void**)&doc_object_service);
+            if(SUCCEEDED(hres))
+                This->doc_obj->doc_object_service = doc_object_service;
+
+            IBrowserService_Release(browser_service);
+        }
+
+        IServiceProvider_Release(sp);
+    }
 
     hostui_setup = This->doc_obj->hostui_setup;
 
@@ -199,7 +223,7 @@ static HRESULT WINAPI OleObject_SetClientSite(IOleObject *iface, IOleClientSite 
 
         if(!hostui_setup) {
             V_VT(&var) = VT_UNKNOWN;
-            V_UNKNOWN(&var) = (IUnknown*)HTMLWINDOW2(This->window);
+            V_UNKNOWN(&var) = (IUnknown*)&This->window->IHTMLWindow2_iface;
             IOleCommandTarget_Exec(cmdtrg, &CGID_DocHostCmdPriv, DOCHOST_DOCCANNAVIGATE, 0, &var, NULL);
         }
 
@@ -216,9 +240,10 @@ static HRESULT WINAPI OleObject_SetClientSite(IOleObject *iface, IOleClientSite 
     }
 
     if(This->doc_obj->usermode == UNKNOWN_USERMODE)
-        IOleControl_OnAmbientPropertyChange(CONTROL(This), DISPID_AMBIENT_USERMODE);
+        IOleControl_OnAmbientPropertyChange(&This->IOleControl_iface, DISPID_AMBIENT_USERMODE);
 
-    IOleControl_OnAmbientPropertyChange(CONTROL(This), DISPID_AMBIENT_OFFLINEIFNOTCONNECTED); 
+    IOleControl_OnAmbientPropertyChange(&This->IOleControl_iface,
+            DISPID_AMBIENT_OFFLINEIFNOTCONNECTED);
 
     hres = get_client_disp_property(This->doc_obj->client, DISPID_AMBIENT_SILENT, &silent);
     if(SUCCEEDED(hres)) {
@@ -228,8 +253,8 @@ static HRESULT WINAPI OleObject_SetClientSite(IOleObject *iface, IOleClientSite 
             FIXME("silent == true\n");
     }
 
-    IOleControl_OnAmbientPropertyChange(CONTROL(This), DISPID_AMBIENT_USERAGENT);
-    IOleControl_OnAmbientPropertyChange(CONTROL(This), DISPID_AMBIENT_PALETTE);
+    IOleControl_OnAmbientPropertyChange(&This->IOleControl_iface, DISPID_AMBIENT_USERAGENT);
+    IOleControl_OnAmbientPropertyChange(&This->IOleControl_iface, DISPID_AMBIENT_PALETTE);
 
     return S_OK;
 }
@@ -573,36 +598,39 @@ static const IOleDocumentVtbl OleDocumentVtbl = {
  * IOleControl implementation
  */
 
-#define CONTROL_THIS(iface) DEFINE_THIS(HTMLDocument, OleControl, iface)
+static inline HTMLDocument *impl_from_IOleControl(IOleControl *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLDocument, IOleControl_iface);
+}
 
 static HRESULT WINAPI OleControl_QueryInterface(IOleControl *iface, REFIID riid, void **ppv)
 {
-    HTMLDocument *This = CONTROL_THIS(iface);
+    HTMLDocument *This = impl_from_IOleControl(iface);
     return htmldoc_query_interface(This, riid, ppv);
 }
 
 static ULONG WINAPI OleControl_AddRef(IOleControl *iface)
 {
-    HTMLDocument *This = CONTROL_THIS(iface);
+    HTMLDocument *This = impl_from_IOleControl(iface);
     return htmldoc_addref(This);
 }
 
 static ULONG WINAPI OleControl_Release(IOleControl *iface)
 {
-    HTMLDocument *This = CONTROL_THIS(iface);
+    HTMLDocument *This = impl_from_IOleControl(iface);
     return htmldoc_release(This);
 }
 
 static HRESULT WINAPI OleControl_GetControlInfo(IOleControl *iface, CONTROLINFO *pCI)
 {
-    HTMLDocument *This = CONTROL_THIS(iface);
+    HTMLDocument *This = impl_from_IOleControl(iface);
     FIXME("(%p)->(%p)\n", This, pCI);
     return E_NOTIMPL;
 }
 
 static HRESULT WINAPI OleControl_OnMnemonic(IOleControl *iface, MSG *pMsg)
 {
-    HTMLDocument *This = CONTROL_THIS(iface);
+    HTMLDocument *This = impl_from_IOleControl(iface);
     FIXME("(%p)->(%p)\n", This, pMsg);
     return E_NOTIMPL;
 }
@@ -644,7 +672,7 @@ static HRESULT on_change_dlcontrol(HTMLDocument *This)
 
 static HRESULT WINAPI OleControl_OnAmbientPropertyChange(IOleControl *iface, DISPID dispID)
 {
-    HTMLDocument *This = CONTROL_THIS(iface);
+    HTMLDocument *This = impl_from_IOleControl(iface);
     IOleClientSite *client;
     VARIANT res;
     HRESULT hres;
@@ -734,12 +762,10 @@ static HRESULT WINAPI OleControl_OnAmbientPropertyChange(IOleControl *iface, DIS
 
 static HRESULT WINAPI OleControl_FreezeEvents(IOleControl *iface, BOOL bFreeze)
 {
-    HTMLDocument *This = CONTROL_THIS(iface);
+    HTMLDocument *This = impl_from_IOleControl(iface);
     FIXME("(%p)->(%x)\n", This, bFreeze);
     return E_NOTIMPL;
 }
-
-#undef CONTROL_THIS
 
 static const IOleControlVtbl OleControlVtbl = {
     OleControl_QueryInterface,
@@ -755,41 +781,42 @@ static const IOleControlVtbl OleControlVtbl = {
  * IObjectWithSite implementation
  */
 
-#define OBJSITE_THIS(iface) DEFINE_THIS(HTMLDocument, ObjectWithSite, iface)
+static inline HTMLDocument *impl_from_IObjectWithSite(IObjectWithSite *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLDocument, IObjectWithSite_iface);
+}
 
 static HRESULT WINAPI ObjectWithSite_QueryInterface(IObjectWithSite *iface, REFIID riid, void **ppv)
 {
-    HTMLDocument *This = OBJSITE_THIS(iface);
+    HTMLDocument *This = impl_from_IObjectWithSite(iface);
     return htmldoc_query_interface(This, riid, ppv);
 }
 
 static ULONG WINAPI ObjectWithSite_AddRef(IObjectWithSite *iface)
 {
-    HTMLDocument *This = OBJSITE_THIS(iface);
+    HTMLDocument *This = impl_from_IObjectWithSite(iface);
     return htmldoc_addref(This);
 }
 
 static ULONG WINAPI ObjectWithSite_Release(IObjectWithSite *iface)
 {
-    HTMLDocument *This = OBJSITE_THIS(iface);
+    HTMLDocument *This = impl_from_IObjectWithSite(iface);
     return htmldoc_release(This);
 }
 
 static HRESULT WINAPI ObjectWithSite_SetSite(IObjectWithSite *iface, IUnknown *pUnkSite)
 {
-    HTMLDocument *This = OBJSITE_THIS(iface);
+    HTMLDocument *This = impl_from_IObjectWithSite(iface);
     FIXME("(%p)->(%p)\n", This, pUnkSite);
     return E_NOTIMPL;
 }
 
 static HRESULT WINAPI ObjectWithSite_GetSite(IObjectWithSite* iface, REFIID riid, PVOID *ppvSite)
 {
-    HTMLDocument *This = OBJSITE_THIS(iface);
+    HTMLDocument *This = impl_from_IObjectWithSite(iface);
     FIXME("(%p)->(%p)\n", This, ppvSite);
     return E_NOTIMPL;
 }
-
-#undef OBJSITE_THIS
 
 static const IObjectWithSiteVtbl ObjectWithSiteVtbl = {
     ObjectWithSite_QueryInterface,
@@ -798,6 +825,10 @@ static const IObjectWithSiteVtbl ObjectWithSiteVtbl = {
     ObjectWithSite_SetSite,
     ObjectWithSite_GetSite
 };
+
+/**********************************************************
+ * IOleContainer implementation
+ */
 
 static inline HTMLDocument *impl_from_IOleContainer(IOleContainer *iface)
 {
@@ -853,6 +884,63 @@ static const IOleContainerVtbl OleContainerVtbl = {
     OleContainer_LockContainer
 };
 
+/**********************************************************
+ * IObjectSafety implementation
+ */
+
+static inline HTMLDocument *impl_from_IObjectSafety(IObjectSafety *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLDocument, IObjectSafety_iface);
+}
+
+static HRESULT WINAPI ObjectSafety_QueryInterface(IObjectSafety *iface, REFIID riid, void **ppv)
+{
+    HTMLDocument *This = impl_from_IObjectSafety(iface);
+    return htmldoc_query_interface(This, riid, ppv);
+}
+
+static ULONG WINAPI ObjectSafety_AddRef(IObjectSafety *iface)
+{
+    HTMLDocument *This = impl_from_IObjectSafety(iface);
+    return htmldoc_addref(This);
+}
+
+static ULONG WINAPI ObjectSafety_Release(IObjectSafety *iface)
+{
+    HTMLDocument *This = impl_from_IObjectSafety(iface);
+    return htmldoc_release(This);
+}
+
+static HRESULT WINAPI ObjectSafety_GetInterfaceSafetyOptions(IObjectSafety *iface,
+        REFIID riid, DWORD *pdwSupportedOptions, DWORD *pdwEnabledOptions)
+{
+    HTMLDocument *This = impl_from_IObjectSafety(iface);
+    FIXME("(%p)->(%s %p %p)\n", This, debugstr_guid(riid), pdwSupportedOptions, pdwEnabledOptions);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI ObjectSafety_SetInterfaceSafetyOptions(IObjectSafety *iface,
+        REFIID riid, DWORD dwOptionSetMask, DWORD dwEnabledOptions)
+{
+    HTMLDocument *This = impl_from_IObjectSafety(iface);
+    FIXME("(%p)->(%s %x %x)\n", This, debugstr_guid(riid), dwOptionSetMask, dwEnabledOptions);
+
+    if(IsEqualGUID(&IID_IPersistMoniker, riid) &&
+            dwOptionSetMask==INTERFACESAFE_FOR_UNTRUSTED_DATA &&
+            dwEnabledOptions==INTERFACESAFE_FOR_UNTRUSTED_DATA)
+        return S_OK;
+
+    return E_NOTIMPL;
+}
+
+static const IObjectSafetyVtbl ObjectSafetyVtbl = {
+    ObjectSafety_QueryInterface,
+    ObjectSafety_AddRef,
+    ObjectSafety_Release,
+    ObjectSafety_GetInterfaceSafetyOptions,
+    ObjectSafety_SetInterfaceSafetyOptions
+};
+
 void HTMLDocument_LockContainer(HTMLDocumentObj *This, BOOL fLock)
 {
     IOleContainer *container;
@@ -873,7 +961,8 @@ void HTMLDocument_OleObj_Init(HTMLDocument *This)
 {
     This->IOleObject_iface.lpVtbl = &OleObjectVtbl;
     This->IOleDocument_iface.lpVtbl = &OleDocumentVtbl;
-    This->lpOleControlVtbl = &OleControlVtbl;
-    This->lpObjectWithSiteVtbl = &ObjectWithSiteVtbl;
+    This->IOleControl_iface.lpVtbl = &OleControlVtbl;
+    This->IObjectWithSite_iface.lpVtbl = &ObjectWithSiteVtbl;
     This->IOleContainer_iface.lpVtbl = &OleContainerVtbl;
+    This->IObjectSafety_iface.lpVtbl = &ObjectSafetyVtbl;
 }

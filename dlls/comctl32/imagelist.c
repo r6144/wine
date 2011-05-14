@@ -1521,7 +1521,6 @@ ImageList_Duplicate (HIMAGELIST himlSrc)
                     himlSrc->hdcMask, 0, 0, SRCCOPY);
 
 	himlDst->cCurImage = himlSrc->cCurImage;
-	himlDst->cMaxImage = himlSrc->cMaxImage;
         if (himlSrc->has_alpha && himlDst->has_alpha)
             memcpy( himlDst->has_alpha, himlSrc->has_alpha, himlDst->cCurImage );
     }
@@ -3385,7 +3384,12 @@ static HRESULT WINAPI ImageListImpl_Merge(IImageList *iface, int i1,
 
     /* Get the interface for the new image list */
     if (hNew)
+    {
+        IImageList *imerge = (IImageList*)hNew;
+
         ret = HIMAGELIST_QueryInterface(hNew, riid, ppv);
+        IImageList_Release(imerge);
+    }
 
     IImageList_Release(iml2);
     return ret;
@@ -3535,7 +3539,12 @@ static HRESULT WINAPI ImageListImpl_GetDragImage(IImageList *iface, POINT *ppt,
 
     /* Get the interface for the new image list */
     if (hNew)
+    {
+        IImageList *idrag = (IImageList*)hNew;
+
         ret = HIMAGELIST_QueryInterface(hNew, riid, ppv);
+        IImageList_Release(idrag);
+    }
 
     return ret;
 }

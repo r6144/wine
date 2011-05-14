@@ -23,6 +23,7 @@
 
 #include "wine/debug.h"
 #include "wine/list.h"
+#include "wine/rbtree.h"
 
 #define COBJMACROS
 #include "windef.h"
@@ -40,70 +41,8 @@
 
 /* TRACE helper functions */
 const char *debug_d3dcompiler_d3d_blob_part(D3D_BLOB_PART part) DECLSPEC_HIDDEN;
-
-/* ID3DBlob */
-struct d3dcompiler_blob
-{
-    ID3DBlob ID3DBlob_iface;
-    LONG refcount;
-
-    SIZE_T size;
-    void *data;
-};
-
-HRESULT d3dcompiler_blob_init(struct d3dcompiler_blob *blob, SIZE_T data_size) DECLSPEC_HIDDEN;
-
-/* blob handling */
-HRESULT d3dcompiler_get_blob_part(const void *data, SIZE_T data_size, D3D_BLOB_PART part, UINT flags, ID3DBlob **blob) DECLSPEC_HIDDEN;
-HRESULT d3dcompiler_strip_shader(const void *data, SIZE_T data_size, UINT flags, ID3DBlob **blob) DECLSPEC_HIDDEN;
-
-struct d3dcompiler_shader_signature
-{
-    D3D11_SIGNATURE_PARAMETER_DESC *elements;
-    UINT element_count;
-    char *string_data;
-};
-
-/* ID3D11ShaderReflection */
-struct d3dcompiler_shader_reflection
-{
-    ID3D11ShaderReflection ID3D11ShaderReflection_iface;
-    LONG refcount;
-
-    UINT mov_instruction_count;
-    UINT conversion_instruction_count;
-    UINT instruction_count;
-    UINT emit_instruction_count;
-    D3D_PRIMITIVE_TOPOLOGY gs_output_topology;
-    UINT gs_max_output_vertex_count;
-    D3D_PRIMITIVE input_primitive;
-    UINT cut_instruction_count;
-    UINT dcl_count;
-    UINT static_flow_control_count;
-    UINT float_instruction_count;
-    UINT temp_register_count;
-    UINT int_instruction_count;
-    UINT uint_instruction_count;
-    UINT temp_array_count;
-    UINT array_instruction_count;
-    UINT texture_normal_instructions;
-    UINT texture_load_instructions;
-    UINT texture_comp_instructions;
-    UINT texture_bias_instructions;
-    UINT texture_gradient_instructions;
-    UINT dynamic_flow_control_count;
-    UINT c_control_points;
-    D3D_TESSELLATOR_OUTPUT_PRIMITIVE hs_output_primitive;
-    D3D_TESSELLATOR_PARTITIONING hs_prtitioning;
-    D3D_TESSELLATOR_DOMAIN tessellator_domain;
-
-    struct d3dcompiler_shader_signature *isgn;
-    struct d3dcompiler_shader_signature *osgn;
-    struct d3dcompiler_shader_signature *pcsg;
-};
-
-/* reflection handling */
-HRESULT d3dcompiler_shader_reflection_init(struct d3dcompiler_shader_reflection *reflection, const void *data, SIZE_T data_size) DECLSPEC_HIDDEN;
+const char *debug_d3dcompiler_shader_variable_class(D3D_SHADER_VARIABLE_CLASS c) DECLSPEC_HIDDEN;
+const char *debug_d3dcompiler_shader_variable_type(D3D_SHADER_VARIABLE_TYPE t) DECLSPEC_HIDDEN;
 
 /* Shader assembler definitions */
 typedef enum _shader_type {
@@ -625,6 +564,8 @@ void SlDeleteShader(struct bwriter_shader *shader) DECLSPEC_HIDDEN;
 #define TAG_PCSG MAKE_TAG('P', 'C', 'S', 'G')
 #define TAG_RDEF MAKE_TAG('R', 'D', 'E', 'F')
 #define TAG_SDBG MAKE_TAG('S', 'D', 'B', 'G')
+#define TAG_SHDR MAKE_TAG('S', 'H', 'D', 'R')
+#define TAG_SHEX MAKE_TAG('S', 'H', 'E', 'X')
 #define TAG_STAT MAKE_TAG('S', 'T', 'A', 'T')
 #define TAG_XNAP MAKE_TAG('X', 'N', 'A', 'P')
 #define TAG_XNAS MAKE_TAG('X', 'N', 'A', 'S')
@@ -662,6 +603,5 @@ static inline void write_dword(char **ptr, DWORD d)
 }
 
 void skip_dword_unknown(const char **ptr, unsigned int count) DECLSPEC_HIDDEN;
-void write_dword_unknown(char **ptr, DWORD d) DECLSPEC_HIDDEN;
 
 #endif /* __WINE_D3DCOMPILER_PRIVATE_H */

@@ -25,6 +25,21 @@
 #define COBJMACROS
 
 #include <stdarg.h>
+#ifdef HAVE_LIBXML2
+# include <libxml/parser.h>
+# include <libxml/xmlerror.h>
+# ifdef SONAME_LIBXSLT
+#  ifdef HAVE_LIBXSLT_PATTERN_H
+#   include <libxslt/pattern.h>
+#  endif
+#  ifdef HAVE_LIBXSLT_TRANSFORM_H
+#   include <libxslt/transform.h>
+#  endif
+#  include <libxslt/xsltutils.h>
+#  include <libxslt/xsltInternals.h>
+# endif
+#endif
+
 #include "windef.h"
 #include "winbase.h"
 #include "winuser.h"
@@ -178,7 +193,9 @@ static void init_libxslt(void)
     if (!libxslt_handle)
         return;
 
-#define LOAD_FUNCPTR(f, needed) if ((p##f = wine_dlsym(libxslt_handle, #f, NULL, 0)) == NULL && needed) { WARN("Can't find symbol %s\n", #f); goto sym_not_found; }
+#define LOAD_FUNCPTR(f, needed) \
+    if ((p##f = wine_dlsym(libxslt_handle, #f, NULL, 0)) == NULL) \
+        if (needed) { WARN("Can't find symbol %s\n", #f); goto sym_not_found; }
     LOAD_FUNCPTR(xsltInit, 0);
     LOAD_FUNCPTR(xsltApplyStylesheet, 1);
     LOAD_FUNCPTR(xsltCleanupGlobals, 1);
@@ -243,6 +260,38 @@ BOOL WINAPI DllMain(HINSTANCE hInstDLL, DWORD fdwReason, LPVOID lpv)
         break;
     }
     return TRUE;
+}
+
+const char *debugstr_variant(const VARIANT *v)
+{
+    if(!v)
+        return "(null)";
+
+    switch(V_VT(v)) {
+    case VT_EMPTY:
+        return "{VT_EMPTY}";
+    case VT_NULL:
+        return "{VT_NULL}";
+    case VT_I4:
+        return wine_dbg_sprintf("{VT_I4: %d}", V_I4(v));
+    case VT_R8:
+        return wine_dbg_sprintf("{VT_R8: %lf}", V_R8(v));
+    case VT_BSTR:
+        return wine_dbg_sprintf("{VT_BSTR: %s}", debugstr_w(V_BSTR(v)));
+    case VT_DISPATCH:
+        return wine_dbg_sprintf("{VT_DISPATCH: %p}", V_DISPATCH(v));
+    case VT_BOOL:
+        return wine_dbg_sprintf("{VT_BOOL: %x}", V_BOOL(v));
+    case VT_UNKNOWN:
+        return wine_dbg_sprintf("{VT_UNKNOWN: %p}", V_UNKNOWN(v));
+    case VT_UINT:
+        return wine_dbg_sprintf("{VT_UINT: %u}", V_UINT(v));
+    case VT_BSTR|VT_BYREF:
+        return wine_dbg_sprintf("{VT_BSTR|VT_BYREF: ptr %p, data %s}",
+            V_BSTRREF(v), V_BSTRREF(v) ? debugstr_w(*V_BSTRREF(v)) : NULL);
+    default:
+        return wine_dbg_sprintf("{vt %d}", V_VT(v));
+    }
 }
 
 /***********************************************************************

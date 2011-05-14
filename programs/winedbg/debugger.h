@@ -293,7 +293,7 @@ extern void             break_set_xpoints(BOOL set);
 extern BOOL             break_add_break(const ADDRESS64* addr, BOOL verbose, BOOL swbp);
 extern BOOL             break_add_break_from_lvalue(const struct dbg_lvalue* value, BOOL swbp);
 extern void             break_add_break_from_id(const char* name, int lineno, BOOL swbp);
-extern void             break_add_break_from_lineno(int lineno, BOOL swbp);
+extern void             break_add_break_from_lineno(const char *filename, int lineno, BOOL swbp);
 extern void             break_add_watch_from_lvalue(const struct dbg_lvalue* lvalue, BOOL is_write);
 extern void             break_add_watch_from_id(const char* name, BOOL is_write);
 extern void             break_check_delayed_bp(void);
@@ -367,7 +367,6 @@ extern void             memory_examine(const struct dbg_lvalue *lvalue, int coun
 extern void*            memory_to_linear_addr(const ADDRESS64* address);
 extern BOOL             memory_get_current_pc(ADDRESS64* address);
 extern BOOL             memory_get_current_stack(ADDRESS64* address);
-extern BOOL             memory_get_current_frame(ADDRESS64* address);
 extern BOOL             memory_get_string(struct dbg_process* pcs, void* addr, BOOL in_debuggee, BOOL unicode, char* buffer, int size);
 extern BOOL             memory_get_string_indirect(struct dbg_process* pcs, void* addr, BOOL unicode, WCHAR* buffer, int size);
 extern BOOL             memory_get_register(DWORD regno, DWORD_PTR** value, char* buffer, int len);

@@ -25,6 +25,7 @@
 #ifdef HAVE_LIBXML2
 #include "xslpattern.h"
 #include <libxml/xpathInternals.h>
+#include "wine/debug.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(msxml);
 
@@ -39,6 +40,23 @@ static inline BOOL is_literal(xmlChar const* tok)
     return (tok && tok[0] && tok[1] &&
             tok[0]== tok[xmlStrlen(tok)-1] &&
             (tok[0] == '\'' || tok[0] == '"'));
+}
+
+static void xslpattern_error(parser_param* param, void const* scanner, char const* msg)
+{
+    FIXME("%s:\n"
+          "  param {\n"
+          "    yyscanner=%p\n"
+          "    ctx=%p\n"
+          "    in=\"%s\"\n"
+          "    pos=%i\n"
+          "    len=%i\n"
+          "    out=\"%s\"\n"
+          "    err=%i\n"
+          "  }\n"
+          "  scanner=%p\n",
+          msg, param->yyscanner, param->ctx, param->in, param->pos,
+          param->len, param->out, ++param->err, scanner);
 }
 
 %}
@@ -726,23 +744,5 @@ static inline BOOL is_literal(xmlChar const* tok)
     ;
 
 %%
-
-void xslpattern_error(parser_param* param, void const* scanner, char const* msg)
-{
-    FIXME("%s:\n"
-          "  param {\n"
-          "    yyscanner=%p\n"
-          "    ctx=%p\n"
-          "    in=\"%s\"\n"
-          "    pos=%i\n"
-          "    len=%i\n"
-          "    out=\"%s\"\n"
-          "    err=%i\n"
-          "  }\n"
-          "  scanner=%p\n",
-          msg, param->yyscanner, param->ctx, param->in, param->pos,
-          param->len, param->out, ++param->err, scanner);
-}
-
 
 #endif  /* HAVE_LIBXML2 */

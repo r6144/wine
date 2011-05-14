@@ -148,6 +148,48 @@ struct stat {
   time_t st_ctime;
 };
 
+struct _stat32 {
+  _dev_t st_dev;
+  _ino_t st_ino;
+  unsigned short st_mode;
+  short st_nlink;
+  short st_uid;
+  short st_gid;
+  _dev_t st_rdev;
+  _off_t st_size;
+  __time32_t st_atime;
+  __time32_t st_mtime;
+  __time32_t st_ctime;
+};
+
+struct _stat32i64 {
+  _dev_t st_dev;
+  _ino_t st_ino;
+  unsigned short st_mode;
+  short st_nlink;
+  short st_uid;
+  short st_gid;
+  _dev_t st_rdev;
+  __int64 DECLSPEC_ALIGN(8) st_size;
+  time_t st_atime;
+  time_t st_mtime;
+  time_t st_ctime;
+};
+
+struct _stat64i32 {
+  _dev_t st_dev;
+  _ino_t st_ino;
+  unsigned short st_mode;
+  short st_nlink;
+  short st_uid;
+  short st_gid;
+  _dev_t st_rdev;
+  _off_t st_size;
+  __time64_t st_atime;
+  __time64_t st_mtime;
+  __time64_t st_ctime;
+};
+
 struct _stati64 {
   _dev_t st_dev;
   _ino_t st_ino;
@@ -264,6 +306,7 @@ int      __cdecl _wsystem(const wchar_t*);
 #ifndef _WSTAT_DEFINED
 #define _WSTAT_DEFINED
 int __cdecl _wstat(const wchar_t*,struct _stat*);
+int __cdecl _wstat32(const wchar_t*, struct _stat32*);
 int __cdecl _wstati64(const wchar_t*,struct _stati64*);
 int __cdecl _wstat64(const wchar_t*,struct _stat64*);
 #endif /* _WSTAT_DEFINED */

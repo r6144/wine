@@ -3,7 +3,7 @@
  *
  * Copyright 1996 Ulrich Schmid
  * Copyright 2002 Sylvain Petreolle
- * Copyright 2006,2007 YunSong Hwang
+ * Copyright 2006,2007,2010 YunSong Hwang
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -22,191 +22,134 @@
 
 #include "progman.h"
 
+#pragma code_page(65001)
+
 LANGUAGE LANG_KOREAN, SUBLANG_DEFAULT
-
-/* Menu */
-
-MAIN_MENU MENU
-{
-POPUP "∆ƒ¿œ(&F)" {
-   MENUITEM "ªı ¿€æ˜(&N)...",              PM_NEW
-   MENUITEM "ø≠±‚(&P)\tEnter",             PM_OPEN
-   MENUITEM "¿Ãµø(&M)...\tF7",             PM_MOVE,      GRAYED
-   MENUITEM "∫πªÁ(&C)...\tF8",             PM_COPY,      GRAYED
-   MENUITEM "¡ˆøÏ±‚(&D)\tEntf",           PM_DELETE
-   MENUITEM "º”º∫(&A)...\tAlt+Enter",       PM_ATTRIBUTES
-   MENUITEM SEPARATOR
-   MENUITEM "Ω««‡(&E)...",          PM_EXECUTE
-   MENUITEM SEPARATOR
-   MENUITEM "√¢ ¡æ∑·(&X)...",             PM_EXIT
- }
- POPUP "ø…º«(&O)" {
-   MENUITEM "¿⁄µø ¡§∑ƒ(&A)",  PM_AUTO_ARRANGE
-   MENUITEM "Ω««‡Ω√ æ∆¿Ãƒ‹ ªÛ≈¬∑Œ(&M)",    PM_MIN_ON_RUN
-   MENUITEM "¡æ∑·Ω√ º≥¡§ ≥ªøÎ ¿˙¿Â(&S)", PM_SAVE_SETTINGS
- }
- POPUP "√¢(&W)" {
-   MENUITEM "∞„ƒ°±‚(&O)\tShift+F5",       PM_OVERLAP
-   MENUITEM "≥™¥©±‚(&S)\tShift+F4",  PM_SIDE_BY_SIDE
-   MENUITEM "æ∆¿Ãƒ‹ ¡§∑ƒ(&A)",       PM_ARRANGE
- }
- 
-POPUP "µµøÚ∏ª(&H)" {
-   MENUITEM "∏Ò¬˜(&C)",         PM_CONTENTS
-   MENUITEM "√£±‚(&S)...",           PM_SEARCH
-   MENUITEM SEPARATOR
-   MENUITEM "µµøÚ∏ª ªÁøÎπ˝(&H)",     PM_HELPONHELP
-   MENUITEM "¿⁄Ω¿º≠(&T)",         PM_TUTORIAL
-   MENUITEM SEPARATOR
-   MENUITEM "WINE ¡§∫∏(&A)",     PM_ABOUT_WINE
- }
-}
 
 /* Dialog `New' */
 
 DIALOG_NEW DIALOG 0, 0, 170, 65
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "ªı ¿€æ˜"
+CAPTION "ÏÉà ÏûëÏóÖ"
+FONT 8, "MS Shell Dlg"
 {
 RADIOBUTTON   "",                 PM_NEW_GROUP,    10, 15,  10, 15
-LTEXT         "«Æ±◊∏≤ ±◊∑Ï(&G)",   -1,    20, 18,  80, 15
+LTEXT         "ÌíÄÍ∑∏Î¶º Í∑∏Î£π(&G)",   -1,    20, 18,  80, 15
 RADIOBUTTON   "",                 PM_NEW_PROGRAM,  10, 35,  10, 15
-LTEXT         "«Æ±◊∏≤(&P)", -1,  20, 38,  80, 15
-DEFPUSHBUTTON "»Æ¿Œ",          IDOK,           105,  5,  60, 15, WS_TABSTOP
-PUSHBUTTON    "√Îº“",      IDCANCEL,       105, 25,  60, 15, WS_TABSTOP
-PUSHBUTTON    "µµøÚ∏ª(&H)",        PM_HELP,        105, 45,  60, 15, WS_TABSTOP
+LTEXT         "ÌíÄÍ∑∏Î¶º(&P)", -1,  20, 38,  80, 15
+DEFPUSHBUTTON "ÌôïÏù∏",          IDOK,           105,  5,  60, 15, WS_TABSTOP
+PUSHBUTTON    "Ï∑®ÏÜå",      IDCANCEL,       105, 25,  60, 15, WS_TABSTOP
+PUSHBUTTON    "ÎèÑÏõÄÎßê(&H)",        PM_HELP,        105, 45,  60, 15, WS_TABSTOP
 }
 
 /* Dialog `Move' */
 
  DIALOG_MOVE DIALOG 0, 0, 250, 65
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "«Æ±◊∏≤ ¿Ãµø"
+CAPTION "ÌíÄÍ∑∏Î¶º Ïù¥Îèô"
+FONT 8, "MS Shell Dlg"
 {
-LTEXT         "«Æ±◊∏≤ ¿Ãµø:",    -1,            5,  5,  90, 15
+LTEXT         "ÌíÄÍ∑∏Î¶º Ïù¥Îèô:",    -1,            5,  5,  90, 15
 LTEXT         "",                     PM_PROGRAM,         95,  5,  90, 15
-LTEXT         "¥ÎªÛ ±◊∑Ï:", -1,            5, 13,  90, 15
+LTEXT         "ÎåÄÏÉÅ Í∑∏Î£π:", -1,            5, 13,  90, 15
 LTEXT         "",                     PM_FROM_GROUP,      95, 13,  90, 15
-LTEXT         "∏Ò¿˚ ±◊∑Ï(&T):",   PM_TO_GROUP_TXT,     5, 28, 140, 15
+LTEXT         "Î™©Ï†Å Í∑∏Î£π(&T):",   PM_TO_GROUP_TXT,     5, 28, 140, 15
 COMBOBOX                              PM_TO_GROUP,         5, 38, 140, 50, WS_TABSTOP | CBS_DROPDOWNLIST
-DEFPUSHBUTTON "»Æ¿Œ",              IDOK,              185,  5,  60, 15, WS_TABSTOP
-PUSHBUTTON    "√Îº“",          IDCANCEL,          185, 25,  60, 15, WS_TABSTOP
-PUSHBUTTON    "µµøÚ∏ª(&H)",            PM_HELP,           185, 45,  60, 15, WS_TABSTOP
+DEFPUSHBUTTON "ÌôïÏù∏",              IDOK,              185,  5,  60, 15, WS_TABSTOP
+PUSHBUTTON    "Ï∑®ÏÜå",          IDCANCEL,          185, 25,  60, 15, WS_TABSTOP
+PUSHBUTTON    "ÎèÑÏõÄÎßê(&H)",            PM_HELP,           185, 45,  60, 15, WS_TABSTOP
 }
 
 /* Dialog `Copy' */
 
 DIALOG_COPY DIALOG 0, 0, 250, 65
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "«Æ±◊∏≤ ∫πªÁ"
+CAPTION "ÌíÄÍ∑∏Î¶º Î≥µÏÇ¨"
+FONT 8, "MS Shell Dlg"
 {
-LTEXT         "«Æ±◊∏≤ ∫πªÁ:",    -1,            5,  5,  90, 15
+LTEXT         "ÌíÄÍ∑∏Î¶º Î≥µÏÇ¨:",    -1,            5,  5,  90, 15
 LTEXT         "",                     PM_PROGRAM,         95,  5,  90, 15
-LTEXT         "¥ÎªÛ ±◊∑Ï:", -1,            5, 13,  90, 15
+LTEXT         "ÎåÄÏÉÅ Í∑∏Î£π:", -1,            5, 13,  90, 15
 LTEXT         "",                     PM_FROM_GROUP,      95, 13,  90, 15
-LTEXT         "∏Ò¿˚ ±◊∑Ï(&T):",   PM_TO_GROUP_TXT,     5, 28, 140, 15
+LTEXT         "Î™©Ï†Å Í∑∏Î£π(&T):",   PM_TO_GROUP_TXT,     5, 28, 140, 15
 COMBOBOX                              PM_TO_GROUP,         5, 38, 140, 50, WS_TABSTOP | CBS_DROPDOWNLIST
-DEFPUSHBUTTON "»Æ¿Œ",              IDOK,              185,  5,  60, 15, WS_TABSTOP
-PUSHBUTTON    "√Îº“",          IDCANCEL,          185, 25,  60, 15, WS_TABSTOP
-PUSHBUTTON    "µµøÚ∏ª(&H)",            PM_HELP,           185, 45,  60, 15, WS_TABSTOP
+DEFPUSHBUTTON "ÌôïÏù∏",              IDOK,              185,  5,  60, 15, WS_TABSTOP
+PUSHBUTTON    "Ï∑®ÏÜå",          IDCANCEL,          185, 25,  60, 15, WS_TABSTOP
+PUSHBUTTON    "ÎèÑÏõÄÎßê(&H)",            PM_HELP,           185, 45,  60, 15, WS_TABSTOP
 }
 
 /* Dialog `Group attributes' */
 
 DIALOG_GROUP DIALOG 0, 0, 230, 65
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "«Æ±◊∏≤ ±◊∑Ï º”º∫"
+CAPTION "ÌíÄÍ∑∏Î¶º Í∑∏Î£π ÏÜçÏÑ±"
+FONT 8, "MS Shell Dlg"
 {
-LTEXT     "º≥∏Ì(&D):", PM_DESCRIPTION_TXT,   05, 18,  50, 10
+LTEXT     "ÏÑ§Î™Ö(&D):", PM_DESCRIPTION_TXT,   05, 18,  50, 10
 EDITTEXT                            PM_DESCRIPTION,       60, 18,  90, 15, WS_TABSTOP
-LTEXT     "±◊∑Ï ∆ƒ¿œ(&G):",        PM_FILE_TXT,          05, 38,  50, 10
+LTEXT     "Í∑∏Î£π ÌååÏùº(&G):",        PM_FILE_TXT,          05, 38,  50, 10
 EDITTEXT                            PM_FILE,              60, 38,  90, 15, WS_TABSTOP
-DEFPUSHBUTTON "»Æ¿Œ",            IDOK,                155,  5,  60, 15, WS_TABSTOP
-PUSHBUTTON    "√Îº“",        IDCANCEL,            155, 25,  60, 15, WS_TABSTOP
-PUSHBUTTON    "µµøÚ∏ª(&H)",          PM_HELP,             155, 45,  60, 15, WS_TABSTOP
+DEFPUSHBUTTON "ÌôïÏù∏",            IDOK,                155,  5,  60, 15, WS_TABSTOP
+PUSHBUTTON    "Ï∑®ÏÜå",        IDCANCEL,            155, 25,  60, 15, WS_TABSTOP
+PUSHBUTTON    "ÎèÑÏõÄÎßê(&H)",          PM_HELP,             155, 45,  60, 15, WS_TABSTOP
 }
 
 /* Dialog `Program attributes' */
 
 DIALOG_PROGRAM DIALOG 0, 0, 250, 105
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "«Æ±◊∏≤ º”º∫"
+CAPTION "ÌíÄÍ∑∏Î¶º ÏÜçÏÑ±"
+FONT 8, "MS Shell Dlg"
 {
-LTEXT         "º≥∏Ì(&D):",  PM_DESCRIPTION_TXT,   05, 10,  60, 10
+LTEXT         "ÏÑ§Î™Ö(&D):",  PM_DESCRIPTION_TXT,   05, 10,  60, 10
 EDITTEXT                                   PM_DESCRIPTION,       80, 10,  90, 15, WS_TABSTOP
-LTEXT         "∏Ì∑… ∂Û¿Œ(&C):", PM_COMMAND_LINE_TXT,  05, 25,  60, 10
+LTEXT         "Î™ÖÎ†π ÎùºÏù∏(&C):", PM_COMMAND_LINE_TXT,  05, 25,  60, 10
 EDITTEXT                                   PM_COMMAND_LINE,      80, 25,  90, 15, WS_TABSTOP
-LTEXT         "¿€æ˜ µ∑∫≈‰∏Æ(&W):",    PM_DIRECTORY_TXT,     05, 40,  60, 10
+LTEXT         "ÏûëÏóÖ ÎîîÎ†âÌÜ†Î¶¨(&W):",    PM_DIRECTORY_TXT,     05, 40,  60, 10
 EDITTEXT                                   PM_DIRECTORY,         80, 40,  90, 15, WS_TABSTOP
-LTEXT         "¥‹√‡≈∞ ¡ˆ¡§(&K):",      PM_HOT_KEY_TXT,       05, 55,  60, 10
+LTEXT         "Îã®Ï∂ïÌÇ§ ÏßÄÏ†ï(&K):",      PM_HOT_KEY_TXT,       05, 55,  60, 10
 EDITTEXT                                   PM_HOT_KEY,           80, 55,  90, 15, WS_TABSTOP
 ICON          "",                          PM_ICON,              20, 70
 CHECKBOX      "",                          PM_SYMBOL,            80, 75,  10, 10, WS_TABSTOP
-LTEXT         "Ω««‡Ω√ √÷º“»≠(&M)",       -1,             95, 75,  75, 10
-DEFPUSHBUTTON "»Æ¿Œ",                   IDOK,                185,  5,  60, 15, WS_TABSTOP
-PUSHBUTTON    "√Îº“",               IDCANCEL,            185, 25,  60, 15, WS_TABSTOP
-PUSHBUTTON    "√£±‚(&B)...",               PM_BROWSE,           185, 45,  60, 15, WS_TABSTOP
-PUSHBUTTON    "æ∆¿Ãƒ‹ πŸ≤Ÿ±‚(&I)...", PM_OTHER_SYMBOL,     185, 65,  60, 15, WS_TABSTOP
-PUSHBUTTON    "µµøÚ∏ª(&H)",                 PM_HELP,             185, 85,  60, 15, WS_TABSTOP
+LTEXT         "Ïã§ÌñâÏãú ÏµúÏÜåÌôî(&M)",       -1,             95, 75,  75, 10
+DEFPUSHBUTTON "ÌôïÏù∏",                   IDOK,                185,  5,  60, 15, WS_TABSTOP
+PUSHBUTTON    "Ï∑®ÏÜå",               IDCANCEL,            185, 25,  60, 15, WS_TABSTOP
+PUSHBUTTON    "Ï∞æÍ∏∞(&B)...",               PM_BROWSE,           185, 45,  60, 15, WS_TABSTOP
+PUSHBUTTON    "ÏïÑÏù¥ÏΩò Î∞îÍæ∏Í∏∞(&I)...", PM_OTHER_SYMBOL,     185, 65,  60, 15, WS_TABSTOP
+PUSHBUTTON    "ÎèÑÏõÄÎßê(&H)",                 PM_HELP,             185, 85,  60, 15, WS_TABSTOP
 }
 
 /* Dialog `Symbol' */
 
 DIALOG_SYMBOL DIALOG 0, 0, 200, 85
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "æ∆¿Ãƒ‹ πŸ≤Ÿ±‚"
+CAPTION "ÏïÑÏù¥ÏΩò Î∞îÍæ∏Í∏∞"
+FONT 8, "MS Shell Dlg"
 {
-LTEXT     "∆ƒ¿œ¿Ã∏ß(&F):",    PM_ICON_FILE_TXT,    5, 15,  40, 10
+LTEXT     "ÌååÏùºÏù¥Î¶Ñ(&F):",    PM_ICON_FILE_TXT,    5, 15,  40, 10
 EDITTEXT                         PM_ICON_FILE,       45, 15,  85, 15, WS_TABSTOP
-LTEXT     "«ˆ¿Á æ∆¿Ãƒ‹(&I):", PM_SYMBOL_LIST_TXT,  5, 30, 125, 10
+LTEXT     "ÌòÑÏû¨ ÏïÑÏù¥ÏΩò(&I):", PM_SYMBOL_LIST_TXT,  5, 30, 125, 10
 COMBOBOX                         PM_SYMBOL_LIST,      5, 40, 125, 50,
    CBS_DROPDOWNLIST | CBS_AUTOHSCROLL | CBS_OWNERDRAWFIXED | WS_TABSTOP
-DEFPUSHBUTTON "»Æ¿Œ",         IDOK,              135,  5,  60, 15, WS_TABSTOP
-PUSHBUTTON    "√Îº“",     IDCANCEL,          135, 25,  60, 15, WS_TABSTOP
-PUSHBUTTON    "√£±‚(&B)...",    PM_BROWSE,         135, 45,  60, 15, WS_TABSTOP
-PUSHBUTTON    "µµøÚ∏ª(&H)",       PM_HELP,           135, 65,  60, 15, WS_TABSTOP
+DEFPUSHBUTTON "ÌôïÏù∏",         IDOK,              135,  5,  60, 15, WS_TABSTOP
+PUSHBUTTON    "Ï∑®ÏÜå",     IDCANCEL,          135, 25,  60, 15, WS_TABSTOP
+PUSHBUTTON    "Ï∞æÍ∏∞(&B)...",    PM_BROWSE,         135, 45,  60, 15, WS_TABSTOP
+PUSHBUTTON    "ÎèÑÏõÄÎßê(&H)",       PM_HELP,           135, 65,  60, 15, WS_TABSTOP
 }
 
 /* Dialog `Execute' */
 
 DIALOG_EXECUTE DIALOG 0, 0, 200, 85
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "«Æ±◊∏≤ Ω««‡"
+CAPTION "ÌíÄÍ∑∏Î¶º Ïã§Ìñâ"
+FONT 8, "MS Shell Dlg"
 {
-LTEXT     "∏Ì∑… ∂Û¿Œ(&C):", -1,   05, 15, 120, 10
+LTEXT     "Î™ÖÎ†π ÎùºÏù∏(&C):", -1,   05, 15, 120, 10
 EDITTEXT                               PM_COMMAND, 05, 25, 120, 15, WS_TABSTOP
 CHECKBOX      "",                      PM_SYMBOL,  05, 45,  10, 10, WS_TABSTOP
-LTEXT         "Ω««‡Ω√ √÷º“»≠(&M)",   -1,   20, 45, 120, 10
-DEFPUSHBUTTON "»Æ¿Œ",               IDOK,      135,  5,  60, 15, WS_TABSTOP
-PUSHBUTTON    "√Îº“",           IDCANCEL,  135, 25,  60, 15, WS_TABSTOP
-PUSHBUTTON    "√£±‚(&B)...",          PM_BROWSE, 135, 45,  60, 15, WS_TABSTOP
-PUSHBUTTON    "µµøÚ∏ª(&H)",             PM_HELP,   135, 65,  60, 15, WS_TABSTOP
-}
-
-/* Strings */
-
-STRINGTABLE
-{
-IDS_PROGRAM_MANAGER,		"«Æ±◊∏≤ ∞¸∏Æ¿⁄"
-IDS_ERROR,			"ø°∑Ø"
-IDS_WARNING,			"∞Ê∞Ì"
-IDS_INFO,			"¡§∫∏"
-IDS_DELETE,			"¡ˆøÏ±‚"
-IDS_DELETE_GROUP_s,		"±◊∑Ï `%s'¿ª ¡ˆøÏ∞⁄Ω¿¥œ±Ó ?"
-IDS_DELETE_PROGRAM_s,		"«Æ±◊∏≤ `%s'¿ª ¡ˆøÏ∞⁄Ω¿¥œ±Ó ?"
-IDS_NOT_IMPLEMENTED,		"æ∆¡˜ ±∏«ˆµ«¡ˆ æ æ“Ω¿¥œ¥Ÿ."
-IDS_FILE_READ_ERROR_s,		"`%s' ¿–±‚ ø°∑Ø."
-IDS_FILE_WRITE_ERROR_s,		"`%s' æ≤±‚ ø°∑Ø."
-IDS_GRPFILE_READ_ERROR_s,	"\±◊∑Ï ∆ƒ¿œ `%s'¿ª ø≠ ºˆ æ¯Ω¿¥œ¥Ÿ.\n\¥ŸΩ√ Ω√µµ«œ∞⁄Ω¿¥œ±Ó?"
-IDS_OUT_OF_MEMORY,		"∏ﬁ∏∏Æ ∫Œ¡∑."
-IDS_WINHELP_ERROR,		"µµøÚ∏ª¿∫ ∞°¥…«œ¡ˆæ Ω¿¥œ¥Ÿ."
-IDS_UNKNOWN_FEATURE_s,		"%s¿« æÀºˆ æ¯¥¬ ∆Ø¬°"
-IDS_FILE_NOT_OVERWRITTEN_s,	"∆ƒ¿œ %s' ¥¬ ¡∏¿Á«œπ«∑Œ, µ§æÓ æµ ºˆ æ¯Ω¿¥œ¥Ÿ."
-IDS_SAVE_GROUP_AS_s,		"`%s∏¶ ¥Ÿ∏• ¿Ã∏ß¿∏∑Œ ¿˙¿Â«ÿæﬂ ø¯∑° ∆ƒ¿œ¿ª µ§æÓ æ≤¥¬ ∞… ∏∑¿ª ºˆ ¿÷Ω¿¥œ¥Ÿ."
-IDS_NO_HOT_KEY,			"æ¯¿Ω"
-IDS_ALL_FILES,			"∏µÁ ∆ƒ¿œ (*.*)"
-IDS_PROGRAMS,			"«Æ±◊∏≤"
-IDS_LIBRARIES_DLL,		"∂Û¿Ã∫Í∑Ø∏Æ ∆ƒ¿œ(*.dll)"
-IDS_SYMBOL_FILES,		"æ∆¿Ãƒ‹ ∆ƒ¿œ"
-IDS_SYMBOLS_ICO,		"æ∆¿Ãƒ‹ (*.ico)"
+LTEXT         "Ïã§ÌñâÏãú ÏµúÏÜåÌôî(&M)",   -1,   20, 45, 120, 10
+DEFPUSHBUTTON "ÌôïÏù∏",               IDOK,      135,  5,  60, 15, WS_TABSTOP
+PUSHBUTTON    "Ï∑®ÏÜå",           IDCANCEL,  135, 25,  60, 15, WS_TABSTOP
+PUSHBUTTON    "Ï∞æÍ∏∞(&B)...",          PM_BROWSE, 135, 45,  60, 15, WS_TABSTOP
+PUSHBUTTON    "ÎèÑÏõÄÎßê(&H)",             PM_HELP,   135, 65,  60, 15, WS_TABSTOP
 }

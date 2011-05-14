@@ -848,7 +848,7 @@ static int stabs_pts_read_type_def(struct ParseTypedefData* ptd, const char* typ
 	case '*':
         case '&':
 	    PTS_ABORTIF(ptd, stabs_pts_read_type_def(ptd, NULL, &ref_dt) == -1);
-	    new_dt = &symt_new_pointer(ptd->module, ref_dt)->symt;
+	    new_dt = &symt_new_pointer(ptd->module, ref_dt, sizeof(void*))->symt;
            break;
         case 'k': /* 'const' modifier */
         case 'B': /* 'volatile' modifier */
@@ -1381,17 +1381,21 @@ BOOL stabs_parse(struct module* module, unsigned long load_offset,
              * With a.out or mingw, they actually do make some amount of sense.
              */
             stab_strcpy(symname, sizeof(symname), ptr);
+            loc.kind = loc_absolute;
+            loc.reg = 0;
+            loc.offset = load_offset + stab_ptr->n_value;
             symt_new_global_variable(module, compiland, symname, TRUE /* FIXME */,
-                                     load_offset + stab_ptr->n_value, 0,
-                                     stabs_parse_type(ptr));
+                                     loc, 0, stabs_parse_type(ptr));
             break;
         case N_LCSYM:
         case N_STSYM:
             /* These are static symbols and BSS symbols. */
             stab_strcpy(symname, sizeof(symname), ptr);
+            loc.kind = loc_absolute;
+            loc.reg = 0;
+            loc.offset = load_offset + stab_ptr->n_value;
             symt_new_global_variable(module, compiland, symname, TRUE /* FIXME */,
-                                     load_offset + stab_ptr->n_value, 0,
-                                     stabs_parse_type(ptr));
+                                     loc, 0, stabs_parse_type(ptr));
             break;
         case N_LBRAC:
             if (curr_func)
@@ -1413,7 +1417,7 @@ BOOL stabs_parse(struct module* module, unsigned long load_offset,
                 struct symt*    param_type = stabs_parse_type(ptr);
                 stab_strcpy(symname, sizeof(symname), ptr);
                 loc.kind = loc_regrel;
-                loc.reg = 0; /* FIXME */
+                loc.reg = dbghelp_current_cpu->frame_regno;
                 loc.offset = stab_ptr->n_value;
                 symt_add_func_local(module, curr_func,
                                     (int)stab_ptr->n_value >= 0 ? DataIsParam : DataIsLocal,
@@ -1488,7 +1492,7 @@ BOOL stabs_parse(struct module* module, unsigned long load_offset,
         case N_LSYM:
             /* These are local variables */
             loc.kind = loc_regrel;
-            loc.reg = 0; /* FIXME */
+            loc.reg = dbghelp_current_cpu->frame_regno;
             loc.offset = stab_ptr->n_value;
             if (curr_func != NULL) pending_add_var(&pending_block, ptr, DataIsLocal, &loc);
             break;

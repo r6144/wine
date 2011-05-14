@@ -141,9 +141,15 @@ typedef UINT	 X_PHYSFONT;
 
 struct xrender_info;
 
+typedef struct gdi_physdev
+{
+    void *reserved[3];
+} *PHYSDEV;
+
   /* X physical device */
 typedef struct
 {
+    struct gdi_physdev dev;
     HDC           hdc;
     GC            gc;          /* X Window GC */
     Drawable      drawable;
@@ -185,10 +191,6 @@ extern GC get_bitmap_gc(int depth);
 
 /* Wine driver X11 functions */
 
-extern BOOL CDECL X11DRV_AlphaBlend( X11DRV_PDEVICE *physDevDst, INT xDst, INT yDst,
-                                     INT widthDst, INT heightDst,
-                                     X11DRV_PDEVICE *physDevSrc, INT xSrc, INT ySrc,
-                                     INT widthSrc, INT heightSrc, BLENDFUNCTION blendfn );
 extern BOOL CDECL X11DRV_EnumDeviceFonts( X11DRV_PDEVICE *physDev, LPLOGFONTW plf,
                                           FONTENUMPROCW dfeproc, LPARAM lp );
 extern LONG CDECL X11DRV_GetBitmapBits( HBITMAP hbitmap, void *bits, LONG count );
@@ -197,10 +199,6 @@ extern BOOL CDECL X11DRV_GetCharWidth( X11DRV_PDEVICE *physDev, UINT firstChar,
 extern BOOL CDECL X11DRV_GetTextExtentExPoint( X11DRV_PDEVICE *physDev, LPCWSTR str, INT count,
                                                INT maxExt, LPINT lpnFit, LPINT alpDx, LPSIZE size );
 extern BOOL CDECL X11DRV_GetTextMetrics(X11DRV_PDEVICE *physDev, TEXTMETRICW *metrics);
-extern BOOL CDECL X11DRV_StretchBlt( X11DRV_PDEVICE *physDevDst, INT xDst, INT yDst,
-                                     INT widthDst, INT heightDst,
-                                     X11DRV_PDEVICE *physDevSrc, INT xSrc, INT ySrc,
-                                     INT widthSrc, INT heightSrc, DWORD rop );
 extern BOOL CDECL X11DRV_LineTo( X11DRV_PDEVICE *physDev, INT x, INT y);
 extern BOOL CDECL X11DRV_Arc( X11DRV_PDEVICE *physDev, INT left, INT top, INT right,
                               INT bottom, INT xstart, INT ystart, INT xend, INT yend );
@@ -260,6 +258,7 @@ extern void X11DRV_OpenGL_Cleanup(void);
 extern void X11DRV_Xcursor_Init(void);
 extern void X11DRV_BITMAP_Init(void);
 extern void X11DRV_FONT_Init( int log_pixels_x, int log_pixels_y );
+extern void X11DRV_XInput2_Init(void);
 
 extern int bitmap_info_size( const BITMAPINFO * info, WORD coloruse );
 extern XImage *X11DRV_DIB_CreateXImage( int width, int height, int depth );
@@ -477,8 +476,6 @@ extern void X11DRV_DIB_DeleteDIBSection(X_PHYSBITMAP *physBitmap, DIBSECTION *di
 extern void X11DRV_DIB_CopyDIBSection(X11DRV_PDEVICE *physDevSrc, X11DRV_PDEVICE *physDevDst,
                                       DWORD xSrc, DWORD ySrc, DWORD xDest, DWORD yDest,
                                       DWORD width, DWORD height);
-struct _DCICMD;
-extern INT X11DRV_DCICommand(INT cbInput, const struct _DCICMD *lpCmd, LPVOID lpOutData);
 
 /**************************************************************************
  * X11 GDI driver
@@ -560,9 +557,14 @@ struct x11drv_thread_data
     HWND     last_focus;           /* last window that had focus */
     XIM      xim;                  /* input method */
     HWND     last_xic_hwnd;        /* last xic window */
+    Time     last_motion_notify;   /* time of last mouse motion */
     XFontSet font_set;             /* international text drawing font set */
     Window   selection_wnd;        /* window used for selection interactions */
+    Window   clip_window;          /* window used for cursor clipping */
+    HWND     clip_hwnd;            /* message window stored in desktop while clipping is active */
+    DWORD    clip_reset;           /* time when clipping was last reset */
     HKL      kbd_layout;           /* active keyboard layout */
+    enum { xi_unavailable = -1, xi_unknown, xi_disabled, xi_enabled } xi2_state; /* XInput2 state */
 };
 
 extern struct x11drv_thread_data *x11drv_init_thread_data(void);
@@ -596,18 +598,20 @@ static inline size_t get_property_size( int format, unsigned long count )
 
 extern Visual *visual;
 extern Window root_window;
+extern int clipping_cursor;
 extern unsigned int screen_width;
 extern unsigned int screen_height;
 extern unsigned int screen_bpp;
 extern unsigned int screen_depth;
 extern RECT virtual_screen_rect;
 extern unsigned int text_caps;
-extern int dxgrab;
 extern int use_xkb;
 extern int use_take_focus;
 extern int use_primary_selection;
 extern int use_system_cursors;
 extern int show_systray;
+extern int grab_pointer;
+extern int grab_fullscreen;
 extern int usexcomposite;
 extern int managed_mode;
 extern int decorated_mode;
@@ -617,9 +621,6 @@ extern int copy_default_colors;
 extern int alloc_system_colors;
 extern int xrender_error_base;
 extern HMODULE x11drv_module;
-
-extern BYTE key_state_table[256];
-extern POINT cursor_pos;
 
 /* atoms */
 
@@ -689,7 +690,27 @@ enum x11drv_atoms
     XATOM_XdndTarget,
     XATOM_XdndTypeList,
     XATOM_HTML_Format,
+    XATOM_WCF_BITMAP,
     XATOM_WCF_DIB,
+    XATOM_WCF_DIBV5,
+    XATOM_WCF_DIF,
+    XATOM_WCF_DSPBITMAP,
+    XATOM_WCF_DSPENHMETAFILE,
+    XATOM_WCF_DSPMETAFILEPICT,
+    XATOM_WCF_DSPTEXT,
+    XATOM_WCF_ENHMETAFILE,
+    XATOM_WCF_HDROP,
+    XATOM_WCF_LOCALE,
+    XATOM_WCF_METAFILEPICT,
+    XATOM_WCF_OEMTEXT,
+    XATOM_WCF_OWNERDISPLAY,
+    XATOM_WCF_PALETTE,
+    XATOM_WCF_PENDATA,
+    XATOM_WCF_RIFF,
+    XATOM_WCF_SYLK,
+    XATOM_WCF_TIFF,
+    XATOM_WCF_WAVE,
+    XATOM_image_bmp,
     XATOM_image_gif,
     XATOM_image_jpeg,
     XATOM_image_png,
@@ -710,7 +731,7 @@ extern Atom systray_atom;
 
 typedef void (*x11drv_event_handler)( HWND hwnd, XEvent *event );
 
-extern void X11DRV_register_event_handler( int type, x11drv_event_handler handler );
+extern void X11DRV_register_event_handler( int type, x11drv_event_handler handler, const char *name );
 
 extern void X11DRV_ButtonPress( HWND hwnd, XEvent *event );
 extern void X11DRV_ButtonRelease( HWND hwnd, XEvent *event );
@@ -722,6 +743,11 @@ extern void X11DRV_DestroyNotify( HWND hwnd, XEvent *event );
 extern void X11DRV_SelectionRequest( HWND hWnd, XEvent *event );
 extern void X11DRV_SelectionClear( HWND hWnd, XEvent *event );
 extern void X11DRV_MappingNotify( HWND hWnd, XEvent *event );
+extern void X11DRV_GenericEvent( HWND hwnd, XEvent *event );
+
+extern int xinput2_opcode;
+extern Bool (*pXGetEventData)( Display *display, XEvent /*XGenericEventCookie*/ *event );
+extern void (*pXFreeEventData)( Display *display, XEvent /*XGenericEventCookie*/ *event );
 
 extern DWORD EVENT_x11_time_to_win32_time(Time time);
 
@@ -732,7 +758,8 @@ enum x11drv_window_messages
     WM_X11DRV_SET_WIN_FORMAT,
     WM_X11DRV_SET_WIN_REGION,
     WM_X11DRV_RESIZE_DESKTOP,
-    WM_X11DRV_SET_CURSOR
+    WM_X11DRV_SET_CURSOR,
+    WM_X11DRV_CLIP_CURSOR
 };
 
 /* _NET_WM_STATE properties that we keep track of */
@@ -762,7 +789,6 @@ struct x11drv_win_data
     RECT        whole_rect;     /* X window rectangle for the whole window relative to parent */
     RECT        client_rect;    /* client area relative to parent */
     XIC         xic;            /* X input context */
-    HCURSOR     cursor;         /* current cursor */
     XWMHints   *wm_hints;       /* window manager hints */
     BOOL        managed : 1;    /* is window managed? */
     BOOL        mapped : 1;     /* is window mapped? (in either normal or iconic state) */
@@ -789,6 +815,7 @@ extern Drawable create_glxpixmap( Display *display, XVisualInfo *vis, Pixmap par
 extern void flush_gl_drawable( X11DRV_PDEVICE *physDev );
 
 extern void wait_for_withdrawn_state( Display *display, struct x11drv_win_data *data, BOOL set );
+extern Window init_clip_window(void);
 extern void update_user_time( Time time );
 extern void update_net_wm_states( Display *display, struct x11drv_win_data *data );
 extern void make_window_embedded( Display *display, struct x11drv_win_data *data );
@@ -804,6 +831,18 @@ static inline void mirror_rect( const RECT *window_rect, RECT *rect )
     rect->right = width - tmp;
 }
 
+static inline BOOL is_window_rect_mapped( const RECT *rect )
+{
+    return (rect->left < virtual_screen_rect.right && rect->top < virtual_screen_rect.bottom &&
+            rect->right > virtual_screen_rect.left && rect->bottom > virtual_screen_rect.top);
+}
+
+static inline BOOL is_window_rect_fullscreen( const RECT *rect )
+{
+    return (rect->left <= 0 && rect->right >= screen_width &&
+            rect->top <= 0 && rect->bottom >= screen_height);
+}
+
 /* X context to associate a hwnd to an X window */
 extern XContext winContext;
 
@@ -812,13 +851,13 @@ extern int CDECL X11DRV_AcquireClipboard(HWND hWndClipWindow);
 extern void X11DRV_Clipboard_Cleanup(void);
 extern void X11DRV_ResetSelectionOwner(void);
 extern void CDECL X11DRV_SetFocus( HWND hwnd );
-extern void set_window_cursor( HWND hwnd, HCURSOR handle );
-extern BOOL CDECL X11DRV_ClipCursor( LPCRECT clip );
+extern void set_window_cursor( Window window, HCURSOR handle );
+extern void sync_window_cursor( Window window );
+extern LRESULT clip_cursor_notify( HWND hwnd, HWND new_clip_hwnd );
+extern void ungrab_clipping_window(void);
+extern void reset_clipping_window(void);
+extern BOOL clip_fullscreen_window( HWND hwnd, BOOL reset );
 extern void X11DRV_InitKeyboard( Display *display );
-extern void X11DRV_send_keyboard_input( WORD wVk, WORD wScan, DWORD dwFlags, DWORD time,
-                                        DWORD dwExtraInfo, UINT injected_flags );
-extern void X11DRV_send_mouse_input( HWND top_hwnd, HWND cursor_hwnd, DWORD flags, DWORD x, DWORD y,
-                                     DWORD data, DWORD time, DWORD extra_info, UINT injected_flags );
 extern DWORD CDECL X11DRV_MsgWaitForMultipleObjectsEx( DWORD count, const HANDLE *handles, DWORD timeout,
                                                        DWORD mask, DWORD flags );
 
@@ -843,8 +882,6 @@ LPDDHALMODEINFO X11DRV_Settings_SetHandlers(const char *name,
                                             unsigned int nmodes,
                                             int reserve_depths);
 
-extern void X11DRV_DDHAL_SwitchMode(DWORD dwModeIndex, LPVOID fb_addr, LPVIDMEM fb_mem);
-
 /* XIM support */
 extern BOOL X11DRV_InitXIM( const char *input_style ) DECLSPEC_HIDDEN;
 extern XIC X11DRV_CreateIC(XIM xim, struct x11drv_win_data *data) DECLSPEC_HIDDEN;
@@ -852,9 +889,6 @@ extern void X11DRV_SetupXIM(void) DECLSPEC_HIDDEN;
 extern void X11DRV_XIMLookupChars( const char *str, DWORD count ) DECLSPEC_HIDDEN;
 extern void X11DRV_ForceXIMReset(HWND hwnd) DECLSPEC_HIDDEN;
 extern BOOL X11DRV_SetPreeditState(HWND hwnd, BOOL fOpen);
-
-/* FIXME: private functions imported from user32 */
-extern LRESULT HOOK_CallHooks( INT id, INT code, WPARAM wparam, LPARAM lparam, BOOL unicode );
 
 #define XEMBED_MAPPED  (1 << 0)
 

@@ -76,6 +76,8 @@ static BOOL find_mono_dll(LPCWSTR path, LPWSTR dll_path, int abi_version);
 
 static MonoAssembly* mono_assembly_search_hook_fn(MonoAssemblyName *aname, char **assemblies_path, void *user_data);
 
+static void mono_shutdown_callback_fn(MonoProfiler *prof);
+
 static void set_environment(LPCWSTR bin_path)
 {
     WCHAR path_env[MAX_PATH];
@@ -91,6 +93,20 @@ static void set_environment(LPCWSTR bin_path)
     SetEnvironmentVariableW(pathW, path_env);
 }
 
+static void CDECL do_nothing(void)
+{
+}
+
+static void missing_runtime_message(const CLRRuntimeInfo *This)
+{
+    if (This->major == 1)
+        MESSAGE("wine: Install Mono 2.6 for Windows to run .NET 1.1 applications.\n");
+    else if (This->major == 2)
+        MESSAGE("wine: Install Mono for Windows to run .NET 2.0 applications.\n");
+    else if (This->major == 4)
+        MESSAGE("wine: Install Mono 2.8 or greater for Windows to run .NET 4.0 applications.\n");
+}
+
 static HRESULT load_mono(CLRRuntimeInfo *This, loaded_mono **result)
 {
     static const WCHAR bin[] = {'\\','b','i','n',0};
@@ -103,13 +119,20 @@ static HRESULT load_mono(CLRRuntimeInfo *This, loaded_mono **result)
     int trace_size;
     char trace_setting[256];
 
-    if (This->mono_abi_version == -1)
-        MESSAGE("wine: Install the Windows version of Mono to run .NET executables\n");
-
     if (This->mono_abi_version <= 0 || This->mono_abi_version > NUM_ABI_VERSIONS)
+    {
+        missing_runtime_message(This);
         return E_FAIL;
+    }
 
     *result = &loaded_monos[This->mono_abi_version-1];
+
+    if ((*result)->is_shutdown)
+    {
+        ERR("Cannot load Mono after it has been shut down.\n");
+        *result = NULL;
+        return E_FAIL;
+    }
 
     if (!(*result)->mono_handle)
     {
@@ -146,16 +169,17 @@ static HRESULT load_mono(CLRRuntimeInfo *This, loaded_mono **result)
         LOAD_MONO_FUNCTION(mono_class_get_method_from_name);
         LOAD_MONO_FUNCTION(mono_domain_assembly_open);
         LOAD_MONO_FUNCTION(mono_install_assembly_preload_hook);
-        LOAD_MONO_FUNCTION(mono_jit_cleanup);
         LOAD_MONO_FUNCTION(mono_jit_exec);
         LOAD_MONO_FUNCTION(mono_jit_init);
         LOAD_MONO_FUNCTION(mono_jit_set_trace_options);
         LOAD_MONO_FUNCTION(mono_object_get_domain);
         LOAD_MONO_FUNCTION(mono_object_new);
         LOAD_MONO_FUNCTION(mono_object_unbox);
+        LOAD_MONO_FUNCTION(mono_profiler_install);
         LOAD_MONO_FUNCTION(mono_reflection_type_from_name);
         LOAD_MONO_FUNCTION(mono_runtime_invoke);
         LOAD_MONO_FUNCTION(mono_runtime_object_init);
+        LOAD_MONO_FUNCTION(mono_runtime_quit);
         LOAD_MONO_FUNCTION(mono_set_dirs);
         LOAD_MONO_FUNCTION(mono_stringify_assembly_name);
 
@@ -174,6 +198,22 @@ static HRESULT load_mono(CLRRuntimeInfo *This, loaded_mono **result)
         }
 
 #undef LOAD_MONO_FUNCTION
+
+#define LOAD_OPT_VOID_MONO_FUNCTION(x) do { \
+    (*result)->x = (void*)GetProcAddress((*result)->mono_handle, #x); \
+    if (!(*result)->x) { \
+        (*result)->x = do_nothing; \
+    } \
+} while (0);
+
+        LOAD_OPT_VOID_MONO_FUNCTION(mono_runtime_set_shutting_down);
+        LOAD_OPT_VOID_MONO_FUNCTION(mono_thread_pool_cleanup);
+        LOAD_OPT_VOID_MONO_FUNCTION(mono_thread_suspend_all_other_threads);
+        LOAD_OPT_VOID_MONO_FUNCTION(mono_threads_set_shutting_down);
+
+#undef LOAD_OPT_VOID_MONO_FUNCTION
+
+        (*result)->mono_profiler_install((MonoProfiler*)*result, mono_shutdown_callback_fn);
 
         (*result)->mono_set_dirs(mono_lib_path_a, mono_etc_path_a);
 
@@ -198,6 +238,13 @@ fail:
     (*result)->mono_handle = NULL;
     (*result)->glib_handle = NULL;
     return E_FAIL;
+}
+
+static void mono_shutdown_callback_fn(MonoProfiler *prof)
+{
+    loaded_mono *mono = (loaded_mono*)prof;
+
+    mono->is_shutdown = TRUE;
 }
 
 static HRESULT CLRRuntimeInfo_GetRuntimeHost(CLRRuntimeInfo *This, RuntimeHost **result)
@@ -230,9 +277,38 @@ void unload_all_runtimes(void)
 {
     int i;
 
+    for (i=0; i<NUM_ABI_VERSIONS; i++)
+    {
+        loaded_mono *mono = &loaded_monos[i];
+        if (mono->mono_handle && mono->is_started && !mono->is_shutdown)
+        {
+            /* Copied from Mono's ves_icall_System_Environment_Exit */
+	    mono->mono_threads_set_shutting_down();
+	    mono->mono_runtime_set_shutting_down();
+	    mono->mono_thread_pool_cleanup();
+	    mono->mono_thread_suspend_all_other_threads();
+	    mono->mono_runtime_quit();
+        }
+    }
+
     for (i=0; i<NUM_RUNTIMES; i++)
         if (runtimes[i].loaded_runtime)
             RuntimeHost_Destroy(runtimes[i].loaded_runtime);
+}
+
+void expect_no_runtimes(void)
+{
+    int i;
+
+    for (i=0; i<NUM_ABI_VERSIONS; i++)
+    {
+        loaded_mono *mono = &loaded_monos[i];
+        if (mono->mono_handle && mono->is_started && !mono->is_shutdown)
+        {
+            ERR("Process exited with a Mono runtime loaded.\n");
+            return;
+        }
+    }
 }
 
 static HRESULT WINAPI CLRRuntimeInfo_QueryInterface(ICLRRuntimeInfo* iface,
@@ -259,13 +335,11 @@ static HRESULT WINAPI CLRRuntimeInfo_QueryInterface(ICLRRuntimeInfo* iface,
 
 static ULONG WINAPI CLRRuntimeInfo_AddRef(ICLRRuntimeInfo* iface)
 {
-    MSCOREE_LockModule();
     return 2;
 }
 
 static ULONG WINAPI CLRRuntimeInfo_Release(ICLRRuntimeInfo* iface)
 {
-    MSCOREE_UnlockModule();
     return 1;
 }
 
@@ -688,15 +762,19 @@ end:
 
 struct InstalledRuntimeEnum
 {
-    const struct IEnumUnknownVtbl *Vtbl;
+    IEnumUnknown IEnumUnknown_iface;
     LONG ref;
     ULONG pos;
 };
 
 const struct IEnumUnknownVtbl InstalledRuntimeEnum_Vtbl;
 
-static HRESULT WINAPI InstalledRuntimeEnum_QueryInterface(IEnumUnknown* iface,
-        REFIID riid,
+static inline struct InstalledRuntimeEnum *impl_from_IEnumUnknown(IEnumUnknown *iface)
+{
+    return CONTAINING_RECORD(iface, struct InstalledRuntimeEnum, IEnumUnknown_iface);
+}
+
+static HRESULT WINAPI InstalledRuntimeEnum_QueryInterface(IEnumUnknown* iface, REFIID riid,
         void **ppvObject)
 {
     TRACE("%p %s %p\n", iface, debugstr_guid(riid), ppvObject);
@@ -719,10 +797,8 @@ static HRESULT WINAPI InstalledRuntimeEnum_QueryInterface(IEnumUnknown* iface,
 
 static ULONG WINAPI InstalledRuntimeEnum_AddRef(IEnumUnknown* iface)
 {
-    struct InstalledRuntimeEnum *This = (struct InstalledRuntimeEnum*)iface;
+    struct InstalledRuntimeEnum *This = impl_from_IEnumUnknown(iface);
     ULONG ref = InterlockedIncrement(&This->ref);
-
-    MSCOREE_LockModule();
 
     TRACE("(%p) refcount=%u\n", iface, ref);
 
@@ -731,10 +807,8 @@ static ULONG WINAPI InstalledRuntimeEnum_AddRef(IEnumUnknown* iface)
 
 static ULONG WINAPI InstalledRuntimeEnum_Release(IEnumUnknown* iface)
 {
-    struct InstalledRuntimeEnum *This = (struct InstalledRuntimeEnum*)iface;
+    struct InstalledRuntimeEnum *This = impl_from_IEnumUnknown(iface);
     ULONG ref = InterlockedDecrement(&This->ref);
-
-    MSCOREE_UnlockModule();
 
     TRACE("(%p) refcount=%u\n", iface, ref);
 
@@ -749,7 +823,7 @@ static ULONG WINAPI InstalledRuntimeEnum_Release(IEnumUnknown* iface)
 static HRESULT WINAPI InstalledRuntimeEnum_Next(IEnumUnknown *iface, ULONG celt,
     IUnknown **rgelt, ULONG *pceltFetched)
 {
-    struct InstalledRuntimeEnum *This = (struct InstalledRuntimeEnum*)iface;
+    struct InstalledRuntimeEnum *This = impl_from_IEnumUnknown(iface);
     int num_fetched = 0;
     HRESULT hr=S_OK;
     IUnknown *item;
@@ -781,7 +855,7 @@ static HRESULT WINAPI InstalledRuntimeEnum_Next(IEnumUnknown *iface, ULONG celt,
 
 static HRESULT WINAPI InstalledRuntimeEnum_Skip(IEnumUnknown *iface, ULONG celt)
 {
-    struct InstalledRuntimeEnum *This = (struct InstalledRuntimeEnum*)iface;
+    struct InstalledRuntimeEnum *This = impl_from_IEnumUnknown(iface);
     int num_fetched = 0;
     HRESULT hr=S_OK;
 
@@ -806,7 +880,7 @@ static HRESULT WINAPI InstalledRuntimeEnum_Skip(IEnumUnknown *iface, ULONG celt)
 
 static HRESULT WINAPI InstalledRuntimeEnum_Reset(IEnumUnknown *iface)
 {
-    struct InstalledRuntimeEnum *This = (struct InstalledRuntimeEnum*)iface;
+    struct InstalledRuntimeEnum *This = impl_from_IEnumUnknown(iface);
 
     TRACE("(%p)\n", iface);
 
@@ -817,7 +891,7 @@ static HRESULT WINAPI InstalledRuntimeEnum_Reset(IEnumUnknown *iface)
 
 static HRESULT WINAPI InstalledRuntimeEnum_Clone(IEnumUnknown *iface, IEnumUnknown **ppenum)
 {
-    struct InstalledRuntimeEnum *This = (struct InstalledRuntimeEnum*)iface;
+    struct InstalledRuntimeEnum *This = impl_from_IEnumUnknown(iface);
     struct InstalledRuntimeEnum *new_enum;
 
     TRACE("(%p)\n", iface);
@@ -826,11 +900,11 @@ static HRESULT WINAPI InstalledRuntimeEnum_Clone(IEnumUnknown *iface, IEnumUnkno
     if (!new_enum)
         return E_OUTOFMEMORY;
 
-    new_enum->Vtbl = &InstalledRuntimeEnum_Vtbl;
+    new_enum->IEnumUnknown_iface.lpVtbl = &InstalledRuntimeEnum_Vtbl;
     new_enum->ref = 1;
     new_enum->pos = This->pos;
 
-    *ppenum = (IEnumUnknown*)new_enum;
+    *ppenum = &new_enum->IEnumUnknown_iface;
 
     return S_OK;
 }
@@ -847,10 +921,10 @@ const struct IEnumUnknownVtbl InstalledRuntimeEnum_Vtbl = {
 
 struct CLRMetaHost
 {
-    const struct ICLRMetaHostVtbl *CLRMetaHost_vtbl;
+    ICLRMetaHost ICLRMetaHost_iface;
 };
 
-static const struct CLRMetaHost GlobalCLRMetaHost;
+static struct CLRMetaHost GlobalCLRMetaHost;
 
 static HRESULT WINAPI CLRMetaHost_QueryInterface(ICLRMetaHost* iface,
         REFIID riid,
@@ -876,13 +950,11 @@ static HRESULT WINAPI CLRMetaHost_QueryInterface(ICLRMetaHost* iface,
 
 static ULONG WINAPI CLRMetaHost_AddRef(ICLRMetaHost* iface)
 {
-    MSCOREE_LockModule();
     return 2;
 }
 
 static ULONG WINAPI CLRMetaHost_Release(ICLRMetaHost* iface)
 {
-    MSCOREE_UnlockModule();
     return 1;
 }
 
@@ -953,7 +1025,7 @@ static HRESULT WINAPI CLRMetaHost_GetRuntime(ICLRMetaHost* iface,
                 return IUnknown_QueryInterface((IUnknown*)&runtimes[i], iid, ppRuntime);
             else
             {
-                ERR("Mono is missing %s runtime\n", debugstr_w(pwzVersion));
+                missing_runtime_message(&runtimes[i]);
                 return CLR_E_SHIM_RUNTIME;
             }
         }
@@ -963,7 +1035,7 @@ static HRESULT WINAPI CLRMetaHost_GetRuntime(ICLRMetaHost* iface,
     return CLR_E_SHIM_RUNTIME;
 }
 
-static HRESULT WINAPI CLRMetaHost_GetVersionFromFile(ICLRMetaHost* iface,
+HRESULT WINAPI CLRMetaHost_GetVersionFromFile(ICLRMetaHost* iface,
     LPCWSTR pwzFilePath, LPWSTR pwzBuffer, DWORD *pcchBuffer)
 {
     ASSEMBLY *assembly;
@@ -1011,11 +1083,11 @@ static HRESULT WINAPI CLRMetaHost_EnumerateInstalledRuntimes(ICLRMetaHost* iface
     if (!new_enum)
         return E_OUTOFMEMORY;
 
-    new_enum->Vtbl = &InstalledRuntimeEnum_Vtbl;
+    new_enum->IEnumUnknown_iface.lpVtbl = &InstalledRuntimeEnum_Vtbl;
     new_enum->ref = 1;
     new_enum->pos = 0;
 
-    *ppEnumerator = (IEnumUnknown*)new_enum;
+    *ppEnumerator = &new_enum->IEnumUnknown_iface;
 
     return S_OK;
 }
@@ -1065,13 +1137,13 @@ static const struct ICLRMetaHostVtbl CLRMetaHost_vtbl =
     CLRMetaHost_ExitProcess
 };
 
-static const struct CLRMetaHost GlobalCLRMetaHost = {
-    &CLRMetaHost_vtbl
+static struct CLRMetaHost GlobalCLRMetaHost = {
+    { &CLRMetaHost_vtbl }
 };
 
 extern HRESULT CLRMetaHost_CreateInstance(REFIID riid, void **ppobj)
 {
-    return ICLRMetaHost_QueryInterface((ICLRMetaHost*)&GlobalCLRMetaHost, riid, ppobj);
+    return ICLRMetaHost_QueryInterface(&GlobalCLRMetaHost.ICLRMetaHost_iface, riid, ppobj);
 }
 
 static MonoAssembly* mono_assembly_search_hook_fn(MonoAssemblyName *aname, char **assemblies_path, void *user_data)
@@ -1247,15 +1319,13 @@ HRESULT get_runtime_info(LPCWSTR exefile, LPCWSTR version, LPCWSTR config_file,
                     &IID_ICLRRuntimeInfo, (void**)result);
         }
 
-        ERR("No %s.NET runtime installed\n", legacy ? "legacy " : "");
+        if (legacy)
+            missing_runtime_message(&runtimes[1]);
+        else
+            missing_runtime_message(&runtimes[NUM_RUNTIMES-1]);
 
         return CLR_E_SHIM_RUNTIME;
     }
 
     return CLR_E_SHIM_RUNTIME;
-}
-
-HRESULT force_get_runtime_info(ICLRRuntimeInfo **result)
-{
-    return IUnknown_QueryInterface((IUnknown*)&runtimes[0], &IID_ICLRRuntimeInfo, (void**)result);
 }

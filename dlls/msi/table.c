@@ -82,11 +82,6 @@ struct tagMSITABLE
     WCHAR name[1];
 };
 
-static const WCHAR szStringData[] = {
-    '_','S','t','r','i','n','g','D','a','t','a',0 };
-static const WCHAR szStringPool[] = {
-    '_','S','t','r','i','n','g','P','o','o','l',0 };
-
 /* information for default tables */
 static WCHAR szTables[]  = { '_','T','a','b','l','e','s',0 };
 static WCHAR szTable[]  = { 'T','a','b','l','e',0 };
@@ -156,7 +151,7 @@ LPWSTR encode_streamname(BOOL bTable, LPCWSTR in)
 
     if( !bTable )
         count = lstrlenW( in )+2;
-    out = msi_alloc( count*sizeof(WCHAR) );
+    if (!(out = msi_alloc( count*sizeof(WCHAR) ))) return NULL;
     p = out;
 
     if( bTable )
@@ -766,7 +761,8 @@ static UINT read_table_int(BYTE *const *data, UINT row, UINT col, UINT bytes)
 static UINT save_table( MSIDATABASE *db, const MSITABLE *t, UINT bytes_per_strref )
 {
     BYTE *rawdata = NULL;
-    UINT rawsize, r, i, j, row_size, row_count;
+    UINT rawsize, i, j, row_size, row_count;
+    UINT r = ERROR_FUNCTION_FAILED;
 
     /* Nothing to do for non-persistent tables */
     if( t->persistent == MSICONDITION_FALSE )
@@ -816,7 +812,6 @@ static UINT save_table( MSIDATABASE *db, const MSITABLE *t, UINT bytes_per_strre
                 if (id > 1 << bytes_per_strref * 8)
                 {
                     ERR("string id %u out of range\n", id);
-                    r = ERROR_FUNCTION_FAILED;
                     goto err;
                 }
             }
@@ -1143,6 +1138,8 @@ static UINT msi_stream_name( const MSITABLEVIEW *tv, UINT row, LPWSTR *pstname )
         type = tv->columns[i].type;
         if ( type & MSITYPE_KEY )
         {
+            WCHAR number[0x20];
+
             r = TABLE_fetch_int( view, row, i+1, &ival );
             if ( r != ERROR_SUCCESS )
                 goto err;
@@ -1159,7 +1156,6 @@ static UINT msi_stream_name( const MSITABLEVIEW *tv, UINT row, LPWSTR *pstname )
             else
             {
                 static const WCHAR fmt[] = { '%','d',0 };
-                WCHAR number[0x20];
                 UINT n = bytes_per_column( tv->db, &tv->columns[i], LONG_STR_BYTES );
 
                 switch( n )
@@ -1225,7 +1221,7 @@ static UINT TABLE_fetch_stream( struct tagMSIVIEW *view, UINT row, UINT col, ISt
     }
 
     encname = encode_streamname( FALSE, full_name );
-    r = db_get_raw_stream( tv->db, encname, stm );
+    r = msi_get_raw_stream( tv->db, encname, stm );
     if( r )
         ERR("fetching stream %s, error = %d\n",debugstr_w(full_name), r);
 
@@ -1629,6 +1625,8 @@ static int compare_record( MSITABLEVIEW *tv, UINT row, MSIRECORD *rec )
 
     for (i = 0; i < tv->num_cols; i++ )
     {
+        if (!(tv->columns[i].type & MSITYPE_KEY)) continue;
+
         r = get_table_value_from_record( tv, rec, i + 1, &ivalue );
         if (r != ERROR_SUCCESS)
             return 1;
@@ -1772,6 +1770,9 @@ static UINT msi_table_update(struct tagMSIVIEW *view, MSIRECORD *rec, UINT row)
     /* the row cannot be changed */
     if (row != new_row + 1)
         return ERROR_FUNCTION_FAILED;
+
+    if(tv->order)
+        new_row = tv->order->reorder[new_row];
 
     return TABLE_set_row(view, new_row, rec, (1 << tv->num_cols) - 1);
 }
@@ -2589,7 +2590,7 @@ static void dump_record( MSIRECORD *rec )
     n = MSI_RecordGetFieldCount( rec );
     for( i=1; i<=n; i++ )
     {
-        LPCWSTR sval = MSI_RecordGetString( rec, i );
+        LPCWSTR sval;
 
         if( MSI_RecordIsNull( rec, i ) )
             TRACE("row -> []\n");

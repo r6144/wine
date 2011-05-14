@@ -1544,6 +1544,46 @@ unsigned char* CDECL _mbslwr(unsigned char* s)
 
 
 /*********************************************************************
+ *              _mbslwr_s(MSVCRT.@)
+ */
+int CDECL _mbslwr_s(unsigned char* s, MSVCRT_size_t len)
+{
+  if (!s && !len)
+  {
+    return 0;
+  }
+  else if (!s || !len)
+  {
+    *MSVCRT__errno() = MSVCRT_EINVAL;
+    return MSVCRT_EINVAL;
+  }
+  if (get_locale()->locinfo->mb_cur_max > 1)
+  {
+    unsigned int c;
+    for ( ; *s && len > 0; len--)
+    {
+      c = _mbctolower(_mbsnextc(s));
+      /* Note that I assume that the size of the character is unchanged */
+      if (c > 255)
+      {
+          *s++=(c>>8);
+          c=c & 0xff;
+      }
+      *s++=c;
+    }
+  }
+  else for ( ; *s && len > 0; s++, len--) *s = tolower(*s);
+  if (*s)
+  {
+    *s = '\0';
+    *MSVCRT__errno() = MSVCRT_EINVAL;
+    return MSVCRT_EINVAL;
+  }
+  return 0;
+}
+
+
+/*********************************************************************
  *              _mbsupr(MSVCRT.@)
  */
 unsigned char* CDECL _mbsupr(unsigned char* s)
@@ -1568,6 +1608,46 @@ unsigned char* CDECL _mbsupr(unsigned char* s)
   }
   else for ( ; *s; s++) *s = toupper(*s);
   return ret;
+}
+
+
+/*********************************************************************
+ *              _mbsupr_s(MSVCRT.@)
+ */
+int CDECL _mbsupr_s(unsigned char* s, MSVCRT_size_t len)
+{
+  if (!s && !len)
+  {
+    return 0;
+  }
+  else if (!s || !len)
+  {
+    *MSVCRT__errno() = MSVCRT_EINVAL;
+    return MSVCRT_EINVAL;
+  }
+  if (get_locale()->locinfo->mb_cur_max > 1)
+  {
+    unsigned int c;
+    for ( ; *s && len > 0; len--)
+    {
+      c = _mbctoupper(_mbsnextc(s));
+      /* Note that I assume that the size of the character is unchanged */
+      if (c > 255)
+      {
+          *s++=(c>>8);
+          c=c & 0xff;
+      }
+      *s++=c;
+    }
+  }
+  else for ( ; *s && len > 0; s++, len--) *s = toupper(*s);
+  if (*s)
+  {
+    *s = '\0';
+    *MSVCRT__errno() = MSVCRT_EINVAL;
+    return MSVCRT_EINVAL;
+  }
+  return 0;
 }
 
 
@@ -1820,7 +1900,7 @@ int CDECL MSVCRT__mbstowcs_s_l(MSVCRT_size_t *ret, MSVCRT_wchar_t *wcstr,
     if(!wcstr && !size) {
         conv = MSVCRT__mbstowcs_l(NULL, mbstr, 0, locale);
         if(ret)
-            *ret = conv;
+            *ret = conv+1;
         return 0;
     }
 

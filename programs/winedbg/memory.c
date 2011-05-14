@@ -29,6 +29,7 @@
 
 #include "debugger.h"
 #include "wine/debug.h"
+#include "wine/unicode.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(winedbg);
 
@@ -64,13 +65,6 @@ BOOL memory_get_current_stack(ADDRESS64* addr)
     assert(be_cpu->get_addr);
     return be_cpu->get_addr(dbg_curr_thread->handle, &dbg_context, 
                             be_cpu_addr_stack, addr);
-}
-
-BOOL memory_get_current_frame(ADDRESS64* addr)
-{
-    assert(be_cpu->get_addr);
-    return be_cpu->get_addr(dbg_curr_thread->handle, &dbg_context, 
-                            be_cpu_addr_frame, addr);
 }
 
 static void	memory_report_invalid_addr(const void* addr)
@@ -342,18 +336,14 @@ static void dbg_print_longlong(LONGLONG sv, BOOL is_signed)
     dbg_printf("%s", ptr);
 }
 
-static void dbg_print_hex(ULONGLONG sv)
+static void dbg_print_hex(DWORD size, ULONGLONG sv)
 {
     if (!sv)
-    {
         dbg_printf("0");
-        return;
-    }
-
-    if (sv >> 32)
-        dbg_printf("0x%lx%08lx", (unsigned long)(sv >> 32), (unsigned long)sv);
+    else if (size > 4 && (sv >> 32))
+        dbg_printf("0x%x%08x", (DWORD)(sv >> 32), (DWORD)sv);
     else
-        dbg_printf("0x%04lx", (unsigned long)sv);
+        dbg_printf("0x%x", (DWORD)sv);
 }
 
 static void print_typed_basic(const struct dbg_lvalue* lvalue)
@@ -385,30 +375,35 @@ static void print_typed_basic(const struct dbg_lvalue* lvalue)
         case btLong:
             if (!be_cpu->fetch_integer(lvalue, size, TRUE, &val_int)) return;
             if (size == 1) goto print_char;
-            dbg_print_hex(val_int);
+            dbg_print_hex(size, val_int);
             break;
         case btUInt:
         case btULong:
             if (!be_cpu->fetch_integer(lvalue, size, FALSE, &val_int)) return;
-            dbg_print_hex(val_int);
+            dbg_print_hex(size, val_int);
             break;
         case btFloat:
             if (!be_cpu->fetch_float(lvalue, size, &val_real)) return;
             dbg_printf("%Lf", val_real);
             break;
         case btChar:
+        case btWChar:
+            /* sometimes WCHAR is defined as btChar with size = 2, so discrimate
+             * Ansi/Unicode based on size, not on basetype
+             */
             if (!be_cpu->fetch_integer(lvalue, size, TRUE, &val_int)) return;
-            /* FIXME: should do the same for a Unicode character (size == 2) */
         print_char:
-            if (size == 1 && (val_int < 0x20 || val_int > 0x80))
-                dbg_printf("%d", (int)val_int);
-            else if (size == 2)
+            if (size == 1 && isprint((char)val_int))
+                dbg_printf("'%c'", (char)val_int);
+            else if (size == 2 && isprintW((WCHAR)val_int))
             {
                 WCHAR   wch = (WCHAR)val_int;
+                dbg_printf("'");
                 dbg_outputW(&wch, 1);
+                dbg_printf("'");
             }
             else
-                dbg_printf("'%c'", (char)val_int);
+                dbg_printf("%d", (int)val_int);
             break;
         case btBool:
             if (!be_cpu->fetch_integer(lvalue, size, TRUE, &val_int)) return;
@@ -530,23 +525,16 @@ void print_basic(const struct dbg_lvalue* lvalue, char format)
     {
         unsigned size;
         LONGLONG res = types_extract_as_longlong(lvalue, &size);
-        DWORD hi;
         WCHAR wch;
 
-        /* FIXME: this implies i386 byte ordering */
         switch (format)
         {
         case 'x':
-            hi = (ULONG64)res >> 32;
-            if (size == 8 && hi)
-                dbg_printf("0x%x%08x", hi, (DWORD)res);
-            else
-                dbg_printf("0x%x", (DWORD)res);
+            dbg_print_hex(size, (ULONGLONG)res);
             return;
 
         case 'd':
             dbg_print_longlong(res, TRUE);
-            dbg_printf("\n");
             return;
 
         case 'c':
@@ -570,7 +558,6 @@ void print_basic(const struct dbg_lvalue* lvalue, char format)
     if (lvalue->type.id == dbg_itype_segptr)
     {
         dbg_print_longlong(types_extract_as_longlong(lvalue, NULL), TRUE);
-        dbg_printf("\n");
     }
     else print_typed_basic(lvalue);
 }

@@ -53,7 +53,8 @@ static ULONG STDMETHODCALLTYPE d3d10_buffer_AddRef(ID3D10Buffer *iface)
 
     TRACE("%p increasing refcount to %u\n", This, refcount);
 
-    if (refcount == 1) IWineD3DBuffer_AddRef(This->wined3d_buffer);
+    if (refcount == 1)
+        wined3d_buffer_incref(This->wined3d_buffer);
 
     return refcount;
 }
@@ -67,7 +68,7 @@ static ULONG STDMETHODCALLTYPE d3d10_buffer_Release(ID3D10Buffer *iface)
 
     if (!refcount)
     {
-        IWineD3DBuffer_Release(This->wined3d_buffer);
+        wined3d_buffer_decref(This->wined3d_buffer);
     }
 
     return refcount;
@@ -140,14 +141,14 @@ static HRESULT STDMETHODCALLTYPE d3d10_buffer_Map(ID3D10Buffer *iface, D3D10_MAP
     if (map_flags)
         FIXME("Ignoring map_flags %#x.\n", map_flags);
 
-    return IWineD3DBuffer_Map(buffer->wined3d_buffer, 0, 0, (BYTE **)data, 0);
+    return wined3d_buffer_map(buffer->wined3d_buffer, 0, 0, (BYTE **)data, 0);
 }
 
 static void STDMETHODCALLTYPE d3d10_buffer_Unmap(ID3D10Buffer *iface)
 {
     TRACE("iface %p.\n", iface);
 
-    IWineD3DBuffer_Unmap(((struct d3d10_buffer *)iface)->wined3d_buffer);
+    wined3d_buffer_unmap(((struct d3d10_buffer *)iface)->wined3d_buffer);
 }
 
 static void STDMETHODCALLTYPE d3d10_buffer_GetDesc(ID3D10Buffer *iface, D3D10_BUFFER_DESC *desc)
@@ -203,8 +204,8 @@ HRESULT d3d10_buffer_init(struct d3d10_buffer *buffer, struct d3d10_device *devi
     wined3d_desc.cpu_access_flags = desc->CPUAccessFlags;
     wined3d_desc.misc_flags = desc->MiscFlags;
 
-    hr = IWineD3DDevice_CreateBuffer(device->wined3d_device, &wined3d_desc,
-            data ? data->pSysMem : NULL, (IUnknown *)buffer, &d3d10_buffer_wined3d_parent_ops,
+    hr = wined3d_buffer_create(device->wined3d_device, &wined3d_desc,
+            data ? data->pSysMem : NULL, buffer, &d3d10_buffer_wined3d_parent_ops,
             &buffer->wined3d_buffer);
     if (FAILED(hr))
     {

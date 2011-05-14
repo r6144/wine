@@ -74,7 +74,7 @@ static ULONG STDMETHODCALLTYPE dxgi_factory_Release(IWineDXGIFactory *iface)
         HeapFree(GetProcessHeap(), 0, This->adapters);
 
         EnterCriticalSection(&dxgi_cs);
-        IWineD3D_Release(This->wined3d);
+        wined3d_decref(This->wined3d);
         LeaveCriticalSection(&dxgi_cs);
         HeapFree(GetProcessHeap(), 0, This);
     }
@@ -162,7 +162,7 @@ static HRESULT STDMETHODCALLTYPE dxgi_factory_CreateSwapChain(IWineDXGIFactory *
         IUnknown *device, DXGI_SWAP_CHAIN_DESC *desc, IDXGISwapChain **swapchain)
 {
     WINED3DPRESENT_PARAMETERS present_parameters;
-    IWineD3DSwapChain *wined3d_swapchain;
+    struct wined3d_swapchain *wined3d_swapchain;
     IWineD3DDevice *wined3d_device;
     IWineDXGIDevice *dxgi_device;
     UINT count;
@@ -235,8 +235,8 @@ static HRESULT STDMETHODCALLTYPE dxgi_factory_CreateSwapChain(IWineDXGIFactory *
         return hr;
     }
 
-    *swapchain = IWineD3DSwapChain_GetParent(wined3d_swapchain);
-    IUnknown_Release(wined3d_swapchain);
+    *swapchain = wined3d_swapchain_get_parent(wined3d_swapchain);
+    wined3d_swapchain_decref(wined3d_swapchain);
 
     /* FIXME? The swapchain is created with refcount 1 by the wined3d device,
      * but the wined3d device can't hold a real reference. */
@@ -256,14 +256,14 @@ static HRESULT STDMETHODCALLTYPE dxgi_factory_CreateSoftwareAdapter(IWineDXGIFac
 
 /* IWineDXGIFactory methods */
 
-static IWineD3D * STDMETHODCALLTYPE dxgi_factory_get_wined3d(IWineDXGIFactory *iface)
+static struct wined3d * STDMETHODCALLTYPE dxgi_factory_get_wined3d(IWineDXGIFactory *iface)
 {
     struct dxgi_factory *This = (struct dxgi_factory *)iface;
 
     TRACE("iface %p\n", iface);
 
     EnterCriticalSection(&dxgi_cs);
-    IWineD3D_AddRef(This->wined3d);
+    wined3d_incref(This->wined3d);
     LeaveCriticalSection(&dxgi_cs);
     return This->wined3d;
 }
@@ -298,14 +298,14 @@ HRESULT dxgi_factory_init(struct dxgi_factory *factory)
     factory->refcount = 1;
 
     EnterCriticalSection(&dxgi_cs);
-    factory->wined3d = WineDirect3DCreate(10, (IUnknown *)factory);
+    factory->wined3d = wined3d_create(10, factory);
     if (!factory->wined3d)
     {
         LeaveCriticalSection(&dxgi_cs);
         return DXGI_ERROR_UNSUPPORTED;
     }
 
-    factory->adapter_count = IWineD3D_GetAdapterCount(factory->wined3d);
+    factory->adapter_count = wined3d_get_adapter_count(factory->wined3d);
     LeaveCriticalSection(&dxgi_cs);
     factory->adapters = HeapAlloc(GetProcessHeap(), 0, factory->adapter_count * sizeof(*factory->adapters));
     if (!factory->adapters)
@@ -355,7 +355,7 @@ HRESULT dxgi_factory_init(struct dxgi_factory *factory)
 fail:
     HeapFree(GetProcessHeap(), 0, factory->adapters);
     EnterCriticalSection(&dxgi_cs);
-    IWineD3D_Release(factory->wined3d);
+    wined3d_decref(factory->wined3d);
     LeaveCriticalSection(&dxgi_cs);
     return hr;
 }

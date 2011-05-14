@@ -24,6 +24,11 @@
 #include "config.h"
 
 #include <stdarg.h>
+#ifdef HAVE_LIBXML2
+# include <libxml/parser.h>
+# include <libxml/xmlerror.h>
+#endif
+
 #include "windef.h"
 #include "winbase.h"
 #include "winerror.h"
@@ -39,7 +44,7 @@ WINE_DEFAULT_DEBUG_CHANNEL(msxml);
 
 typedef struct
 {
-    const struct IXMLDOMParseErrorVtbl *lpVtbl;
+    IXMLDOMParseError IXMLDOMParseError_iface;
     LONG ref;
     LONG code, line, linepos, filepos;
     BSTR url, reason, srcText;
@@ -47,7 +52,7 @@ typedef struct
 
 static inline parse_error_t *impl_from_IXMLDOMParseError( IXMLDOMParseError *iface )
 {
-    return (parse_error_t *)((char*)iface - FIELD_OFFSET(parse_error_t, lpVtbl));
+    return CONTAINING_RECORD(iface, parse_error_t, IXMLDOMParseError_iface);
 }
 
 static HRESULT WINAPI parseError_QueryInterface(
@@ -66,6 +71,7 @@ static HRESULT WINAPI parseError_QueryInterface(
     else
     {
         FIXME("interface %s not implemented\n", debugstr_guid(riid));
+        *ppvObject = NULL;
         return E_NOINTERFACE;
     }
 
@@ -180,8 +186,8 @@ static HRESULT WINAPI parseError_Invoke(
     hr = get_typeinfo(IXMLDOMParseError_tid, &typeinfo);
     if(SUCCEEDED(hr))
     {
-        hr = ITypeInfo_Invoke(typeinfo, &(This->lpVtbl), dispIdMember, wFlags, pDispParams,
-                pVarResult, pExcepInfo, puArgErr);
+        hr = ITypeInfo_Invoke(typeinfo, &This->IXMLDOMParseError_iface, dispIdMember, wFlags,
+                pDispParams, pVarResult, pExcepInfo, puArgErr);
         ITypeInfo_Release(typeinfo);
     }
 
@@ -291,7 +297,7 @@ IXMLDOMParseError *create_parseError( LONG code, BSTR url, BSTR reason, BSTR src
     if ( !This )
         return NULL;
 
-    This->lpVtbl = &parseError_vtbl;
+    This->IXMLDOMParseError_iface.lpVtbl = &parseError_vtbl;
     This->ref = 1;
 
     This->code = code;
@@ -302,5 +308,5 @@ IXMLDOMParseError *create_parseError( LONG code, BSTR url, BSTR reason, BSTR src
     This->linepos = linepos;
     This->filepos = filepos;
 
-    return (IXMLDOMParseError*) &This->lpVtbl;
+    return &This->IXMLDOMParseError_iface;
 }

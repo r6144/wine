@@ -39,8 +39,8 @@ FONT 8, "MS Shell Dlg"
  LTEXT "Domaine", -1, 10, 50, 50, 10
  LTEXT "Utilisateur", -1, 10, 71, 50, 10
  LTEXT "Mot de passe", -1, 10, 90, 50, 10
- LTEXT "" IDC_PROXY, 58, 28, 150, 14, 0
- LTEXT "" IDC_REALM, 58, 48, 150, 14, 0
+ LTEXT "", IDC_PROXY, 58, 28, 150, 14, 0
+ LTEXT "", IDC_REALM, 58, 48, 150, 14, 0
  EDITTEXT IDC_USERNAME, 58, 68, 150, 14, ES_AUTOHSCROLL | WS_BORDER | WS_TABSTOP
  EDITTEXT IDC_PASSWORD, 58, 88, 150, 14, ES_AUTOHSCROLL | WS_BORDER | WS_TABSTOP | ES_PASSWORD
  CHECKBOX "&Enregistrer ce mot de passe (risqué)", IDC_SAVEPASSWORD,
@@ -59,8 +59,8 @@ FONT 8, "MS Shell Dlg"
  LTEXT "Domaine", -1, 10, 50, 50, 10
  LTEXT "Utilisateur", -1, 10, 71, 50, 10
  LTEXT "Mot de passe", -1, 10, 90, 50, 10
- LTEXT "" IDC_SERVER, 58, 28, 150, 14, 0
- LTEXT "" IDC_REALM, 58, 48, 150, 14, 0
+ LTEXT "", IDC_SERVER, 58, 28, 150, 14, 0
+ LTEXT "", IDC_REALM, 58, 48, 150, 14, 0
  EDITTEXT IDC_USERNAME, 58, 68, 150, 14, ES_AUTOHSCROLL | WS_BORDER | WS_TABSTOP
  EDITTEXT IDC_PASSWORD, 58, 88, 150, 14, ES_AUTOHSCROLL | WS_BORDER | WS_TABSTOP | ES_PASSWORD
  CHECKBOX "&Enregistrer ce mot de passe (risqué)", IDC_SAVEPASSWORD,
@@ -79,13 +79,4 @@ FONT 8, "MS Shell Dlg"
  LTEXT "Voulez-vous tout de même continuer ?", -1, 40, 46, 200, 20
  PUSHBUTTON "Oui", IDOK, 40, 66, 56, 14, WS_GROUP | WS_TABSTOP | BS_DEFPUSHBUTTON
  PUSHBUTTON "Non", IDCANCEL, 100, 66, 56, 14, WS_GROUP | WS_TABSTOP
-}
-
-STRINGTABLE
-{
-  IDS_LANCONNECTION "Connexion réseau local (LAN)"
-  IDS_CERT_CA_INVALID   "Le certificat est délivré par un éditeur inconnu ou non fiable."
-  IDS_CERT_DATE_INVALID "La date sur le certificat est invalide."
-  IDS_CERT_CN_INVALID   "Le nom sur le certificat ne correspond pas au nom du site."
-  IDS_CERT_ERRORS       "Ce certificat comporte au moins un problème de sécurité indéterminé."
 }

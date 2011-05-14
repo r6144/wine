@@ -138,7 +138,6 @@ void *xmalloc(size_t size)
     void *res;
 
     assert(size > 0);
-    assert(size < 102400);
     res = malloc(size);
     if(res == NULL)
     {
@@ -154,7 +153,6 @@ void *xrealloc(void *p, size_t size)
     void *res;
 
     assert(size > 0);
-    assert(size < 102400);
     res = realloc(p, size);
     if(res == NULL)
     {
@@ -170,6 +168,25 @@ char *xstrdup(const char *str)
 	assert(str != NULL);
 	s = xmalloc(strlen(str)+1);
 	return strcpy(s, str);
+}
+
+char *strmake( const char* fmt, ... )
+{
+    int n;
+    size_t size = 100;
+    va_list ap;
+
+    for (;;)
+    {
+        char *p = xmalloc( size );
+        va_start( ap, fmt );
+        n = vsnprintf( p, size, fmt, ap );
+        va_end( ap );
+        if (n == -1) size *= 2;
+        else if ((size_t)n >= size) size = n + 1;
+        else return p;
+        free( p );
+    }
 }
 
 int unistrlen(const WCHAR *s)
@@ -242,4 +259,77 @@ int unistrcmp(const WCHAR *s1, const WCHAR *s2)
 	}
 
 	return *s1 - *s2;
+}
+
+/*******************************************************************
+ *         buffer management
+ *
+ * Function for writing to a memory buffer.
+ */
+
+int byte_swapped = 0;
+unsigned char *output_buffer;
+size_t output_buffer_pos;
+size_t output_buffer_size;
+
+static void check_output_buffer_space( size_t size )
+{
+    if (output_buffer_pos + size >= output_buffer_size)
+    {
+        output_buffer_size = max( output_buffer_size * 2, output_buffer_pos + size );
+        output_buffer = xrealloc( output_buffer, output_buffer_size );
+    }
+}
+
+void init_output_buffer(void)
+{
+    output_buffer_size = 1024;
+    output_buffer_pos = 0;
+    output_buffer = xmalloc( output_buffer_size );
+}
+
+void flush_output_buffer( const char *name )
+{
+    int fd = open( name, O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, 0666 );
+    if (fd == -1) error( "Error creating %s\n", name );
+    if (write( fd, output_buffer, output_buffer_pos ) != output_buffer_pos)
+        error( "Error writing to %s\n", name );
+    close( fd );
+    free( output_buffer );
+}
+
+void put_data( const void *data, size_t size )
+{
+    check_output_buffer_space( size );
+    memcpy( output_buffer + output_buffer_pos, data, size );
+    output_buffer_pos += size;
+}
+
+void put_byte( unsigned char val )
+{
+    check_output_buffer_space( 1 );
+    output_buffer[output_buffer_pos++] = val;
+}
+
+void put_word( unsigned short val )
+{
+    if (byte_swapped) val = (val << 8) | (val >> 8);
+    put_data( &val, sizeof(val) );
+}
+
+void put_dword( unsigned int val )
+{
+    if (byte_swapped)
+        val = ((val << 24) | ((val << 8) & 0x00ff0000) | ((val >> 8) & 0x0000ff00) | (val >> 24));
+    put_data( &val, sizeof(val) );
+}
+
+void align_output( unsigned int align )
+{
+    size_t size = align - (output_buffer_pos % align);
+
+    if (size == align) return;
+    check_output_buffer_space( size );
+    memset( output_buffer + output_buffer_pos, 0, size );
+    output_buffer_pos += size;
 }

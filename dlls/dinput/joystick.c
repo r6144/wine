@@ -32,15 +32,29 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(dinput);
 
+static inline JoystickGenericImpl *impl_from_IDirectInputDevice8A(IDirectInputDevice8A *iface)
+{
+    return CONTAINING_RECORD(CONTAINING_RECORD(iface, IDirectInputDeviceImpl, IDirectInputDevice8A_iface), JoystickGenericImpl, base);
+}
+static inline JoystickGenericImpl *impl_from_IDirectInputDevice8W(IDirectInputDevice8W *iface)
+{
+    return CONTAINING_RECORD(CONTAINING_RECORD(iface, IDirectInputDeviceImpl, IDirectInputDevice8W_iface), JoystickGenericImpl, base);
+}
+static inline IDirectInputDevice8A *IDirectInputDevice8A_from_impl(JoystickGenericImpl *This)
+{
+    return &This->base.IDirectInputDevice8A_iface;
+}
+static inline IDirectInputDevice8W *IDirectInputDevice8W_from_impl(JoystickGenericImpl *This)
+{
+    return &This->base.IDirectInputDevice8W_iface;
+}
+
 /******************************************************************************
   *     SetProperty : change input device properties
   */
-HRESULT WINAPI JoystickAGenericImpl_SetProperty(
-    LPDIRECTINPUTDEVICE8A iface,
-    REFGUID rguid,
-    LPCDIPROPHEADER ph)
+HRESULT WINAPI JoystickWGenericImpl_SetProperty(LPDIRECTINPUTDEVICE8W iface, REFGUID rguid, LPCDIPROPHEADER ph)
 {
-    JoystickGenericImpl *This = (JoystickGenericImpl *)iface;
+    JoystickGenericImpl *This = impl_from_IDirectInputDevice8W(iface);
     DWORD i;
 
     TRACE("(%p,%s,%p)\n",This,debugstr_guid(rguid),ph);
@@ -110,11 +124,17 @@ HRESULT WINAPI JoystickAGenericImpl_SetProperty(
             break;
         }
         default:
-            return IDirectInputDevice2AImpl_SetProperty(iface, rguid, ph);
+            return IDirectInputDevice2WImpl_SetProperty(iface, rguid, ph);
         }
     }
 
     return DI_OK;
+}
+
+HRESULT WINAPI JoystickAGenericImpl_SetProperty(LPDIRECTINPUTDEVICE8A iface, REFGUID rguid, LPCDIPROPHEADER ph)
+{
+    JoystickGenericImpl *This = impl_from_IDirectInputDevice8A(iface);
+    return JoystickWGenericImpl_SetProperty(IDirectInputDevice8W_from_impl(This), rguid, ph);
 }
 
 void _dump_DIDEVCAPS(const DIDEVCAPS *lpDIDevCaps)
@@ -140,11 +160,9 @@ void _dump_DIDEVCAPS(const DIDEVCAPS *lpDIDevCaps)
     }
 }
 
-HRESULT WINAPI JoystickAGenericImpl_GetCapabilities(
-	LPDIRECTINPUTDEVICE8A iface,
-	LPDIDEVCAPS lpDIDevCaps)
+HRESULT WINAPI JoystickWGenericImpl_GetCapabilities(LPDIRECTINPUTDEVICE8W iface, LPDIDEVCAPS lpDIDevCaps)
 {
-    JoystickGenericImpl *This = (JoystickGenericImpl *)iface;
+    JoystickGenericImpl *This = impl_from_IDirectInputDevice8W(iface);
     int size;
 
     TRACE("%p->(%p)\n",iface,lpDIDevCaps);
@@ -168,6 +186,12 @@ HRESULT WINAPI JoystickAGenericImpl_GetCapabilities(
         _dump_DIDEVCAPS(lpDIDevCaps);
 
     return DI_OK;
+}
+
+HRESULT WINAPI JoystickAGenericImpl_GetCapabilities(LPDIRECTINPUTDEVICE8A iface, LPDIDEVCAPS lpDIDevCaps)
+{
+    JoystickGenericImpl *This = impl_from_IDirectInputDevice8A(iface);
+    return JoystickWGenericImpl_GetCapabilities(IDirectInputDevice8W_from_impl(This), lpDIDevCaps);
 }
 
 /******************************************************************************
@@ -198,12 +222,13 @@ HRESULT WINAPI JoystickWGenericImpl_GetObjectInfo(LPDIRECTINPUTDEVICE8W iface,
 HRESULT WINAPI JoystickAGenericImpl_GetObjectInfo(LPDIRECTINPUTDEVICE8A iface,
         LPDIDEVICEOBJECTINSTANCEA pdidoi, DWORD dwObj, DWORD dwHow)
 {
+    JoystickGenericImpl *This = impl_from_IDirectInputDevice8A(iface);
     HRESULT res;
     DIDEVICEOBJECTINSTANCEW didoiW;
     DWORD dwSize = pdidoi->dwSize;
 
     didoiW.dwSize = sizeof(didoiW);
-    res = JoystickWGenericImpl_GetObjectInfo((LPDIRECTINPUTDEVICE8W)iface, &didoiW, dwObj, dwHow);
+    res = JoystickWGenericImpl_GetObjectInfo(IDirectInputDevice8W_from_impl(This), &didoiW, dwObj, dwHow);
     if (res != DI_OK) return res;
 
     memset(pdidoi, 0, pdidoi->dwSize);
@@ -218,12 +243,9 @@ HRESULT WINAPI JoystickAGenericImpl_GetObjectInfo(LPDIRECTINPUTDEVICE8A iface,
 /******************************************************************************
   *     GetProperty : get input device properties
   */
-HRESULT WINAPI JoystickAGenericImpl_GetProperty(
-    LPDIRECTINPUTDEVICE8A iface,
-    REFGUID rguid,
-    LPDIPROPHEADER pdiph)
+HRESULT WINAPI JoystickWGenericImpl_GetProperty(LPDIRECTINPUTDEVICE8W iface, REFGUID rguid, LPDIPROPHEADER pdiph)
 {
-    JoystickGenericImpl *This = (JoystickGenericImpl *)iface;
+    JoystickGenericImpl *This = impl_from_IDirectInputDevice8W(iface);
 
     TRACE("(%p,%s,%p)\n", iface, debugstr_guid(rguid), pdiph);
 
@@ -269,11 +291,17 @@ HRESULT WINAPI JoystickAGenericImpl_GetProperty(
             break;
         }
         default:
-            return IDirectInputDevice2AImpl_GetProperty(iface, rguid, pdiph);
+            return IDirectInputDevice2WImpl_GetProperty(iface, rguid, pdiph);
         }
     }
 
     return DI_OK;
+}
+
+HRESULT WINAPI JoystickAGenericImpl_GetProperty(LPDIRECTINPUTDEVICE8A iface, REFGUID rguid, LPDIPROPHEADER pdiph)
+{
+    JoystickGenericImpl *This = impl_from_IDirectInputDevice8A(iface);
+    return JoystickWGenericImpl_GetProperty(IDirectInputDevice8W_from_impl(This), rguid, pdiph);
 }
 
 /******************************************************************************
@@ -283,7 +311,7 @@ HRESULT WINAPI JoystickAGenericImpl_GetDeviceInfo(
     LPDIRECTINPUTDEVICE8A iface,
     LPDIDEVICEINSTANCEA pdidi)
 {
-    JoystickGenericImpl *This = (JoystickGenericImpl *)iface;
+    JoystickGenericImpl *This = impl_from_IDirectInputDevice8A(iface);
 
     TRACE("(%p,%p)\n", iface, pdidi);
 
@@ -321,7 +349,7 @@ HRESULT WINAPI JoystickWGenericImpl_GetDeviceInfo(
     LPDIRECTINPUTDEVICE8W iface,
     LPDIDEVICEINSTANCEW pdidi)
 {
-    JoystickGenericImpl *This = (JoystickGenericImpl *)iface;
+    JoystickGenericImpl *This = impl_from_IDirectInputDevice8W(iface);
 
     TRACE("(%p,%p)\n", iface, pdidi);
 
@@ -347,9 +375,9 @@ HRESULT WINAPI JoystickWGenericImpl_GetDeviceInfo(
     return DI_OK;
 }
 
-HRESULT WINAPI JoystickAGenericImpl_Poll(LPDIRECTINPUTDEVICE8A iface)
+HRESULT WINAPI JoystickWGenericImpl_Poll(LPDIRECTINPUTDEVICE8W iface)
 {
-    JoystickGenericImpl *This = (JoystickGenericImpl *)iface;
+    JoystickGenericImpl *This = impl_from_IDirectInputDevice8W(iface);
 
     TRACE("(%p)\n",This);
 
@@ -358,20 +386,23 @@ HRESULT WINAPI JoystickAGenericImpl_Poll(LPDIRECTINPUTDEVICE8A iface)
         return DIERR_NOTACQUIRED;
     }
 
-    This->joy_polldev(This);
+    This->joy_polldev(IDirectInputDevice8A_from_impl(This));
     return DI_OK;
+}
+
+HRESULT WINAPI JoystickAGenericImpl_Poll(LPDIRECTINPUTDEVICE8A iface)
+{
+    JoystickGenericImpl *This = impl_from_IDirectInputDevice8A(iface);
+    return JoystickWGenericImpl_Poll(IDirectInputDevice8W_from_impl(This));
 }
 
 /******************************************************************************
   *     GetDeviceState : returns the "state" of the joystick.
   *
   */
-HRESULT WINAPI JoystickAGenericImpl_GetDeviceState(
-    LPDIRECTINPUTDEVICE8A iface,
-    DWORD len,
-    LPVOID ptr)
+HRESULT WINAPI JoystickWGenericImpl_GetDeviceState(LPDIRECTINPUTDEVICE8W iface, DWORD len, LPVOID ptr)
 {
-    JoystickGenericImpl *This = (JoystickGenericImpl *)iface;
+    JoystickGenericImpl *This = impl_from_IDirectInputDevice8W(iface);
 
     TRACE("(%p,0x%08x,%p)\n", This, len, ptr);
 
@@ -381,12 +412,18 @@ HRESULT WINAPI JoystickAGenericImpl_GetDeviceState(
     }
 
     /* update joystick state */
-    This->joy_polldev(This);
+    This->joy_polldev(IDirectInputDevice8A_from_impl(This));
 
     /* convert and copy data to user supplied buffer */
     fill_DataFormat(ptr, len, &This->js, &This->base.data_format);
 
     return DI_OK;
+}
+
+HRESULT WINAPI JoystickAGenericImpl_GetDeviceState(LPDIRECTINPUTDEVICE8A iface, DWORD len, LPVOID ptr)
+{
+    JoystickGenericImpl *This = impl_from_IDirectInputDevice8A(iface);
+    return JoystickWGenericImpl_GetDeviceState(IDirectInputDevice8W_from_impl(This), len, ptr);
 }
 
 /*

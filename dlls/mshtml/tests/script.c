@@ -139,6 +139,7 @@ DEFINE_EXPECT(external_success);
 #define DISPID_EXTERNAL_OK             0x300000
 #define DISPID_EXTERNAL_TRACE          0x300001
 #define DISPID_EXTERNAL_REPORTSUCCESS  0x300002
+#define DISPID_EXTERNAL_TODO_WINE_OK   0x300003
 
 static const GUID CLSID_TestScript =
     {0x178fc163,0xf585,0x4e24,{0x9c,0x13,0x4b,0xb7,0xfa,0xf8,0x07,0x46}};
@@ -493,6 +494,10 @@ static HRESULT WINAPI externalDisp_GetDispID(IDispatchEx *iface, BSTR bstrName, 
         *pid = DISPID_EXTERNAL_REPORTSUCCESS;
         return S_OK;
     }
+    if(!strcmp_wa(bstrName, "todo_wine_ok")) {
+        *pid = DISPID_EXTERNAL_TODO_WINE_OK;
+        return S_OK;
+    }
 
     ok(0, "unexpected name %s\n", wine_dbgstr_w(bstrName));
     return DISP_E_UNKNOWNNAME;
@@ -543,6 +548,22 @@ static HRESULT WINAPI externalDisp_InvokeEx(IDispatchEx *iface, DISPID id, LCID 
         ok(!pdp->cNamedArgs, "cNamedArgs = %d\n", pdp->cNamedArgs);
         ok(!pvarRes, "pvarRes != NULL\n");
         ok(pei != NULL, "pei == NULL\n");
+
+        return S_OK;
+
+    case DISPID_EXTERNAL_TODO_WINE_OK:
+        ok(wFlags == INVOKE_FUNC || wFlags == (INVOKE_FUNC|INVOKE_PROPERTYGET), "wFlags = %x\n", wFlags);
+        ok(pdp != NULL, "pdp == NULL\n");
+        ok(pdp->rgvarg != NULL, "rgvarg == NULL\n");
+        ok(!pdp->rgdispidNamedArgs, "rgdispidNamedArgs != NULL\n");
+        ok(pdp->cArgs == 2, "cArgs = %d\n", pdp->cArgs);
+        ok(!pdp->cNamedArgs, "cNamedArgs = %d\n", pdp->cNamedArgs);
+        ok(pei != NULL, "pei == NULL\n");
+
+        ok(V_VT(pdp->rgvarg) == VT_BSTR, "V_VT(psp->rgvargs) = %d\n", V_VT(pdp->rgvarg));
+        ok(V_VT(pdp->rgvarg+1) == VT_BOOL, "V_VT(psp->rgvargs+1) = %d\n", V_VT(pdp->rgvarg));
+        todo_wine
+        ok(V_BOOL(pdp->rgvarg+1), "%s\n", wine_dbgstr_w(V_BSTR(pdp->rgvarg)));
 
         return S_OK;
 
@@ -862,7 +883,7 @@ static HRESULT WINAPI InPlaceSite_GetWindowContext(IOleInPlaceSite *iface,
     *lprcPosRect = rect;
     *lprcClipRect = rect;
 
-    lpFrameInfo->cb = sizeof(*lpFrameInfo);
+    ok(lpFrameInfo->cb == sizeof(*lpFrameInfo), "lpFrameInfo->cb = %u, expected %u\n", lpFrameInfo->cb, (unsigned)sizeof(*lpFrameInfo));
     lpFrameInfo->fMDIApp = FALSE;
     lpFrameInfo->hwndFrame = container_hwnd;
     lpFrameInfo->haccel = NULL;
@@ -1811,6 +1832,7 @@ static void test_nextdispid(IDispatchEx *dispex)
 
     V_VT(&var) = VT_EMPTY;
     hres = dispex_propput(dispex, dyn_id, 0, &var);
+    ok(hres == S_OK, "dispex_propput failed: %08x\n", hres);
 
     while(last_id != dyn_id) {
         hres = IDispatchEx_GetNextDispID(dispex, fdexEnumAll, last_id, &id);
@@ -1963,6 +1985,18 @@ static void test_script_run(void)
     ok(hres == S_OK, "InvokeEx failed: %08x\n", hres);
     ok(V_VT(&var) == VT_I4, "V_VT(var)=%d\n", V_VT(&var));
     ok(V_I4(&var) == 300, "V_I4(&var) = %d\n", V_I4(&var));
+
+    V_VT(&var) = VT_BSTR;
+    V_BSTR(&var) = NULL;
+    dispex_propput(document, id, 0,&var);
+
+    VariantInit(&var);
+    memset(&dp, 0, sizeof(dp));
+    memset(&ei, 0, sizeof(ei));
+    hres = IDispatchEx_InvokeEx(document, id, LOCALE_NEUTRAL, INVOKE_PROPERTYGET, &dp, &var, &ei, NULL);
+    ok(hres == S_OK, "InvokeEx failed: %08x\n", hres);
+    ok(V_VT(&var) == VT_BSTR, "V_VT(var)=%d\n", V_VT(&var));
+    ok(!V_BSTR(&var), "V_BSTR(&var) = %s\n", wine_dbgstr_w(V_BSTR(&var)));
 
     unk = (void*)0xdeadbeef;
     hres = IDispatchEx_GetNameSpaceParent(window_dispex, &unk);
@@ -2561,6 +2595,7 @@ static void run_js_script(const char *test_name)
 static void run_js_tests(void)
 {
     run_js_script("jstest.html");
+    run_js_script("exectest.html");
 }
 
 static BOOL init_registry(BOOL init)

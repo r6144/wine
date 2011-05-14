@@ -172,7 +172,7 @@
 @ stub NetScheduleJobGetInfo
 @ stub NetServerComputerNameAdd
 @ stub NetServerComputerNameDel
-@ stub NetServerDiskEnum
+@ stdcall NetServerDiskEnum(wstr long ptr long ptr ptr ptr)
 @ stdcall NetServerEnum(wstr long ptr long ptr ptr long wstr ptr)
 @ stdcall NetServerEnumEx(wstr long ptr long ptr ptr long wstr wstr)
 @ stdcall NetServerGetInfo(wstr long ptr)
@@ -198,7 +198,7 @@
 @ stub NetShareSetInfo
 @ stdcall NetStatisticsGet(wstr wstr long long ptr)
 @ stdcall NetUseAdd(wstr long ptr ptr)
-@ stub NetUseDel
+@ stdcall NetUseDel(wstr wstr long)
 @ stdcall NetUseEnum(wstr long ptr long ptr ptr ptr)
 @ stub NetUseGetInfo
 @ stdcall NetUserAdd(wstr long ptr ptr)

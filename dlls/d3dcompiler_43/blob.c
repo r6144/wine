@@ -26,6 +26,15 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(d3dcompiler);
 
+struct d3dcompiler_blob
+{
+    ID3DBlob ID3DBlob_iface;
+    LONG refcount;
+
+    SIZE_T size;
+    void *data;
+};
+
 static inline struct d3dcompiler_blob *impl_from_ID3DBlob(ID3DBlob *iface)
 {
     return CONTAINING_RECORD(iface, struct d3dcompiler_blob, ID3DBlob_iface);
@@ -108,7 +117,7 @@ static const struct ID3D10BlobVtbl d3dcompiler_blob_vtbl =
     d3dcompiler_blob_GetBufferSize,
 };
 
-HRESULT d3dcompiler_blob_init(struct d3dcompiler_blob *blob, SIZE_T data_size)
+static HRESULT d3dcompiler_blob_init(struct d3dcompiler_blob *blob, SIZE_T data_size)
 {
     blob->ID3DBlob_iface.lpVtbl = &d3dcompiler_blob_vtbl;
     blob->refcount = 1;
@@ -120,6 +129,41 @@ HRESULT d3dcompiler_blob_init(struct d3dcompiler_blob *blob, SIZE_T data_size)
         ERR("Failed to allocate D3D blob data memory\n");
         return E_OUTOFMEMORY;
     }
+
+    return S_OK;
+}
+
+HRESULT WINAPI D3DCreateBlob(SIZE_T data_size, ID3DBlob **blob)
+{
+    struct d3dcompiler_blob *object;
+    HRESULT hr;
+
+    TRACE("data_size %lu, blob %p\n", data_size, blob);
+
+    if (!blob)
+    {
+        WARN("Invalid blob specified.\n");
+        return D3DERR_INVALIDCALL;
+    }
+
+    object = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*object));
+    if (!object)
+    {
+        ERR("Failed to allocate D3D blob object memory\n");
+        return E_OUTOFMEMORY;
+    }
+
+    hr = d3dcompiler_blob_init(object, data_size);
+    if (FAILED(hr))
+    {
+        WARN("Failed to initialize blob, hr %#x.\n", hr);
+        HeapFree(GetProcessHeap(), 0, object);
+        return hr;
+    }
+
+    *blob = &object->ID3DBlob_iface;
+
+    TRACE("Created ID3DBlob %p\n", *blob);
 
     return S_OK;
 }
@@ -176,7 +220,7 @@ static BOOL check_blob_part(DWORD tag, D3D_BLOB_PART part)
     return add;
 }
 
-HRESULT d3dcompiler_get_blob_part(const void *data, SIZE_T data_size, D3D_BLOB_PART part, UINT flags, ID3DBlob **blob)
+static HRESULT d3dcompiler_get_blob_part(const void *data, SIZE_T data_size, D3D_BLOB_PART part, UINT flags, ID3DBlob **blob)
 {
     struct dxbc src_dxbc, dst_dxbc;
     HRESULT hr;
@@ -317,7 +361,7 @@ static BOOL check_blob_strip(DWORD tag, UINT flags)
     return add;
 }
 
-HRESULT d3dcompiler_strip_shader(const void *data, SIZE_T data_size, UINT flags, ID3DBlob **blob)
+static HRESULT d3dcompiler_strip_shader(const void *data, SIZE_T data_size, UINT flags, ID3DBlob **blob)
 {
     struct dxbc src_dxbc, dst_dxbc;
     HRESULT hr;
@@ -378,4 +422,47 @@ HRESULT d3dcompiler_strip_shader(const void *data, SIZE_T data_size, UINT flags,
     dxbc_destroy(&dst_dxbc);
 
     return hr;
+}
+
+HRESULT WINAPI D3DGetBlobPart(const void *data, SIZE_T data_size, D3D_BLOB_PART part, UINT flags, ID3DBlob **blob)
+{
+    TRACE("data %p, data_size %lu, part %s, flags %#x, blob %p\n", data,
+           data_size, debug_d3dcompiler_d3d_blob_part(part), flags, blob);
+
+    return d3dcompiler_get_blob_part(data, data_size, part, flags, blob);
+}
+
+HRESULT WINAPI D3DGetInputSignatureBlob(const void *data, SIZE_T data_size, ID3DBlob **blob)
+{
+    TRACE("data %p, data_size %lu, blob %p\n", data, data_size, blob);
+
+    return d3dcompiler_get_blob_part(data, data_size, D3D_BLOB_INPUT_SIGNATURE_BLOB, 0, blob);
+}
+
+HRESULT WINAPI D3DGetOutputSignatureBlob(const void *data, SIZE_T data_size, ID3DBlob **blob)
+{
+    TRACE("data %p, data_size %lu, blob %p\n", data, data_size, blob);
+
+    return d3dcompiler_get_blob_part(data, data_size, D3D_BLOB_OUTPUT_SIGNATURE_BLOB, 0, blob);
+}
+
+HRESULT WINAPI D3DGetInputAndOutputSignatureBlob(const void *data, SIZE_T data_size, ID3DBlob **blob)
+{
+    TRACE("data %p, data_size %lu, blob %p\n", data, data_size, blob);
+
+    return d3dcompiler_get_blob_part(data, data_size, D3D_BLOB_INPUT_AND_OUTPUT_SIGNATURE_BLOB, 0, blob);
+}
+
+HRESULT WINAPI D3DGetDebugInfo(const void *data, SIZE_T data_size, ID3DBlob **blob)
+{
+    TRACE("data %p, data_size %lu, blob %p\n", data, data_size, blob);
+
+    return d3dcompiler_get_blob_part(data, data_size, D3D_BLOB_DEBUG_INFO, 0, blob);
+}
+
+HRESULT WINAPI D3DStripShader(const void *data, SIZE_T data_size, UINT flags, ID3D10Blob **blob)
+{
+    TRACE("data %p, data_size %lu, flags %#x, blob %p\n", data, data_size, flags, blob);
+
+    return d3dcompiler_strip_shader(data, data_size, flags, blob);
 }

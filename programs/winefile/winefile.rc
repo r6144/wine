@@ -1,0 +1,137 @@
+/*
+ * Copyright 2000 Martin Fuchs
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
+ */
+
+#include "resource.h"
+
+LANGUAGE LANG_ENGLISH, SUBLANG_DEFAULT
+
+IDM_WINEFILE MENU
+{
+    POPUP "&File"  {
+        MENUITEM "&Open\tEnter",                ID_ACTIVATE
+        MENUITEM "&Move...\tF7",                ID_FILE_MOVE
+        MENUITEM "&Copy...\tF8",                ID_FILE_COPY
+        MENUITEM "&Delete\tDel",                ID_FILE_DELETE
+        MENUITEM "Re&name...",                  109
+        MENUITEM "Propert&ies\tAlt+Enter",   ID_EDIT_PROPERTIES
+        MENUITEM SEPARATOR
+        MENUITEM "&Run...",                     ID_RUN
+        MENUITEM SEPARATOR
+        MENUITEM "Cr&eate Directory...",        111
+        MENUITEM SEPARATOR
+#ifndef _NO_EXTENSIONS
+        MENUITEM "E&xit\tAlt+X",                ID_FILE_EXIT
+#else
+        MENUITEM "E&xit",                       ID_FILE_EXIT
+#endif
+    }
+
+    POPUP "&Disk"  {
+        MENUITEM "Connect &Network Drive...",      ID_CONNECT_NETWORK_DRIVE
+        MENUITEM "&Disconnect Network Drive",   ID_DISCONNECT_NETWORK_DRIVE
+    }
+
+    POPUP "&View"  {
+        MENUITEM "Sp&lit",                      ID_VIEW_SPLIT
+        MENUITEM SEPARATOR
+        MENUITEM "&Name",                       ID_VIEW_NAME
+        MENUITEM "&All File Details",           ID_VIEW_ALL_ATTRIBUTES, CHECKED
+        MENUITEM SEPARATOR
+        MENUITEM "&Sort by Name",               ID_VIEW_SORT_NAME
+        MENUITEM "Sort &by Type",               ID_VIEW_SORT_TYPE
+        MENUITEM "Sort by Si&ze",               ID_VIEW_SORT_SIZE
+        MENUITEM "Sort by &Date",               ID_VIEW_SORT_DATE
+        MENUITEM SEPARATOR
+        MENUITEM "Filter by&...",               ID_VIEW_FILTER
+    }
+
+    POPUP "&Options"  {
+        MENUITEM "&Font...",                    ID_SELECT_FONT
+        MENUITEM SEPARATOR
+        MENUITEM "&Toolbar",                    ID_VIEW_TOOL_BAR, CHECKED
+        MENUITEM "&Drivebar",                   ID_VIEW_DRIVE_BAR, CHECKED
+        MENUITEM "&Status Bar",                 ID_VIEW_STATUSBAR, CHECKED
+#ifndef _NO_EXTENSIONS
+        MENUITEM "F&ull Screen\tCtrl+Shift+S",  ID_VIEW_FULLSCREEN
+#endif
+        MENUITEM SEPARATOR
+        MENUITEM "&Save settings on exit",      ID_VIEW_SAVESETTINGS
+    }
+
+    POPUP "&Window"  {
+        MENUITEM "New &Window",                 ID_WINDOW_NEW
+        MENUITEM "Cascading\tCtrl+F5",          ID_WINDOW_CASCADE
+        MENUITEM "Tile &Horizontally",          ID_WINDOW_TILE_HORZ
+        MENUITEM "Tile &Vertically\tCtrl+F4",   ID_WINDOW_TILE_VERT
+        MENUITEM "Arrange &Symbols",            ID_WINDOW_ARRANGE
+        MENUITEM "&Refresh\tF5",                ID_REFRESH
+    }
+
+    POPUP "&Help"  {
+        MENUITEM "&Contents\tF1",               ID_HELP
+        MENUITEM "&About Wine File",            ID_ABOUT
+    }
+}
+
+STRINGTABLE
+{
+    IDS_FONT_SEL_DLG_NAME   "Applying font settings"
+    IDS_FONT_SEL_ERROR      "Error while selecting new font."
+}
+
+STRINGTABLE
+{
+    IDS_WINEFILE            "Wine File Manager"
+    IDS_ERROR               "Error"
+    IDS_ROOT_FS             "root fs"
+    IDS_UNIXFS              "unixfs"
+    IDS_DESKTOP             "Desktop"
+    IDS_SHELL               "Shell"
+    IDS_TITLEFMT            "%s - %s"
+    IDS_NO_IMPL             "Not yet implemented"
+    IDS_WINE_FILE           "Wine File"
+}
+
+STRINGTABLE
+{
+    IDS_COL_NAME            "Name"
+    IDS_COL_SIZE            "Size"
+    IDS_COL_CDATE           "CDate"
+    IDS_COL_ADATE           "ADate"
+    IDS_COL_MDATE           "MDate"
+    IDS_COL_IDX             "Index/Inode"
+    IDS_COL_LINKS           "Links"
+    IDS_COL_ATTR            "Attributes"
+    IDS_COL_SEC             "Security"
+
+    IDS_FREE_SPACE_FMT      "%s of %s free"
+}
+
+LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
+
+/* @makedep: winefile.ico */
+IDI_WINEFILE ICON winefile.ico
+
+/* @makedep: toolbar.bmp */
+IDB_TOOLBAR BITMAP toolbar.bmp
+
+/* @makedep: drivebar.bmp */
+IDB_DRIVEBAR BITMAP drivebar.bmp
+
+/* @makedep: images.bmp */
+IDB_IMAGES BITMAP images.bmp

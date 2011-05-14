@@ -30,6 +30,7 @@ PUBLIC_IDL_H_SRCS = \
 	dimm.idl \
 	dispex.idl \
 	docobj.idl \
+	docobjectservice.idl \
 	downloadmgr.idl \
 	dxgi.idl \
 	dxgitype.idl \
@@ -106,9 +107,13 @@ PUBLIC_IDL_H_SRCS = \
 IDL_TLB_SRCS = \
 	stdole2.idl
 
+XTEMPLATE_SRCS = \
+	rmxftmpl.x
+
 SRCDIR_INCLUDES = \
 	$(IDL_TLB_SRCS) \
 	$(PUBLIC_IDL_H_SRCS) \
+	$(XTEMPLATE_SRCS) \
 	accctrl.h \
 	access.idl \
 	aclapi.h \
@@ -172,6 +177,7 @@ SRCDIR_INCLUDES = \
 	d3dtypes.h \
 	d3dvec.inl \
 	d3dx9.h \
+	d3dx9anim.h \
 	d3dx9core.h \
 	d3dx9effect.h \
 	d3dx9math.h \
@@ -180,6 +186,7 @@ SRCDIR_INCLUDES = \
 	d3dx9shader.h \
 	d3dx9shape.h \
 	d3dx9tex.h \
+	d3dx9xof.h \
 	dbccmd.idl \
 	dbcses.idl \
 	dbdsad.idl \
@@ -343,6 +350,7 @@ SRCDIR_INCLUDES = \
 	msiquery.h \
 	mssip.h \
 	mstcpip.h \
+	msvcrt/assert.h \
 	msvcrt/conio.h \
 	msvcrt/crtdbg.h \
 	msvcrt/crtdefs.h \
@@ -554,7 +562,11 @@ SRCDIR_INCLUDES = \
 	xmldsodid.h \
 	zmouse.h
 
-EXTRASUBDIRS = ddk msvcrt msvcrt/sys wine
+EXTRASUBDIRS = \
+	ddk \
+	msvcrt \
+	msvcrt/sys \
+	wine
 
 INSTALLDIRS = \
 	$(DESTDIR)$(includedir)/windows/ddk \
@@ -567,9 +579,12 @@ IDL_H_SRCS = $(PUBLIC_IDL_H_SRCS) $(PRIVATE_IDL_H_SRCS)
 
 @MAKE_RULES@
 
-OBJDIR_INCLUDES = $(PUBLIC_IDL_H_SRCS:.idl=.h)
+OBJDIR_INCLUDES = $(PUBLIC_IDL_H_SRCS:.idl=.h) $(XTEMPLATE_SRCS:.x=.h)
 
-all: $(IDL_H_SRCS:.idl=.h) $(IDL_TLB_SRCS:.idl=.tlb)
+all: $(IDL_H_SRCS:.idl=.h) $(IDL_TLB_SRCS:.idl=.tlb) $(XTEMPLATE_SRCS:.x=.h)
+
+rmxftmpl.h: rmxftmpl.x $(MAKEXFTMPL)
+	$(MAKEXFTMPL) -i D3DRM_XTEMPLATES -s D3DRM_XTEMPLATE_BYTES -o $@ $(srcdir)/rmxftmpl.x
 
 install install-dev:: $(OBJDIR_INCLUDES) $(INSTALLDIRS)
 	for f in $(SRCDIR_INCLUDES); do case $$f in \

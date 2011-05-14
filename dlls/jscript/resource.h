@@ -18,6 +18,10 @@
 
 #include <windef.h>
 
+#define JSCRIPT_MAJOR_VERSION 5
+#define JSCRIPT_MINOR_VERSION 8
+#define JSCRIPT_BUILD_VERSION 16475
+
 #define IDS_TO_PRIMITIVE                    0x0001
 #define IDS_INVALID_CALL_ARG                0x0005
 #define IDS_SUBSCRIPT_OUT_OF_RANGE          0x0009
@@ -30,6 +34,7 @@
 #define IDS_LBRACKET                        0x03ED
 #define IDS_RBRACKET                        0x03EE
 #define IDS_UNTERMINATED_STR                0x03F7
+#define IDS_DISABLED_CC                     0x0406
 #define IDS_NOT_FUNC                        0x138A
 #define IDS_NOT_DATE                        0x138E
 #define IDS_NOT_NUM                         0x1389

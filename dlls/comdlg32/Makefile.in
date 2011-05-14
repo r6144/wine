@@ -11,6 +11,7 @@ C_SRCS = \
 	filedlgbrowser.c \
 	finddlg.c \
 	fontdlg.c \
+	itemdlg.c \
 	printdlg.c
 
 RC_SRCS = \
@@ -46,12 +47,16 @@ RC_SRCS = \
 	cdlg_Uk.rc \
 	cdlg_Wa.rc \
 	cdlg_Zh.rc \
-	cdlg_xx.rc
+	comdlg32.rc
+
+PO_SRCS = comdlg32.rc
 
 SVG_SRCS = \
 	pd32_collate.svg \
 	pd32_landscape.svg \
 	pd32_nocollate.svg \
 	pd32_portrait.svg
+
+IDL_R_SRCS = comdlg32_classes.idl
 
 @MAKE_DLL_RULES@

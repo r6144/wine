@@ -25,8 +25,8 @@ C_SRCS = \
 	iconcache.c \
 	pidl.c \
 	recyclebin.c \
-	regsvr.c \
 	shell32_main.c \
+	shelldispatch.c \
 	shellitem.c \
 	shelllink.c \
 	shellole.c \
@@ -54,6 +54,7 @@ C_SRCS = \
 	xdg.c
 
 RC_SRCS = \
+	shell32.rc \
 	shell32_Bg.rc \
 	shell32_Ca.rc \
 	shell32_Cs.rc \
@@ -83,9 +84,13 @@ RC_SRCS = \
 	shell32_Tr.rc \
 	shell32_Uk.rc \
 	shell32_Wa.rc \
-	shell32_Zh.rc \
-	shres.rc \
-	version.rc
+	shell32_Zh.rc
+
+PO_SRCS = shell32.rc
+
+IDL_TLB_SRCS = shell32_tlb.idl
+
+IDL_R_SRCS = shell32_classes.idl
 
 SVG_SRCS = \
 	cdrom.svg \

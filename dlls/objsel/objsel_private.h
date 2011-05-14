@@ -49,13 +49,13 @@ extern LONG dll_refs;
  */
 typedef struct
 {
-    IClassFactoryVtbl *lpVtbl;
+    IClassFactory IClassFactory_iface;
     LONG ref;
 } ClassFactoryImpl;
 
 typedef struct
 {
-    IDsObjectPickerVtbl *lpVtbl;
+    IDsObjectPicker IDsObjectPicker_iface;
     LONG ref;
 } IDsObjectPickerImpl;
 

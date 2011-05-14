@@ -55,6 +55,10 @@
 #ifdef HAVE_SYS_POLL_H
 # include <sys/poll.h>
 #endif
+#ifdef HAVE_SYS_ERRNO_H
+#include <sys/errno.h>
+#endif
+#include <sys/soundcard.h>
 
 #include "windef.h"
 #include "winbase.h"
@@ -66,12 +70,11 @@
 #include "mmreg.h"
 #include "dsound.h"
 #include "ks.h"
-#include "ksguid.h"
-#include "ksmedia.h"
-#include "initguid.h"
-#include "dsdriver.h"
-#include "oss.h"
 #include "wine/debug.h"
+
+#include "initguid.h"
+#include "ksmedia.h"
+#include "dsdriver.h"
 
 #include "audio.h"
 
@@ -79,8 +82,6 @@ WINE_DEFAULT_DEBUG_CHANNEL(wave);
 
 /* Allow 1% deviation for sample rates (some ES137x cards) */
 #define NEAR_MATCH(rate1,rate2) (((100*((int)(rate1)-(int)(rate2)))/(rate1))==0)
-
-#ifdef HAVE_OSS
 
 WINE_WAVEOUT    WOutDev[MAX_WAVEDRV];
 WINE_WAVEIN     WInDev[MAX_WAVEDRV];
@@ -297,7 +298,7 @@ static BOOL supportedFormat(LPWAVEFORMATEX wf)
 
 void copy_format(LPWAVEFORMATEX wf1, LPWAVEFORMATPCMEX wf2)
 {
-    ZeroMemory(wf2, sizeof(wf2));
+    ZeroMemory(wf2, sizeof(*wf2));
     if (wf1->wFormatTag == WAVE_FORMAT_PCM)
         memcpy(wf2, wf1, sizeof(PCMWAVEFORMAT));
     else if (wf1->wFormatTag == WAVE_FORMAT_EXTENSIBLE)
@@ -1311,7 +1312,7 @@ static int OSS_AddRingMessage(OSS_MSG_RING* omr, enum win_wm_message msg, DWORD 
     HANDLE	hEvent = INVALID_HANDLE_VALUE;
 
     EnterCriticalSection(&omr->msg_crst);
-    if ((omr->msg_toget == ((omr->msg_tosave + 1) % omr->ring_buffer_size)))
+    if (omr->msg_toget == ((omr->msg_tosave + 1) % omr->ring_buffer_size))
     {
 	int old_ring_buffer_size = omr->ring_buffer_size;
 	omr->ring_buffer_size += OSS_RING_BUFFER_INCREMENT;
@@ -1427,7 +1428,7 @@ static int OSS_PeekRingMessage(OSS_MSG_RING* omr,
 /**************************************************************************
  * 			wodNotifyClient			[internal]
  */
-static DWORD wodNotifyClient(WINE_WAVEOUT* wwo, WORD wMsg, DWORD_PTR dwParam1, DWORD_PTR dwParam2)
+static void wodNotifyClient(WINE_WAVEOUT* wwo, WORD wMsg, DWORD_PTR dwParam1, DWORD_PTR dwParam2)
 {
     TRACE("wMsg = 0x%04x (%s) dwParm1 = %04lx dwParam2 = %04lx\n", wMsg,
         wMsg == WOM_OPEN ? "WOM_OPEN" : wMsg == WOM_CLOSE ? "WOM_CLOSE" :
@@ -1437,19 +1438,13 @@ static DWORD wodNotifyClient(WINE_WAVEOUT* wwo, WORD wMsg, DWORD_PTR dwParam1, D
     case WOM_OPEN:
     case WOM_CLOSE:
     case WOM_DONE:
-	if (wwo->wFlags != DCB_NULL &&
-	    !DriverCallback(wwo->waveDesc.dwCallback, wwo->wFlags,
-			    (HDRVR)wwo->waveDesc.hWave, wMsg,
-			    wwo->waveDesc.dwInstance, dwParam1, dwParam2)) {
-	    WARN("can't notify client !\n");
-	    return MMSYSERR_ERROR;
-	}
+        DriverCallback(wwo->waveDesc.dwCallback, wwo->wFlags,
+                       (HDRVR)wwo->waveDesc.hWave, wMsg,
+                       wwo->waveDesc.dwInstance, dwParam1, dwParam2);
 	break;
     default:
 	FIXME("Unknown callback message %u\n", wMsg);
-        return MMSYSERR_INVALPARAM;
     }
-    return MMSYSERR_NOERROR;
 }
 
 /**************************************************************************
@@ -1665,7 +1660,7 @@ static DWORD wodPlayer_NotifyCompletions(WINE_WAVEOUT* wwo, BOOL force)
 	lpWaveHdr->dwFlags &= ~WHDR_INQUEUE;
 	lpWaveHdr->dwFlags |= WHDR_DONE;
 
-	wodNotifyClient(wwo, WOM_DONE, (DWORD)lpWaveHdr, 0);
+	wodNotifyClient(wwo, WOM_DONE, (DWORD_PTR)lpWaveHdr, 0);
     }
 #else
     for (;;)
@@ -2128,7 +2123,8 @@ static DWORD wodOpen(WORD wDevID, LPWAVEOPENDESC lpDesc, DWORD dwFlags)
 	  wwo->waveFormat.Format.nSamplesPerSec, wwo->waveFormat.Format.nChannels,
 	  wwo->waveFormat.Format.nBlockAlign);
 
-    return wodNotifyClient(wwo, WOM_OPEN, 0L, 0L);
+    wodNotifyClient(wwo, WOM_OPEN, 0L, 0L);
+    return MMSYSERR_NOERROR;
 }
 
 /**************************************************************************
@@ -2136,7 +2132,6 @@ static DWORD wodOpen(WORD wDevID, LPWAVEOPENDESC lpDesc, DWORD dwFlags)
  */
 static DWORD wodClose(WORD wDevID)
 {
-    DWORD		ret = MMSYSERR_NOERROR;
     WINE_WAVEOUT*	wwo;
 
     TRACE("(%u);\n", wDevID);
@@ -2149,7 +2144,7 @@ static DWORD wodClose(WORD wDevID)
     wwo = &WOutDev[wDevID];
     if (wwo->lpQueuePtr) {
 	WARN("buffers still playing !\n");
-	ret = WAVERR_STILLPLAYING;
+	return WAVERR_STILLPLAYING;
     } else {
 	if (wwo->hThread != INVALID_HANDLE_VALUE) {
 	    OSS_AddRingMessage(&wwo->msgRing, WINE_WM_CLOSING, 0, TRUE);
@@ -2160,9 +2155,9 @@ static DWORD wodClose(WORD wDevID)
         OSS_CloseDevice(&wwo->ossdev);
 	wwo->state = WINE_WS_CLOSED;
 	wwo->dwFragmentSize = 0;
-	ret = wodNotifyClient(wwo, WOM_CLOSE, 0L, 0L);
+	wodNotifyClient(wwo, WOM_CLOSE, 0L, 0L);
     }
-    return ret;
+    return MMSYSERR_NOERROR;
 }
 
 /**************************************************************************
@@ -2464,7 +2459,7 @@ DWORD WINAPI OSS_wodMessage(UINT wDevID, UINT wMsg, DWORD_PTR dwUser,
 /**************************************************************************
  * 			widNotifyClient			[internal]
  */
-static DWORD widNotifyClient(WINE_WAVEIN* wwi, WORD wMsg, DWORD_PTR dwParam1, DWORD_PTR dwParam2)
+static void widNotifyClient(WINE_WAVEIN* wwi, WORD wMsg, DWORD_PTR dwParam1, DWORD_PTR dwParam2)
 {
     TRACE("wMsg = 0x%04x (%s) dwParm1 = %04lx dwParam2 = %04lx\n", wMsg,
         wMsg == WIM_OPEN ? "WIM_OPEN" : wMsg == WIM_CLOSE ? "WIM_CLOSE" :
@@ -2474,19 +2469,13 @@ static DWORD widNotifyClient(WINE_WAVEIN* wwi, WORD wMsg, DWORD_PTR dwParam1, DW
     case WIM_OPEN:
     case WIM_CLOSE:
     case WIM_DATA:
-	if (wwi->wFlags != DCB_NULL &&
-	    !DriverCallback(wwi->waveDesc.dwCallback, wwi->wFlags,
-			    (HDRVR)wwi->waveDesc.hWave, wMsg,
-			    wwi->waveDesc.dwInstance, dwParam1, dwParam2)) {
-	    WARN("can't notify client !\n");
-	    return MMSYSERR_ERROR;
-	}
+        DriverCallback(wwi->waveDesc.dwCallback, wwi->wFlags,
+                       (HDRVR)wwi->waveDesc.hWave, wMsg,
+                       wwi->waveDesc.dwInstance, dwParam1, dwParam2);
 	break;
     default:
 	FIXME("Unknown callback message %u\n", wMsg);
-	return MMSYSERR_INVALPARAM;
     }
-    return MMSYSERR_NOERROR;
 }
 
 /**************************************************************************
@@ -2998,7 +2987,8 @@ static DWORD widOpen(WORD wDevID, LPWAVEOPENDESC lpDesc, DWORD dwFlags)
     CloseHandle(wwi->hStartUpEvent);
     wwi->hStartUpEvent = INVALID_HANDLE_VALUE;
 
-    return widNotifyClient(wwi, WIM_OPEN, 0L, 0L);
+    widNotifyClient(wwi, WIM_OPEN, 0L, 0L);
+    return MMSYSERR_NOERROR;
 }
 
 /**************************************************************************
@@ -3026,7 +3016,8 @@ static DWORD widClose(WORD wDevID)
     wwi->state = WINE_WS_CLOSED;
     wwi->dwFragmentSize = 0;
     OSS_DestroyRingMessage(&wwi->msgRing);
-    return widNotifyClient(wwi, WIM_CLOSE, 0L, 0L);
+    widNotifyClient(wwi, WIM_CLOSE, 0L, 0L);
+    return MMSYSERR_NOERROR;
 }
 
 /**************************************************************************
@@ -3170,26 +3161,29 @@ DWORD WINAPI OSS_widMessage(WORD wDevID, WORD wMsg, DWORD_PTR dwUser,
     return MMSYSERR_NOTSUPPORTED;
 }
 
-#else /* !HAVE_OSS */
-
 /**************************************************************************
- * 				wodMessage (WINEOSS.7)
+ * 				DriverProc (WINEOSS.1)
  */
-DWORD WINAPI OSS_wodMessage(WORD wDevID, WORD wMsg, DWORD_PTR dwUser,
-			    DWORD_PTR dwParam1, DWORD_PTR dwParam2)
+LRESULT CALLBACK OSS_DriverProc(DWORD_PTR dwDevID, HDRVR hDriv, UINT wMsg,
+                                LPARAM dwParam1, LPARAM dwParam2)
 {
-    FIXME("(%u, %04X, %08lX, %08lX, %08lX):stub\n", wDevID, wMsg, dwUser, dwParam1, dwParam2);
-    return MMSYSERR_NOTENABLED;
-}
+     TRACE("(%08lX, %p, %08X, %08lX, %08lX)\n",
+           dwDevID, hDriv, wMsg, dwParam1, dwParam2);
 
-/**************************************************************************
- * 				widMessage (WINEOSS.6)
- */
-DWORD WINAPI OSS_widMessage(WORD wDevID, WORD wMsg, DWORD_PTR dwUser,
-			    DWORD_PTR dwParam1, DWORD_PTR dwParam2)
-{
-    FIXME("(%u, %04X, %08lX, %08lX, %08lX):stub\n", wDevID, wMsg, dwUser, dwParam1, dwParam2);
-    return MMSYSERR_NOTENABLED;
+    switch(wMsg) {
+    case DRV_LOAD:
+    case DRV_FREE:
+    case DRV_OPEN:
+    case DRV_CLOSE:
+    case DRV_ENABLE:
+    case DRV_DISABLE:
+    case DRV_QUERYCONFIGURE:
+        return 1;
+    case DRV_CONFIGURE:		MessageBoxA(0, "OSS MultiMedia Driver !", "OSS Driver", MB_OK);	return 1;
+    case DRV_INSTALL:
+    case DRV_REMOVE:
+        return DRV_SUCCESS;
+    default:
+	return 0;
+    }
 }
-
-#endif /* HAVE_OSS */

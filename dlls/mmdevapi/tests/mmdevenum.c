@@ -23,6 +23,7 @@
 #include "initguid.h"
 #include "mmdeviceapi.h"
 #include "audioclient.h"
+#include "audiopolicy.h"
 #include "dshow.h"
 #include "dsound.h"
 #include "devpkey.h"
@@ -140,6 +141,7 @@ START_TEST(mmdevenum)
 
     /* Proving that it is static.. */
     hr = CoCreateInstance(&CLSID_MMDeviceEnumerator, NULL, CLSCTX_INPROC_SERVER, &IID_IMMDeviceEnumerator, (void**)&mme2);
+    ok(hr == S_OK, "CoCreateInstance failed: 0x%08x\n", hr);
     IUnknown_Release(mme2);
     ok(mme == mme2, "Pointers are not equal!\n");
 

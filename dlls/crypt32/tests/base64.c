@@ -28,7 +28,9 @@
 #include "wine/test.h"
 
 #define CERT_HEADER               "-----BEGIN CERTIFICATE-----\r\n"
+#define ALT_CERT_HEADER           "-----BEGIN This is some arbitrary text that goes on and on-----\r\n"
 #define CERT_TRAILER              "-----END CERTIFICATE-----\r\n"
+#define ALT_CERT_TRAILER          "-----END More arbitrary text------\r\n"
 #define CERT_REQUEST_HEADER       "-----BEGIN NEW CERTIFICATE REQUEST-----\r\n"
 #define CERT_REQUEST_TRAILER      "-----END NEW CERTIFICATE REQUEST-----\r\n"
 #define X509_HEADER               "-----BEGIN X509 CRL-----\r\n"
@@ -151,6 +153,7 @@ static void testBinaryToStringA(void)
 
             ret = pCryptBinaryToStringA(tests[i].toEncode, tests[i].toEncodeLen,
              CRYPT_STRING_BINARY, str, &strLen2);
+            ok(ret, "CryptBinaryToStringA failed: %d\n", GetLastError());
             ok(strLen == strLen2, "Expected length %d, got %d\n", strLen,
              strLen2);
             ok(!memcmp(str, tests[i].toEncode, tests[i].toEncodeLen),
@@ -187,6 +190,7 @@ static void testBinaryToStringA(void)
             ret = pCryptBinaryToStringA(testsNoCR[i].toEncode,
              testsNoCR[i].toEncodeLen, CRYPT_STRING_BINARY | CRYPT_STRING_NOCR,
              str, &strLen2);
+            ok(ret, "CryptBinaryToStringA failed: %d\n", GetLastError());
             ok(strLen == strLen2, "Expected length %d, got %d\n", strLen,
              strLen2);
             ok(!memcmp(str, testsNoCR[i].toEncode, testsNoCR[i].toEncodeLen),
@@ -287,6 +291,7 @@ static void decodeAndCompareBase64_A(LPCSTR toDecode, LPCSTR header,
 
                 ret = pCryptStringToBinaryA(str, 0, useFormat, buf, &bufLen,
                  &skipped, &usedFormat);
+                ok(ret, "CryptStringToBinaryA failed: %d\n", GetLastError());
                 ok(skipped == strlen(garbage),
                  "Expected %d characters of \"%s\" skipped when trying format %08x, got %d (used format is %08x)\n",
                  lstrlenA(garbage), str, useFormat, skipped, usedFormat);
@@ -355,6 +360,9 @@ static void testStringToBinaryA(void)
          CRYPT_STRING_BASE64, CRYPT_STRING_BASE64, tests[i].toEncode,
          tests[i].toEncodeLen);
         decodeAndCompareBase64_A(tests[i].base64, CERT_HEADER, CERT_TRAILER,
+         CRYPT_STRING_BASE64HEADER, CRYPT_STRING_BASE64HEADER,
+         tests[i].toEncode, tests[i].toEncodeLen);
+        decodeAndCompareBase64_A(tests[i].base64, ALT_CERT_HEADER, ALT_CERT_TRAILER,
          CRYPT_STRING_BASE64HEADER, CRYPT_STRING_BASE64HEADER,
          tests[i].toEncode, tests[i].toEncodeLen);
         decodeAndCompareBase64_A(tests[i].base64, CERT_REQUEST_HEADER,

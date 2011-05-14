@@ -74,12 +74,6 @@ enum joined_forms {
 #endif
 
 /* These are all structures needed for the GSUB table */
-#define MS_MAKE_TAG( _x1, _x2, _x3, _x4 ) \
-          ( ( (ULONG)_x4 << 24 ) |     \
-            ( (ULONG)_x3 << 16 ) |     \
-            ( (ULONG)_x2 <<  8 ) |     \
-              (ULONG)_x1         )
-
 #define GSUB_TAG MS_MAKE_TAG('G', 'S', 'U', 'B')
 #define GSUB_E_NOFEATURE -2
 #define GSUB_E_NOGLYPH -1
@@ -768,9 +762,12 @@ static INT GSUB_apply_feature(const GSUB_Header * header, const GSUB_Feature* fe
     return out_index;
 }
 
-static const char* get_opentype_script(HDC hdc, SCRIPT_ANALYSIS *psa)
+static const char* get_opentype_script(HDC hdc, SCRIPT_ANALYSIS *psa, ScriptCache *psc)
 {
     UINT charset;
+
+    if (psc->userScript != 0)
+        return (char*)&psc->userScript;
 
     if (ShapingData[psa->eScript].otTag[0] != 0)
         return ShapingData[psa->eScript].otTag;
@@ -816,10 +813,13 @@ static LPCVOID load_GSUB_feature(HDC hdc, SCRIPT_ANALYSIS *psa, ScriptCache *psc
         const GSUB_Script *script;
         const GSUB_LangSys *language;
 
-        script = GSUB_get_script_table(psc->GSUB_Table, get_opentype_script(hdc,psa));
+        script = GSUB_get_script_table(psc->GSUB_Table, get_opentype_script(hdc,psa,psc));
         if (script)
         {
-            language = GSUB_get_lang_table(script, "xxxx"); /* Need to get Lang tag */
+            if (psc->userLang != 0)
+                language = GSUB_get_lang_table(script,(char*)&psc->userLang);
+            else
+                language = GSUB_get_lang_table(script, "xxxx"); /* Need to get Lang tag */
             if (language)
                 feature = GSUB_get_feature(psc->GSUB_Table, language, feat);
         }

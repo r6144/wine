@@ -127,16 +127,19 @@ AddReg=\
 AddService=MountMgr,0x800,MountMgrService
 AddService=Spooler,0,SpoolerService
 AddService=TermService,0,TerminalServices
+AddService=PlugPlay,0,PlugPlayService
 
 [DefaultInstall.NT.Services]
 AddService=MountMgr,0x800,MountMgrService
 AddService=Spooler,0,SpoolerService
 AddService=TermService,0,TerminalServices
+AddService=PlugPlay,0,PlugPlayService
 
 [DefaultInstall.ntamd64.Services]
 AddService=MountMgr,0x800,MountMgrService
 AddService=Spooler,0,SpoolerService
 AddService=TermService,0,TerminalServices
+AddService=PlugPlay,0,PlugPlayService
 
 [Strings]
 MciExtStr="Software\Microsoft\Windows NT\CurrentVersion\MCI Extensions"
@@ -156,6 +159,7 @@ HKCR,.inf,,2,"inffile"
 HKCR,.ini,,2,"inifile"
 HKCR,.lnk,,2,"lnkfile"
 HKCR,.msi,,2,"Msi.Package" 
+HKCR,.msp,,2,"Msi.Patch"
 HKCR,.rtf,,2,"rtffile"
 HKCR,.wri,,2,"wrifile"
 HKCR,chm.file,,2,"Compiled HTML Help File"
@@ -172,7 +176,7 @@ HKCR,folder\shell\open\ddeexec,"NoActivateHandler",2,""
 HKCR,folder\shell\open\ddeexec\application,,2,"Folders"
 HKCR,hlpfile,,2,"Help File"
 HKCR,hlpfile\shell\open\command,,2,"%11%\winhlp32.exe %1"
-HKCR,htmlfile\shell\open\command,,2,"%11%\winebrowser.exe -nohome"
+HKCR,htmlfile\shell\open\command,,2,"""%11%\winebrowser.exe"" -nohome"
 HKCR,htmlfile\shell\open\ddeexec,,2,"""%1"",,-1,0,,,,"
 HKCR,htmlfile\shell\open\ddeexec,"NoActivateHandler",2,""
 HKCR,htmlfile\shell\open\ddeexec\Application,,2,"IExplore"
@@ -194,6 +198,9 @@ HKCR,Msi.Package\DefaultIcon,,2,"msiexec.exe"
 HKCR,Msi.Package\shell\Open\command,,2,"msiexec /i ""%1"""
 HKCR,Msi.Package\shell\Repair\command,,2,"msiexec /f ""%1"""
 HKCR,Msi.Package\shell\Uninstall\command,,2,"msiexec /x ""%1"""
+HKCR,Msi.Patch,,2,"Windows Installer Patch"
+HKCR,Msi.Patch\DefaultIcon,,2,"msiexec.exe"
+HKCR,Msi.Patch\shell\Open\command,,2,"msiexec /p ""%1"""
 HKCR,rtffile,,2,"Rich Text Document"
 HKCR,rtffile\shell\open\command,,2,"%11%\wordpad.exe %1"
 HKCR,rtffile\shell\print\command,,2,"%11%\wordpad.exe /p %1"
@@ -203,22 +210,22 @@ HKCR,txtfile\shell\print\command,,2,"%11%\notepad.exe /p %1"
 HKCR,wrifile\shell\open\command,,2,"%11%\wordpad.exe %1"
 HKCR,wrifile\shell\print\command,,2,"%11%\wordpad.exe /p %1"
 HKCR,xmlfile,,2,"XML Document"
-HKCR,xmlfile\shell\open\command,,2,"%11%\winebrowser.exe -nohome"
+HKCR,xmlfile\shell\open\command,,2,"""%11%\winebrowser.exe"" -nohome"
 HKCR,xmlfile\shell\open\ddeexec,,2,"""%1"",,-1,0,,,,"
 HKCR,xmlfile\shell\open\ddeexec,"NoActivateHandler",2,""
 HKCR,xmlfile\shell\open\ddeexec\Application,,2,"IExplore"
 HKCR,xmlfile\shell\open\ddeexec\Topic,,2,"WWW_OpenURL"
-HKCR,ftp\shell\open\command,,2,"%11%\winebrowser.exe -nohome"
+HKCR,ftp\shell\open\command,,2,"""%11%\winebrowser.exe"" -nohome"
 HKCR,ftp\shell\open\ddeexec,,2,"""%1"",,-1,0,,,,"
 HKCR,ftp\shell\open\ddeexec,"NoActivateHandler",2,""
 HKCR,ftp\shell\open\ddeexec\Application,,2,"IExplore"
 HKCR,ftp\shell\open\ddeexec\Topic,,2,"WWW_OpenURL"
-HKCR,http\shell\open\command,,2,"%11%\winebrowser.exe -nohome"
+HKCR,http\shell\open\command,,2,"""%11%\winebrowser.exe"" -nohome"
 HKCR,http\shell\open\ddeexec,,2,"""%1"",,-1,0,,,,"
 HKCR,http\shell\open\ddeexec,"NoActivateHandler",2,""
 HKCR,http\shell\open\ddeexec\Application,,2,"IExplore"
 HKCR,http\shell\open\ddeexec\Topic,,2,"WWW_OpenURL"
-HKCR,https\shell\open\command,,2,"%11%\winebrowser.exe -nohome"
+HKCR,https\shell\open\command,,2,"""%11%\winebrowser.exe"" -nohome"
 HKCR,https\shell\open\ddeexec,,2,"""%1"",,-1,0,,,,"
 HKCR,https\shell\open\ddeexec,"NoActivateHandler",2,""
 HKCR,https\shell\open\ddeexec\Application,,2,"IExplore"
@@ -451,6 +458,7 @@ HKLM,%CurrentVersion%\Setup,"SharedDir",,"%25%"
 HKLM,%CurrentVersion%\Shell Extensions\Approved,,16
 HKLM,%CurrentVersion%\Uninstall,,16
 HKCU,%CurrentVersion%\Run,,16
+HKLM,%CurrentVersion%\Run,,16
 HKLM,%CurrentVersionNT%,"RegisteredOrganization",2,""
 HKLM,%CurrentVersionNT%,"RegisteredOwner",2,""
 HKLM,%CurrentVersionNT%,"SystemRoot",,"%10%"
@@ -507,6 +515,12 @@ HKLM,Software\Microsoft\NET Framework Setup\NDP\v3.5,Install,0x10003,1
 HKLM,Software\Microsoft\NET Framework Setup\NDP\v3.5,SP,0x10003,1
 HKLM,Software\Microsoft\NET Framework Setup\NDP\v3.5,Version,2,3.5.30729.01
 HKLM,Software\Microsoft\NET Framework Setup\NDP\v3.5\1033,Install,0x10003,1
+HKLM,Software\Microsoft\NET Framework Setup\NDP\v4\Client,Install,0x10003,1
+HKLM,Software\Microsoft\NET Framework Setup\NDP\v4\Client,Version,2,4.0.30319
+HKLM,Software\Microsoft\NET Framework Setup\NDP\v4\Client,TargetVersion,2,4.0.0
+HKLM,Software\Microsoft\NET Framework Setup\NDP\v4\Full,Install,0x10003,1
+HKLM,Software\Microsoft\NET Framework Setup\NDP\v4\Full,Version,2,4.0.30319
+HKLM,Software\Microsoft\NET Framework Setup\NDP\v4\Full,TargetVersion,2,4.0.0
 
 [Metrics]
 HKCU,%Metrics%,"ScrollWidth",2,"16"
@@ -2485,6 +2499,7 @@ HKLM,%CurrentVersion%\Telephony\Country List\998,"SameAreaRule",,"G"
 11,,avifil32.dll,1
 11,,browseui.dll,1
 11,,comctl32.dll,2
+11,,comdlg32.dll,1
 11,,cryptdlg.dll,1
 11,,cryptnet.dll,1
 11,,d3dxof.dll,1
@@ -2547,6 +2562,7 @@ HKLM,%CurrentVersion%\Telephony\Country List\998,"SameAreaRule",,"G"
 11,,wiaservc.dll,1
 11,,windowscodecs.dll,1
 11,,winegstreamer.dll,1
+11,,wineqtdecoder.dll,1
 11,,wintrust.dll,1
 11,,wmiutils.dll,1
 11,,wuapi.dll,1
@@ -2561,6 +2577,7 @@ HKLM,%CurrentVersion%\Telephony\Country List\998,"SameAreaRule",,"G"
 10,,winhlp32.exe
 10,command,start.exe
 10,system,ddeml.dll,ddeml.dll16
+10,system,mmsystem.dll,mmsystem.dll16
 11,,ddhelp.exe
 11,,dosx.exe
 11,,dsound.vxd
@@ -2570,7 +2587,8 @@ HKLM,%CurrentVersion%\Telephony\Country List\998,"SameAreaRule",,"G"
 [FakeDllsWow64]
 ; create some directories first
 11,mui,
-11,wbem,
+11,gecko\plugin,npmshtml.dll
+11,wbem,mofcomp.exe
 11,,iexplore.exe,-
 11,,winetest.exe,-
 12,,mountmgr.sys,-
@@ -3007,6 +3025,14 @@ DisplayName="Terminal Services"
 ServiceBinary="%11%\termsv.exe"
 ServiceType=32
 StartType=3
+ErrorControl=1
+
+[PlugPlayService]
+Description="Enables automatic configuration of devices"
+DisplayName="Plug and Play Service"
+ServiceBinary="%11%\plugplay.exe"
+ServiceType=32
+StartType=2
 ErrorControl=1
 
 [Services]

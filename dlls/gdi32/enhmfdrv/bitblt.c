@@ -65,12 +65,8 @@ BOOL CDECL EMFDRV_PatBlt( PHYSDEV dev, INT left, INT top,
     return ret;
 }
 
-/* Utilitarian function used by EMFDRV_BitBlt and EMFDRV_StretchBlt */
-
-static BOOL EMFDRV_BitBlockTransfer( 
-    PHYSDEV devDst, INT xDst, INT yDst, INT widthDst, INT heightDst,  
-    PHYSDEV devSrc, INT xSrc, INT ySrc, INT widthSrc, INT heightSrc, DWORD rop,
-    DWORD emrType)
+BOOL CDECL EMFDRV_StretchBlt( PHYSDEV devDst, INT xDst, INT yDst, INT widthDst, INT heightDst,
+                              PHYSDEV devSrc, INT xSrc, INT ySrc, INT widthSrc, INT heightSrc, DWORD rop )
 {
     BOOL ret;
     PEMRBITBLT pEMR;
@@ -81,37 +77,32 @@ static BOOL EMFDRV_BitBlockTransfer(
     BITMAP  BM;
     WORD nBPP = 0;
     LPBITMAPINFOHEADER lpBmiH;
-    BOOL useSrc;
-    EMFDRV_PDEVICE* physDevSrc = (EMFDRV_PDEVICE*)devSrc;
     HBITMAP hBitmap = NULL;
+    DWORD emrType;
 
-    useSrc = (((rop >> 2) & 0x330000) != (rop & 0x330000));
-    if (!physDevSrc && useSrc) return FALSE;
+    if (devSrc->funcs == devDst->funcs) return FALSE;  /* can't use a metafile DC as source */
 
-    if (emrType == EMR_BITBLT)
+    if (widthSrc == widthDst && heightSrc == heightDst)
+    {
+        emrType = EMR_BITBLT;
         emrSize = sizeof(EMRBITBLT);
-    else if (emrType == EMR_STRETCHBLT)
-        emrSize = sizeof(EMRSTRETCHBLT);
+    }
     else
+    {
+        emrType = EMR_STRETCHBLT;
+        emrSize = sizeof(EMRSTRETCHBLT);
+    }
+
+    hBitmap = GetCurrentObject(devSrc->hdc, OBJ_BITMAP);
+
+    if(sizeof(BITMAP) != GetObjectW(hBitmap, sizeof(BITMAP), &BM))
         return FALSE;
 
-    if(useSrc)
-    {
-        hBitmap = GetCurrentObject(physDevSrc->hdc, OBJ_BITMAP);
-
-        if(sizeof(BITMAP) != GetObjectW(hBitmap, sizeof(BITMAP), &BM))
-            return FALSE;
-
-        nBPP = BM.bmPlanes * BM.bmBitsPixel;
-        if(nBPP > 8) nBPP = 24; /* FIXME Can't get 16bpp to work for some reason */
-        bitsSize = DIB_GetDIBWidthBytes(BM.bmWidth, nBPP) * BM.bmHeight;
-        bmiSize = sizeof(BITMAPINFOHEADER) +
-            (nBPP <= 8 ? 1 << nBPP : 0) * sizeof(RGBQUAD);
-    }
-    else
-    {
-        bitsSize = bmiSize = 0;
-    }
+    nBPP = BM.bmPlanes * BM.bmBitsPixel;
+    if(nBPP > 8) nBPP = 24; /* FIXME Can't get 16bpp to work for some reason */
+    bitsSize = DIB_GetDIBWidthBytes(BM.bmWidth, nBPP) * BM.bmHeight;
+    bmiSize = sizeof(BITMAPINFOHEADER) +
+        (nBPP <= 8 ? 1 << nBPP : 0) * sizeof(RGBQUAD);
 
    size = emrSize + bmiSize + bitsSize;
 
@@ -132,27 +123,11 @@ static BOOL EMFDRV_BitBlockTransfer(
     pEMR->dwRop = rop;
     pEMR->xSrc = xSrc;
     pEMR->ySrc = ySrc;
-    if (useSrc)
-    {
-        GetWorldTransform(physDevSrc->hdc, &pEMR->xformSrc);
-        pEMR->crBkColorSrc = GetBkColor(physDevSrc->hdc);
-        pEMR->iUsageSrc = DIB_RGB_COLORS;
-        pEMR->offBmiSrc = emrSize;
-        pEMR->offBitsSrc = emrSize + bmiSize;
-    }
-    else
-    {
-        pEMR->xformSrc.eM11 = 1.0;  /** FIXME:           */
-        pEMR->xformSrc.eM12 = 0.0;  /** Setting default  */
-        pEMR->xformSrc.eM21 = 0.0;  /** value.           */
-        pEMR->xformSrc.eM22 = 1.0;  /** Where should we  */
-        pEMR->xformSrc.eDx = 0.0;   /** get that info    */
-        pEMR->xformSrc.eDy = 0.0;   /** ????             */
-        pEMR->crBkColorSrc = 0;
-        pEMR->iUsageSrc = 0;
-        pEMR->offBmiSrc = 0;
-        pEMR->offBitsSrc = 0;
-    }
+    GetWorldTransform(devSrc->hdc, &pEMR->xformSrc);
+    pEMR->crBkColorSrc = GetBkColor(devSrc->hdc);
+    pEMR->iUsageSrc = DIB_RGB_COLORS;
+    pEMR->offBmiSrc = emrSize;
+    pEMR->offBitsSrc = emrSize + bmiSize;
     pEMR->cbBmiSrc = bmiSize;
     pEMR->cbBitsSrc = bitsSize;
     if (emrType == EMR_STRETCHBLT) 
@@ -162,63 +137,37 @@ static BOOL EMFDRV_BitBlockTransfer(
         pEMRStretch->cySrc = heightSrc;
     }
 
-    if (useSrc)
-    {
-        /* Initialize BITMAPINFO structure */
-        lpBmiH = (LPBITMAPINFOHEADER)((BYTE*)pEMR + pEMR->offBmiSrc);
+    /* Initialize BITMAPINFO structure */
+    lpBmiH = (LPBITMAPINFOHEADER)((BYTE*)pEMR + pEMR->offBmiSrc);
 
-        lpBmiH->biSize = sizeof(BITMAPINFOHEADER);
-        lpBmiH->biWidth =  BM.bmWidth;
-        lpBmiH->biHeight = BM.bmHeight;
-        lpBmiH->biPlanes = BM.bmPlanes;
-        lpBmiH->biBitCount = nBPP;
-        /* Assume the bitmap isn't compressed and set the BI_RGB flag. */
-        lpBmiH->biCompression = BI_RGB;
-        lpBmiH->biSizeImage = bitsSize;
-        lpBmiH->biYPelsPerMeter = 0;
-        lpBmiH->biXPelsPerMeter = 0;
-        lpBmiH->biClrUsed   = nBPP <= 8 ? 1 << nBPP : 0;
-        /* Set biClrImportant to 0, indicating that all of the
-           device colors are important. */
-        lpBmiH->biClrImportant = 0;
+    lpBmiH->biSize = sizeof(BITMAPINFOHEADER);
+    lpBmiH->biWidth =  BM.bmWidth;
+    lpBmiH->biHeight = BM.bmHeight;
+    lpBmiH->biPlanes = BM.bmPlanes;
+    lpBmiH->biBitCount = nBPP;
+    /* Assume the bitmap isn't compressed and set the BI_RGB flag. */
+    lpBmiH->biCompression = BI_RGB;
+    lpBmiH->biSizeImage = bitsSize;
+    lpBmiH->biYPelsPerMeter = 0;
+    lpBmiH->biXPelsPerMeter = 0;
+    lpBmiH->biClrUsed   = nBPP <= 8 ? 1 << nBPP : 0;
+    /* Set biClrImportant to 0, indicating that all of the
+       device colors are important. */
+    lpBmiH->biClrImportant = 0;
 
-        /* Initialize bitmap bits */
-        if (GetDIBits(physDevSrc->hdc, hBitmap, 0, (UINT)lpBmiH->biHeight,
-                      (BYTE*)pEMR + pEMR->offBitsSrc,
-                      (LPBITMAPINFO)lpBmiH, DIB_RGB_COLORS))
-        {
-            ret = EMFDRV_WriteRecord(devDst, (EMR*)pEMR);
-            if (ret) EMFDRV_UpdateBBox(devDst, &(pEMR->rclBounds));
-        }
-        else
-            ret = FALSE;
-    }
-    else
+    /* Initialize bitmap bits */
+    if (GetDIBits(devSrc->hdc, hBitmap, 0, (UINT)lpBmiH->biHeight,
+                  (BYTE*)pEMR + pEMR->offBitsSrc,
+                  (LPBITMAPINFO)lpBmiH, DIB_RGB_COLORS))
     {
         ret = EMFDRV_WriteRecord(devDst, (EMR*)pEMR);
         if (ret) EMFDRV_UpdateBBox(devDst, &(pEMR->rclBounds));
     }
+    else
+        ret = FALSE;
 
     HeapFree( GetProcessHeap(), 0, pEMR);
     return ret;
-}
-
-BOOL CDECL EMFDRV_BitBlt(
-    PHYSDEV devDst, INT xDst, INT yDst, INT width, INT height,
-    PHYSDEV devSrc, INT xSrc, INT ySrc, DWORD rop)
-{
-    return EMFDRV_BitBlockTransfer( devDst, xDst, yDst, width, height,  
-                                    devSrc, xSrc, ySrc, width, height, 
-                                    rop, EMR_BITBLT );
-}
-
-BOOL CDECL EMFDRV_StretchBlt(
-    PHYSDEV devDst, INT xDst, INT yDst, INT widthDst, INT heightDst,  
-    PHYSDEV devSrc, INT xSrc, INT ySrc, INT widthSrc, INT heightSrc, DWORD rop )
-{
-    return EMFDRV_BitBlockTransfer( devDst, xDst, yDst, widthDst, heightDst,  
-                                    devSrc, xSrc, ySrc, widthSrc, heightSrc, 
-                                    rop, EMR_STRETCHBLT );
 }
 
 INT CDECL EMFDRV_StretchDIBits( PHYSDEV dev, INT xDst, INT yDst, INT widthDst,

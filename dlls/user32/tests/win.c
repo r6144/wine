@@ -127,6 +127,34 @@ static void check_parents( HWND hwnd, HWND ga_parent, HWND gwl_parent, HWND get_
     }
 }
 
+#define check_wnd_state(a,b,c,d) check_wnd_state_(__FILE__,__LINE__,a,b,c,d)
+static void check_wnd_state_(const char *file, int line,
+                             HWND active, HWND foreground, HWND focus, HWND capture)
+{
+    ok_(file, line)(active == GetActiveWindow(), "GetActiveWindow() = %p\n", GetActiveWindow());
+    /* only check foreground if it belongs to the current thread */
+    /* foreground can be moved to a different app pretty much at any time */
+    if (foreground && GetForegroundWindow() &&
+        GetWindowThreadProcessId(GetForegroundWindow(), NULL) == GetCurrentThreadId())
+        ok_(file, line)(foreground == GetForegroundWindow(), "GetForegroundWindow() = %p\n", GetForegroundWindow());
+    ok_(file, line)(focus == GetFocus(), "GetFocus() = %p\n", GetFocus());
+    ok_(file, line)(capture == GetCapture(), "GetCapture() = %p\n", GetCapture());
+}
+
+/* same as above but without capture test */
+#define check_active_state(a,b,c) check_active_state_(__FILE__,__LINE__,a,b,c)
+static void check_active_state_(const char *file, int line,
+                                HWND active, HWND foreground, HWND focus)
+{
+    ok_(file, line)(active == GetActiveWindow(), "GetActiveWindow() = %p\n", GetActiveWindow());
+    /* only check foreground if it belongs to the current thread */
+    /* foreground can be moved to a different app pretty much at any time */
+    if (foreground && GetForegroundWindow() &&
+        GetWindowThreadProcessId(GetForegroundWindow(), NULL) == GetCurrentThreadId())
+        ok_(file, line)(foreground == GetForegroundWindow(), "GetForegroundWindow() = %p\n", GetForegroundWindow());
+    ok_(file, line)(focus == GetFocus(), "GetFocus() = %p\n", GetFocus());
+}
+
 static BOOL ignore_message( UINT message )
 {
     /* these are always ignored */
@@ -1941,10 +1969,14 @@ static LRESULT WINAPI nccalcsize_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM
     return DefWindowProc( hwnd, msg, wparam, lparam );
 }
 
-static void test_SetWindowPos(HWND hwnd)
+static void test_SetWindowPos(HWND hwnd, HWND hwnd2)
 {
     RECT orig_win_rc, rect;
     LONG_PTR old_proc;
+    HWND hwnd_grandchild, hwnd_child, hwnd_child2;
+    HWND hwnd_desktop;
+    RECT rc1, rc2;
+    BOOL ret;
 
     SetRect(&rect, 111, 222, 333, 444);
     ok(!GetWindowRect(0, &rect), "GetWindowRect succeeded\n");
@@ -1959,7 +1991,8 @@ static void test_SetWindowPos(HWND hwnd)
     GetWindowRect(hwnd, &orig_win_rc);
 
     old_proc = SetWindowLongPtr( hwnd, GWLP_WNDPROC, (ULONG_PTR)nccalcsize_proc );
-    SetWindowPos(hwnd, 0, 100, 100, 0, 0, SWP_NOZORDER|SWP_FRAMECHANGED);
+    ret = SetWindowPos(hwnd, 0, 100, 100, 0, 0, SWP_NOZORDER|SWP_FRAMECHANGED);
+    ok(ret, "Got %d\n", ret);
     GetWindowRect( hwnd, &rect );
     ok( rect.left == 100 && rect.top == 100 && rect.right == 100 && rect.bottom == 100,
         "invalid window rect %d,%d-%d,%d\n", rect.left, rect.top, rect.right, rect.bottom );
@@ -1968,7 +2001,8 @@ static void test_SetWindowPos(HWND hwnd)
     ok( rect.left == 90 && rect.top == 90 && rect.right == 110 && rect.bottom == 110,
         "invalid client rect %d,%d-%d,%d\n", rect.left, rect.top, rect.right, rect.bottom );
 
-    SetWindowPos(hwnd, 0, 200, 200, 0, 0, SWP_NOZORDER|SWP_FRAMECHANGED);
+    ret = SetWindowPos(hwnd, 0, 200, 200, 0, 0, SWP_NOZORDER|SWP_FRAMECHANGED);
+    ok(ret, "Got %d\n", ret);
     GetWindowRect( hwnd, &rect );
     ok( rect.left == 200 && rect.top == 200 && rect.right == 200 && rect.bottom == 200,
         "invalid window rect %d,%d-%d,%d\n", rect.left, rect.top, rect.right, rect.bottom );
@@ -1977,30 +2011,151 @@ static void test_SetWindowPos(HWND hwnd)
     ok( rect.left == 210 && rect.top == 210 && rect.right == 190 && rect.bottom == 190,
         "invalid client rect %d,%d-%d,%d\n", rect.left, rect.top, rect.right, rect.bottom );
 
-    SetWindowPos(hwnd, 0, orig_win_rc.left, orig_win_rc.top,
-                 orig_win_rc.right, orig_win_rc.bottom, 0);
+    ret = SetWindowPos(hwnd, 0, orig_win_rc.left, orig_win_rc.top,
+                      orig_win_rc.right, orig_win_rc.bottom, 0);
+    ok(ret, "Got %d\n", ret);
     SetWindowLongPtr( hwnd, GWLP_WNDPROC, old_proc );
 
     /* Win9x truncates coordinates to 16-bit irrespectively */
     if (!is_win9x)
     {
-        SetWindowPos(hwnd, 0, -32769, -40000, -32769, -90000, SWP_NOMOVE);
-        SetWindowPos(hwnd, 0, 32768, 40000, 32768, 40000, SWP_NOMOVE);
+        ret = SetWindowPos(hwnd, 0, -32769, -40000, -32769, -90000, SWP_NOMOVE);
+        ok(ret, "Got %d\n", ret);
+        ret = SetWindowPos(hwnd, 0, 32768, 40000, 32768, 40000, SWP_NOMOVE);
+        ok(ret, "Got %d\n", ret);
 
-        SetWindowPos(hwnd, 0, -32769, -40000, -32769, -90000, SWP_NOSIZE);
-        SetWindowPos(hwnd, 0, 32768, 40000, 32768, 40000, SWP_NOSIZE);
+        ret = SetWindowPos(hwnd, 0, -32769, -40000, -32769, -90000, SWP_NOSIZE);
+        ok(ret, "Got %d\n", ret);
+        ret = SetWindowPos(hwnd, 0, 32768, 40000, 32768, 40000, SWP_NOSIZE);
+        ok(ret, "Got %d\n", ret);
     }
 
-    SetWindowPos(hwnd, 0, orig_win_rc.left, orig_win_rc.top,
-                 orig_win_rc.right, orig_win_rc.bottom, 0);
+    ret = SetWindowPos(hwnd, 0, orig_win_rc.left, orig_win_rc.top,
+                       orig_win_rc.right, orig_win_rc.bottom, 0);
+    ok(ret, "Got %d\n", ret);
 
     ok(!(GetWindowLong(hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST), "WS_EX_TOPMOST should not be set\n");
-    SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE|SWP_NOMOVE);
+    ret = SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE|SWP_NOMOVE);
+    ok(ret, "Got %d\n", ret);
     ok(GetWindowLong(hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST, "WS_EX_TOPMOST should be set\n");
-    SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOSIZE|SWP_NOMOVE);
+    ret = SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOSIZE|SWP_NOMOVE);
+    ok(ret, "Got %d\n", ret);
     ok(GetWindowLong(hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST, "WS_EX_TOPMOST should be set\n");
-    SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOSIZE|SWP_NOMOVE);
+    ret = SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOSIZE|SWP_NOMOVE);
+    ok(ret, "Got %d\n", ret);
     ok(!(GetWindowLong(hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST), "WS_EX_TOPMOST should not be set\n");
+
+    hwnd_desktop = GetDesktopWindow();
+    ok(!!hwnd_desktop, "Failed to get hwnd_desktop window (%d).\n", GetLastError());
+    hwnd_child = create_tool_window(WS_VISIBLE|WS_CHILD, hwnd);
+    ok(!!hwnd_child, "Failed to create child window (%d)\n", GetLastError());
+    hwnd_grandchild = create_tool_window(WS_VISIBLE|WS_CHILD, hwnd_child);
+    ok(!!hwnd_child, "Failed to create child window (%d)\n", GetLastError());
+    hwnd_child2 = create_tool_window(WS_VISIBLE|WS_CHILD, hwnd);
+    ok(!!hwnd_child2, "Failed to create second child window (%d)\n", GetLastError());
+
+    ret = SetWindowPos(hwnd, hwnd2, 0, 0, 0, 0, SWP_NOMOVE|SWP_NOSIZE);
+    ok(ret, "Got %d\n", ret);
+    check_active_state(hwnd, hwnd, hwnd);
+
+    ret = SetWindowPos(hwnd2, hwnd, 0, 0, 0, 0, SWP_NOMOVE|SWP_NOSIZE);
+    ok(ret, "Got %d\n", ret);
+    check_active_state(hwnd2, hwnd2, hwnd2);
+
+    /* Returns TRUE also for windows that are not siblings */
+    ret = SetWindowPos(hwnd_child, hwnd2, 0, 0, 0, 0, SWP_NOMOVE|SWP_NOSIZE);
+    ok(ret, "Got %d\n", ret);
+    check_active_state(hwnd2, hwnd2, hwnd2);
+
+    ret = SetWindowPos(hwnd2, hwnd_child, 0, 0, 0, 0, SWP_NOMOVE|SWP_NOSIZE);
+    ok(ret, "Got %d\n", ret);
+    check_active_state(hwnd2, hwnd2, hwnd2);
+
+    /* Does not seem to do anything even without passing flags, still returns TRUE */
+    GetWindowRect(hwnd_child, &rc1);
+    ret = SetWindowPos(hwnd_child, hwnd2 , 1, 2, 3, 4, 0);
+    ok(ret, "Got %d\n", ret);
+    GetWindowRect(hwnd_child, &rc2);
+    ok(rc1.left == rc2.left && rc1.top == rc2.top &&
+       rc1.right == rc2.right && rc1.bottom == rc2.bottom,
+       "(%d, %d, %d, %d) != (%d, %d, %d, %d)\n",
+       rc1.left, rc1.top, rc1.right, rc1.bottom, rc2.left, rc2.top, rc2.right, rc2.bottom);
+    check_active_state(hwnd2, hwnd2, hwnd2);
+
+    /* Same thing the other way around. */
+    GetWindowRect(hwnd2, &rc1);
+    ret = SetWindowPos(hwnd2, hwnd_child, 1, 2, 3, 4, 0);
+    ok(ret, "Got %d\n", ret);
+    GetWindowRect(hwnd2, &rc2);
+    ok(rc1.left == rc2.left && rc1.top == rc2.top &&
+       rc1.right == rc2.right && rc1.bottom == rc2.bottom,
+       "(%d, %d, %d, %d) != (%d, %d, %d, %d)\n",
+       rc1.left, rc1.top, rc1.right, rc1.bottom, rc2.left, rc2.top, rc2.right, rc2.bottom);
+    check_active_state(hwnd2, hwnd2, hwnd2);
+
+    /* .. and with these windows. */
+    GetWindowRect(hwnd_grandchild, &rc1);
+    ret = SetWindowPos(hwnd_grandchild, hwnd_child2, 1, 2, 3, 4, 0);
+    ok(ret, "Got %d\n", ret);
+    GetWindowRect(hwnd_grandchild, &rc2);
+    ok(rc1.left == rc2.left && rc1.top == rc2.top &&
+       rc1.right == rc2.right && rc1.bottom == rc2.bottom,
+       "(%d, %d, %d, %d) != (%d, %d, %d, %d)\n",
+       rc1.left, rc1.top, rc1.right, rc1.bottom, rc2.left, rc2.top, rc2.right, rc2.bottom);
+    check_active_state(hwnd2, hwnd2, hwnd2);
+
+    /* Add SWP_NOZORDER and it will be properly resized. */
+    GetWindowRect(hwnd_grandchild, &rc1);
+    ret = SetWindowPos(hwnd_grandchild, hwnd_child2, 1, 2, 3, 4, SWP_NOZORDER);
+    ok(ret, "Got %d\n", ret);
+    GetWindowRect(hwnd_grandchild, &rc2);
+    ok((rc1.left+1) == rc2.left && (rc1.top+2) == rc2.top &&
+       (rc1.left+4) == rc2.right && (rc1.top+6) == rc2.bottom,
+       "(%d, %d, %d, %d) != (%d, %d, %d, %d)\n",
+       rc1.left+1, rc1.top+2, rc1.left+4, rc1.top+6, rc2.left, rc2.top, rc2.right, rc2.bottom);
+    check_active_state(hwnd2, hwnd2, hwnd2);
+
+    /* Given a sibling window, the window is properly resized. */
+    GetWindowRect(hwnd_child, &rc1);
+    ret = SetWindowPos(hwnd_child, hwnd_child2, 1, 2, 3, 4, 0);
+    ok(ret, "Got %d\n", ret);
+    GetWindowRect(hwnd_child, &rc2);
+    ok((rc1.left+1) == rc2.left && (rc1.top+2) == rc2.top &&
+       (rc1.left+4) == rc2.right && (rc1.top+6) == rc2.bottom,
+       "(%d, %d, %d, %d) != (%d, %d, %d, %d)\n",
+       rc1.left+1, rc1.top+2, rc1.left+4, rc1.top+6, rc2.left, rc2.top, rc2.right, rc2.bottom);
+    check_active_state(hwnd2, hwnd2, hwnd2);
+
+    /* Involving the desktop window changes things. */
+    ret = SetWindowPos(hwnd_child, hwnd_desktop, 0, 0, 0, 0, SWP_NOMOVE|SWP_NOSIZE);
+    ok(!ret, "Got %d\n", ret);
+    check_active_state(hwnd2, hwnd2, hwnd2);
+
+    GetWindowRect(hwnd_child, &rc1);
+    ret = SetWindowPos(hwnd_child, hwnd_desktop, 0, 0, 0, 0, 0);
+    ok(!ret, "Got %d\n", ret);
+    GetWindowRect(hwnd_child, &rc2);
+    ok(rc1.top == rc2.top && rc1.left == rc2.left &&
+       rc1.bottom == rc2.bottom && rc1.right == rc2.right,
+       "(%d, %d, %d, %d) != (%d, %d, %d, %d)\n",
+       rc1.top, rc1.left, rc1.bottom, rc1.right, rc2.top, rc2.left, rc2.bottom, rc2.right);
+    check_active_state(hwnd2, hwnd2, hwnd2);
+
+    ret = SetWindowPos(hwnd_desktop, hwnd_child, 0, 0, 0, 0, SWP_NOMOVE|SWP_NOSIZE);
+    ok(!ret, "Got %d\n", ret);
+    check_active_state(hwnd2, hwnd2, hwnd2);
+
+    ret = SetWindowPos(hwnd_desktop, hwnd, 0, 0, 0, 0, SWP_NOMOVE|SWP_NOSIZE);
+    ok(!ret, "Got %d\n", ret);
+    check_active_state(hwnd2, hwnd2, hwnd2);
+
+    ret = SetWindowPos(hwnd, hwnd_desktop, 0, 0, 0, 0, SWP_NOMOVE|SWP_NOSIZE);
+    ok(!ret, "Got %d\n", ret);
+    check_active_state(hwnd2, hwnd2, hwnd2);
+
+    DestroyWindow(hwnd_grandchild);
+    DestroyWindow(hwnd_child);
+    DestroyWindow(hwnd_child2);
 }
 
 static void test_SetMenu(HWND parent)
@@ -2439,20 +2594,6 @@ todo_wine
     DestroyWindow( child );
 }
 
-#define check_wnd_state(a,b,c,d) check_wnd_state_(__FILE__,__LINE__,a,b,c,d)
-static void check_wnd_state_(const char *file, int line,
-                             HWND active, HWND foreground, HWND focus, HWND capture)
-{
-    ok_(file, line)(active == GetActiveWindow(), "GetActiveWindow() = %p\n", GetActiveWindow());
-    /* only check foreground if it belongs to the current thread */
-    /* foreground can be moved to a different app pretty much at any time */
-    if (foreground && GetForegroundWindow() &&
-        GetWindowThreadProcessId(GetForegroundWindow(), NULL) == GetCurrentThreadId())
-        ok_(file, line)(foreground == GetForegroundWindow(), "GetForegroundWindow() = %p\n", GetForegroundWindow());
-    ok_(file, line)(focus == GetFocus(), "GetFocus() = %p\n", GetFocus());
-    ok_(file, line)(capture == GetCapture(), "GetCapture() = %p\n", GetCapture());
-}
-
 static void test_SetActiveWindow(HWND hwnd)
 {
     HWND hwnd2;
@@ -2586,7 +2727,8 @@ static void test_SetForegroundWindow(HWND hwnd)
 
     hwnd2 = GetForegroundWindow();
     ok(hwnd2 == hwnd, "Wrong foreground window %p\n", hwnd2);
-    ok(SetForegroundWindow( GetDesktopWindow() ), "SetForegroundWindow(desktop) error: %d\n", GetLastError());
+    ret = SetForegroundWindow( GetDesktopWindow() );
+    ok(ret, "SetForegroundWindow(desktop) error: %d\n", GetLastError());
     hwnd2 = GetForegroundWindow();
     ok(hwnd2 != hwnd, "Wrong foreground window %p\n", hwnd2);
 
@@ -2705,10 +2847,7 @@ static LRESULT WINAPI button_hook_proc(HWND button, UINT msg, WPARAM wparam, LPA
 
 static void test_capture_1(void)
 {
-    HWND button, capture, oldFocus, oldActive;
-
-    oldFocus = GetFocus();
-    oldActive = GetActiveWindow();
+    HWND button, capture;
 
     capture = GetCapture();
     ok(capture == 0, "GetCapture() = %p\n", capture);
@@ -2726,7 +2865,9 @@ static void test_capture_1(void)
     check_wnd_state(button, 0, button, button);
 
     DestroyWindow(button);
-    check_wnd_state(oldActive, 0, oldFocus, 0);
+    /* old active window test depends on previously executed window
+     * activation tests, and fails under NT4.
+    check_wnd_state(oldActive, 0, oldFocus, 0);*/
 }
 
 static void test_capture_2(void)
@@ -2883,6 +3024,7 @@ static void test_capture_4(void)
     HWND hwnd;
     WNDCLASSA wclass;
     HINSTANCE hInstance = GetModuleHandleA( NULL );
+    ATOM aclass;
 
     if (!pGetGUIThreadInfo)
     {
@@ -2899,10 +3041,11 @@ static void test_capture_4(void)
     wclass.lpszMenuName  = 0;
     wclass.cbClsExtra    = 0;
     wclass.cbWndExtra    = 0;
-    assert (RegisterClassA( &wclass ));
-    assert (hwnd = CreateWindowA( wclass.lpszClassName, "MenuTest",
-                                  WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, 0,
-                                  400, 200, NULL, NULL, hInstance, NULL) );
+    aclass = RegisterClassA( &wclass );
+    ok( aclass, "RegisterClassA failed with error %d\n", GetLastError());
+    hwnd = CreateWindowA( wclass.lpszClassName, "MenuTest",
+                          WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, 0,
+                          400, 200, NULL, NULL, hInstance, NULL);
     ok(hwnd != NULL, "CreateWindowEx failed with error %d\n", GetLastError());
     if (!hwnd) return;
     hmenu = CreatePopupMenu();
@@ -3329,10 +3472,10 @@ static void test_nccalcscroll(HWND parent)
 
 static void test_SetParent(void)
 {
-    BOOL ret;
     HWND desktop = GetDesktopWindow();
     HMENU hMenu;
-    HWND parent, child1, child2, child3, child4, sibling;
+    HWND ret, parent, child1, child2, child3, child4, sibling, popup;
+    BOOL bret;
 
     parent = CreateWindowExA(0, "static", NULL, WS_OVERLAPPEDWINDOW,
 			     100, 100, 200, 200, 0, 0, 0, NULL);
@@ -3377,8 +3520,6 @@ static void test_SetParent(void)
 
     if (!is_win9x) /* Win9x doesn't survive this test */
     {
-        HWND ret;
-
         ok(!SetParent(parent, child1), "SetParent should fail\n");
         ok(!SetParent(child2, child3), "SetParent should fail\n");
         ok(SetParent(child1, parent) != 0, "SetParent should not fail\n");
@@ -3424,8 +3565,7 @@ static void test_SetParent(void)
     ok(SetParent(sibling, parent) != 0, "SetParent should not fail\n");
     ok(GetMenu(sibling) == hMenu, "SetParent should not remove menu\n");
 
-    ret = DestroyWindow(parent);
-    ok( ret, "DestroyWindow() error %d\n", GetLastError());
+    ok(DestroyWindow(parent), "DestroyWindow() failed\n");
 
     ok(!IsWindow(parent), "parent still exists\n");
     ok(!IsWindow(sibling), "sibling still exists\n");
@@ -3433,6 +3573,51 @@ static void test_SetParent(void)
     ok(!IsWindow(child2), "child2 still exists\n");
     ok(!IsWindow(child3), "child3 still exists\n");
     ok(!IsWindow(child4), "child4 still exists\n");
+
+    parent = CreateWindowExA(0, "static", NULL, WS_OVERLAPPEDWINDOW,
+			     100, 100, 200, 200, 0, 0, 0, NULL);
+    assert(parent != 0);
+    child1 = CreateWindowExA(0, "static", NULL, WS_CHILD,
+			     0, 0, 50, 50, parent, 0, 0, NULL);
+    assert(child1 != 0);
+    popup = CreateWindowExA(0, "static", NULL, WS_POPUP,
+			     0, 0, 50, 50, 0, 0, 0, NULL);
+    assert(popup != 0);
+
+    trace("parent %p, child %p, popup %p\n", parent, child1, popup);
+
+    check_parents(parent, desktop, 0, 0, 0, parent, parent);
+    check_parents(child1, parent, parent, parent, 0, parent, parent);
+    check_parents(popup, desktop, 0, 0, 0, popup, popup);
+
+    SetActiveWindow(parent);
+    SetFocus(parent);
+    check_active_state(parent, 0, parent);
+
+    ret = SetParent(popup, child1);
+    ok(ret == desktop, "expected %p, got %p\n", desktop, ret);
+    check_parents(popup, child1, child1, 0, 0, parent, popup);
+todo_wine
+    check_active_state(popup, 0, popup);
+
+    SetActiveWindow(parent);
+    SetFocus(parent);
+    check_active_state(parent, 0, parent);
+
+    bret = SetForegroundWindow(popup);
+todo_wine {
+    ok(bret || broken(!bret), "SetForegroundWindow() failed\n");
+    if (!bret)
+        check_active_state(popup, 0, popup);
+    else
+        check_active_state(popup, popup, popup);
+    }
+
+    ok(DestroyWindow(parent), "DestroyWindow() failed\n");
+
+    ok(!IsWindow(parent), "parent still exists\n");
+    ok(!IsWindow(child1), "child1 still exists\n");
+    ok(!IsWindow(popup), "popup still exists\n");
 }
 
 static LRESULT WINAPI StyleCheckProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
@@ -3877,6 +4062,10 @@ static void test_params(void)
 {
     HWND hwnd;
     INT rc;
+
+    ok(!IsWindow(0), "IsWindow(0)\n");
+    ok(!IsWindow(HWND_BROADCAST), "IsWindow(HWND_BROADCAST)\n");
+    ok(!IsWindow(HWND_TOPMOST), "IsWindow(HWND_TOPMOST)\n");
 
     /* Just a param check */
     if (pGetMonitorInfoA)
@@ -4529,10 +4718,12 @@ static void test_CreateWindow(void)
     HMENU hmenu;
     RECT rc, rc_minmax;
     MINMAXINFO minmax;
+    BOOL res;
 
 #define expect_menu(window, menu) \
     SetLastError(0xdeadbeef); \
-    ok(GetMenu(window) == (HMENU)menu, "GetMenu error %d\n", GetLastError())
+    res = (GetMenu(window) == (HMENU)menu); \
+    ok(res, "GetMenu error %d\n", GetLastError())
 
 #define expect_style(window, style)\
     ok((ULONG)GetWindowLong(window, GWL_STYLE) == (style), "expected style %x != %x\n", (LONG)(style), GetWindowLong(window, GWL_STYLE))
@@ -4551,7 +4742,8 @@ static void test_CreateWindow(void)
     assert(parent != 0);
 
     SetLastError(0xdeadbeef);
-    ok(IsMenu(hmenu), "IsMenu error %d\n", GetLastError());
+    res = IsMenu(hmenu);
+    ok(res, "IsMenu error %d\n", GetLastError());
 
     /* WS_CHILD */
     SetLastError(0xdeadbeef);
@@ -6051,7 +6243,8 @@ static void test_thick_child_size(HWND parentWindow)
     cls.lpszMenuName = NULL;
     cls.lpszClassName = className;
     SetLastError(0xdeadbeef);
-    ok(RegisterClassA(&cls),"RegisterClassA failed, error: %u\n", GetLastError());
+    success = RegisterClassA(&cls);
+    ok(success,"RegisterClassA failed, error: %u\n", GetLastError());
 
     for(i = 0; i < NUMBER_OF_THICK_CHILD_TESTS; i++)
     {
@@ -6338,8 +6531,9 @@ START_TEST(win)
     hhook = SetWindowsHookExA(WH_CBT, cbt_hook_proc, 0, GetCurrentThreadId());
     if (!hhook) win_skip( "Cannot set CBT hook, skipping some tests\n" );
 
-    /* make sure that FindWindow tests are executed first */
+    /* make sure that these tests are executed first */
     test_FindWindowEx();
+    test_SetParent();
 
     hwndMain = CreateWindowExA(/*WS_EX_TOOLWINDOW*/ 0, "MainWindowClass", "Main window",
                                WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX |
@@ -6371,12 +6565,11 @@ START_TEST(win)
 
     test_CreateWindow();
     test_parent_owner();
-    test_SetParent();
     test_enum_thread_windows();
 
     test_mdi();
     test_icons();
-    test_SetWindowPos(hwndMain);
+    test_SetWindowPos(hwndMain, hwndMain2);
     test_SetMenu(hwndMain);
     test_SetFocus(hwndMain);
     test_SetActiveWindow(hwndMain);

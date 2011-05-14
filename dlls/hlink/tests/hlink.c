@@ -355,7 +355,6 @@ static void test_persist_save_data(const char *testname, IHlink *lnk,
     const unsigned char *data;
     DWORD i;
     BOOL same;
-    unsigned int expected_data_win9x_size = 0;
 
     hr = IHlink_QueryInterface(lnk, &IID_IPersistStream, (void **)&ps);
     ok(hr == S_OK, "IHlink_QueryInterface failed with error 0x%08x\n", hr);
@@ -373,13 +372,9 @@ static void test_persist_save_data(const char *testname, IHlink *lnk,
 
     data = GlobalLock(hglobal);
 
-    if (expected_data_size % 4)
-        expected_data_win9x_size =  4 * ((expected_data_size / 4) + 1);
-
     /* first check we have the right amount of data */
     ok((data_size == expected_data_size) ||
-       (data_size == expected_data_alt_size) ||
-       broken(data_size == expected_data_win9x_size), /* Win9x and WinMe */
+       (data_size == expected_data_alt_size),
        "%s: Size of saved data differs (expected %d or %d, actual %d)\n",
        testname, expected_data_size, expected_data_alt_size, data_size);
 
@@ -1065,6 +1060,7 @@ static void test_HlinkGetSetMonikerReference(void)
     ok(hres == S_OK, "IHlink_SetMonikerReference failed: 0x%08x\n", hres);
 
     hres = IHlink_GetMonikerReference(hlink, HLINKGETREF_DEFAULT, &found_trgt, &found_loc);
+    ok(hres == S_OK, "IHlink_GetMonikerReference failed: 0x%08x\n", hres);
     ok(found_trgt == dummy, "Found target should've been %p, was: %p\n", dummy, found_trgt);
     ok(lstrcmpW(found_loc, two) == 0, "Found location should've been %s, was: %s\n", wine_dbgstr_w(two), wine_dbgstr_w(found_loc));
     IMoniker_Release(found_trgt);
@@ -1075,6 +1071,7 @@ static void test_HlinkGetSetMonikerReference(void)
     ok(hres == S_OK, "IHlink_SetMonikerReference failed: 0x%08x\n", hres);
 
     hres = IHlink_GetMonikerReference(hlink, HLINKGETREF_DEFAULT, &found_trgt, &found_loc);
+    ok(hres == S_OK, "IHlink_GetMonikerReference failed: 0x%08x\n", hres);
     ok(found_trgt == dummy2, "Found target should've been %p, was: %p\n", dummy2, found_trgt);
     ok(lstrcmpW(found_loc, two) == 0, "Found location should've been %s, was: %s\n", wine_dbgstr_w(two), wine_dbgstr_w(found_loc));
     IMoniker_Release(found_trgt);
@@ -1085,6 +1082,7 @@ static void test_HlinkGetSetMonikerReference(void)
     ok(hres == S_OK, "IHlink_SetMonikerReference failed: 0x%08x\n", hres);
 
     hres = IHlink_GetMonikerReference(hlink, HLINKGETREF_DEFAULT, &found_trgt, &found_loc);
+    ok(hres == S_OK, "IHlink_GetMonikerReference failed: 0x%08x\n", hres);
     ok(found_trgt == dummy, "Found target should've been %p, was: %p\n", dummy, found_trgt);
     ok(lstrcmpW(found_loc, one) == 0, "Found location should've been %s, was: %s\n", wine_dbgstr_w(one), wine_dbgstr_w(found_loc));
     IMoniker_Release(found_trgt);
@@ -1095,17 +1093,19 @@ static void test_HlinkGetSetMonikerReference(void)
     ok(hres == E_INVALIDARG, "IHlink_SetMonikerReference should've failed with E_INVALIDARG (0x%08x), failed with 0x%08x\n", E_INVALIDARG, hres);
 
     hres = IHlink_GetMonikerReference(hlink, HLINKGETREF_DEFAULT, &found_trgt, &found_loc);
+    ok(hres == S_OK, "IHlink_GetMonikerReference failed: 0x%08x\n", hres);
     ok(found_trgt == dummy, "Found target should've been %p, was: %p\n", dummy, found_trgt);
     ok(lstrcmpW(found_loc, one) == 0, "Found location should've been %s, was: %s\n", wine_dbgstr_w(one), wine_dbgstr_w(found_loc));
     IMoniker_Release(found_trgt);
     CoTaskMemFree(found_loc);
 
     /* invalid HLINKSETF flags */
-    hres = IHlink_SetMonikerReference(hlink, 12, dummy2, two);
     /* Windows returns garbage; on 32-bit it returns the flags probably because the compiler happened to store them in %eax at some point */
-    if (0) ok(hres == 12, "IHlink_SetMonikerReference should've failed with 0x%08x, failed with 0x%08x\n", 12, hres);
+    if (0) 
+        IHlink_SetMonikerReference(hlink, 12, dummy2, two);
 
     hres = IHlink_GetMonikerReference(hlink, HLINKGETREF_DEFAULT, &found_trgt, &found_loc);
+    ok(hres == S_OK, "IHlink_GetMonikerReference failed: 0x%08x\n", hres);
     ok(found_trgt == dummy, "Found target should've been %p, was: %p\n", dummy, found_trgt);
     ok(lstrcmpW(found_loc, one) == 0, "Found location should've been %s, was: %s\n", wine_dbgstr_w(one), wine_dbgstr_w(found_loc));
     IMoniker_Release(found_trgt);
@@ -1116,6 +1116,7 @@ static void test_HlinkGetSetMonikerReference(void)
     ok(hres == S_OK, "IHlink_SetMonikerReference failed: 0x%08x\n", hres);
 
     hres = IHlink_GetMonikerReference(hlink, HLINKGETREF_DEFAULT, &found_trgt, &found_loc);
+    ok(hres == S_OK, "IHlink_GetMonikerReference failed: 0x%08x\n", hres);
     ok(found_trgt == dummy2, "Found target should've been %p, was: %p\n", dummy2, found_trgt);
     ok(lstrcmpW(found_loc, one) == 0, "Found location should've been %s, was: %s\n", wine_dbgstr_w(one), wine_dbgstr_w(found_loc));
     IMoniker_Release(found_trgt);
@@ -1126,6 +1127,7 @@ static void test_HlinkGetSetMonikerReference(void)
     ok(hres == S_OK, "IHlink_SetMonikerReference failed: 0x%08x\n", hres);
 
     hres = IHlink_GetMonikerReference(hlink, HLINKGETREF_DEFAULT, &found_trgt, &found_loc);
+    ok(hres == S_OK, "IHlink_GetMonikerReference failed: 0x%08x\n", hres);
     ok(found_trgt == NULL, "Found target should've been %p, was: %p\n", NULL, found_trgt);
     ok(found_loc == NULL, "Found location should've been %s, was: %s\n", wine_dbgstr_w(NULL), wine_dbgstr_w(found_loc));
     if(found_trgt)
@@ -1253,12 +1255,12 @@ static void test_HlinkGetSetStringReference(void)
     CoTaskMemFree(fnd_tgt);
     CoTaskMemFree(fnd_loc);
 
-    hres = IHlink_SetStringReference(link, 4, NULL, NULL);
-    /* Windows returns garbage; on 32-bit it returns the flags probably because the compiler happened to store them in %eax at some point */
-    if (0) ok(hres == 4, "IHlink_SetStringReference should have failed with 0x4, instead: 0x%08x\n", hres);
-
-    hres = IHlink_SetStringReference(link, -4, NULL, NULL);
-    if (0) ok(hres == -4, "IHlink_SetStringReference should have failed with 0xFFFFFFFC, instead: 0x%08x\n", hres);
+    if (0)
+    {
+        /* Windows returns garbage; on 32-bit it returns the flags probably because the compiler happened to store them in %eax at some point */
+        IHlink_SetStringReference(link, 4, NULL, NULL);
+        IHlink_SetStringReference(link, -4, NULL, NULL);
+    }
 
     IHlink_Release(link);
 }
@@ -1723,12 +1725,12 @@ static void test_HlinkClone(void)
     hres = HlinkClone(hl, &IID_IHlink, NULL, 0, NULL);
     ok(hres == E_INVALIDARG, "Got wrong failure code: %08x\n", hres);
 
-    if(0){ /* crash on Windows XP */
-        hres = HlinkClone(hl, NULL, NULL, 0, NULL);
-        ok(hres == E_INVALIDARG, "Got wrong failure code: %08x\n", hres);
+    if (0)
+    { 
+        /* crash on Windows XP */
+        HlinkClone(hl, NULL, NULL, 0, NULL);
 
-        hres = HlinkClone(hl, NULL, NULL, 0, (void**)&cloned);
-        ok(hres == E_INVALIDARG, "Got wrong failure code: %08x\n", hres);
+        HlinkClone(hl, NULL, NULL, 0, (void**)&cloned);
     }
 
     hres = HlinkClone(hl, &IID_IHlink, NULL, 0, (void**)&cloned);

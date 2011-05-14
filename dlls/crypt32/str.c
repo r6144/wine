@@ -29,6 +29,133 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(crypt);
 
+DWORD WINAPI CertRDNValueToStrA(DWORD dwValueType, PCERT_RDN_VALUE_BLOB pValue,
+ LPSTR psz, DWORD csz)
+{
+    DWORD ret = 0, len;
+
+    TRACE("(%d, %p, %p, %d)\n", dwValueType, pValue, psz, csz);
+
+    switch (dwValueType)
+    {
+    case CERT_RDN_ANY_TYPE:
+        break;
+    case CERT_RDN_NUMERIC_STRING:
+    case CERT_RDN_PRINTABLE_STRING:
+    case CERT_RDN_TELETEX_STRING:
+    case CERT_RDN_VIDEOTEX_STRING:
+    case CERT_RDN_IA5_STRING:
+    case CERT_RDN_GRAPHIC_STRING:
+    case CERT_RDN_VISIBLE_STRING:
+    case CERT_RDN_GENERAL_STRING:
+        len = pValue->cbData;
+        if (!psz || !csz)
+            ret = len;
+        else
+        {
+            DWORD chars = min(len, csz - 1);
+
+            if (chars)
+            {
+                memcpy(psz, pValue->pbData, chars);
+                ret += chars;
+                csz -= chars;
+            }
+        }
+        break;
+    case CERT_RDN_BMP_STRING:
+    case CERT_RDN_UTF8_STRING:
+        len = WideCharToMultiByte(CP_ACP, 0, (LPCWSTR)pValue->pbData,
+         pValue->cbData / sizeof(WCHAR), NULL, 0, NULL, NULL);
+        if (!psz || !csz)
+            ret = len;
+        else
+        {
+            DWORD chars = min(pValue->cbData / sizeof(WCHAR), csz - 1);
+
+            if (chars)
+            {
+                ret = WideCharToMultiByte(CP_ACP, 0, (LPCWSTR)pValue->pbData,
+                 chars, psz, csz - 1, NULL, NULL);
+                csz -= ret;
+            }
+        }
+        break;
+    default:
+        FIXME("string type %d unimplemented\n", dwValueType);
+    }
+    if (psz && csz)
+    {
+        *(psz + ret) = '\0';
+        csz--;
+        ret++;
+    }
+    else
+        ret++;
+    TRACE("returning %d (%s)\n", ret, debugstr_a(psz));
+    return ret;
+}
+
+DWORD WINAPI CertRDNValueToStrW(DWORD dwValueType, PCERT_RDN_VALUE_BLOB pValue,
+ LPWSTR psz, DWORD csz)
+{
+    DWORD ret = 0, len, i, strLen;
+
+    TRACE("(%d, %p, %p, %d)\n", dwValueType, pValue, psz, csz);
+
+    switch (dwValueType)
+    {
+    case CERT_RDN_ANY_TYPE:
+        break;
+    case CERT_RDN_NUMERIC_STRING:
+    case CERT_RDN_PRINTABLE_STRING:
+    case CERT_RDN_TELETEX_STRING:
+    case CERT_RDN_VIDEOTEX_STRING:
+    case CERT_RDN_IA5_STRING:
+    case CERT_RDN_GRAPHIC_STRING:
+    case CERT_RDN_VISIBLE_STRING:
+    case CERT_RDN_GENERAL_STRING:
+        len = pValue->cbData;
+        if (!psz || !csz)
+            ret = len;
+        else
+        {
+            WCHAR *ptr = psz;
+
+            for (i = 0; i < pValue->cbData && ptr - psz < csz; ptr++, i++)
+                *ptr = pValue->pbData[i];
+            ret = ptr - psz;
+        }
+        break;
+    case CERT_RDN_BMP_STRING:
+    case CERT_RDN_UTF8_STRING:
+        strLen = len = pValue->cbData / sizeof(WCHAR);
+        if (!psz || !csz)
+            ret = len;
+        else
+        {
+            WCHAR *ptr = psz;
+
+            for (i = 0; i < strLen && ptr - psz < csz; ptr++, i++)
+                *ptr = ((LPCWSTR)pValue->pbData)[i];
+            ret = ptr - psz;
+        }
+        break;
+    default:
+        FIXME("string type %d unimplemented\n", dwValueType);
+    }
+    if (psz && csz)
+    {
+        *(psz + ret) = '\0';
+        csz--;
+        ret++;
+    }
+    else
+        ret++;
+    TRACE("returning %d (%s)\n", ret, debugstr_w(psz));
+    return ret;
+}
+
 static inline BOOL is_quotable_char(char c)
 {
     switch(c)
@@ -48,8 +175,8 @@ static inline BOOL is_quotable_char(char c)
     }
 }
 
-DWORD WINAPI CertRDNValueToStrA(DWORD dwValueType, PCERT_RDN_VALUE_BLOB pValue,
- LPSTR psz, DWORD csz)
+static DWORD quote_rdn_value_to_str_a(DWORD dwValueType,
+ PCERT_RDN_VALUE_BLOB pValue, LPSTR psz, DWORD csz)
 {
     DWORD ret = 0, len, i;
     BOOL needsQuotes = FALSE;
@@ -157,8 +284,8 @@ DWORD WINAPI CertRDNValueToStrA(DWORD dwValueType, PCERT_RDN_VALUE_BLOB pValue,
     return ret;
 }
 
-DWORD WINAPI CertRDNValueToStrW(DWORD dwValueType, PCERT_RDN_VALUE_BLOB pValue,
- LPWSTR psz, DWORD csz)
+static DWORD quote_rdn_value_to_str_w(DWORD dwValueType,
+ PCERT_RDN_VALUE_BLOB pValue, LPWSTR psz, DWORD csz)
 {
     DWORD ret = 0, len, i, strLen;
     BOOL needsQuotes = FALSE;
@@ -358,7 +485,7 @@ DWORD WINAPI CertNameToStrA(DWORD dwCertEncodingType, PCERT_NAME_BLOB pName,
                      psz ? psz + ret : NULL, psz ? csz - ret - 1 : 0);
                     ret += chars;
                 }
-                chars = CertRDNValueToStrA(
+                chars = quote_rdn_value_to_str_a(
                  rdn->rgRDNAttr[j].dwValueType,
                  &rdn->rgRDNAttr[j].Value, psz ? psz + ret : NULL,
                  psz ? csz - ret : 0);
@@ -537,7 +664,7 @@ DWORD cert_name_to_str_with_indent(DWORD dwCertEncodingType, DWORD indentLevel,
                      psz ? psz + ret : NULL, psz ? csz - ret - 1 : 0);
                     ret += chars;
                 }
-                chars = CertRDNValueToStrW(
+                chars = quote_rdn_value_to_str_w(
                  rdn->rgRDNAttr[j].dwValueType,
                  &rdn->rgRDNAttr[j].Value, psz ? psz + ret : NULL,
                  psz ? csz - ret : 0);
@@ -786,46 +913,46 @@ static BOOL CRYPT_EncodeValueWithType(DWORD dwCertEncodingType,
 
     if (value->end > value->start)
     {
-        nameValue.Value.pbData = CryptMemAlloc((value->end - value->start) *
+        LONG i;
+        LPWSTR ptr;
+
+        nameValue.Value.pbData = CryptMemAlloc((value->end - value->start + 1) *
          sizeof(WCHAR));
         if (!nameValue.Value.pbData)
         {
             SetLastError(ERROR_OUTOFMEMORY);
-            ret = FALSE;
+            return FALSE;
         }
+        ptr = (LPWSTR)nameValue.Value.pbData;
+        for (i = 0; i < value->end - value->start; i++)
+        {
+            *ptr++ = value->start[i];
+            if (value->start[i] == '"')
+                i++;
+        }
+        /* The string is NULL terminated because of a quirk in encoding
+         * unicode names values:  if the length is given as 0, the value is
+         * assumed to be a NULL-terminated string.
+         */
+        *ptr = 0;
+        nameValue.Value.cbData = (LPBYTE)ptr - nameValue.Value.pbData;
     }
-    if (ret)
+    ret = CryptEncodeObjectEx(dwCertEncodingType, X509_UNICODE_NAME_VALUE,
+     &nameValue, CRYPT_ENCODE_ALLOC_FLAG, NULL, &output->pbData,
+     &output->cbData);
+    if (!ret && ppszError)
     {
-        if (value->end > value->start)
-        {
-            LONG i;
-            LPWSTR ptr = (LPWSTR)nameValue.Value.pbData;
-
-            for (i = 0; i < value->end - value->start; i++)
-            {
-                *ptr++ = value->start[i];
-                if (value->start[i] == '"')
-                    i++;
-            }
-            nameValue.Value.cbData = (LPBYTE)ptr - nameValue.Value.pbData;
-        }
-        ret = CryptEncodeObjectEx(dwCertEncodingType, X509_UNICODE_NAME_VALUE,
-         &nameValue, CRYPT_ENCODE_ALLOC_FLAG, NULL, &output->pbData,
-         &output->cbData);
-        if (!ret && ppszError)
-        {
-            if (type == CERT_RDN_NUMERIC_STRING &&
-             GetLastError() == CRYPT_E_INVALID_NUMERIC_STRING)
-                *ppszError = value->start + output->cbData;
-            else if (type == CERT_RDN_PRINTABLE_STRING &&
-             GetLastError() == CRYPT_E_INVALID_PRINTABLE_STRING)
-                *ppszError = value->start + output->cbData;
-            else if (type == CERT_RDN_IA5_STRING &&
-             GetLastError() == CRYPT_E_INVALID_IA5_STRING)
-                *ppszError = value->start + output->cbData;
-        }
-        CryptMemFree(nameValue.Value.pbData);
+        if (type == CERT_RDN_NUMERIC_STRING &&
+         GetLastError() == CRYPT_E_INVALID_NUMERIC_STRING)
+            *ppszError = value->start + output->cbData;
+        else if (type == CERT_RDN_PRINTABLE_STRING &&
+         GetLastError() == CRYPT_E_INVALID_PRINTABLE_STRING)
+            *ppszError = value->start + output->cbData;
+        else if (type == CERT_RDN_IA5_STRING &&
+         GetLastError() == CRYPT_E_INVALID_IA5_STRING)
+            *ppszError = value->start + output->cbData;
     }
+    CryptMemFree(nameValue.Value.pbData);
     return ret;
 }
 
@@ -844,7 +971,7 @@ static BOOL CRYPT_EncodeValue(DWORD dwCertEncodingType,
 }
 
 static BOOL CRYPT_ValueToRDN(DWORD dwCertEncodingType, PCERT_NAME_INFO info,
- PCCRYPT_OID_INFO keyOID, struct X500TokenW *value, LPCWSTR *ppszError)
+ PCCRYPT_OID_INFO keyOID, struct X500TokenW *value, DWORD dwStrType, LPCWSTR *ppszError)
 {
     BOOL ret = FALSE;
 
@@ -878,7 +1005,7 @@ static BOOL CRYPT_ValueToRDN(DWORD dwCertEncodingType, PCERT_NAME_INFO info,
                 types = defaultTypes;
 
             /* Remove surrounding quotes */
-            if (value->start[0] == '"')
+            if (value->start[0] == '"' && !(dwStrType & CERT_NAME_STR_NO_QUOTING_FLAG))
             {
                 value->start++;
                 value->end--;
@@ -947,7 +1074,8 @@ BOOL WINAPI CertStrToNameW(DWORD dwCertEncodingType, LPCWSTR pszX500,
                     static const WCHAR commaSep[] = { ',',0 };
                     static const WCHAR semiSep[] = { ';',0 };
                     static const WCHAR crlfSep[] = { '\r','\n',0 };
-                    static const WCHAR allSeps[] = { ',',';','\r','\n',0 };
+                    static const WCHAR allSepsWithoutPlus[] = { ',',';','\r','\n',0 };
+                    static const WCHAR allSeps[] = { '+',',',';','\r','\n',0 };
                     LPCWSTR sep;
 
                     str++;
@@ -957,6 +1085,8 @@ BOOL WINAPI CertStrToNameW(DWORD dwCertEncodingType, LPCWSTR pszX500,
                         sep = semiSep;
                     else if (dwStrType & CERT_NAME_STR_CRLF_FLAG)
                         sep = crlfSep;
+                    else if (dwStrType & CERT_NAME_STR_NO_PLUS_FLAG)
+                        sep = allSepsWithoutPlus;
                     else
                         sep = allSeps;
                     ret = CRYPT_GetNextValueW(str, dwStrType, sep, &token,
@@ -965,7 +1095,7 @@ BOOL WINAPI CertStrToNameW(DWORD dwCertEncodingType, LPCWSTR pszX500,
                     {
                         str = token.end;
                         ret = CRYPT_ValueToRDN(dwCertEncodingType, &info,
-                         keyOID, &token, ppszError);
+                         keyOID, &token, dwStrType, ppszError);
                     }
                 }
             }

@@ -60,16 +60,6 @@
 WINE_DEFAULT_DEBUG_CHANNEL(keyboard);
 WINE_DECLARE_DEBUG_CHANNEL(key);
 
-/* key state table bits:
-  0x80 -> key is pressed
-  0x40 -> key got pressed since last time
-  0x01 -> key is toggled
-*/
-BYTE key_state_table[256];
-
-static BYTE TrackSysKey = 0; /* determine whether ALT key up will cause a WM_SYSKEYUP
-                                or a WM_KEYUP message */
-
 static int min_keycode, max_keycode, keysyms_per_keycode;
 static WORD keyc2vkey[256], keyc2scan[256];
 
@@ -1150,161 +1140,39 @@ static WORD EVENT_event_to_vkey( XIC xic, XKeyEvent *e)
 /***********************************************************************
  *           X11DRV_send_keyboard_input
  */
-void X11DRV_send_keyboard_input( WORD wVk, WORD wScan, DWORD event_flags, DWORD time,
-                                 DWORD dwExtraInfo, UINT injected_flags )
+static void X11DRV_send_keyboard_input( HWND hwnd, WORD vkey, WORD scan, DWORD flags, DWORD time )
 {
-    UINT message;
-    KBDLLHOOKSTRUCT hook;
-    WORD flags, wVkStripped, wVkL, wVkR, vk_hook = wVk;
-    LPARAM lParam = 0;
+    INPUT input;
 
-    if (!time) time = GetTickCount();
+    TRACE_(key)( "hwnd %p vkey=%04x scan=%04x flags=%04x\n", hwnd, vkey, scan, flags );
 
-    wVk = LOBYTE(wVk);
-    flags = LOBYTE(wScan);
+    input.type             = INPUT_KEYBOARD;
+    input.u.ki.wVk         = vkey;
+    input.u.ki.wScan       = scan;
+    input.u.ki.dwFlags     = flags;
+    input.u.ki.time        = time;
+    input.u.ki.dwExtraInfo = 0;
 
-    if (event_flags & KEYEVENTF_EXTENDEDKEY) flags |= KF_EXTENDED;
-    /* FIXME: set KF_DLGMODE and KF_MENUMODE when needed */
-
-    /* strip left/right for menu, control, shift */
-    switch (wVk)
-    {
-    case VK_MENU:
-    case VK_LMENU:
-    case VK_RMENU:
-        wVk = (event_flags & KEYEVENTF_EXTENDEDKEY) ? VK_RMENU : VK_LMENU;
-        wVkStripped = VK_MENU;
-        wVkL = VK_LMENU;
-        wVkR = VK_RMENU;
-        break;
-    case VK_CONTROL:
-    case VK_LCONTROL:
-    case VK_RCONTROL:
-        wVk = (event_flags & KEYEVENTF_EXTENDEDKEY) ? VK_RCONTROL : VK_LCONTROL;
-        wVkStripped = VK_CONTROL;
-        wVkL = VK_LCONTROL;
-        wVkR = VK_RCONTROL;
-        break;
-    case VK_SHIFT:
-    case VK_LSHIFT:
-    case VK_RSHIFT:
-        wVk = (event_flags & KEYEVENTF_EXTENDEDKEY) ? VK_RSHIFT : VK_LSHIFT;
-        wVkStripped = VK_SHIFT;
-        wVkL = VK_LSHIFT;
-        wVkR = VK_RSHIFT;
-        break;
-    default:
-        wVkStripped = wVkL = wVkR = wVk;
-    }
-
-    if (event_flags & KEYEVENTF_KEYUP)
-    {
-        message = WM_KEYUP;
-        if (((key_state_table[VK_MENU] & 0x80) &&
-             ((wVkStripped == VK_MENU) || (wVkStripped == VK_CONTROL)
-              || !(key_state_table[VK_CONTROL] & 0x80)))
-            || (wVkStripped == VK_F10))
-        {
-            if( TrackSysKey == VK_MENU || /* <ALT>-down/<ALT>-up sequence */
-                (wVkStripped != VK_MENU)) /* <ALT>-down...<something else>-up */
-                message = WM_SYSKEYUP;
-            TrackSysKey = 0;
-        }
-        flags |= KF_REPEAT | KF_UP;
-    }
-    else
-    {
-        message = WM_KEYDOWN;
-        if (((key_state_table[VK_MENU] & 0x80 || wVkStripped == VK_MENU) &&
-             !(key_state_table[VK_CONTROL] & 0x80 || wVkStripped == VK_CONTROL)) ||
-            (wVkStripped == VK_F10))
-        {
-            message = WM_SYSKEYDOWN;
-            TrackSysKey = wVkStripped;
-        }
-        if (!(event_flags & KEYEVENTF_UNICODE) && key_state_table[wVk] & 0x80) flags |= KF_REPEAT;
-    }
-
-    if (event_flags & KEYEVENTF_UNICODE)
-    {
-        vk_hook = wVk = VK_PACKET;
-        lParam = MAKELPARAM(1 /* repeat count */, wScan);
-        TRACE_(key)("message=0x%04x wParam=0x%04X lParam=0x%08lx\n",
-                    message, wVk, lParam);
-    }
-
-    /* Hook gets whatever key was sent. */
-    hook.vkCode      = vk_hook;
-    hook.scanCode    = wScan;
-    hook.flags       = (flags >> 8) | injected_flags;
-    hook.time        = time;
-    hook.dwExtraInfo = dwExtraInfo;
-    if (HOOK_CallHooks( WH_KEYBOARD_LL, HC_ACTION, message, (LPARAM)&hook, TRUE )) return;
-
-    if (!(event_flags & KEYEVENTF_UNICODE))
-    {
-        if (event_flags & KEYEVENTF_KEYUP)
-        {
-            key_state_table[wVk] &= ~0x80;
-            key_state_table[wVkStripped] = key_state_table[wVkL] | key_state_table[wVkR];
-        }
-        else
-        {
-            if (!(key_state_table[wVk] & 0x80)) key_state_table[wVk] ^= 0x01;
-            key_state_table[wVk] |= 0xc0;
-            key_state_table[wVkStripped] = key_state_table[wVkL] | key_state_table[wVkR];
-        }
-
-        if (key_state_table[VK_MENU] & 0x80) flags |= KF_ALTDOWN;
-
-        if (wVkStripped == VK_SHIFT) flags &= ~KF_EXTENDED;
-
-        lParam = MAKELPARAM(1 /* repeat count */, flags);
-
-        TRACE_(key)(" message=0x%04x wParam=0x%04X, lParam=0x%08lx, InputKeyState=0x%x\n",
-                    message, wVk, lParam, key_state_table[wVk]);
-    }
-
-    SERVER_START_REQ( send_hardware_message )
-    {
-        req->id       = (injected_flags & LLKHF_INJECTED) ? 0 : GetCurrentThreadId();
-        req->win      = 0;
-        req->msg      = message;
-        req->wparam   = wVk;
-        req->lparam   = lParam;
-        req->x        = cursor_pos.x;
-        req->y        = cursor_pos.y;
-        req->time     = time;
-        req->info     = dwExtraInfo;
-        wine_server_call( req );
-    }
-    SERVER_END_REQ;
+    __wine_send_input( hwnd, &input );
 }
 
 
 /***********************************************************************
- *           KEYBOARD_UpdateOneState
- *
- * Updates internal state for <vkey>, depending on key <state> under X
- *
+ *           get_async_key_state
  */
-static inline void KEYBOARD_UpdateOneState ( WORD vkey, WORD scan, int state, DWORD time )
+static BOOL get_async_key_state( BYTE state[256] )
 {
-    /* Do something if internal table state != X state for keycode */
-    if (((key_state_table[vkey & 0xff] & 0x80)!=0) != state)
+    BOOL ret;
+
+    SERVER_START_REQ( get_key_state )
     {
-        DWORD flags = vkey & 0x100 ? KEYEVENTF_EXTENDEDKEY : 0;
-
-        if (!state) flags |= KEYEVENTF_KEYUP;
-
-        TRACE("Adjusting state for vkey %#.2X. State before %#.2x\n",
-              vkey, key_state_table[vkey & 0xff]);
-
-        /* Fake key being pressed inside wine */
-        X11DRV_send_keyboard_input( vkey & 0xff, scan & 0xff, flags, time, 0, 0 );
-
-        TRACE("State after %#.2x\n", key_state_table[vkey & 0xff]);
+        req->tid = 0;
+        req->key = -1;
+        wine_server_set_reply( req, state, 256 );
+        ret = !wine_server_call( req );
     }
+    SERVER_END_REQ;
+    return ret;
 }
 
 /***********************************************************************
@@ -1320,6 +1188,9 @@ void X11DRV_KeymapNotify( HWND hwnd, XEvent *event )
 {
     int i, j;
     DWORD time = GetCurrentTime();
+    BYTE keystate[256];
+
+    if (!get_async_key_state( keystate )) return;
 
     /* the minimum keycode is always greater or equal to 8, so we can
      * skip the first 8 values, hence start at 1
@@ -1329,8 +1200,6 @@ void X11DRV_KeymapNotify( HWND hwnd, XEvent *event )
         for (j = 0; j < 8; j++)
         {
             WORD vkey = keyc2vkey[(i * 8) + j];
-            WORD scan = keyc2scan[(i * 8) + j];
-            int state = (event->xkeymap.key_vector[i] & (1<<j)) != 0;
 
             switch(vkey & 0xff)
             {
@@ -1340,21 +1209,62 @@ void X11DRV_KeymapNotify( HWND hwnd, XEvent *event )
             case VK_RCONTROL:
             case VK_LSHIFT:
             case VK_RSHIFT:
-                KEYBOARD_UpdateOneState( vkey, scan, state, time );
+                if (!(keystate[vkey & 0xff] & 0x80) != !(event->xkeymap.key_vector[i] & (1<<j)))
+                {
+                    WORD scan = keyc2scan[(i * 8) + j];
+                    DWORD flags = vkey & 0x100 ? KEYEVENTF_EXTENDEDKEY : 0;
+                    if (!(event->xkeymap.key_vector[i] & (1<<j))) flags |= KEYEVENTF_KEYUP;
+
+                    TRACE( "Adjusting state for vkey %#.2x. State before %#.2x\n",
+                           vkey, keystate[vkey & 0xff]);
+
+                    /* Fake key being pressed inside wine */
+                    X11DRV_send_keyboard_input( hwnd, vkey & 0xff, scan & 0xff, flags, time );
+                }
                 break;
             }
         }
     }
 }
 
-static void update_lock_state(BYTE vkey, WORD scan, DWORD time)
+static void update_lock_state( HWND hwnd, WORD vkey, UINT state, DWORD time )
 {
-    DWORD flags = vkey == VK_NUMLOCK ? KEYEVENTF_EXTENDEDKEY : 0;
+    BYTE keystate[256];
 
-    if (key_state_table[vkey] & 0x80) flags ^= KEYEVENTF_KEYUP;
+    /* Note: X sets the below states on key down and clears them on key up.
+       Windows triggers them on key down. */
 
-    X11DRV_send_keyboard_input( vkey, scan, flags, time, 0, 0 );
-    X11DRV_send_keyboard_input( vkey, scan, flags ^ KEYEVENTF_KEYUP, time, 0, 0 );
+    if (!get_async_key_state( keystate )) return;
+
+    /* Adjust the CAPSLOCK state if it has been changed outside wine */
+    if (!(keystate[VK_CAPITAL] & 0x01) != !(state & LockMask) && vkey != VK_CAPITAL)
+    {
+        DWORD flags = 0;
+        if (keystate[VK_CAPITAL] & 0x80) flags ^= KEYEVENTF_KEYUP;
+        TRACE("Adjusting CapsLock state (%#.2x)\n", keystate[VK_CAPITAL]);
+        X11DRV_send_keyboard_input( hwnd, VK_CAPITAL, 0x3a, flags, time );
+        X11DRV_send_keyboard_input( hwnd, VK_CAPITAL, 0x3a, flags ^ KEYEVENTF_KEYUP, time );
+    }
+
+    /* Adjust the NUMLOCK state if it has been changed outside wine */
+    if (!(keystate[VK_NUMLOCK] & 0x01) != !(state & NumLockMask) && (vkey & 0xff) != VK_NUMLOCK)
+    {
+        DWORD flags = KEYEVENTF_EXTENDEDKEY;
+        if (keystate[VK_NUMLOCK] & 0x80) flags ^= KEYEVENTF_KEYUP;
+        TRACE("Adjusting NumLock state (%#.2x)\n", keystate[VK_NUMLOCK]);
+        X11DRV_send_keyboard_input( hwnd, VK_NUMLOCK, 0x45, flags, time );
+        X11DRV_send_keyboard_input( hwnd, VK_NUMLOCK, 0x45, flags ^ KEYEVENTF_KEYUP, time );
+    }
+
+    /* Adjust the SCROLLLOCK state if it has been changed outside wine */
+    if (!(keystate[VK_SCROLL] & 0x01) != !(state & ScrollLockMask) && vkey != VK_SCROLL)
+    {
+        DWORD flags = 0;
+        if (keystate[VK_SCROLL] & 0x80) flags ^= KEYEVENTF_KEYUP;
+        TRACE("Adjusting ScrLock state (%#.2x)\n", keystate[VK_SCROLL]);
+        X11DRV_send_keyboard_input( hwnd, VK_SCROLL, 0x46, flags, time );
+        X11DRV_send_keyboard_input( hwnd, VK_SCROLL, 0x46, flags ^ KEYEVENTF_KEYUP, time );
+    }
 }
 
 /***********************************************************************
@@ -1385,13 +1295,13 @@ void X11DRV_KeyEvent( HWND hwnd, XEvent *xev )
     if (xic && event->type == KeyPress)
     {
         ascii_chars = XmbLookupString(xic, event, buf, sizeof(buf), &keysym, &status);
-        TRACE("XmbLookupString needs %i byte(s)\n", ascii_chars);
+        TRACE_(key)("XmbLookupString needs %i byte(s)\n", ascii_chars);
         if (status == XBufferOverflow)
         {
             Str = HeapAlloc(GetProcessHeap(), 0, ascii_chars);
             if (Str == NULL)
             {
-                ERR("Failed to allocate memory!\n");
+                ERR_(key)("Failed to allocate memory!\n");
                 wine_tsx11_unlock();
                 return;
             }
@@ -1454,38 +1364,12 @@ void X11DRV_KeyEvent( HWND hwnd, XEvent *xev )
     if ( event->type == KeyRelease ) dwFlags |= KEYEVENTF_KEYUP;
     if ( vkey & 0x100 )              dwFlags |= KEYEVENTF_EXTENDEDKEY;
 
-
-    /* Note: X sets the below states on key down and clears them on key up.
-       Windows triggers them on key down. */
-
-    /* Adjust the CAPSLOCK state if it has been changed outside wine */
-    if (!(key_state_table[VK_CAPITAL] & 0x01) != !(event->state & LockMask) &&
-        vkey != VK_CAPITAL)
-    {
-        TRACE("Adjusting CapsLock state (%#.2x)\n", key_state_table[VK_CAPITAL]);
-        update_lock_state(VK_CAPITAL, 0x3A, event_time);
-    }
-
-    /* Adjust the NUMLOCK state if it has been changed outside wine */
-    if (!(key_state_table[VK_NUMLOCK] & 0x01) != !(event->state & NumLockMask) &&
-        (vkey & 0xff) != VK_NUMLOCK)
-    {
-        TRACE("Adjusting NumLock state (%#.2x)\n", key_state_table[VK_NUMLOCK]);
-        update_lock_state(VK_NUMLOCK, 0x45, event_time);
-    }
-
-    /* Adjust the SCROLLLOCK state if it has been changed outside wine */
-    if (!(key_state_table[VK_SCROLL] & 0x01) != !(event->state & ScrollLockMask) &&
-        vkey != VK_SCROLL)
-    {
-        TRACE("Adjusting ScrLock state (%#.2x)\n", key_state_table[VK_SCROLL]);
-        update_lock_state(VK_SCROLL, 0x46, event_time);
-    }
+    update_lock_state( hwnd, vkey, event->state, event_time );
 
     bScan = keyc2scan[event->keycode] & 0xFF;
     TRACE_(key)("bScan = 0x%02x.\n", bScan);
 
-    X11DRV_send_keyboard_input( vkey & 0xff, bScan, dwFlags, event_time, 0, 0 );
+    X11DRV_send_keyboard_input( hwnd, vkey & 0xff, bScan, dwFlags, event_time );
 }
 
 /**********************************************************************
@@ -1968,16 +1852,9 @@ static BOOL match_x11_keyboard_layout(HKL hkl)
  */
 SHORT CDECL X11DRV_GetAsyncKeyState(INT key)
 {
-    SHORT retval;
-
     /* Photoshop livelocks unless mouse events are included here */
     X11DRV_MsgWaitForMultipleObjectsEx( 0, NULL, 0, QS_KEY | QS_MOUSE, 0 );
-
-    retval = ((key_state_table[key] & 0x40) ? 0x0001 : 0) |
-             ((key_state_table[key] & 0x80) ? 0x8000 : 0);
-    key_state_table[key] &= ~0x40;
-    TRACE_(key)("(%X) -> %x\n", key, retval);
-    return retval;
+    return -1;
 }
 
 
@@ -2525,16 +2402,16 @@ INT CDECL X11DRV_ToUnicodeEx(UINT virtKey, UINT scanCode, const BYTE *lpKeyState
 
     if (scanCode & 0x8000)
     {
-        TRACE("Key UP, doing nothing\n" );
+        TRACE_(key)("Key UP, doing nothing\n" );
         return 0;
     }
 
     if (!match_x11_keyboard_layout(hkl))
-        FIXME("keyboard layout %p is not supported\n", hkl);
+        FIXME_(key)("keyboard layout %p is not supported\n", hkl);
 
     if ((lpKeyState[VK_MENU] & 0x80) && (lpKeyState[VK_CONTROL] & 0x80))
     {
-        TRACE("Ctrl+Alt+[key] won't generate a character\n");
+        TRACE_(key)("Ctrl+Alt+[key] won't generate a character\n");
         return 0;
     }
 
@@ -2555,27 +2432,27 @@ INT CDECL X11DRV_ToUnicodeEx(UINT virtKey, UINT scanCode, const BYTE *lpKeyState
 
     if (lpKeyState[VK_SHIFT] & 0x80)
     {
-	TRACE("ShiftMask = %04x\n", ShiftMask);
+	TRACE_(key)("ShiftMask = %04x\n", ShiftMask);
 	e.state |= ShiftMask;
     }
     if (lpKeyState[VK_CAPITAL] & 0x01)
     {
-	TRACE("LockMask = %04x\n", LockMask);
+	TRACE_(key)("LockMask = %04x\n", LockMask);
 	e.state |= LockMask;
     }
     if (lpKeyState[VK_CONTROL] & 0x80)
     {
-	TRACE("ControlMask = %04x\n", ControlMask);
+	TRACE_(key)("ControlMask = %04x\n", ControlMask);
 	e.state |= ControlMask;
     }
     if (lpKeyState[VK_NUMLOCK] & 0x01)
     {
-	TRACE("NumLockMask = %04x\n", NumLockMask);
+	TRACE_(key)("NumLockMask = %04x\n", NumLockMask);
 	e.state |= NumLockMask;
     }
 
     /* Restore saved AltGr state */
-    TRACE("AltGrMask = %04x\n", AltGrMask);
+    TRACE_(key)("AltGrMask = %04x\n", AltGrMask);
     e.state |= AltGrMask;
 
     TRACE_(key)("(%04X, %04X) : faked state = 0x%04x\n",
@@ -2608,11 +2485,11 @@ INT CDECL X11DRV_ToUnicodeEx(UINT virtKey, UINT scanCode, const BYTE *lpKeyState
 
     if (!e.keycode && virtKey != VK_NONAME)
       {
-	WARN("Unknown virtual key %X !!!\n", virtKey);
+	WARN_(key)("Unknown virtual key %X !!!\n", virtKey);
         wine_tsx11_unlock();
 	return 0;
       }
-    else TRACE("Found keycode %u\n",e.keycode);
+    else TRACE_(key)("Found keycode %u\n",e.keycode);
 
     TRACE_(key)("type %d, window %lx, state 0x%04x, keycode %u\n",
 		e.type, e.window, e.state, e.keycode);
@@ -2623,13 +2500,13 @@ INT CDECL X11DRV_ToUnicodeEx(UINT virtKey, UINT scanCode, const BYTE *lpKeyState
     if (xic)
     {
         ret = XmbLookupString(xic, &e, buf, sizeof(buf), &keysym, &status);
-        TRACE("XmbLookupString needs %d byte(s)\n", ret);
+        TRACE_(key)("XmbLookupString needs %d byte(s)\n", ret);
         if (status == XBufferOverflow)
         {
             lpChar = HeapAlloc(GetProcessHeap(), 0, ret);
             if (lpChar == NULL)
             {
-                ERR("Failed to allocate memory!\n");
+                ERR_(key)("Failed to allocate memory!\n");
                 wine_tsx11_unlock();
                 return 0;
             }
@@ -2709,9 +2586,9 @@ INT CDECL X11DRV_ToUnicodeEx(UINT virtKey, UINT scanCode, const BYTE *lpKeyState
 		ksname = "No Name";
 	    if ((keysym >> 8) != 0xff)
 		{
-		WARN("no char for keysym %04lx (%s) :\n",
+		WARN_(key)("no char for keysym %04lx (%s) :\n",
                     keysym, ksname);
-		WARN("virtKey=%X, scanCode=%X, keycode=%u, state=%X\n",
+		WARN_(key)("virtKey=%X, scanCode=%X, keycode=%u, state=%X\n",
                     virtKey, scanCode, e.keycode, e.state);
 		}
 	    }

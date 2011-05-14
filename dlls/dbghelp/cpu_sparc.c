@@ -32,15 +32,18 @@ WINE_DEFAULT_DEBUG_CHANNEL(dbghelp);
 static unsigned sparc_get_addr(HANDLE hThread, const CONTEXT* ctx,
                              enum cpu_addr ca, ADDRESS64* addr)
 {
-   switch (ca)
+    addr->Mode    = AddrModeFlat;
+    addr->Segment = 0; /* don't need segment */
+    switch (ca)
     {
-    case cpu_addr_pc:
-    case cpu_addr_stack:
-    case cpu_addr_frame:
-    default:
-         FIXME("not done for Sparc\n");
+#ifdef __sparc__
+    case cpu_addr_pc:    addr->Offset = ctx->pc; return TRUE;
+    case cpu_addr_stack: addr->Offset = ctx->o6; return TRUE;
+    case cpu_addr_frame: addr->Offset = ctx->i6; return TRUE;
+#endif
+    default: addr->Mode = -1;
+        return FALSE;
     }
-    return FALSE;
 }
 
 static BOOL sparc_stack_walk(struct cpu_stack_walk* csw, LPSTACKFRAME64 frame, CONTEXT* context)
@@ -51,8 +54,17 @@ static BOOL sparc_stack_walk(struct cpu_stack_walk* csw, LPSTACKFRAME64 frame, C
 
 static unsigned sparc_map_dwarf_register(unsigned regno)
 {
-    FIXME("not done for Sparc\n");
-    return 0;
+    if (regno <= 7)
+        return CV_SPARC_G0 + regno;
+    else if (regno >= 8 && regno <= 15)
+        return CV_SPARC_O0 + regno - 8;
+    else if (regno >= 16 && regno <= 23)
+        return CV_SPARC_L0 + regno - 16;
+    else if (regno >= 24 && regno <= 31)
+        return CV_SPARC_I0 + regno - 24;
+
+    FIXME("Don't know how to map register %d\n", regno);
+    return CV_SPARC_NOREG;
 }
 
 static void* sparc_fetch_context_reg(CONTEXT* ctx, unsigned regno, unsigned* size)
@@ -67,9 +79,10 @@ static const char* sparc_fetch_regname(unsigned regno)
     return NULL;
 }
 
-struct cpu cpu_sparc = {
+DECLSPEC_HIDDEN struct cpu cpu_sparc = {
     IMAGE_FILE_MACHINE_SPARC,
     4,
+    CV_REG_NONE, /* FIXME */
     sparc_get_addr,
     sparc_stack_walk,
     NULL,

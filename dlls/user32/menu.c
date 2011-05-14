@@ -784,8 +784,8 @@ static UINT MENU_FindItemByKey( HWND hwndOwner, HMENU hmenu,
 	}
 	menuchar = SendMessageW( hwndOwner, WM_MENUCHAR,
                                  MAKEWPARAM( key, menu->wFlags ), (LPARAM)hmenu );
-	if (HIWORD(menuchar) == 2) return LOWORD(menuchar);
-	if (HIWORD(menuchar) == 1) return (UINT)(-2);
+	if (HIWORD(menuchar) == MNC_EXECUTE) return LOWORD(menuchar);
+	if (HIWORD(menuchar) == MNC_CLOSE) return (UINT)(-2);
     }
     return (UINT)(-1);
 }
@@ -1848,6 +1848,11 @@ static BOOL MENU_ShowPopup( HWND hwndOwner, HMENU hmenu, UINT id, UINT flags,
     }
 
     /* store the owner for DrawItem */
+    if (!IsWindow( hwndOwner ))
+    {
+        SetLastError( ERROR_INVALID_WINDOW_HANDLE );
+        return FALSE;
+    }
     menu->hwndOwner = hwndOwner;
 
     menu->nScrollPos = 0;
@@ -3397,7 +3402,7 @@ void MENU_TrackKbdMenuBar( HWND hwnd, UINT wParam, WCHAR wChar)
         if( uItem == NO_SELECTED_ITEM )
             MENU_MoveSelection( hwnd, hTrackMenu, ITEM_NEXT );
         else
-            PostMessageW( hwnd, WM_KEYDOWN, VK_DOWN, 0L );
+            PostMessageW( hwnd, WM_KEYDOWN, VK_RETURN, 0 );
     }
 
 track_menu:

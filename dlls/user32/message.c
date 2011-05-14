@@ -25,6 +25,8 @@
 #include <assert.h>
 #include <stdarg.h>
 
+#define NONAMELESSUNION
+#define NONAMELESSSTRUCT
 #include "ntstatus.h"
 #define WIN32_NO_STATUS
 #include "windef.h"
@@ -1867,6 +1869,14 @@ static LRESULT handle_internal_message( HWND hwnd, UINT msg, WPARAM wparam, LPAR
 
         return call_current_hook( h_extra->handle, HC_ACTION, wparam, h_extra->lparam );
     }
+    case WM_WINE_CLIPCURSOR:
+        if (wparam)
+        {
+            RECT rect;
+            GetClipCursor( &rect );
+            return USER_Driver->pClipCursor( &rect );
+        }
+        return USER_Driver->pClipCursor( NULL );
     default:
         if (msg >= WM_WINE_FIRST_DRIVER_MSG && msg <= WM_WINE_LAST_DRIVER_MSG)
             return USER_Driver->pWindowMessage( hwnd, msg, wparam, lparam );
@@ -2707,6 +2717,38 @@ static BOOL peek_message( MSG *msg, HWND hwnd, UINT first, UINT last, UINT flags
                              info.msg.lParam, msg_data->winevent.tid, info.msg.time);
             }
             continue;
+        case MSG_HOOK_LL:
+            info.flags = ISMEX_SEND;
+            result = 0;
+            if (info.msg.message == WH_KEYBOARD_LL && size >= sizeof(msg_data->hardware))
+            {
+                KBDLLHOOKSTRUCT hook;
+
+                hook.vkCode      = LOWORD( info.msg.lParam );
+                hook.scanCode    = HIWORD( info.msg.lParam );
+                hook.flags       = msg_data->hardware.flags;
+                hook.time        = info.msg.time;
+                hook.dwExtraInfo = msg_data->hardware.info;
+                TRACE( "calling keyboard LL hook vk %x scan %x flags %x time %u info %lx\n",
+                       hook.vkCode, hook.scanCode, hook.flags, hook.time, hook.dwExtraInfo );
+                result = HOOK_CallHooks( WH_KEYBOARD_LL, HC_ACTION, info.msg.wParam, (LPARAM)&hook, TRUE );
+            }
+            else if (info.msg.message == WH_MOUSE_LL && size >= sizeof(msg_data->hardware))
+            {
+                MSLLHOOKSTRUCT hook;
+
+                hook.pt.x        = msg_data->hardware.x;
+                hook.pt.y        = msg_data->hardware.y;
+                hook.mouseData   = info.msg.lParam;
+                hook.flags       = msg_data->hardware.flags;
+                hook.time        = info.msg.time;
+                hook.dwExtraInfo = msg_data->hardware.info;
+                TRACE( "calling mouse LL hook pos %d,%d data %x flags %x time %u info %lx\n",
+                       hook.pt.x, hook.pt.y, hook.mouseData, hook.flags, hook.time, hook.dwExtraInfo );
+                result = HOOK_CallHooks( WH_MOUSE_LL, HC_ACTION, info.msg.wParam, (LPARAM)&hook, TRUE );
+            }
+            reply_message( &info, result, TRUE );
+            continue;
         case MSG_OTHER_PROCESS:
             info.flags = ISMEX_SEND;
             if (!unpack_message( info.msg.hwnd, info.msg.message, &info.msg.wParam,
@@ -3061,6 +3103,63 @@ static BOOL send_message( struct send_message_info *info, DWORD_PTR *res_ptr, BO
 
     SPY_ExitMessage( SPY_RESULT_OK, info->hwnd, info->msg, result, info->wparam, info->lparam );
     if (ret && res_ptr) *res_ptr = result;
+    return ret;
+}
+
+
+/***********************************************************************
+ *		send_hardware_message
+ */
+NTSTATUS send_hardware_message( HWND hwnd, const INPUT *input, UINT flags )
+{
+    struct send_message_info info;
+    NTSTATUS ret;
+    BOOL wait;
+
+    info.type     = MSG_HARDWARE;
+    info.dest_tid = 0;
+    info.hwnd     = hwnd;
+    info.flags    = 0;
+    info.timeout  = 0;
+
+    SERVER_START_REQ( send_hardware_message )
+    {
+        req->win        = wine_server_user_handle( hwnd );
+        req->flags      = flags;
+        req->input.type = input->type;
+        switch (input->type)
+        {
+        case INPUT_MOUSE:
+            req->input.mouse.x     = input->u.mi.dx;
+            req->input.mouse.y     = input->u.mi.dy;
+            req->input.mouse.data  = input->u.mi.mouseData;
+            req->input.mouse.flags = input->u.mi.dwFlags;
+            req->input.mouse.time  = input->u.mi.time;
+            req->input.mouse.info  = input->u.mi.dwExtraInfo;
+            break;
+        case INPUT_KEYBOARD:
+            req->input.kbd.vkey  = input->u.ki.wVk;
+            req->input.kbd.scan  = input->u.ki.wScan;
+            req->input.kbd.flags = input->u.ki.dwFlags;
+            req->input.kbd.time  = input->u.ki.time;
+            req->input.kbd.info  = input->u.ki.dwExtraInfo;
+            break;
+        case INPUT_HARDWARE:
+            req->input.hw.msg    = input->u.hi.uMsg;
+            req->input.hw.lparam = MAKELONG( input->u.hi.wParamL, input->u.hi.wParamH );
+            break;
+        }
+        ret = wine_server_call( req );
+        wait = reply->wait;
+    }
+    SERVER_END_REQ;
+
+    if (wait)
+    {
+        LRESULT ignored;
+        wait_message_reply( 0 );
+        retrieve_reply( &info, 0, &ignored );
+    }
     return ret;
 }
 

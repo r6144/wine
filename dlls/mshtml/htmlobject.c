@@ -51,34 +51,37 @@ static HRESULT WINAPI HTMLObjectElement_QueryInterface(IHTMLObjectElement *iface
 {
     HTMLObjectElement *This = impl_from_IHTMLObjectElement(iface);
 
-    return IHTMLDOMNode_QueryInterface(HTMLDOMNODE(&This->plugin_container.element.node), riid, ppv);
+    return IHTMLDOMNode_QueryInterface(&This->plugin_container.element.node.IHTMLDOMNode_iface,
+            riid, ppv);
 }
 
 static ULONG WINAPI HTMLObjectElement_AddRef(IHTMLObjectElement *iface)
 {
     HTMLObjectElement *This = impl_from_IHTMLObjectElement(iface);
 
-    return IHTMLDOMNode_AddRef(HTMLDOMNODE(&This->plugin_container.element.node));
+    return IHTMLDOMNode_AddRef(&This->plugin_container.element.node.IHTMLDOMNode_iface);
 }
 
 static ULONG WINAPI HTMLObjectElement_Release(IHTMLObjectElement *iface)
 {
     HTMLObjectElement *This = impl_from_IHTMLObjectElement(iface);
 
-    return IHTMLDOMNode_Release(HTMLDOMNODE(&This->plugin_container.element.node));
+    return IHTMLDOMNode_Release(&This->plugin_container.element.node.IHTMLDOMNode_iface);
 }
 
 static HRESULT WINAPI HTMLObjectElement_GetTypeInfoCount(IHTMLObjectElement *iface, UINT *pctinfo)
 {
     HTMLObjectElement *This = impl_from_IHTMLObjectElement(iface);
-    return IDispatchEx_GetTypeInfoCount(DISPATCHEX(&This->plugin_container.element.node.dispex), pctinfo);
+    return IDispatchEx_GetTypeInfoCount(&This->plugin_container.element.node.dispex.IDispatchEx_iface,
+            pctinfo);
 }
 
 static HRESULT WINAPI HTMLObjectElement_GetTypeInfo(IHTMLObjectElement *iface, UINT iTInfo,
                                               LCID lcid, ITypeInfo **ppTInfo)
 {
     HTMLObjectElement *This = impl_from_IHTMLObjectElement(iface);
-    return IDispatchEx_GetTypeInfo(DISPATCHEX(&This->plugin_container.element.node.dispex), iTInfo, lcid, ppTInfo);
+    return IDispatchEx_GetTypeInfo(&This->plugin_container.element.node.dispex.IDispatchEx_iface,
+            iTInfo, lcid, ppTInfo);
 }
 
 static HRESULT WINAPI HTMLObjectElement_GetIDsOfNames(IHTMLObjectElement *iface, REFIID riid,
@@ -86,7 +89,8 @@ static HRESULT WINAPI HTMLObjectElement_GetIDsOfNames(IHTMLObjectElement *iface,
                                                 LCID lcid, DISPID *rgDispId)
 {
     HTMLObjectElement *This = impl_from_IHTMLObjectElement(iface);
-    return IDispatchEx_GetIDsOfNames(DISPATCHEX(&This->plugin_container.element.node.dispex), riid, rgszNames, cNames, lcid, rgDispId);
+    return IDispatchEx_GetIDsOfNames(&This->plugin_container.element.node.dispex.IDispatchEx_iface,
+            riid, rgszNames, cNames, lcid, rgDispId);
 }
 
 static HRESULT WINAPI HTMLObjectElement_Invoke(IHTMLObjectElement *iface, DISPID dispIdMember,
@@ -94,8 +98,8 @@ static HRESULT WINAPI HTMLObjectElement_Invoke(IHTMLObjectElement *iface, DISPID
                             VARIANT *pVarResult, EXCEPINFO *pExcepInfo, UINT *puArgErr)
 {
     HTMLObjectElement *This = impl_from_IHTMLObjectElement(iface);
-    return IDispatchEx_Invoke(DISPATCHEX(&This->plugin_container.element.node.dispex), dispIdMember, riid, lcid, wFlags, pDispParams,
-            pVarResult, pExcepInfo, puArgErr);
+    return IDispatchEx_Invoke(&This->plugin_container.element.node.dispex.IDispatchEx_iface,
+            dispIdMember, riid, lcid, wFlags, pDispParams, pVarResult, pExcepInfo, puArgErr);
 }
 
 static HRESULT WINAPI HTMLObjectElement_get_object(IHTMLObjectElement *iface, IDispatch **p)
@@ -393,11 +397,14 @@ static const IHTMLObjectElementVtbl HTMLObjectElementVtbl = {
     HTMLObjectElement_get_hspace
 };
 
-#define HTMLOBJECT_NODE_THIS(iface) DEFINE_THIS2(HTMLObjectElement, plugin_container.element.node, iface)
+static inline HTMLObjectElement *impl_from_HTMLDOMNode(HTMLDOMNode *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLObjectElement, plugin_container.element.node);
+}
 
 static HRESULT HTMLObjectElement_QI(HTMLDOMNode *iface, REFIID riid, void **ppv)
 {
-    HTMLObjectElement *This = HTMLOBJECT_NODE_THIS(iface);
+    HTMLObjectElement *This = impl_from_HTMLDOMNode(iface);
 
     if(IsEqualGUID(&IID_IUnknown, riid)) {
         TRACE("(%p)->(IID_IUnknown %p)\n", This, ppv);
@@ -422,7 +429,7 @@ static HRESULT HTMLObjectElement_QI(HTMLDOMNode *iface, REFIID riid, void **ppv)
 
 static void HTMLObjectElement_destructor(HTMLDOMNode *iface)
 {
-    HTMLObjectElement *This = HTMLOBJECT_NODE_THIS(iface);
+    HTMLObjectElement *This = impl_from_HTMLDOMNode(iface);
 
     if(This->plugin_container.plugin_host)
         detach_plugin_host(This->plugin_container.plugin_host);
@@ -434,7 +441,7 @@ static void HTMLObjectElement_destructor(HTMLDOMNode *iface)
 
 static HRESULT HTMLObjectElement_get_readystate(HTMLDOMNode *iface, BSTR *p)
 {
-    HTMLObjectElement *This = HTMLOBJECT_NODE_THIS(iface);
+    HTMLObjectElement *This = impl_from_HTMLDOMNode(iface);
     FIXME("(%p)->(%p)\n", This, p);
     return E_NOTIMPL;
 }
@@ -442,7 +449,7 @@ static HRESULT HTMLObjectElement_get_readystate(HTMLDOMNode *iface, BSTR *p)
 static HRESULT HTMLObjectElement_get_dispid(HTMLDOMNode *iface, BSTR name,
         DWORD grfdex, DISPID *pid)
 {
-    HTMLObjectElement *This = HTMLOBJECT_NODE_THIS(iface);
+    HTMLObjectElement *This = impl_from_HTMLDOMNode(iface);
 
     TRACE("(%p)->(%s %x %p)\n", This, debugstr_w(name), grfdex, pid);
 
@@ -452,14 +459,12 @@ static HRESULT HTMLObjectElement_get_dispid(HTMLDOMNode *iface, BSTR name,
 static HRESULT HTMLObjectElement_invoke(HTMLDOMNode *iface, DISPID id, LCID lcid,
         WORD flags, DISPPARAMS *params, VARIANT *res, EXCEPINFO *ei, IServiceProvider *caller)
 {
-    HTMLObjectElement *This = HTMLOBJECT_NODE_THIS(iface);
+    HTMLObjectElement *This = impl_from_HTMLDOMNode(iface);
 
     TRACE("(%p)->(%d)\n", This, id);
 
     return invoke_plugin_prop(&This->plugin_container, id, lcid, flags, params, res, ei);
 }
-
-#undef HTMLOBJECT_NODE_THIS
 
 static const NodeImplVtbl HTMLObjectElementImplVtbl = {
     HTMLObjectElement_QI,

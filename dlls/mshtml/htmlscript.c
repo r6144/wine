@@ -49,34 +49,35 @@ static HRESULT WINAPI HTMLScriptElement_QueryInterface(IHTMLScriptElement *iface
 {
     HTMLScriptElement *This = impl_from_IHTMLScriptElement(iface);
 
-    return IHTMLDOMNode_QueryInterface(HTMLDOMNODE(&This->element.node), riid, ppv);
+    return IHTMLDOMNode_QueryInterface(&This->element.node.IHTMLDOMNode_iface, riid, ppv);
 }
 
 static ULONG WINAPI HTMLScriptElement_AddRef(IHTMLScriptElement *iface)
 {
     HTMLScriptElement *This = impl_from_IHTMLScriptElement(iface);
 
-    return IHTMLDOMNode_AddRef(HTMLDOMNODE(&This->element.node));
+    return IHTMLDOMNode_AddRef(&This->element.node.IHTMLDOMNode_iface);
 }
 
 static ULONG WINAPI HTMLScriptElement_Release(IHTMLScriptElement *iface)
 {
     HTMLScriptElement *This = impl_from_IHTMLScriptElement(iface);
 
-    return IHTMLDOMNode_Release(HTMLDOMNODE(&This->element.node));
+    return IHTMLDOMNode_Release(&This->element.node.IHTMLDOMNode_iface);
 }
 
 static HRESULT WINAPI HTMLScriptElement_GetTypeInfoCount(IHTMLScriptElement *iface, UINT *pctinfo)
 {
     HTMLScriptElement *This = impl_from_IHTMLScriptElement(iface);
-    return IDispatchEx_GetTypeInfoCount(DISPATCHEX(&This->element.node.dispex), pctinfo);
+    return IDispatchEx_GetTypeInfoCount(&This->element.node.dispex.IDispatchEx_iface, pctinfo);
 }
 
 static HRESULT WINAPI HTMLScriptElement_GetTypeInfo(IHTMLScriptElement *iface, UINT iTInfo,
                                               LCID lcid, ITypeInfo **ppTInfo)
 {
     HTMLScriptElement *This = impl_from_IHTMLScriptElement(iface);
-    return IDispatchEx_GetTypeInfo(DISPATCHEX(&This->element.node.dispex), iTInfo, lcid, ppTInfo);
+    return IDispatchEx_GetTypeInfo(&This->element.node.dispex.IDispatchEx_iface, iTInfo, lcid,
+            ppTInfo);
 }
 
 static HRESULT WINAPI HTMLScriptElement_GetIDsOfNames(IHTMLScriptElement *iface, REFIID riid,
@@ -84,7 +85,8 @@ static HRESULT WINAPI HTMLScriptElement_GetIDsOfNames(IHTMLScriptElement *iface,
                                                 LCID lcid, DISPID *rgDispId)
 {
     HTMLScriptElement *This = impl_from_IHTMLScriptElement(iface);
-    return IDispatchEx_GetIDsOfNames(DISPATCHEX(&This->element.node.dispex), riid, rgszNames, cNames, lcid, rgDispId);
+    return IDispatchEx_GetIDsOfNames(&This->element.node.dispex.IDispatchEx_iface, riid, rgszNames,
+            cNames, lcid, rgDispId);
 }
 
 static HRESULT WINAPI HTMLScriptElement_Invoke(IHTMLScriptElement *iface, DISPID dispIdMember,
@@ -92,8 +94,8 @@ static HRESULT WINAPI HTMLScriptElement_Invoke(IHTMLScriptElement *iface, DISPID
                             VARIANT *pVarResult, EXCEPINFO *pExcepInfo, UINT *puArgErr)
 {
     HTMLScriptElement *This = impl_from_IHTMLScriptElement(iface);
-    return IDispatchEx_Invoke(DISPATCHEX(&This->element.node.dispex), dispIdMember, riid, lcid, wFlags, pDispParams,
-            pVarResult, pExcepInfo, puArgErr);
+    return IDispatchEx_Invoke(&This->element.node.dispex.IDispatchEx_iface, dispIdMember, riid,
+            lcid, wFlags, pDispParams, pVarResult, pExcepInfo, puArgErr);
 }
 
 static HRESULT WINAPI HTMLScriptElement_put_src(IHTMLScriptElement *iface, BSTR v)
@@ -281,11 +283,14 @@ static const IHTMLScriptElementVtbl HTMLScriptElementVtbl = {
     HTMLScriptElement_get_type
 };
 
-#define HTMLSCRIPT_NODE_THIS(iface) DEFINE_THIS2(HTMLScriptElement, element.node, iface)
+static inline HTMLScriptElement *impl_from_HTMLDOMNode(HTMLDOMNode *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLScriptElement, element.node);
+}
 
 static HRESULT HTMLScriptElement_QI(HTMLDOMNode *iface, REFIID riid, void **ppv)
 {
-    HTMLScriptElement *This = HTMLSCRIPT_NODE_THIS(iface);
+    HTMLScriptElement *This = impl_from_HTMLDOMNode(iface);
 
     *ppv = NULL;
 
@@ -310,18 +315,16 @@ static HRESULT HTMLScriptElement_QI(HTMLDOMNode *iface, REFIID riid, void **ppv)
 
 static void HTMLScriptElement_destructor(HTMLDOMNode *iface)
 {
-    HTMLScriptElement *This = HTMLSCRIPT_NODE_THIS(iface);
+    HTMLScriptElement *This = impl_from_HTMLDOMNode(iface);
     HTMLElement_destructor(&This->element.node);
 }
 
 static HRESULT HTMLScriptElement_get_readystate(HTMLDOMNode *iface, BSTR *p)
 {
-    HTMLScriptElement *This = HTMLSCRIPT_NODE_THIS(iface);
+    HTMLScriptElement *This = impl_from_HTMLDOMNode(iface);
 
     return IHTMLScriptElement_get_readyState(&This->IHTMLScriptElement_iface, p);
 }
-
-#undef HTMLSCRIPT_NODE_THIS
 
 static const NodeImplVtbl HTMLScriptElementImplVtbl = {
     HTMLScriptElement_QI,

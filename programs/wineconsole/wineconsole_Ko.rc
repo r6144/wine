@@ -1,6 +1,6 @@
 /*
  * Copyright 2001 Eric Pouech
- * Copyright 2005,2007 YunSong Hwang
+ * Copyright 2005,2007,2011 YunSong Hwang
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -19,118 +19,87 @@
 
 #include "wineconsole_res.h"
 
+#pragma code_page(65001)
+
 LANGUAGE LANG_KOREAN, SUBLANG_DEFAULT
 
-STRINGTABLE
-BEGIN
-IDS_EDIT,		"∆Ì¡˝(&E)"
-IDS_DEFAULT,		"±‚∫ª¿∏∑Œ º≥¡§(&D)"
-IDS_PROPERTIES,		"º”º∫(&P)"
-IDS_MARK,		"&Mark"
-IDS_COPY,		"∫πªÁ(&C)"
-IDS_PASTE,		"∫Ÿø©≥÷±‚(&P)"
-IDS_SELECTALL,		"∏µŒ º±≈√(&S)"
-IDS_SCROLL,		"Ω∫≈©∑—(&R)"
-IDS_SEARCH,		"√£±‚(&E)"
-IDS_FNT_DISPLAY,	"∞¢∞¢¿« ±€¿⁄¥¬ %ld  «»ºø ≥ ∫Òø° %ld «»ºø ≥Ù¿Ã∏¶ ∞°¡˝¥œ¥Ÿ"
-IDS_FNT_PREVIEW,	"¿Ã∞Õ¿∫ ≈◊Ω∫∆Æ¿‘¥œ¥Ÿ"
-IDS_DLG_TIT_DEFAULT,    "º≥ƒ° - ±‚∫ª º≥¡§"
-IDS_DLG_TIT_CURRENT,    "º≥ƒ° - «ˆ¿Á º≥¡§"
-IDS_DLG_TIT_ERROR,	"º≥¡§ ø°∑Ø"
-IDS_DLG_ERR_SBWINSIZE, 	"Ω∫≈©∏∞ πˆ∆€ ≈©±‚¥¬ π›µÂΩ√ √¢∫∏¥Ÿ ∞∞∞≈≥™ ƒøæﬂ«’¥œ¥Ÿ."
-
-IDS_CMD_INVALID_EVENT_ID  "wineconsole: ¿Ã∫•∆Æ id∏¶ ∫Ÿø© ≥÷¿ª ºˆ æ¯Ω¿¥œ¥Ÿ\n"
-IDS_CMD_INVALID_BACKEND    "wineconsole: ø√πŸ∏£¡ˆ æ ¿∫ πÈø£µÂ\n"
-IDS_CMD_INVALID_OPTION    "wineconsole: ¿Ã«ÿ«“ºˆ æ¯¥¬ ∏Ì∑… ∂Û¿Œ ø…º«\n"
-IDS_CMD_ABOUT              "Wine ƒ‹º÷ø°º≠ «¡∑Œ±◊∑• Ω√¿€\n"
-IDS_CMD_LAUNCH_FAILED      "wineconsole: «Æ±◊∏≤ %s Ω√¿€ Ω«∆–.\n"\
-                           "¿Ã ∏Ì∑…¿∫ ø√πŸ∏£¡ˆ æ Ω¿¥œ¥Ÿ.\n"
-
-IDS_USAGE_HEADER           "\nªÁøÎπ˝:\n  wineconsole [ø…º«] <∏Ì∑…>\n\nø…º«:\n"
-IDS_USAGE_BACKEND          "  --backend={user|curses}  ªÁøÎ¿⁄∞° ªı √¢¿ª ø≠ ∞Õ¿Œ¡ˆ,\n"\
-                           "                            curses∞° Wine ƒ‹º÷√≥∑≥ «ˆ¿Á ≈ÕπÃ≥Œø°  ≥™≈∏≥æ ∞Õ¿Œ¡ˆ º±≈√\n"
-IDS_USAGE_COMMAND          "  <∏Ì∑…>                 The Wine «¡∑Œ±◊∑•¿∫ ƒ‹º÷¿ª ≈Î«ÿº≠ Ω√¿€µ \n"
-IDS_USAGE_FOOTER           "\nøπ:\n  wineconsole cmd\nWine ƒ‹º÷ø°º≠ Wine ∏Ì∑… «¡∑“«¡∆Æ Ω√¿€\n\n"
-
-END
-
-IDD_OPTION DIALOG 36, 24, 140, 105
+IDD_OPTION DIALOG 36, 24, 208, 105
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION " ø…º« "
+CAPTION " ÏòµÏÖò "
 FONT 9, "MS Shell Dlg"
 {
-	GROUPBOX "ƒøº≠ ≈©±‚", -1, 10, 11, 60, 44, BS_GROUPBOX
-	AUTORADIOBUTTON "¿€∞‘(&S)", IDC_OPT_CURSOR_SMALL, 14, 23, 44, 10, WS_TABSTOP
-	AUTORADIOBUTTON "¡ﬂ∞£(&M)", IDC_OPT_CURSOR_MEDIUM, 14, 33, 44, 10, WS_TABSTOP
-	AUTORADIOBUTTON "≈©∞‘(&L)", IDC_OPT_CURSOR_LARGE, 14, 43, 44, 10, WS_TABSTOP
+	GROUPBOX "Ïª§ÏÑú ÌÅ¨Í∏∞", -1, 10, 11, 60, 44, BS_GROUPBOX
+	AUTORADIOBUTTON "ÏûëÍ≤å(&S)", IDC_OPT_CURSOR_SMALL, 14, 23, 44, 10, WS_TABSTOP
+	AUTORADIOBUTTON "Ï§ëÍ∞Ñ(&M)", IDC_OPT_CURSOR_MEDIUM, 14, 33, 44, 10, WS_TABSTOP
+	AUTORADIOBUTTON "ÌÅ¨Í≤å(&L)", IDC_OPT_CURSOR_LARGE, 14, 43, 44, 10, WS_TABSTOP
 
-	GROUPBOX "ƒ¡∆Æ∑—", -1, 75, 11, 125, 44, BS_GROUPBOX
-	LTEXT "∆Àæ˜ ∏ﬁ¥∫", -1, 79, 23, 40, 10
-	AUTOCHECKBOX "ƒ¡∆Æ∑—(&C)", IDC_OPT_CONF_CTRL, 129, 23, 60, 10, WS_TABSTOP
-	AUTOCHECKBOX "Ω¨«¡∆Æ(&H)", IDC_OPT_CONF_SHIFT, 129, 33, 60, 10, WS_TABSTOP
-	LTEXT "∫¸∏• ∆Ì¡˝", -1, 79, 43, 50, 10
-	AUTOCHECKBOX "∞°¥…(&E)", IDC_OPT_QUICK_EDIT, 129, 43, 60, 10, WS_TABSTOP
+	GROUPBOX "Ïª®Ìä∏Î°§", -1, 75, 11, 125, 44, BS_GROUPBOX
+	LTEXT "ÌåùÏóÖ Î©îÎâ¥", -1, 79, 23, 40, 10
+	AUTOCHECKBOX "Ïª®Ìä∏Î°§(&C)", IDC_OPT_CONF_CTRL, 129, 23, 60, 10, WS_TABSTOP
+	AUTOCHECKBOX "Ïâ¨ÌîÑÌä∏(&H)", IDC_OPT_CONF_SHIFT, 129, 33, 60, 10, WS_TABSTOP
+	LTEXT "Îπ†Î•∏ Ìé∏Ïßë", -1, 79, 43, 50, 10
+	AUTOCHECKBOX "Í∞ÄÎä•(&E)", IDC_OPT_QUICK_EDIT, 129, 43, 60, 10, WS_TABSTOP
 
-	GROUPBOX "∏Ì∑… »˜Ω∫≈‰∏Æ", -1, 10, 57, 190, 35, BS_GROUPBOX
-	LTEXT "¥ŸΩ√ ∫Œ∏£¥¬ ∏Ì∑…¿« ∞πºˆ(&N):", -1, 14, 67, 78, 18
+	GROUPBOX "Î™ÖÎ†π ÌûàÏä§ÌÜ†Î¶¨", -1, 10, 57, 190, 35, BS_GROUPBOX
+	LTEXT "Îã§Ïãú Î∂ÄÎ•¥Îäî Î™ÖÎ†πÏùò Í∞ØÏàò(&N):", -1, 14, 67, 78, 18
 	EDITTEXT IDC_OPT_HIST_SIZE, 92, 69, 31, 12, WS_TABSTOP|WS_BORDER|ES_NUMBER
 	CONTROL "", IDC_OPT_HIST_SIZE_UD, "msctls_updown32", UDS_SETBUDDYINT|UDS_ALIGNRIGHT|UDS_AUTOBUDDY|UDS_ARROWKEYS|UDS_NOTHOUSANDS, 0, 0, 0, 0
-	AUTOCHECKBOX "µŒπ¯  ¡¶∞≈(&R)", IDC_OPT_HIST_NODOUBLE, 130, 67, 50, 18, WS_TABSTOP|BS_MULTILINE
+	AUTOCHECKBOX "ÎëêÎ≤à  Ï†úÍ±∞(&R)", IDC_OPT_HIST_NODOUBLE, 130, 67, 50, 18, WS_TABSTOP|BS_MULTILINE
 }
 
 IDD_FONT DIALOG 36, 24, 140, 105
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION " ±€≤√ "
+CAPTION " Í∏ÄÍº¥ "
 FONT 9, "MS Shell Dlg"
 {
-	LTEXT "±€≤√(&F)", -1, 5, 5, 24, 8
+	LTEXT "Í∏ÄÍº¥(&F)", -1, 5, 5, 24, 8
 	LISTBOX IDC_FNT_LIST_FONT, 5, 18, 90, 42, LBS_SORT|WS_VSCROLL
-	LTEXT "ªˆªÛ(&C)", -1, 100, 5, 50, 8
+	LTEXT "ÏÉâÏÉÅ(&C)", -1, 100, 5, 50, 8
 	CONTROL "", IDC_FNT_COLOR_FG, "WineConColorPreview", 0L, 100, 18, 48, 16
 	CONTROL "", IDC_FNT_COLOR_BK, "WineConColorPreview", 0L, 100, 40, 48, 16
-	LTEXT "≈©±‚;(&S)", -1, 158, 5, 40, 8
+	LTEXT "ÌÅ¨Í∏∞;(&S)", -1, 158, 5, 40, 8
 	LISTBOX IDC_FNT_LIST_SIZE, 158, 18, 40, 60, WS_VSCROLL
 	CONTROL "", IDC_FNT_PREVIEW, "WineConFontPreview", 0L, 5, 60, 109, 40
 	LTEXT "", IDC_FNT_FONT_INFO, 128, 76, 80, 18
 }
 
-IDD_CONFIG DIALOG 36, 24, 140, 105
+IDD_CONFIG DIALOG 36, 24, 206, 105
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION " º≥¡§ "
+CAPTION " ÏÑ§Ï†ï "
 FONT 9, "MS Shell Dlg"
 {
-	GROUPBOX "πˆ∆€ ¡∏", -1, 10, 11, 100, 42, BS_GROUPBOX
-	LTEXT "≥ ∫Ò(&W) :", -1, 14, 25, 54, 9
+	GROUPBOX "Î≤ÑÌçº Ï°¥", -1, 10, 11, 100, 42, BS_GROUPBOX
+	LTEXT "ÎÑàÎπÑ(&W) :", -1, 14, 25, 54, 9
 	EDITTEXT IDC_CNF_SB_WIDTH, 68, 23, 36, 12, WS_TABSTOP|WS_BORDER|ES_NUMBER
 	CONTROL "", IDC_CNF_SB_WIDTH_UD, "msctls_updown32", UDS_SETBUDDYINT|UDS_ALIGNRIGHT|UDS_AUTOBUDDY|UDS_ARROWKEYS|UDS_NOTHOUSANDS, 0, 0, 0, 0
-	LTEXT "≥Ù¿Ã(&H) :", -1, 14, 39, 54, 9
+	LTEXT "ÎÜíÏù¥(&H) :", -1, 14, 39, 54, 9
 	EDITTEXT IDC_CNF_SB_HEIGHT, 68, 37, 36, 12, WS_TABSTOP|WS_BORDER|ES_NUMBER
 	CONTROL "", IDC_CNF_SB_HEIGHT_UD, "msctls_updown32", UDS_SETBUDDYINT|UDS_ALIGNRIGHT|UDS_AUTOBUDDY|UDS_ARROWKEYS|UDS_NOTHOUSANDS, 0, 0, 0, 0
 
-	GROUPBOX "√¢ ≈©±‚", -1, 10, 55, 100, 42
-	LTEXT "≥ ∫Ò(&I) :", -1, 14, 69, 54, 9
+	GROUPBOX "Ï∞Ω ÌÅ¨Í∏∞", -1, 10, 55, 100, 42
+	LTEXT "ÎÑàÎπÑ(&I) :", -1, 14, 69, 54, 9
 	EDITTEXT IDC_CNF_WIN_WIDTH, 68, 67, 36, 12, WS_TABSTOP|WS_BORDER|ES_NUMBER
 	CONTROL "", IDC_CNF_WIN_WIDTH_UD, "msctls_updown32", UDS_SETBUDDYINT|UDS_ALIGNRIGHT|UDS_AUTOBUDDY|UDS_ARROWKEYS|UDS_NOTHOUSANDS, 0, 0, 0, 0
-	LTEXT "≥Ù¿Ã(&E) :", -1, 14, 83, 54, 9
+	LTEXT "ÎÜíÏù¥(&E) :", -1, 14, 83, 54, 9
 	EDITTEXT IDC_CNF_WIN_HEIGHT, 68, 81, 36, 12, WS_TABSTOP|WS_BORDER|ES_NUMBER
 	CONTROL "", IDC_CNF_WIN_HEIGHT_UD, "msctls_updown32", UDS_SETBUDDYINT|UDS_ALIGNRIGHT|UDS_AUTOBUDDY|UDS_ARROWKEYS|UDS_NOTHOUSANDS, 0, 0, 0, 0
 
-	GROUPBOX "«Æ±◊∏≤¿« ≥°", -1, 115, 11, 80, 42, BS_GROUPBOX
-	AUTOCHECKBOX "ƒ‹º÷ ¥›±‚(&C)", IDC_CNF_CLOSE_EXIT, 119, 25, 72, 20, WS_TABSTOP
+	GROUPBOX "ÌíÄÍ∑∏Î¶ºÏùò ÎÅù", -1, 115, 11, 80, 42, BS_GROUPBOX
+	AUTOCHECKBOX "ÏΩòÏÜî Îã´Í∏∞(&C)", IDC_CNF_CLOSE_EXIT, 119, 25, 72, 20, WS_TABSTOP
 
-	GROUPBOX "ø°µº«", -1, 115, 55, 80, 42
+	GROUPBOX "ÏóêÎîîÏÖò", -1, 115, 55, 80, 42
 	COMBOBOX IDC_CNF_EDITION_MODE, 119, 69, 72, 20, CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP
 }
 
 IDD_SAVE_SETTINGS DIALOG 20, 20, 170, 60
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION
-CAPTION " ƒ‹º÷ ∏≈∞≥∫Øºˆ"
+CAPTION " ÏΩòÏÜî Îß§Í∞úÎ≥ÄÏàò"
 FONT 9, "MS Shell Dlg"
 {
 	GROUPBOX "", -1, 10, 10, 150, 31, BS_GROUPBOX
-	AUTORADIOBUTTON "≥™¡ﬂ¿« ººº«¿ª ¿ß«ÿ º≥¡§ ∫∏¡∏", IDC_SAV_SAVE, 14, 15, 140, 10, WS_TABSTOP
-	AUTORADIOBUTTON "ø¿¡˜ «ˆ¿Á¿« ººº«∏∏ ∫Ø∞Ê", IDC_SAV_SESSION, 14, 27, 140, 10, WS_TABSTOP
+	AUTORADIOBUTTON "ÎÇòÏ§ëÏùò ÏÑ∏ÏÖòÏùÑ ÏúÑÌï¥ ÏÑ§Ï†ï Î≥¥Ï°¥", IDC_SAV_SAVE, 14, 15, 140, 10, WS_TABSTOP
+	AUTORADIOBUTTON "Ïò§ÏßÅ ÌòÑÏû¨Ïùò ÏÑ∏ÏÖòÎßå Î≥ÄÍ≤Ω", IDC_SAV_SESSION, 14, 27, 140, 10, WS_TABSTOP
 
-	PUSHBUTTON "»Æ¿Œ", IDOK, 35, 45, 35, 12
-	PUSHBUTTON "√Îº“", IDCANCEL, 80, 45, 35, 12
+	PUSHBUTTON "ÌôïÏù∏", IDOK, 35, 45, 35, 12
+	PUSHBUTTON "Ï∑®ÏÜå", IDCANCEL, 80, 45, 35, 12
 }

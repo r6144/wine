@@ -788,6 +788,32 @@ static const uri_properties uri_tests[] = {
             {URLZONE_INVALID,E_NOTIMPL,FALSE}
         }
     },
+    /* Make sure already percent encoded characters don't get unencoded. */
+    {   "ftp://\"%20\"weird@ftp.google.com/\"%20\"weird", Uri_CREATE_NO_ENCODE_FORBIDDEN_CHARACTERS, S_OK, FALSE,
+        {
+            {"ftp://\"%20\"weird@ftp.google.com/\"%20\"weird",S_OK,FALSE},
+            {"\"%20\"weird@ftp.google.com",S_OK,FALSE},
+            {"ftp://ftp.google.com/\"%20\"weird",S_OK,FALSE},
+            {"google.com",S_OK,FALSE},
+            {"",S_FALSE,FALSE},
+            {"",S_FALSE,FALSE},
+            {"ftp.google.com",S_OK,FALSE},
+            {"",S_FALSE,FALSE},
+            {"/\"%20\"weird",S_OK,FALSE},
+            {"/\"%20\"weird",S_OK,FALSE},
+            {"",S_FALSE,FALSE},
+            {"ftp://\"%20\"weird@ftp.google.com/\"%20\"weird",S_OK,FALSE},
+            {"ftp",S_OK,FALSE},
+            {"\"%20\"weird",S_OK,FALSE},
+            {"\"%20\"weird",S_OK,FALSE}
+        },
+        {
+            {Uri_HOST_DNS,S_OK,FALSE},
+            {21,S_OK,FALSE},
+            {URL_SCHEME_FTP,S_OK,FALSE},
+            {URLZONE_INVALID,E_NOTIMPL,FALSE}
+        }
+    },
     /* Allowed to have invalid % encoded because its an unknown scheme type. */
     {   "zip://%xy:word@winehq.org/", 0, S_OK, FALSE,
         {
@@ -3963,6 +3989,156 @@ static const uri_properties uri_tests[] = {
             {URL_SCHEME_RES,S_OK,FALSE},
             {URLZONE_INVALID,E_NOTIMPL,FALSE}
         }
+    },
+    {   "mk:@MSITStore:Z:\\dir\\test.chm::/html/../images/xxx.jpg", 0, S_OK, FALSE,
+        {
+            {"mk:@MSITStore:Z:\\dir\\test.chm::/images/xxx.jpg",S_OK,FALSE},
+            {"",S_FALSE,FALSE},
+            {"mk:@MSITStore:Z:\\dir\\test.chm::/images/xxx.jpg",S_OK,FALSE},
+            {"",S_FALSE,FALSE},
+            {".jpg",S_OK,FALSE},
+            {"",S_FALSE,FALSE},
+            {"",S_FALSE,FALSE},
+            {"",S_FALSE,FALSE},
+            {"@MSITStore:Z:\\dir\\test.chm::/images/xxx.jpg",S_OK,FALSE},
+            {"@MSITStore:Z:\\dir\\test.chm::/images/xxx.jpg",S_OK,FALSE},
+            {"",S_FALSE,FALSE},
+            {"mk:@MSITStore:Z:\\dir\\test.chm::/html/../images/xxx.jpg",S_OK,FALSE},
+            {"mk",S_OK,FALSE},
+            {"",S_FALSE,FALSE},
+            {"",S_FALSE,FALSE}
+        },
+        {
+            {Uri_HOST_UNKNOWN,S_OK,FALSE},
+            {0,S_FALSE,FALSE},
+            {URL_SCHEME_MK,S_OK,FALSE},
+            {URLZONE_INVALID,E_NOTIMPL,FALSE}
+        }
+    },
+    {   "mk:@MSITStore:Z:\\dir\\test.chm::/html/../images/xxx.jpg", Uri_CREATE_NO_CANONICALIZE, S_OK, FALSE,
+        {
+            {"mk:@MSITStore:Z:\\dir\\test.chm::/html/../images/xxx.jpg",S_OK,FALSE},
+            {"",S_FALSE,FALSE},
+            {"mk:@MSITStore:Z:\\dir\\test.chm::/html/../images/xxx.jpg",S_OK,FALSE},
+            {"",S_FALSE,FALSE},
+            {".jpg",S_OK,FALSE},
+            {"",S_FALSE,FALSE},
+            {"",S_FALSE,FALSE},
+            {"",S_FALSE,FALSE},
+            {"@MSITStore:Z:\\dir\\test.chm::/html/../images/xxx.jpg",S_OK,FALSE},
+            {"@MSITStore:Z:\\dir\\test.chm::/html/../images/xxx.jpg",S_OK,FALSE},
+            {"",S_FALSE,FALSE},
+            {"mk:@MSITStore:Z:\\dir\\test.chm::/html/../images/xxx.jpg",S_OK,FALSE},
+            {"mk",S_OK,FALSE},
+            {"",S_FALSE,FALSE},
+            {"",S_FALSE,FALSE}
+        },
+        {
+            {Uri_HOST_UNKNOWN,S_OK,FALSE},
+            {0,S_FALSE,FALSE},
+            {URL_SCHEME_MK,S_OK,FALSE},
+            {URLZONE_INVALID,E_NOTIMPL,FALSE}
+        }
+    },
+    {   "xx:@MSITStore:Z:\\dir\\test.chm::/html/../images/xxx.jpg", 0, S_OK, FALSE,
+        {
+            {"xx:@MSITStore:Z:\\dir\\test.chm::/html/../images/xxx.jpg",S_OK,FALSE},
+            {"",S_FALSE,FALSE},
+            {"xx:@MSITStore:Z:\\dir\\test.chm::/html/../images/xxx.jpg",S_OK,FALSE},
+            {"",S_FALSE,FALSE},
+            {".jpg",S_OK,FALSE},
+            {"",S_FALSE,FALSE},
+            {"",S_FALSE,FALSE},
+            {"",S_FALSE,FALSE},
+            {"@MSITStore:Z:\\dir\\test.chm::/html/../images/xxx.jpg",S_OK,FALSE},
+            {"@MSITStore:Z:\\dir\\test.chm::/html/../images/xxx.jpg",S_OK,FALSE},
+            {"",S_FALSE,FALSE},
+            {"xx:@MSITStore:Z:\\dir\\test.chm::/html/../images/xxx.jpg",S_OK,FALSE},
+            {"xx",S_OK,FALSE},
+            {"",S_FALSE,FALSE},
+            {"",S_FALSE,FALSE}
+        },
+        {
+            {Uri_HOST_UNKNOWN,S_OK,FALSE},
+            {0,S_FALSE,FALSE},
+            {URL_SCHEME_UNKNOWN,S_OK,FALSE},
+            {URLZONE_INVALID,E_NOTIMPL,FALSE}
+        }
+    },
+    {   "mk:@MSITStore:Z:\\dir\\test.chm::/html/../../images/xxx.jpg", 0, S_OK, FALSE,
+        {
+            {"mk:@MSITStore:Z:\\dir\\images/xxx.jpg",S_OK,FALSE},
+            {"",S_FALSE,FALSE},
+            {"mk:@MSITStore:Z:\\dir\\images/xxx.jpg",S_OK,FALSE},
+            {"",S_FALSE,FALSE},
+            {".jpg",S_OK,FALSE},
+            {"",S_FALSE,FALSE},
+            {"",S_FALSE,FALSE},
+            {"",S_FALSE,FALSE},
+            {"@MSITStore:Z:\\dir\\images/xxx.jpg",S_OK,FALSE},
+            {"@MSITStore:Z:\\dir\\images/xxx.jpg",S_OK,FALSE},
+            {"",S_FALSE,FALSE},
+            {"mk:@MSITStore:Z:\\dir\\test.chm::/html/../../images/xxx.jpg",S_OK,FALSE},
+            {"mk",S_OK,FALSE},
+            {"",S_FALSE,FALSE},
+            {"",S_FALSE,FALSE}
+        },
+        {
+            {Uri_HOST_UNKNOWN,S_OK,FALSE},
+            {0,S_FALSE,FALSE},
+            {URL_SCHEME_MK,S_OK,FALSE},
+            {URLZONE_INVALID,E_NOTIMPL,FALSE}
+        }
+    },
+    {   "mk:@MSITStore:Z:\\dir\\dir2\\..\\test.chm::/html/../../images/xxx.jpg", 0, S_OK, FALSE,
+        {
+            {"mk:@MSITStore:Z:\\dir\\images/xxx.jpg",S_OK,FALSE},
+            {"",S_FALSE,FALSE},
+            {"mk:@MSITStore:Z:\\dir\\images/xxx.jpg",S_OK,FALSE},
+            {"",S_FALSE,FALSE},
+            {".jpg",S_OK,FALSE},
+            {"",S_FALSE,FALSE},
+            {"",S_FALSE,FALSE},
+            {"",S_FALSE,FALSE},
+            {"@MSITStore:Z:\\dir\\images/xxx.jpg",S_OK,FALSE},
+            {"@MSITStore:Z:\\dir\\images/xxx.jpg",S_OK,FALSE},
+            {"",S_FALSE,FALSE},
+            {"mk:@MSITStore:Z:\\dir\\dir2\\..\\test.chm::/html/../../images/xxx.jpg",S_OK,FALSE},
+            {"mk",S_OK,FALSE},
+            {"",S_FALSE,FALSE},
+            {"",S_FALSE,FALSE}
+        },
+        {
+            {Uri_HOST_UNKNOWN,S_OK,FALSE},
+            {0,S_FALSE,FALSE},
+            {URL_SCHEME_MK,S_OK,FALSE},
+            {URLZONE_INVALID,E_NOTIMPL,FALSE}
+        }
+    },
+    {   "mk:@MSITStore:Z:\\dir\\test.chm::/html/../../../../images/xxx.jpg", 0, S_OK, FALSE,
+        {
+            {"mk:images/xxx.jpg",S_OK,FALSE},
+            {"",S_FALSE,FALSE},
+            {"mk:images/xxx.jpg",S_OK,FALSE},
+            {"",S_FALSE,FALSE},
+            {".jpg",S_OK,FALSE},
+            {"",S_FALSE,FALSE},
+            {"",S_FALSE,FALSE},
+            {"",S_FALSE,FALSE},
+            {"images/xxx.jpg",S_OK,FALSE},
+            {"images/xxx.jpg",S_OK,FALSE},
+            {"",S_FALSE,FALSE},
+            {"mk:@MSITStore:Z:\\dir\\test.chm::/html/../../../../images/xxx.jpg",S_OK,FALSE},
+            {"mk",S_OK,FALSE},
+            {"",S_FALSE,FALSE},
+            {"",S_FALSE,FALSE}
+        },
+        {
+            {Uri_HOST_UNKNOWN,S_OK,FALSE},
+            {0,S_FALSE,FALSE},
+            {URL_SCHEME_MK,S_OK,FALSE},
+            {URLZONE_INVALID,E_NOTIMPL,FALSE}
+        }
     }
 };
 
@@ -5902,6 +6078,87 @@ static const uri_combine_test uri_combine_tests[] = {
             {URL_SCHEME_FILE,S_OK},
             {URLZONE_INVALID,E_NOTIMPL}
         }
+    },
+    {   "http://winehq.org/dir/testfile",0,
+        "test?querystring",Uri_CREATE_ALLOW_RELATIVE,
+        0,S_OK,FALSE,
+        {
+            {"http://winehq.org/dir/test?querystring",S_OK},
+            {"winehq.org",S_OK},
+            {"http://winehq.org/dir/test?querystring",S_OK},
+            {"winehq.org",S_OK},
+            {"",S_FALSE},
+            {"",S_FALSE},
+            {"winehq.org",S_OK},
+            {"",S_FALSE},
+            {"/dir/test",S_OK},
+            {"/dir/test?querystring",S_OK},
+            {"?querystring",S_OK},
+            {"http://winehq.org/dir/test?querystring",S_OK},
+            {"http",S_OK},
+            {"",S_FALSE},
+            {"",S_FALSE}
+        },
+        {
+            {Uri_HOST_DNS,S_OK},
+            {80,S_OK},
+            {URL_SCHEME_HTTP,S_OK},
+            {URLZONE_INVALID,E_NOTIMPL}
+        }
+    },
+    {   "http://winehq.org/dir/test",0,
+        "test?querystring",Uri_CREATE_ALLOW_RELATIVE,
+        0,S_OK,FALSE,
+        {
+            {"http://winehq.org/dir/test?querystring",S_OK},
+            {"winehq.org",S_OK},
+            {"http://winehq.org/dir/test?querystring",S_OK},
+            {"winehq.org",S_OK},
+            {"",S_FALSE},
+            {"",S_FALSE},
+            {"winehq.org",S_OK},
+            {"",S_FALSE},
+            {"/dir/test",S_OK},
+            {"/dir/test?querystring",S_OK},
+            {"?querystring",S_OK},
+            {"http://winehq.org/dir/test?querystring",S_OK},
+            {"http",S_OK},
+            {"",S_FALSE},
+            {"",S_FALSE}
+        },
+        {
+            {Uri_HOST_DNS,S_OK},
+            {80,S_OK},
+            {URL_SCHEME_HTTP,S_OK},
+            {URLZONE_INVALID,E_NOTIMPL}
+        }
+    },
+    {   "http://winehq.org/dir/test?querystring",0,
+        "#hash",Uri_CREATE_ALLOW_RELATIVE,
+        0,S_OK,FALSE,
+        {
+            {"http://winehq.org/dir/test?querystring#hash",S_OK},
+            {"winehq.org",S_OK},
+            {"http://winehq.org/dir/test?querystring#hash",S_OK},
+            {"winehq.org",S_OK},
+            {"",S_FALSE},
+            {"#hash",S_OK},
+            {"winehq.org",S_OK},
+            {"",S_FALSE},
+            {"/dir/test",S_OK},
+            {"/dir/test?querystring",S_OK},
+            {"?querystring",S_OK},
+            {"http://winehq.org/dir/test?querystring#hash",S_OK},
+            {"http",S_OK},
+            {"",S_FALSE},
+            {"",S_FALSE}
+        },
+        {
+            {Uri_HOST_DNS,S_OK},
+            {80,S_OK},
+            {URL_SCHEME_HTTP,S_OK},
+            {URLZONE_INVALID,E_NOTIMPL}
+        }
     }
 };
 
@@ -7248,6 +7505,7 @@ static void test_CreateUriWithFragment(void) {
 
         if(uri) IUri_Release(uri);
         heap_free(uriW);
+        heap_free(fragW);
     }
 }
 
@@ -9031,6 +9289,7 @@ static void test_IUriBuilder_RemoveProperties(void) {
                         BSTR received = NULL;
 
                         hr = IUri_GetAbsoluteUri(result, &received);
+                        ok(hr == S_OK, "Error: Expected S_OK, but got 0x%08x instead.\n", hr);
                         ok(!strcmp_aw(test.expected_uri, received),
                             "Error: Expected %s but got %s instead on test %d.\n",
                             test.expected_uri, wine_dbgstr_w(received), i);
@@ -9090,23 +9349,23 @@ static void test_IUriBuilderFactory(void) {
 
         if(SUCCEEDED(hr)) {
             builder = (void*) 0xdeadbeef;
-            hr = IUriBuilderFactory_CreateInitializedIUriBuilder(factory, 10, 0, &builder);
+            hr = IUriBuilderFactory_CreateIUriBuilder(factory, 10, 0, &builder);
             ok(hr == E_INVALIDARG, "Error: CreateInitializedIUriBuilder returned 0x%08x, expected 0x%08x.\n",
                 hr, E_INVALIDARG);
             ok(!builder, "Error: Expected 'builder' to be NULL, but was %p.\n", builder);
 
             builder = (void*) 0xdeadbeef;
-            hr = IUriBuilderFactory_CreateInitializedIUriBuilder(factory, 0, 10, &builder);
+            hr = IUriBuilderFactory_CreateIUriBuilder(factory, 0, 10, &builder);
             ok(hr == E_INVALIDARG, "Error: CreateInitializedIUriBuilder returned 0x%08x, expected 0x%08x.\n",
                 hr, E_INVALIDARG);
             ok(!builder, "Error: Expected 'builder' to be NULL, but was %p.\n", builder);
 
-            hr = IUriBuilderFactory_CreateInitializedIUriBuilder(factory, 0, 0, NULL);
+            hr = IUriBuilderFactory_CreateIUriBuilder(factory, 0, 0, NULL);
             ok(hr == E_POINTER, "Error: CreateInitializedIUriBuilder returned 0x%08x, expected 0x%08x.\n",
                 hr, E_POINTER);
 
             builder = NULL;
-            hr = IUriBuilderFactory_CreateInitializedIUriBuilder(factory, 0, 0, &builder);
+            hr = IUriBuilderFactory_CreateIUriBuilder(factory, 0, 0, &builder);
             ok(hr == S_OK, "Error: CreateInitializedIUriBuilder returned 0x%08x, expected 0x%08x.\n",
                 hr, S_OK);
             if(SUCCEEDED(hr)) {
@@ -9114,9 +9373,6 @@ static void test_IUriBuilderFactory(void) {
                 LPCWSTR result;
                 DWORD result_len;
 
-                /* Seems microsoft had a bit of mixup naming this function. It
-                 * returns an uninitialized IUriBuilder.
-                 */
                 hr = IUriBuilder_GetIUri(builder, &tmp);
                 ok(hr == S_OK, "Error: GetIUri returned 0x%08x, expected 0x%08x.\n",
                     hr, S_OK);
@@ -9129,23 +9385,23 @@ static void test_IUriBuilderFactory(void) {
             if(builder) IUriBuilder_Release(builder);
 
             builder = (void*) 0xdeadbeef;
-            hr = IUriBuilderFactory_CreateIUriBuilder(factory, 10, 0, &builder);
+            hr = IUriBuilderFactory_CreateInitializedIUriBuilder(factory, 10, 0, &builder);
             ok(hr == E_INVALIDARG, "Error: CreateIUriBuilder returned 0x%08x, expected 0x%08x.\n",
                 hr, E_INVALIDARG);
             ok(!builder, "Error: Expected 'builder' to be NULL, but was %p.\n", builder);
 
             builder = (void*) 0xdeadbeef;
-            hr = IUriBuilderFactory_CreateIUriBuilder(factory, 0, 10, &builder);
+            hr = IUriBuilderFactory_CreateInitializedIUriBuilder(factory, 0, 10, &builder);
             ok(hr == E_INVALIDARG, "Error: CreateIUriBuilder returned 0x%08x, expected 0x%08x.\n",
                 hr, E_INVALIDARG);
             ok(!builder, "Error: Expected 'builder' to be NULL, but was %p.\n", builder);
 
-            hr = IUriBuilderFactory_CreateIUriBuilder(factory, 0, 0, NULL);
+            hr = IUriBuilderFactory_CreateInitializedIUriBuilder(factory, 0, 0, NULL);
             ok(hr == E_POINTER, "Error: CreateIUriBuilder returned 0x%08x, expected 0x%08x.\n",
                 hr, E_POINTER);
 
             builder = NULL;
-            hr = IUriBuilderFactory_CreateIUriBuilder(factory, 0, 0, &builder);
+            hr = IUriBuilderFactory_CreateInitializedIUriBuilder(factory, 0, 0, &builder);
             ok(hr == S_OK, "Error: CreateIUriBuilder returned 0x%08x, expected 0x%08x.\n",
                 hr, S_OK);
             if(SUCCEEDED(hr)) {

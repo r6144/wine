@@ -51,6 +51,11 @@
 #include "winuser.h"
 #include "winnls.h"
 #include "mmddk.h"
+#include "mmreg.h"
+#include "dsound.h"
+#include "dsdriver.h"
+#include "ks.h"
+#include "ksmedia.h"
 
 #include "alsa.h"
 #include "wine/library.h"
@@ -59,8 +64,6 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(wave);
 
-#ifdef HAVE_ALSA
-
 WINE_WAVEDEV	*WInDev;
 DWORD            ALSA_WidNumMallocedDevs;
 DWORD            ALSA_WidNumDevs;
@@ -68,7 +71,7 @@ DWORD            ALSA_WidNumDevs;
 /**************************************************************************
 * 			widNotifyClient			[internal]
 */
-static DWORD widNotifyClient(WINE_WAVEDEV* wwi, WORD wMsg, DWORD_PTR dwParam1, DWORD_PTR dwParam2)
+static void widNotifyClient(WINE_WAVEDEV* wwi, WORD wMsg, DWORD_PTR dwParam1, DWORD_PTR dwParam2)
 {
    TRACE("wMsg = 0x%04x dwParm1 = %04lX dwParam2 = %04lX\n", wMsg, dwParam1, dwParam2);
 
@@ -76,18 +79,12 @@ static DWORD widNotifyClient(WINE_WAVEDEV* wwi, WORD wMsg, DWORD_PTR dwParam1, D
    case WIM_OPEN:
    case WIM_CLOSE:
    case WIM_DATA:
-       if (wwi->wFlags != DCB_NULL &&
-	   !DriverCallback(wwi->waveDesc.dwCallback, wwi->wFlags, (HDRVR)wwi->waveDesc.hWave,
-			   wMsg, wwi->waveDesc.dwInstance, dwParam1, dwParam2)) {
-	   WARN("can't notify client !\n");
-	   return MMSYSERR_ERROR;
-       }
+       DriverCallback(wwi->waveDesc.dwCallback, wwi->wFlags, (HDRVR)wwi->waveDesc.hWave,
+                      wMsg, wwi->waveDesc.dwInstance, dwParam1, dwParam2);
        break;
    default:
        FIXME("Unknown callback message %u\n", wMsg);
-       return MMSYSERR_INVALPARAM;
    }
-   return MMSYSERR_NOERROR;
 }
 
 /**************************************************************************
@@ -372,7 +369,6 @@ static DWORD widOpen(WORD wDevID, LPWAVEOPENDESC lpDesc, DWORD dwFlags)
         return MMSYSERR_ALLOCATED;
     }
 
-    wwi->pcm = 0;
     flags = SND_PCM_NONBLOCK;
 
     if ( (err=snd_pcm_open(&pcm, wwi->pcmname, SND_PCM_STREAM_CAPTURE, flags)) < 0 )
@@ -396,7 +392,11 @@ static DWORD widOpen(WORD wDevID, LPWAVEOPENDESC lpDesc, DWORD dwFlags)
 
     hw_params = HeapAlloc( GetProcessHeap(), HEAP_ZERO_MEMORY, snd_pcm_hw_params_sizeof() );
     sw_params = HeapAlloc( GetProcessHeap(), HEAP_ZERO_MEMORY, snd_pcm_sw_params_sizeof() );
-
+    if (!hw_params || !sw_params)
+    {
+        ret = MMSYSERR_NOMEM;
+        goto error;
+    }
     snd_pcm_hw_params_any(pcm, hw_params);
 
 #define EXIT_ON_ERROR(f,e,txt) do \
@@ -491,14 +491,9 @@ static DWORD widOpen(WORD wDevID, LPWAVEOPENDESC lpDesc, DWORD dwFlags)
 	ALSA_TraceParameters(hw_params, sw_params, FALSE);
 
     /* now, we can save all required data for later use... */
-    if ( wwi->hw_params )
-	snd_pcm_hw_params_free(wwi->hw_params);
-    snd_pcm_hw_params_malloc(&(wwi->hw_params));
-    snd_pcm_hw_params_copy(wwi->hw_params, hw_params);
 
     wwi->dwBufferSize = snd_pcm_frames_to_bytes(pcm, buffer_size);
     wwi->lpQueuePtr = wwi->lpPlayPtr = wwi->lpLoopPtr = NULL;
-    wwi->pcm = pcm;
 
     ALSA_InitRingMessage(&wwi->msgRing);
 
@@ -511,20 +506,30 @@ static DWORD widOpen(WORD wDevID, LPWAVEOPENDESC lpDesc, DWORD dwFlags)
 
     wwi->hStartUpEvent = CreateEventW(NULL, FALSE, FALSE, NULL);
     wwi->hThread = CreateThread(NULL, 0, widRecorder, (LPVOID)(DWORD_PTR)wDevID, 0, &(wwi->dwThreadID));
-    if (wwi->hThread)
-        SetThreadPriority(wwi->hThread, THREAD_PRIORITY_TIME_CRITICAL);
+    if (!wwi->hThread) {
+        ERR("Thread creation for the widRecorder failed!\n");
+        CloseHandle(wwi->hStartUpEvent);
+        ret = MMSYSERR_NOMEM;
+        goto error;
+    }
+    SetThreadPriority(wwi->hThread, THREAD_PRIORITY_TIME_CRITICAL);
     WaitForSingleObject(wwi->hStartUpEvent, INFINITE);
     CloseHandle(wwi->hStartUpEvent);
-    wwi->hStartUpEvent = INVALID_HANDLE_VALUE;
+    wwi->hStartUpEvent = NULL;
 
-    HeapFree( GetProcessHeap(), 0, hw_params );
     HeapFree( GetProcessHeap(), 0, sw_params );
-    return widNotifyClient(wwi, WIM_OPEN, 0L, 0L);
+    wwi->hw_params = hw_params;
+    wwi->pcm = pcm;
+
+    widNotifyClient(wwi, WIM_OPEN, 0L, 0L);
+    return MMSYSERR_NOERROR;
 
 error:
     snd_pcm_close(pcm);
     HeapFree( GetProcessHeap(), 0, hw_params );
     HeapFree( GetProcessHeap(), 0, sw_params );
+    if (wwi->msgRing.ring_buffer_size > 0)
+        ALSA_DestroyRingMessage(&wwi->msgRing);
     return ret;
 }
 
@@ -534,7 +539,6 @@ error:
  */
 static DWORD widClose(WORD wDevID)
 {
-    DWORD		ret = MMSYSERR_NOERROR;
     WINE_WAVEDEV*	wwi;
 
     TRACE("(%u);\n", wDevID);
@@ -544,31 +548,31 @@ static DWORD widClose(WORD wDevID)
 	return MMSYSERR_BADDEVICEID;
     }
 
-    if (WInDev[wDevID].pcm == NULL) {
+    wwi = &WInDev[wDevID];
+    if (wwi->pcm == NULL) {
 	WARN("Requested to close already closed device %d!\n", wDevID);
 	return MMSYSERR_BADDEVICEID;
     }
 
-    wwi = &WInDev[wDevID];
     if (wwi->lpQueuePtr) {
 	WARN("buffers still playing !\n");
-	ret = WAVERR_STILLPLAYING;
+	return WAVERR_STILLPLAYING;
     } else {
-	if (wwi->hThread != INVALID_HANDLE_VALUE) {
+	if (wwi->hThread) {
 	    ALSA_AddRingMessage(&wwi->msgRing, WINE_WM_CLOSING, 0, TRUE);
 	}
         ALSA_DestroyRingMessage(&wwi->msgRing);
 
-	snd_pcm_hw_params_free(wwi->hw_params);
+	HeapFree( GetProcessHeap(), 0, wwi->hw_params );
 	wwi->hw_params = NULL;
 
         snd_pcm_close(wwi->pcm);
 	wwi->pcm = NULL;
 
-	ret = widNotifyClient(wwi, WIM_CLOSE, 0L, 0L);
+	widNotifyClient(wwi, WIM_CLOSE, 0L, 0L);
     }
 
-    return ret;
+    return MMSYSERR_NOERROR;
 }
 
 /**************************************************************************
@@ -774,17 +778,3 @@ DWORD WINAPI ALSA_widMessage(UINT wDevID, UINT wMsg, DWORD_PTR dwUser,
     }
     return MMSYSERR_NOTSUPPORTED;
 }
-
-#else /* HAVE_ALSA */
-
-/**************************************************************************
- * 				widMessage (WINEALSA.@)
- */
-DWORD WINAPI ALSA_widMessage(WORD wDevID, WORD wMsg, DWORD_PTR dwUser,
-                             DWORD_PTR dwParam1, DWORD_PTR dwParam2)
-{
-    FIXME("(%u, %04X, %08lX, %08lX, %08lX):stub\n", wDevID, wMsg, dwUser, dwParam1, dwParam2);
-    return MMSYSERR_NOTENABLED;
-}
-
-#endif /* HAVE_ALSA */

@@ -622,6 +622,19 @@ NTSTATUS WINAPI IoDeleteSymbolicLink( UNICODE_STRING *name )
 
 
 /***********************************************************************
+ *           IoGetDeviceInterfaces   (NTOSKRNL.EXE.@)
+ */
+NTSTATUS WINAPI IoGetDeviceInterfaces( CONST GUID *InterfaceClassGuid,
+                                       PDEVICE_OBJECT PhysicalDeviceObject,
+                                       ULONG Flags, PWSTR *SymbolicLinkList )
+{
+    FIXME( "stub: %s %p %x %p\n", debugstr_guid(InterfaceClassGuid),
+           PhysicalDeviceObject, Flags, SymbolicLinkList );
+    return STATUS_NOT_IMPLEMENTED;
+}
+
+
+/***********************************************************************
  *           IoGetDeviceObjectPointer   (NTOSKRNL.EXE.@)
  */
 NTSTATUS  WINAPI IoGetDeviceObjectPointer( UNICODE_STRING *name, ACCESS_MASK access, PFILE_OBJECT *file, PDEVICE_OBJECT *device )
@@ -1086,6 +1099,27 @@ void WINAPI KeInitializeMutex(PRKMUTEX Mutex, ULONG Level)
 }
 
 
+ /***********************************************************************
+ *           KeWaitForMutexObject   (NTOSKRNL.EXE.@)
+ */
+NTSTATUS WINAPI KeWaitForMutexObject(PRKMUTEX Mutex, KWAIT_REASON WaitReason, KPROCESSOR_MODE WaitMode,
+                                     BOOLEAN Alertable, PLARGE_INTEGER Timeout)
+{
+    FIXME( "stub: %p, %d, %d, %d, %p\n", Mutex, WaitReason, WaitMode, Alertable, Timeout );
+    return STATUS_NOT_IMPLEMENTED;
+}
+
+
+ /***********************************************************************
+ *           KeReleaseMutex   (NTOSKRNL.EXE.@)
+ */
+LONG WINAPI KeReleaseMutex(PRKMUTEX Mutex, BOOLEAN Wait)
+{
+    FIXME( "stub: %p, %d\n", Mutex, Wait );
+    return STATUS_NOT_IMPLEMENTED;
+}
+
+
 /***********************************************************************
  *           KeInitializeSemaphore   (NTOSKRNL.EXE.@)
  */
@@ -1510,7 +1544,10 @@ PVOID WINAPI MmGetSystemRoutineAddress(PUNICODE_STRING SystemRoutineName)
         RtlFreeAnsiString( &routineNameA );
     }
 
-    TRACE( "%s -> %p\n", debugstr_us(SystemRoutineName), pFunc );
+    if (pFunc)
+        TRACE( "%s -> %p\n", debugstr_us(SystemRoutineName), pFunc );
+    else
+        FIXME( "%s not found\n", debugstr_us(SystemRoutineName) );
     return pFunc;
 }
 
@@ -1556,6 +1593,24 @@ NTSTATUS WINAPI IoWMIRegistrationControl(PDEVICE_OBJECT DeviceObject, ULONG Acti
 {
     FIXME("(%p %u ) stub\n", DeviceObject, Action);
     return STATUS_SUCCESS;
+}
+
+/*****************************************************
+ *           PsSetLoadImageNotifyRoutine   (NTOSKRNL.EXE.@)
+ */
+NTSTATUS WINAPI PsSetLoadImageNotifyRoutine(PLOAD_IMAGE_NOTIFY_ROUTINE routine)
+{
+    FIXME("(%p) stub\n", routine);
+    return STATUS_SUCCESS;
+}
+
+/*****************************************************
+ *           PsLookupProcessByProcessId  (NTOSKRNL.EXE.@)
+ */
+NTSTATUS WINAPI PsLookupProcessByProcessId(HANDLE processid, PEPROCESS *process)
+{
+    FIXME("(%p %p) stub\n", processid, process);
+    return STATUS_NOT_IMPLEMENTED;
 }
 
 /*****************************************************

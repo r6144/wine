@@ -649,7 +649,7 @@
 @ stdcall GetThreadContext(long ptr)
 @ stdcall GetThreadErrorMode()
 @ stdcall GetThreadId(ptr)
-# @ stub GetThreadIOPendingFlag
+@ stdcall GetThreadIOPendingFlag(long ptr)
 @ stdcall GetThreadLocale()
 @ stdcall GetThreadPriority(long)
 @ stdcall GetThreadPriorityBoost(long ptr)
@@ -676,7 +676,7 @@
 @ stdcall GetVolumeNameForVolumeMountPointW(wstr ptr long)
 @ stdcall GetVolumePathNameA(str ptr long)
 @ stdcall GetVolumePathNameW(wstr ptr long)
-# @ stub GetVolumePathNamesForVolumeNameA
+@ stdcall GetVolumePathNamesForVolumeNameA(str ptr long ptr)
 @ stdcall GetVolumePathNamesForVolumeNameW(wstr ptr long ptr)
 @ stdcall GetWindowsDirectoryA(ptr long)
 @ stdcall GetWindowsDirectoryW(ptr long)
@@ -726,6 +726,9 @@
 @ stub HeapUsage
 @ stdcall HeapValidate(long long ptr)
 @ stdcall HeapWalk(long ptr)
+@ stdcall IdnToAscii(long wstr long ptr long)
+@ stdcall IdnToNameprepUnicode(long wstr long ptr long)
+@ stdcall IdnToUnicode(long wstr long ptr long)
 @ stdcall InitAtomTable(long)
 @ stdcall InitializeCriticalSection(ptr)
 @ stdcall InitializeCriticalSectionAndSpinCount(ptr long)
@@ -753,6 +756,7 @@
 @ stdcall IsDBCSLeadByteEx(long long)
 @ stdcall IsDebuggerPresent()
 @ stub -i386 IsLSCallback
+@ stdcall IsNormalizedString(long wstr long)
 @ stdcall IsProcessInJob(long long ptr)
 @ stdcall IsProcessorFeaturePresent(long)
 @ stub -i386 IsSLCallback
@@ -763,6 +767,21 @@
 @ stdcall IsValidLocale(long long)
 # @ stub IsValidUILanguage
 @ stdcall IsWow64Process(ptr ptr)
+@ stdcall K32EmptyWorkingSet(long)
+@ stdcall K32GetProcessImageFileNameA(long ptr long)
+@ stdcall K32GetProcessImageFileNameW(long ptr long)
+@ stdcall K32EnumProcessModules(long ptr long ptr)
+@ stdcall K32EnumProcesses(ptr long ptr)
+@ stdcall K32GetMappedFileNameA(long ptr ptr long)
+@ stdcall K32GetMappedFileNameW(long ptr ptr long)
+@ stdcall K32GetModuleBaseNameA(long long ptr long)
+@ stdcall K32GetModuleBaseNameW(long long ptr long)
+@ stdcall K32GetModuleFileNameExA(long long ptr long)
+@ stdcall K32GetModuleFileNameExW(long long ptr long)
+@ stdcall K32GetModuleInformation(long long ptr long)
+@ stdcall K32GetProcessMemoryInfo(long ptr long)
+@ stdcall K32QueryWorkingSet(long ptr long)
+@ stdcall K32QueryWorkingSetEx(long ptr long)
 @ stdcall -i386 -private -register K32Thk1632Epilog() krnl386.exe16.K32Thk1632Epilog
 @ stdcall -i386 -private -register K32Thk1632Prolog() krnl386.exe16.K32Thk1632Prolog
 @ stdcall LCIDToLocaleName(long ptr long long)
@@ -832,6 +851,7 @@
 # @ stub NlsConvertIntegerToString
 # @ stub NlsGetCacheUpdateCount
 # @ stub NlsResetProcessLocale
+@ stdcall NormalizeString(long wstr long ptr long)
 @ stub NotifyNLSUserCache
 # @ stub NumaVirtualQueryNode
 @ stdcall OpenConsoleW(wstr long long long)
@@ -904,6 +924,48 @@
 @ stdcall ReadFileEx(long ptr long ptr ptr)
 @ stdcall ReadFileScatter(long ptr long ptr ptr)
 @ stdcall ReadProcessMemory(long ptr ptr long ptr)
+@ stdcall RegCloseKey(long) advapi32.RegCloseKey
+@ stdcall RegCreateKeyExA(long str long ptr long long ptr ptr ptr) advapi32.RegCreateKeyExA
+@ stdcall RegCreateKeyExW(long wstr long ptr long long ptr ptr ptr) advapi32.RegCreateKeyExW
+@ stdcall RegDeleteKeyExA(long str long long) advapi32.RegDeleteKeyExA
+@ stdcall RegDeleteKeyExW(long wstr long long) advapi32.RegDeleteKeyExW
+@ stdcall RegDeleteTreeA(long str) advapi32.RegDeleteTreeA
+@ stdcall RegDeleteTreeW(long wstr) advapi32.RegDeleteTreeW
+@ stdcall RegDeleteValueA(long str) advapi32.RegDeleteValueA
+@ stdcall RegDeleteValueW(long wstr) advapi32.RegDeleteValueW
+# stub RegDisablePredefinedCacheEx
+@ stdcall RegEnumKeyExA(long long ptr ptr ptr ptr ptr ptr) advapi32.RegEnumKeyExA
+@ stdcall RegEnumKeyExW(long long ptr ptr ptr ptr ptr ptr) advapi32.RegEnumKeyExW
+@ stdcall RegEnumValueA(long long ptr ptr ptr ptr ptr ptr) advapi32.RegEnumValueA
+@ stdcall RegEnumValueW(long long ptr ptr ptr ptr ptr ptr) advapi32.RegEnumValueW
+@ stdcall RegFlushKey(long) advapi32.RegFlushKey
+@ stdcall RegGetKeySecurity(long long ptr ptr) advapi32.RegGetKeySecurity
+@ stdcall RegGetValueA(long str str long ptr ptr ptr) advapi32.RegGetValueA
+@ stdcall RegGetValueW(long wstr wstr long ptr ptr ptr) advapi32.RegGetValueW
+# stub RegKrnGetGlobalState
+# stub RegKrnInitialize
+@ stdcall RegLoadKeyA(long str str) advapi32.RegLoadKeyA
+@ stdcall RegLoadKeyW(long wstr wstr) advapi32.RegLoadKeyW
+@ stdcall RegLoadMUIStringA(long str str long ptr long str) advapi32.RegLoadMUIStringA
+@ stdcall RegLoadMUIStringW(long wstr wstr long ptr long wstr) advapi32.RegLoadMUIStringW
+@ stdcall RegNotifyChangeKeyValue(long long long long long) advapi32.RegNotifyChangeKeyValue
+@ stdcall RegOpenCurrentUser(long ptr) advapi32.RegOpenCurrentUser
+@ stdcall RegOpenKeyExA(long str long long ptr) advapi32.RegOpenKeyExA
+@ stdcall RegOpenKeyExW(long wstr long long ptr) advapi32.RegOpenKeyExW
+@ stdcall RegOpenUserClassesRoot(ptr long long ptr) advapi32.RegOpenUserClassesRoot
+@ stdcall RegQueryInfoKeyA(long ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr) advapi32.RegQueryInfoKeyA
+@ stdcall RegQueryInfoKeyW(long ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr) advapi32.RegQueryInfoKeyW
+@ stdcall RegQueryValueExA(long str ptr ptr ptr ptr) advapi32.RegQueryValueExA
+@ stdcall RegQueryValueExW(long wstr ptr ptr ptr ptr) advapi32.RegQueryValueExW
+@ stdcall RegRestoreKeyA(long str long) advapi32.RegRestoreKeyA
+@ stdcall RegRestoreKeyW(long wstr long) advapi32.RegRestoreKeyW
+# stub RegSaveKeyExA
+# stub RegSaveKeyExW
+@ stdcall RegSetKeySecurity(long long ptr) advapi32.RegSetKeySecurity
+@ stdcall RegSetValueExA(long str long long ptr long) advapi32.RegSetValueExA
+@ stdcall RegSetValueExW(long wstr long long ptr long) advapi32.RegSetValueExW
+@ stdcall RegUnLoadKeyA(long str) advapi32.RegUnLoadKeyA
+@ stdcall RegUnLoadKeyW(long wstr) advapi32.RegUnLoadKeyW
 @ stdcall RegisterApplicationRestart(wstr long)
 @ stub RegisterConsoleIME
 @ stub RegisterConsoleOS2
@@ -936,6 +998,7 @@
 @ cdecl -arch=x86_64 RtlAddFunctionTable(ptr long long) ntdll.RtlAddFunctionTable
 @ stdcall -register RtlCaptureContext(ptr) ntdll.RtlCaptureContext
 @ stdcall RtlCaptureStackBackTrace(long long ptr ptr) ntdll.RtlCaptureStackBackTrace
+@ stdcall -arch=x86_64 RtlCompareMemory(ptr ptr long) ntdll.RtlCompareMemory
 @ stdcall RtlFillMemory(ptr long long) ntdll.RtlFillMemory
 @ stdcall -arch=x86_64 RtlLookupFunctionEntry(long ptr ptr) ntdll.RtlLookupFunctionEntry
 @ stdcall RtlMoveMemory(ptr ptr long) ntdll.RtlMoveMemory
@@ -1070,6 +1133,7 @@
 @ stdcall SetThreadExecutionState(long)
 @ stdcall SetThreadIdealProcessor(long long)
 @ stdcall SetThreadLocale(long)
+@ stdcall SetThreadPreferredUILanguages(long ptr ptr)
 @ stdcall SetThreadPriority(long long)
 @ stdcall SetThreadPriorityBoost(long long)
 @ stdcall SetThreadUILanguage(long)

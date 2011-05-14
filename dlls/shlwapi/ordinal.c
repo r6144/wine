@@ -1571,7 +1571,10 @@ HRESULT WINAPI IUnknown_ProfferService(IUnknown *lpUnknown, REFGUID service, ISe
         if (pService)
             hr = IProfferService_ProfferService(proffer, service, pService, pCookie);
         else
+        {
             hr = IProfferService_RevokeService(proffer, *pCookie);
+            *pCookie = 0;
+        }
 
         IProfferService_Release(proffer);
     }
@@ -3842,6 +3845,28 @@ DWORD WINAPI SHGetMachineInfo(DWORD dwFlags)
 }
 
 /*************************************************************************
+ * @    [SHLWAPI.416]
+ *
+ */
+DWORD WINAPI SHWinHelpOnDemandW(HWND hwnd, LPCWSTR helpfile, DWORD flags1, VOID *ptr1, DWORD flags2)
+{
+
+    FIXME("(%p, %s, 0x%x, %p, %d)\n", hwnd, debugstr_w(helpfile), flags1, ptr1, flags2);
+    return 0;
+}
+
+/*************************************************************************
+ * @    [SHLWAPI.417]
+ *
+ */
+DWORD WINAPI SHWinHelpOnDemandA(HWND hwnd, LPCSTR helpfile, DWORD flags1, VOID *ptr1, DWORD flags2)
+{
+
+    FIXME("(%p, %s, 0x%x, %p, %d)\n", hwnd, debugstr_a(helpfile), flags1, ptr1, flags2);
+    return 0;
+}
+
+/*************************************************************************
  *      @	[SHLWAPI.418]
  *
  * Function seems to do FreeLibrary plus other things.
@@ -4038,8 +4063,11 @@ BOOL WINAPI IsOS(DWORD feature)
     case OS_ANYSERVER:
         ISOS_RETURN(platform == VER_PLATFORM_WIN32_NT)
     case OS_WOW6432:
-        FIXME("(OS_WOW6432) Should we check this?\n");
-        return FALSE;
+        {
+            BOOL is_wow64;
+            IsWow64Process(GetCurrentProcess(), &is_wow64);
+            return is_wow64;
+        }
     case OS_WEBSERVER:
         ISOS_RETURN(platform == VER_PLATFORM_WIN32_NT)
     case OS_SMALLBUSINESSSERVER:

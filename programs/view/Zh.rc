@@ -26,100 +26,14 @@
 
 LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_SIMPLIFIED
 
-/*
- *
- * Menu
- *
- */
-
-VIEW MENU
-BEGIN
-    POPUP "文件(&F)"
-    BEGIN
-	MENUITEM "打开(&O)", IDM_OPEN
-        MENUITEM "退出(&x)", IDM_EXIT
-    END
-    POPUP "平移(&P)" /* 译名待求证 */
-    BEGIN
-      MENUITEM "缩放至窗口(&S)", IDM_SET_EXT_TO_WIN
-      MENUITEM SEPARATOR
-      MENUITEM "左(&L)", IDM_LEFT
-      MENUITEM "右(&R)", IDM_RIGHT
-      MENUITEM "上(&U)", IDM_UP
-      MENUITEM "下(&D)", IDM_DOWN
-    END
-END
-
-
-/*
- *
- * Accelerator
- *
- */
-
 VIEW ACCELERATORS
 BEGIN
     "Q", IDM_EXIT, VIRTKEY, CONTROL
-END
-
-
-/*
- *
- * String Table
- *
- */
-
-STRINGTABLE
-BEGIN
-    IDS_DESCRIPTION         "普通 Metafile 阅读器"
 END
 
 LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_TRADITIONAL
 
-/*
- *
- * Menu
- *
- */
-
-VIEW MENU
-BEGIN
-    POPUP "檔案(&F)"
-    BEGIN
-	MENUITEM "開啟(&O)", IDM_OPEN
-        MENUITEM "結束(&x)", IDM_EXIT
-    END
-    POPUP "平移(&P)"
-    BEGIN
-      MENUITEM "放大至視窗(&S)", IDM_SET_EXT_TO_WIN
-      MENUITEM SEPARATOR
-      MENUITEM "左(&L)", IDM_LEFT
-      MENUITEM "右(&R)", IDM_RIGHT
-      MENUITEM "上(&U)", IDM_UP
-      MENUITEM "下(&D)", IDM_DOWN
-    END
-END
-
-
-/*
- *
- * Accelerator
- *
- */
-
 VIEW ACCELERATORS
 BEGIN
     "Q", IDM_EXIT, VIRTKEY, CONTROL
-END
-
-
-/*
- *
- * String Table
- *
- */
-
-STRINGTABLE
-BEGIN
-    IDS_DESCRIPTION         "普通 Metafile 閱讀器"
 END

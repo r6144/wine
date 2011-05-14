@@ -593,6 +593,7 @@ static void test_BeginContainer2(void)
     GdipSetClipRect(graphics, 2, 4, 6, 8, CombineModeReplace);
 
     status = GdipEndContainer(graphics, cont2);
+    expect(Ok, status);
 
     GdipGetClipBounds(graphics, &clip);
     ok(fabs(defClip[0] - clip.X) < 0.0001 &&
@@ -604,6 +605,7 @@ static void test_BeginContainer2(void)
             clip.X, clip.Y, clip.Width, clip.Height);
 
     status = GdipEndContainer(graphics, cont1);
+    expect(Ok, status);
 
     /* nesting */
     status = GdipBeginContainer2(graphics, &cont1);
@@ -1128,6 +1130,60 @@ static void test_GdipDrawLineI(void)
     ReleaseDC(hwnd, hdc);
 }
 
+static void test_GdipDrawImagePointsRect(void)
+{
+    GpStatus status;
+    GpGraphics *graphics = NULL;
+    GpPointF ptf[4];
+    GpBitmap *bm = NULL;
+    BYTE rbmi[sizeof(BITMAPINFOHEADER)];
+    BYTE buff[400];
+    BITMAPINFO *bmi = (BITMAPINFO*)rbmi;
+    HDC hdc = GetDC( hwnd );
+    if (!hdc)
+        return;
+
+    memset(rbmi, 0, sizeof(rbmi));
+    bmi->bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi->bmiHeader.biWidth = 10;
+    bmi->bmiHeader.biHeight = 10;
+    bmi->bmiHeader.biPlanes = 1;
+    bmi->bmiHeader.biBitCount = 32;
+    bmi->bmiHeader.biCompression = BI_RGB;
+    status = GdipCreateBitmapFromGdiDib(bmi, buff, &bm);
+    expect(Ok, status);
+    ok(NULL != bm, "Expected bitmap to be initialized\n");
+    status = GdipCreateFromHDC(hdc, &graphics);
+    expect(Ok, status);
+    ptf[0].X = 0;
+    ptf[0].Y = 0;
+    ptf[1].X = 10;
+    ptf[1].Y = 0;
+    ptf[2].X = 0;
+    ptf[2].Y = 10;
+    ptf[3].X = 10;
+    ptf[3].Y = 10;
+    status = GdipDrawImagePointsRect(graphics, (GpImage*)bm, ptf, 4, 0, 0, 10, 10, UnitPixel, NULL, NULL, NULL);
+    expect(NotImplemented, status);
+    status = GdipDrawImagePointsRect(graphics, (GpImage*)bm, ptf, 2, 0, 0, 10, 10, UnitPixel, NULL, NULL, NULL);
+    expect(InvalidParameter, status);
+    status = GdipDrawImagePointsRect(graphics, (GpImage*)bm, ptf, 3, 0, 0, 10, 10, UnitPixel, NULL, NULL, NULL);
+    expect(Ok, status);
+    status = GdipDrawImagePointsRect(graphics, NULL, ptf, 3, 0, 0, 10, 10, UnitPixel, NULL, NULL, NULL);
+    expect(InvalidParameter, status);
+    status = GdipDrawImagePointsRect(graphics, (GpImage*)bm, NULL, 3, 0, 0, 10, 10, UnitPixel, NULL, NULL, NULL);
+    expect(InvalidParameter, status);
+    status = GdipDrawImagePointsRect(graphics, (GpImage*)bm, ptf, 3, 0, 0, 0, 0, UnitPixel, NULL, NULL, NULL);
+    expect(Ok, status);
+    memset(ptf, 0, sizeof(ptf));
+    status = GdipDrawImagePointsRect(graphics, (GpImage*)bm, ptf, 3, 0, 0, 10, 10, UnitPixel, NULL, NULL, NULL);
+    expect(Ok, status);
+
+    GdipDisposeImage((GpImage*)bm);
+    GdipDeleteGraphics(graphics);
+    ReleaseDC(hwnd, hdc);
+}
+
 static void test_GdipDrawLinesI(void)
 {
     GpStatus status;
@@ -1414,193 +1470,194 @@ static void test_Get_Release_DC(void)
     expect(ObjectBusy, status);
 
     /* try all Graphics calls here */
-    status = Ok;
     status = GdipDrawArc(graphics, pen, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipDrawArcI(graphics, pen, 0, 0, 1, 1, 0.0, 0.0);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipDrawBezier(graphics, pen, 0.0, 10.0, 20.0, 15.0, 35.0, -10.0, 10.0, 10.0);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipDrawBezierI(graphics, pen, 0, 0, 0, 0, 0, 0, 0, 0);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipDrawBeziers(graphics, pen, ptf, 5);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipDrawBeziersI(graphics, pen, pt, 5);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipDrawClosedCurve(graphics, pen, ptf, 5);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipDrawClosedCurveI(graphics, pen, pt, 5);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipDrawClosedCurve2(graphics, pen, ptf, 5, 1.0);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipDrawClosedCurve2I(graphics, pen, pt, 5, 1.0);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipDrawCurve(graphics, pen, ptf, 5);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipDrawCurveI(graphics, pen, pt, 5);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipDrawCurve2(graphics, pen, ptf, 5, 1.0);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipDrawCurve2I(graphics, pen, pt, 5, 1.0);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipDrawEllipse(graphics, pen, 0.0, 0.0, 100.0, 50.0);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipDrawEllipseI(graphics, pen, 0, 0, 100, 50);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     /* GdipDrawImage/GdipDrawImageI */
     /* GdipDrawImagePointsRect/GdipDrawImagePointsRectI */
     /* GdipDrawImageRectRect/GdipDrawImageRectRectI */
     /* GdipDrawImageRect/GdipDrawImageRectI */
     status = GdipDrawLine(graphics, pen, 0.0, 0.0, 100.0, 200.0);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipDrawLineI(graphics, pen, 0, 0, 100, 200);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipDrawLines(graphics, pen, ptf, 5);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipDrawLinesI(graphics, pen, pt, 5);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipDrawPath(graphics, pen, path);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipDrawPie(graphics, pen, 0.0, 0.0, 100.0, 100.0, 0.0, 90.0);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipDrawPieI(graphics, pen, 0, 0, 100, 100, 0.0, 90.0);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipDrawRectangle(graphics, pen, 0.0, 0.0, 100.0, 300.0);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipDrawRectangleI(graphics, pen, 0, 0, 100, 300);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipDrawRectangles(graphics, pen, rectf, 2);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipDrawRectanglesI(graphics, pen, rect, 2);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     /* GdipDrawString */
     status = GdipFillClosedCurve2(graphics, (GpBrush*)brush, ptf, 5, 1.0, FillModeAlternate);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipFillClosedCurve2I(graphics, (GpBrush*)brush, pt, 5, 1.0, FillModeAlternate);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipFillClosedCurve(graphics, (GpBrush*)brush, ptf, 5);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipFillClosedCurveI(graphics, (GpBrush*)brush, pt, 5);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipFillEllipse(graphics, (GpBrush*)brush, 0.0, 0.0, 100.0, 100.0);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipFillEllipseI(graphics, (GpBrush*)brush, 0, 0, 100, 100);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipFillPath(graphics, (GpBrush*)brush, path);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipFillPie(graphics, (GpBrush*)brush, 0.0, 0.0, 100.0, 100.0, 0.0, 15.0);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipFillPieI(graphics, (GpBrush*)brush, 0, 0, 100, 100, 0.0, 15.0);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipFillPolygon(graphics, (GpBrush*)brush, ptf, 5, FillModeAlternate);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipFillPolygonI(graphics, (GpBrush*)brush, pt, 5, FillModeAlternate);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipFillPolygon2(graphics, (GpBrush*)brush, ptf, 5);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipFillPolygon2I(graphics, (GpBrush*)brush, pt, 5);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipFillRectangle(graphics, (GpBrush*)brush, 0.0, 0.0, 100.0, 100.0);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipFillRectangleI(graphics, (GpBrush*)brush, 0, 0, 100, 100);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipFillRectangles(graphics, (GpBrush*)brush, rectf, 2);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipFillRectanglesI(graphics, (GpBrush*)brush, rect, 2);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipFillRegion(graphics, (GpBrush*)brush, region);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipFlush(graphics, FlushIntentionFlush);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipGetClipBounds(graphics, rectf);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipGetClipBoundsI(graphics, rect);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipGetCompositingMode(graphics, &compmode);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipGetCompositingQuality(graphics, &quality);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipGetInterpolationMode(graphics, &intmode);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipGetNearestColor(graphics, &color);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipGetPageScale(graphics, &r);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipGetPageUnit(graphics, &unit);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipGetPixelOffsetMode(graphics, &offsetmode);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipGetSmoothingMode(graphics, &smoothmode);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipGetTextRenderingHint(graphics, &texthint);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipGetWorldTransform(graphics, m);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipGraphicsClear(graphics, 0xdeadbeef);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipIsVisiblePoint(graphics, 0.0, 0.0, &res);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipIsVisiblePointI(graphics, 0, 0, &res);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     /* GdipMeasureCharacterRanges */
     /* GdipMeasureString */
     status = GdipResetClip(graphics);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipResetWorldTransform(graphics);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     /* GdipRestoreGraphics */
     status = GdipRotateWorldTransform(graphics, 15.0, MatrixOrderPrepend);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     /*  GdipSaveGraphics */
     status = GdipScaleWorldTransform(graphics, 1.0, 1.0, MatrixOrderPrepend);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipSetCompositingMode(graphics, CompositingModeSourceOver);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipSetCompositingQuality(graphics, CompositingQualityDefault);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipSetInterpolationMode(graphics, InterpolationModeDefault);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipSetPageScale(graphics, 1.0);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipSetPageUnit(graphics, UnitWorld);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipSetPixelOffsetMode(graphics, PixelOffsetModeDefault);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipSetSmoothingMode(graphics, SmoothingModeDefault);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipSetTextRenderingHint(graphics, TextRenderingHintSystemDefault);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipSetWorldTransform(graphics, m);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipTranslateWorldTransform(graphics, 0.0, 0.0, MatrixOrderPrepend);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipSetClipHrgn(graphics, hrgn, CombineModeReplace);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipSetClipPath(graphics, path, CombineModeReplace);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipSetClipRect(graphics, 0.0, 0.0, 10.0, 10.0, CombineModeReplace);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipSetClipRectI(graphics, 0, 0, 10, 10, CombineModeReplace);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipSetClipRegion(graphics, clip, CombineModeReplace);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipTranslateClip(graphics, 0.0, 0.0);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipTranslateClipI(graphics, 0, 0);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipDrawPolygon(graphics, pen, ptf, 5);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipDrawPolygonI(graphics, pen, pt, 5);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipGetDpiX(graphics, &r);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipGetDpiY(graphics, &r);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipMultiplyWorldTransform(graphics, m, MatrixOrderPrepend);
+    expect(ObjectBusy, status);
     status = GdipGetClip(graphics, region);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
     status = GdipTransformPoints(graphics, CoordinateSpacePage, CoordinateSpaceWorld, ptf, 5);
-    expect(ObjectBusy, status); status = Ok;
+    expect(ObjectBusy, status);
+
     /* try to delete before release */
     status = GdipDeleteGraphics(graphics);
     expect(ObjectBusy, status);
@@ -1757,6 +1814,7 @@ static void test_get_set_clip(void)
     rect.Height = rect.Width = 100.0;
 
     status = GdipCreateRegionRect(&rect, &clip);
+    expect(Ok, status);
 
     /* NULL arguments */
     status = GdipGetClip(NULL, NULL);
@@ -1878,6 +1936,7 @@ static void test_textcontrast(void)
     status = GdipGetTextContrast(graphics, NULL);
     expect(InvalidParameter, status);
     status = GdipGetTextContrast(graphics, &contrast);
+    expect(Ok, status);
     expect(4, contrast);
 
     GdipDeleteGraphics(graphics);
@@ -1895,6 +1954,8 @@ static void test_GdipDrawString(void)
     LOGFONTA logfont;
     HDC hdc = GetDC( hwnd );
     static const WCHAR string[] = {'T','e','s','t',0};
+    static const PointF positions[4] = {{0,0}, {1,1}, {2,2}, {3,3}};
+    GpMatrix *matrix;
 
     memset(&logfont,0,sizeof(logfont));
     strcpy(logfont.lfFaceName,"Arial");
@@ -1926,6 +1987,34 @@ static void test_GdipDrawString(void)
     status = GdipDrawString(graphics, string, 4, fnt, &rect, format, brush);
     expect(Ok, status);
 
+    status = GdipCreateMatrix(&matrix);
+    expect(Ok, status);
+
+    status = GdipDrawDriverString(NULL, string, 4, fnt, brush, positions, DriverStringOptionsCmapLookup, matrix);
+    expect(InvalidParameter, status);
+
+    status = GdipDrawDriverString(graphics, NULL, 4, fnt, brush, positions, DriverStringOptionsCmapLookup, matrix);
+    expect(InvalidParameter, status);
+
+    status = GdipDrawDriverString(graphics, string, 4, NULL, brush, positions, DriverStringOptionsCmapLookup, matrix);
+    expect(InvalidParameter, status);
+
+    status = GdipDrawDriverString(graphics, string, 4, fnt, NULL, positions, DriverStringOptionsCmapLookup, matrix);
+    expect(InvalidParameter, status);
+
+    status = GdipDrawDriverString(graphics, string, 4, fnt, brush, NULL, DriverStringOptionsCmapLookup, matrix);
+    expect(InvalidParameter, status);
+
+    status = GdipDrawDriverString(graphics, string, 4, fnt, brush, positions, DriverStringOptionsCmapLookup|0x10, matrix);
+    expect(Ok, status);
+
+    status = GdipDrawDriverString(graphics, string, 4, fnt, brush, positions, DriverStringOptionsCmapLookup, NULL);
+    expect(Ok, status);
+
+    status = GdipDrawDriverString(graphics, string, 4, fnt, brush, positions, DriverStringOptionsCmapLookup, matrix);
+    expect(Ok, status);
+
+    GdipDeleteMatrix(matrix);
     GdipDeleteGraphics(graphics);
     GdipDeleteBrush(brush);
     GdipDeleteFont(fnt);
@@ -2172,7 +2261,7 @@ static void test_fromMemoryBitmap(void)
     GdipDeleteGraphics(graphics);
 
     /* drawing writes to the memory provided */
-    todo_wine expect(0x68, bits[10]);
+    expect(0x68, bits[10]);
 
     status = GdipGetImageGraphicsContext((GpImage*)bitmap, &graphics);
     expect(Ok, status);
@@ -2953,6 +3042,123 @@ static void test_string_functions(void)
     ReleaseDC(hwnd, hdc);
 }
 
+static void test_get_set_interpolation(void)
+{
+    GpGraphics *graphics;
+    HDC hdc = GetDC( hwnd );
+    GpStatus status;
+    InterpolationMode mode;
+
+    ok(hdc != NULL, "Expected HDC to be initialized\n");
+    status = GdipCreateFromHDC(hdc, &graphics);
+    expect(Ok, status);
+    ok(graphics != NULL, "Expected graphics to be initialized\n");
+
+    status = GdipGetInterpolationMode(NULL, &mode);
+    expect(InvalidParameter, status);
+
+    if (0)
+    {
+        /* Crashes on Windows XP */
+        status = GdipGetInterpolationMode(graphics, NULL);
+        expect(InvalidParameter, status);
+    }
+
+    status = GdipSetInterpolationMode(NULL, InterpolationModeNearestNeighbor);
+    expect(InvalidParameter, status);
+
+    /* out of range */
+    status = GdipSetInterpolationMode(graphics, InterpolationModeHighQualityBicubic+1);
+    expect(InvalidParameter, status);
+
+    status = GdipSetInterpolationMode(graphics, InterpolationModeInvalid);
+    expect(InvalidParameter, status);
+
+    status = GdipGetInterpolationMode(graphics, &mode);
+    expect(Ok, status);
+    expect(InterpolationModeBilinear, mode);
+
+    status = GdipSetInterpolationMode(graphics, InterpolationModeNearestNeighbor);
+    expect(Ok, status);
+
+    status = GdipGetInterpolationMode(graphics, &mode);
+    expect(Ok, status);
+    expect(InterpolationModeNearestNeighbor, mode);
+
+    status = GdipSetInterpolationMode(graphics, InterpolationModeDefault);
+    expect(Ok, status);
+
+    status = GdipGetInterpolationMode(graphics, &mode);
+    expect(Ok, status);
+    expect(InterpolationModeBilinear, mode);
+
+    status = GdipSetInterpolationMode(graphics, InterpolationModeLowQuality);
+    expect(Ok, status);
+
+    status = GdipGetInterpolationMode(graphics, &mode);
+    expect(Ok, status);
+    expect(InterpolationModeBilinear, mode);
+
+    status = GdipSetInterpolationMode(graphics, InterpolationModeHighQuality);
+    expect(Ok, status);
+
+    status = GdipGetInterpolationMode(graphics, &mode);
+    expect(Ok, status);
+    expect(InterpolationModeHighQualityBicubic, mode);
+
+    GdipDeleteGraphics(graphics);
+
+    ReleaseDC(hwnd, hdc);
+}
+
+static void test_get_set_textrenderinghint(void)
+{
+    GpGraphics *graphics;
+    HDC hdc = GetDC( hwnd );
+    GpStatus status;
+    TextRenderingHint hint;
+
+    ok(hdc != NULL, "Expected HDC to be initialized\n");
+    status = GdipCreateFromHDC(hdc, &graphics);
+    expect(Ok, status);
+    ok(graphics != NULL, "Expected graphics to be initialized\n");
+
+    status = GdipGetTextRenderingHint(NULL, &hint);
+    expect(InvalidParameter, status);
+
+    status = GdipGetTextRenderingHint(graphics, NULL);
+    expect(InvalidParameter, status);
+
+    status = GdipSetTextRenderingHint(NULL, TextRenderingHintAntiAlias);
+    expect(InvalidParameter, status);
+
+    /* out of range */
+    status = GdipSetTextRenderingHint(graphics, TextRenderingHintClearTypeGridFit+1);
+    expect(InvalidParameter, status);
+
+    status = GdipGetTextRenderingHint(graphics, &hint);
+    expect(Ok, status);
+    expect(TextRenderingHintSystemDefault, hint);
+
+    status = GdipSetTextRenderingHint(graphics, TextRenderingHintSystemDefault);
+    expect(Ok, status);
+
+    status = GdipGetTextRenderingHint(graphics, &hint);
+    expect(Ok, status);
+    expect(TextRenderingHintSystemDefault, hint);
+
+    status = GdipSetTextRenderingHint(graphics, TextRenderingHintAntiAliasGridFit);
+    expect(Ok, status);
+
+    status = GdipGetTextRenderingHint(graphics, &hint);
+    expect(Ok, status);
+    expect(TextRenderingHintAntiAliasGridFit, hint);
+
+    GdipDeleteGraphics(graphics);
+
+    ReleaseDC(hwnd, hdc);
+}
+
 START_TEST(graphics)
 {
     struct GdiplusStartupInput gdiplusStartupInput;
@@ -2994,6 +3200,7 @@ START_TEST(graphics)
     test_GdipDrawCurve3I();
     test_GdipDrawLineI();
     test_GdipDrawLinesI();
+    test_GdipDrawImagePointsRect();
     test_GdipFillClosedCurve();
     test_GdipFillClosedCurveI();
     test_GdipDrawString();
@@ -3010,6 +3217,8 @@ START_TEST(graphics)
     test_textcontrast();
     test_fromMemoryBitmap();
     test_string_functions();
+    test_get_set_interpolation();
+    test_get_set_textrenderinghint();
 
     GdiplusShutdown(gdiplusToken);
     DestroyWindow( hwnd );

@@ -111,6 +111,7 @@ static ULONG WINAPI IAssemblyNameImpl_Release(IAssemblyName *iface)
         HeapFree(GetProcessHeap(), 0, This->displayname);
         HeapFree(GetProcessHeap(), 0, This->name);
         HeapFree(GetProcessHeap(), 0, This->culture);
+        HeapFree(GetProcessHeap(), 0, This->procarch);
         HeapFree(GetProcessHeap(), 0, This);
     }
 
@@ -561,7 +562,10 @@ static HRESULT parse_display_name(IAssemblyNameImpl *name, LPCWSTR szAssemblyNam
     str = strdupW(szAssemblyName);
     save = str;
     if (!str)
-        return E_OUTOFMEMORY;
+    {
+        hr = E_OUTOFMEMORY;
+        goto done;
+    }
 
     ptr = strchrW(str, ',');
     if (ptr) *ptr = '\0';
@@ -575,7 +579,10 @@ static HRESULT parse_display_name(IAssemblyNameImpl *name, LPCWSTR szAssemblyNam
 
     name->name = strdupW(str);
     if (!name->name)
-        return E_OUTOFMEMORY;
+    {
+        hr = E_OUTOFMEMORY;
+        goto done;
+    }
 
     if (!ptr)
         goto done;
@@ -621,7 +628,8 @@ static HRESULT parse_display_name(IAssemblyNameImpl *name, LPCWSTR szAssemblyNam
         else if (!lstrcmpW(str, procarch))
         {
             name->procarch = strdupW(ptr);
-            hr = S_OK;
+            if (!name->procarch)
+                hr = E_OUTOFMEMORY;
         }
 
         if (FAILED(hr))

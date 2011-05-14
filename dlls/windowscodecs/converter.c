@@ -51,6 +51,7 @@ enum pixelformat {
     format_24bppBGR,
     format_32bppBGR,
     format_32bppBGRA,
+    format_32bppPBGRA,
     format_48bppRGB,
     format_64bppRGBA,
     format_32bppCMYK,
@@ -639,6 +640,28 @@ static HRESULT copypixels_to_32bppBGRA(struct FormatConverter *This, const WICRe
         if (prc)
             return IWICBitmapSource_CopyPixels(This->source, prc, cbStride, cbBufferSize, pbBuffer);
         return S_OK;
+    case format_32bppPBGRA:
+        if (prc)
+        {
+            HRESULT res;
+            UINT x, y;
+
+            res = IWICBitmapSource_CopyPixels(This->source, prc, cbStride, cbBufferSize, pbBuffer);
+            if (FAILED(res)) return res;
+
+            for (y=0; y<prc->Height; y++)
+                for (x=0; x<prc->Width; x++)
+                {
+                    BYTE alpha = pbBuffer[cbStride*y+4*x+3];
+                    if (alpha != 0 && alpha != 255)
+                    {
+                        pbBuffer[cbStride*y+4*x] = pbBuffer[cbStride*y+4*x] * 255 / alpha;
+                        pbBuffer[cbStride*y+4*x+1] = pbBuffer[cbStride*y+4*x+1] * 255 / alpha;
+                        pbBuffer[cbStride*y+4*x+2] = pbBuffer[cbStride*y+4*x+2] * 255 / alpha;
+                    }
+                }
+        }
+        return S_OK;
     case format_48bppRGB:
         if (prc)
         {
@@ -761,11 +784,45 @@ static HRESULT copypixels_to_32bppBGR(struct FormatConverter *This, const WICRec
     {
     case format_32bppBGR:
     case format_32bppBGRA:
+    case format_32bppPBGRA:
         if (prc)
             return IWICBitmapSource_CopyPixels(This->source, prc, cbStride, cbBufferSize, pbBuffer);
         return S_OK;
     default:
         return copypixels_to_32bppBGRA(This, prc, cbStride, cbBufferSize, pbBuffer, source_format);
+    }
+}
+
+static HRESULT copypixels_to_32bppPBGRA(struct FormatConverter *This, const WICRect *prc,
+    UINT cbStride, UINT cbBufferSize, BYTE *pbBuffer, enum pixelformat source_format)
+{
+    HRESULT hr;
+
+    switch (source_format)
+    {
+    case format_32bppPBGRA:
+        if (prc)
+            return IWICBitmapSource_CopyPixels(This->source, prc, cbStride, cbBufferSize, pbBuffer);
+        return S_OK;
+    default:
+        hr = copypixels_to_32bppBGRA(This, prc, cbStride, cbBufferSize, pbBuffer, source_format);
+        if (SUCCEEDED(hr) && prc)
+        {
+            UINT x, y;
+
+            for (y=0; y<prc->Height; y++)
+                for (x=0; x<prc->Width; x++)
+                {
+                    BYTE alpha = pbBuffer[cbStride*y+4*x+3];
+                    if (alpha != 255)
+                    {
+                        pbBuffer[cbStride*y+4*x] = pbBuffer[cbStride*y+4*x] * alpha / 255;
+                        pbBuffer[cbStride*y+4*x+1] = pbBuffer[cbStride*y+4*x+1] * alpha / 255;
+                        pbBuffer[cbStride*y+4*x+2] = pbBuffer[cbStride*y+4*x+2] * alpha / 255;
+                    }
+                }
+        }
+        return hr;
     }
 }
 
@@ -785,6 +842,7 @@ static const struct pixelformatinfo supported_formats[] = {
     {format_24bppBGR, &GUID_WICPixelFormat24bppBGR, NULL},
     {format_32bppBGR, &GUID_WICPixelFormat32bppBGR, copypixels_to_32bppBGR},
     {format_32bppBGRA, &GUID_WICPixelFormat32bppBGRA, copypixels_to_32bppBGRA},
+    {format_32bppPBGRA, &GUID_WICPixelFormat32bppPBGRA, copypixels_to_32bppPBGRA},
     {format_48bppRGB, &GUID_WICPixelFormat48bppRGB, NULL},
     {format_64bppRGBA, &GUID_WICPixelFormat64bppRGBA, NULL},
     {format_32bppCMYK, &GUID_WICPixelFormat32bppCMYK, NULL},
@@ -960,6 +1018,7 @@ static HRESULT WINAPI FormatConverter_Initialize(IWICFormatConverter *iface,
     if (!srcinfo)
     {
         res = WINCODEC_ERR_UNSUPPORTEDPIXELFORMAT;
+        FIXME("Unsupported source format %s\n", debugstr_guid(&srcFormat));
         goto end;
     }
 
@@ -967,6 +1026,7 @@ static HRESULT WINAPI FormatConverter_Initialize(IWICFormatConverter *iface,
     if (!dstinfo)
     {
         res = WINCODEC_ERR_UNSUPPORTEDPIXELFORMAT;
+        FIXME("Unsupported destination format %s\n", debugstr_guid(dstFormat));
         goto end;
     }
 
@@ -981,7 +1041,10 @@ static HRESULT WINAPI FormatConverter_Initialize(IWICFormatConverter *iface,
         This->source = pISource;
     }
     else
+    {
+        FIXME("Unsupported conversion %s -> %s\n", debugstr_guid(&srcFormat), debugstr_guid(dstFormat));
         res = WINCODEC_ERR_UNSUPPORTEDOPERATION;
+    }
 
 end:
 
@@ -1001,16 +1064,27 @@ static HRESULT WINAPI FormatConverter_CanConvert(IWICFormatConverter *iface,
         debugstr_guid(dstPixelFormat), pfCanConvert);
 
     srcinfo = get_formatinfo(srcPixelFormat);
-    if (!srcinfo) return WINCODEC_ERR_UNSUPPORTEDPIXELFORMAT;
+    if (!srcinfo)
+    {
+        FIXME("Unsupported source format %s\n", debugstr_guid(srcPixelFormat));
+        return WINCODEC_ERR_UNSUPPORTEDPIXELFORMAT;
+    }
 
     dstinfo = get_formatinfo(dstPixelFormat);
-    if (!dstinfo) return WINCODEC_ERR_UNSUPPORTEDPIXELFORMAT;
+    if (!dstinfo)
+    {
+        FIXME("Unsupported destination format %s\n", debugstr_guid(dstPixelFormat));
+        return WINCODEC_ERR_UNSUPPORTEDPIXELFORMAT;
+    }
 
     if (dstinfo->copy_function &&
         SUCCEEDED(dstinfo->copy_function(This, NULL, 0, 0, NULL, dstinfo->format)))
         *pfCanConvert = TRUE;
     else
+    {
+        FIXME("Unsupported conversion %s -> %s\n", debugstr_guid(srcPixelFormat), debugstr_guid(dstPixelFormat));
         *pfCanConvert = FALSE;
+    }
 
     return S_OK;
 }

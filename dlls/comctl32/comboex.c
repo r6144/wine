@@ -1693,7 +1693,7 @@ static LRESULT COMBOEX_WindowPosChanging (const COMBOEX_INFO *infoPtr, WINDOWPOS
     height =   (cb_wrect.bottom-cb_wrect.top)
 	     + (cbx_wrect.bottom-cbx_wrect.top)
              - (cbx_crect.bottom-cbx_crect.top);
-    if (wp->cy < height) wp->cy = height;
+    wp->cy = height;
     if (infoPtr->hwndEdit) {
 	COMBOEX_AdjustEditPos (infoPtr);
 	InvalidateRect (infoPtr->hwndCombo, 0, TRUE);
@@ -1741,7 +1741,7 @@ COMBOEX_EditWndProc (HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
 	    return DefSubclassProc(hwnd, uMsg, wParam, lParam);
 
 	case WM_KEYDOWN: {
-	    INT_PTR oldItem, selected, step = 1;
+	    INT_PTR oldItem, selected;
 	    CBE_ITEMDATA *item;
 
 	    switch ((INT)wParam)
@@ -1851,13 +1851,15 @@ COMBOEX_EditWndProc (HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
 		break;
 
 	    case VK_UP:
-		step = -1;
 	    case VK_DOWN:
-		/* by default, step is 1 */
+	    {
+		INT step = wParam == VK_DOWN ? 1 : -1;
+
 		oldItem = SendMessageW (infoPtr->hwndSelf, CB_GETCURSEL, 0, 0);
 		if (oldItem >= 0 && oldItem + step >= 0)
 		    SendMessageW (infoPtr->hwndSelf, CB_SETCURSEL, oldItem + step, 0);
 	    	return 0;
+	    }
 	    default:
 		return DefSubclassProc(hwnd, uMsg, wParam, lParam);
 	    }

@@ -44,7 +44,6 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(midi);
 
-#if defined(HAVE_COREAUDIO_COREAUDIO_H)
 #include <CoreAudio/CoreAudio.h>
 
 #define WINE_DEFINITIONS
@@ -222,14 +221,14 @@ LONG CoreAudio_MIDIRelease(void)
 /**************************************************************************
  * 			MIDI_NotifyClient			[internal]
  */
-static void MIDI_NotifyClient(UINT wDevID, WORD wMsg, DWORD dwParam1, DWORD dwParam2)
+static void MIDI_NotifyClient(UINT wDevID, WORD wMsg, DWORD_PTR dwParam1, DWORD_PTR dwParam2)
 {
     DWORD 		dwCallBack;
     UINT 		uFlags;
     HANDLE		hDev;
     DWORD 		dwInstance;
 
-    TRACE("wDevID=%d wMsg=%d dwParm1=%04X dwParam2=%04X\n", wDevID, wMsg, dwParam1, dwParam2);
+    TRACE("wDevID=%d wMsg=%d dwParm1=%04lX dwParam2=%04lX\n", wDevID, wMsg, dwParam1, dwParam2);
 
     switch (wMsg) {
     case MOM_OPEN:
@@ -443,7 +442,7 @@ static DWORD MIDIOut_LongData(WORD wDevID, LPMIDIHDR lpMidiHdr, DWORD dwSize)
 
     lpMidiHdr->dwFlags &= ~MHDR_INQUEUE;
     lpMidiHdr->dwFlags |= MHDR_DONE;
-    MIDI_NotifyClient(wDevID, MOM_DONE, (DWORD)lpMidiHdr, 0L);
+    MIDI_NotifyClient(wDevID, MOM_DONE, (DWORD_PTR)lpMidiHdr, 0L);
     return MMSYSERR_NOERROR;
 }
 
@@ -694,8 +693,8 @@ static DWORD MIDIIn_AddBuffer(WORD wDevID, LPMIDIHDR lpMidiHdr, DWORD dwSize)
 	LPMIDIHDR ptr;
 	for (ptr = sources[wDevID].lpQueueHdr;
 	     ptr->lpNext != 0;
-	     ptr = (LPMIDIHDR)ptr->lpNext);
-	ptr->lpNext = (struct midihdr_tag*)lpMidiHdr;
+	     ptr = ptr->lpNext);
+	ptr->lpNext = lpMidiHdr;
     }
     LeaveCriticalSection(&midiInLock);
 
@@ -806,11 +805,12 @@ static DWORD MIDIIn_Reset(WORD wDevID)
 
     EnterCriticalSection(&midiInLock);
     while (sources[wDevID].lpQueueHdr) {
-	sources[wDevID].lpQueueHdr->dwFlags &= ~MHDR_INQUEUE;
-	sources[wDevID].lpQueueHdr->dwFlags |= MHDR_DONE;
+	LPMIDIHDR lpMidiHdr = sources[wDevID].lpQueueHdr;
+	sources[wDevID].lpQueueHdr = lpMidiHdr->lpNext;
+	lpMidiHdr->dwFlags &= ~MHDR_INQUEUE;
+	lpMidiHdr->dwFlags |= MHDR_DONE;
 	/* FIXME: when called from 16 bit, lpQueueHdr needs to be a segmented ptr */
-	MIDI_NotifyClient(wDevID, MIM_LONGDATA, (DWORD)sources[wDevID].lpQueueHdr, dwTime);
-	sources[wDevID].lpQueueHdr = (LPMIDIHDR)sources[wDevID].lpQueueHdr->lpNext;
+	MIDI_NotifyClient(wDevID, MIM_LONGDATA, (DWORD_PTR)lpMidiHdr, dwTime);
     }
     LeaveCriticalSection(&midiInLock);
 
@@ -1020,18 +1020,3 @@ DWORD WINAPI CoreAudio_midMessage(UINT wDevID, UINT wMsg, DWORD dwUser, DWORD dw
     }
     return MMSYSERR_NOTSUPPORTED;
 }
-#else
-
-DWORD WINAPI CoreAudio_modMessage(UINT wDevID, UINT wMsg, DWORD dwUser, DWORD dwParam1, DWORD dwParam2)
-{
-    TRACE("%08x, %08x, %08x, %08x, %08x\n", wDevID, wMsg, dwUser, dwParam1, dwParam2);
-    return MMSYSERR_NOTENABLED;
-}
-
-DWORD WINAPI CoreAudio_midMessage(UINT wDevID, UINT wMsg, DWORD dwUser,
-                                  DWORD dwParam1, DWORD dwParam2)
-{
-    TRACE("%08x, %08x, %08x, %08x, %08x\n", wDevID, wMsg, dwUser, dwParam1, dwParam2);
-    return MMSYSERR_NOTENABLED;
-}
-#endif

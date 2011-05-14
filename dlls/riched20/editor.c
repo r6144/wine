@@ -664,6 +664,7 @@ void ME_RTFParAttrHook(RTF_Info *info)
       fmt.dyLineSpacing = info->rtfParam;
       fmt.bLineSpacingRule = 4;
     }
+    break;
   case rtfSpaceMultiply:
     fmt.dwMask = PFM_LINESPACING;
     fmt.dyLineSpacing = info->rtfParam * 20;
@@ -4332,6 +4333,18 @@ LRESULT ME_HandleMessage(ME_TextEditor *editor, UINT msg, WPARAM wParam,
     {
       mask |= TM_RICHTEXT | TM_PLAINTEXT;
       changes |= wParam & (TM_RICHTEXT | TM_PLAINTEXT);
+      if (wParam & TM_PLAINTEXT) {
+        /* Clear selection since it should be possible to select the
+         * end of text run for rich text */
+        ME_InvalidateSelection(editor);
+        ME_SetCursorToStart(editor, &editor->pCursors[0]);
+        editor->pCursors[1] = editor->pCursors[0];
+        /* plain text can only have the default style. */
+        ME_ClearTempStyle(editor);
+        ME_AddRefStyle(editor->pBuffer->pDefaultStyle);
+        ME_ReleaseStyle(editor->pCursors[0].pRun->member.run.style);
+        editor->pCursors[0].pRun->member.run.style = editor->pBuffer->pDefaultStyle;
+      }
     }
     /* FIXME: Currently no support for undo level and code page options */
     editor->mode = (editor->mode & ~mask) | changes;

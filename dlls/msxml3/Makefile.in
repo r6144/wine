@@ -19,14 +19,16 @@ C_SRCS = \
 	factory.c \
 	httprequest.c \
 	main.c \
+	mxwriter.c \
 	node.c \
 	nodelist.c \
 	nodemap.c \
 	parseerror.c \
 	pi.c \
-	queryresult.c \
 	saxreader.c \
 	schema.c \
+	selection.c \
+	stylesheet.c \
 	text.c \
 	uuid.c \
 	xdr.c \

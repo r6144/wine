@@ -26,6 +26,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
+#ifdef HAVE_SYS_MMAN_H
+# include <sys/mman.h>
+#endif
 #include <unistd.h>
 
 #include "ntstatus.h"
@@ -161,13 +164,47 @@ static int grow_file( int unix_fd, file_pos_t new_size )
     return 0;
 }
 
+/* check if the current directory allows exec mappings */
+static int check_current_dir_for_exec(void)
+{
+    int fd;
+    char tmpfn[] = "anonmap.XXXXXX";
+    void *ret = MAP_FAILED;
+
+    fd = mkstemps( tmpfn, 0 );
+    if (fd == -1) return 0;
+    if (grow_file( fd, 1 ))
+    {
+        ret = mmap( NULL, get_page_size(), PROT_READ | PROT_EXEC, MAP_PRIVATE, fd, 0 );
+        if (ret != MAP_FAILED) munmap( ret, get_page_size() );
+    }
+    close( fd );
+    unlink( tmpfn );
+    return (ret != MAP_FAILED);
+}
+
 /* create a temp file for anonymous mappings */
 static int create_temp_file( file_pos_t size )
 {
-    char tmpfn[16];
+    static int temp_dir_fd = -1;
+    char tmpfn[] = "anonmap.XXXXXX";
     int fd;
 
-    sprintf( tmpfn, "anonmap.XXXXXX" );  /* create it in the server directory */
+    if (temp_dir_fd == -1)
+    {
+        temp_dir_fd = server_dir_fd;
+        if (!check_current_dir_for_exec())
+        {
+            /* the server dir is noexec, try the config dir instead */
+            fchdir( config_dir_fd );
+            if (check_current_dir_for_exec())
+                temp_dir_fd = config_dir_fd;
+            else  /* neither works, fall back to server dir */
+                fchdir( server_dir_fd );
+        }
+    }
+    else if (temp_dir_fd != server_dir_fd) fchdir( temp_dir_fd );
+
     fd = mkstemps( tmpfn, 0 );
     if (fd != -1)
     {
@@ -179,6 +216,8 @@ static int create_temp_file( file_pos_t size )
         unlink( tmpfn );
     }
     else file_set_error();
+
+    if (temp_dir_fd != server_dir_fd) fchdir( server_dir_fd );
     return fd;
 }
 
@@ -457,6 +496,7 @@ static struct object *create_mapping( struct directory *root, const struct unico
 
     if (handle)
     {
+        const unsigned int sharing = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
         unsigned int mapping_access = FILE_MAPPING_ACCESS;
 
         if (!(protect & VPROT_COMMITTED))
@@ -470,14 +510,16 @@ static struct object *create_mapping( struct directory *root, const struct unico
         /* file sharing rules for mappings are different so we use magic the access rights */
         if (protect & VPROT_IMAGE) mapping_access |= FILE_MAPPING_IMAGE;
         else if (protect & VPROT_WRITE) mapping_access |= FILE_MAPPING_WRITE;
-        mapping->fd = dup_fd_object( fd, mapping_access,
-                                     FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                                     FILE_SYNCHRONOUS_IO_NONALERT );
+
+        if (!(mapping->fd = get_fd_object_for_mapping( fd, mapping_access, sharing )))
+        {
+            mapping->fd = dup_fd_object( fd, mapping_access, sharing, FILE_SYNCHRONOUS_IO_NONALERT );
+            if (mapping->fd) set_fd_user( mapping->fd, &mapping_fd_ops, NULL );
+        }
         release_object( file );
         release_object( fd );
         if (!mapping->fd) goto error;
 
-        set_fd_user( mapping->fd, &mapping_fd_ops, &mapping->obj );
         if ((unix_fd = get_unix_fd( mapping->fd )) == -1) goto error;
         if (protect & VPROT_IMAGE)
         {
@@ -524,6 +566,30 @@ static struct object *create_mapping( struct directory *root, const struct unico
  error:
     release_object( mapping );
     return NULL;
+}
+
+struct mapping *get_mapping_obj( struct process *process, obj_handle_t handle, unsigned int access )
+{
+    return (struct mapping *)get_handle_obj( process, handle, access, &mapping_ops );
+}
+
+/* open a new file handle to the file backing the mapping */
+obj_handle_t open_mapping_file( struct process *process, struct mapping *mapping,
+                                unsigned int access, unsigned int sharing )
+{
+    obj_handle_t handle;
+    struct file *file = create_file_for_fd_obj( mapping->fd, access, sharing );
+
+    if (!file) return 0;
+    handle = alloc_handle( process, file, access, 0 );
+    release_object( file );
+    return handle;
+}
+
+struct mapping *grab_mapping_unless_removable( struct mapping *mapping )
+{
+    if (is_fd_removable( mapping->fd )) return NULL;
+    return (struct mapping *)grab_object( mapping );
 }
 
 static void mapping_dump( struct object *obj, int verbose )
@@ -643,8 +709,7 @@ DECL_HANDLER(get_mapping_info)
     struct mapping *mapping;
     struct fd *fd;
 
-    if ((mapping = (struct mapping *)get_handle_obj( current->process, req->handle,
-                                                     req->access, &mapping_ops )))
+    if ((mapping = get_mapping_obj( current->process, req->handle, req->access )))
     {
         reply->size        = mapping->size;
         reply->protect     = mapping->protect;
@@ -674,7 +739,7 @@ DECL_HANDLER(get_mapping_committed_range)
 {
     struct mapping *mapping;
 
-    if ((mapping = (struct mapping *)get_handle_obj( current->process, req->handle, 0, &mapping_ops )))
+    if ((mapping = get_mapping_obj( current->process, req->handle, 0 )))
     {
         if (!(req->offset & page_mask) && req->offset < mapping->size)
             reply->committed = find_committed_range( mapping, req->offset, &reply->size );
@@ -690,7 +755,7 @@ DECL_HANDLER(add_mapping_committed_range)
 {
     struct mapping *mapping;
 
-    if ((mapping = (struct mapping *)get_handle_obj( current->process, req->handle, 0, &mapping_ops )))
+    if ((mapping = get_mapping_obj( current->process, req->handle, 0 )))
     {
         if (!(req->size & page_mask) &&
             !(req->offset & page_mask) &&

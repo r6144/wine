@@ -141,6 +141,32 @@ struct file *create_file_for_fd( int fd, unsigned int access, unsigned int shari
     return file;
 }
 
+/* create a file by duplicating an fd object */
+struct file *create_file_for_fd_obj( struct fd *fd, unsigned int access, unsigned int sharing )
+{
+    struct file *file;
+    struct stat st;
+
+    if (fstat( get_unix_fd(fd), &st ) == -1)
+    {
+        file_set_error();
+        return NULL;
+    }
+
+    if ((file = alloc_object( &file_ops )))
+    {
+        file->mode = st.st_mode;
+        file->access = default_fd_map_access( &file->obj, access );
+        if (!(file->fd = dup_fd_object( fd, access, sharing, FILE_SYNCHRONOUS_IO_NONALERT )))
+        {
+            release_object( file );
+            return NULL;
+        }
+        set_fd_user( file->fd, &file_fd_ops, &file->obj );
+    }
+    return file;
+}
+
 static struct object *create_file_obj( struct fd *fd, unsigned int access, mode_t mode )
 {
     struct file *file = alloc_object( &file_ops );
@@ -179,10 +205,12 @@ static struct object *create_file( struct fd *root, const char *nameptr, data_si
     {
     case FILE_CREATE:       flags = O_CREAT | O_EXCL; break;
     case FILE_OVERWRITE_IF: /* FIXME: the difference is whether we trash existing attr or not */
+                            access |= FILE_WRITE_ATTRIBUTES;
     case FILE_SUPERSEDE:    flags = O_CREAT | O_TRUNC; break;
     case FILE_OPEN:         flags = 0; break;
     case FILE_OPEN_IF:      flags = O_CREAT; break;
-    case FILE_OVERWRITE:    flags = O_TRUNC; break;
+    case FILE_OVERWRITE:    flags = O_TRUNC;
+                            access |= FILE_WRITE_ATTRIBUTES; break;
     default:                set_error( STATUS_INVALID_PARAMETER ); goto done;
     }
 
@@ -358,11 +386,9 @@ struct security_descriptor *mode_to_sd( mode_t mode, const SID *user, const SID 
                               FIELD_OFFSET(SID, SubAuthority[user->SubAuthorityCount]);
         aaa->Mask = WRITE_DAC | WRITE_OWNER;
         if (mode & S_IRUSR)
-            aaa->Mask |= FILE_GENERIC_READ;
+            aaa->Mask |= FILE_GENERIC_READ | FILE_GENERIC_EXECUTE;
         if (mode & S_IWUSR)
-            aaa->Mask |= FILE_GENERIC_WRITE | DELETE;
-        if (mode & S_IXUSR)
-            aaa->Mask |= FILE_GENERIC_EXECUTE;
+            aaa->Mask |= FILE_GENERIC_WRITE | DELETE | FILE_DELETE_CHILD;
         sid = (SID *)&aaa->SidStart;
         memcpy( sid, user, FIELD_OFFSET(SID, SubAuthority[user->SubAuthorityCount]) );
     }
@@ -379,11 +405,9 @@ struct security_descriptor *mode_to_sd( mode_t mode, const SID *user, const SID 
                               FIELD_OFFSET(SID, SubAuthority[user->SubAuthorityCount]);
         ada->Mask = 0;
         if (!(mode & S_IRUSR) && (mode & (S_IRGRP|S_IROTH)))
-            ada->Mask |= FILE_GENERIC_READ;
+            ada->Mask |= FILE_GENERIC_READ | FILE_GENERIC_EXECUTE;
         if (!(mode & S_IWUSR) && (mode & (S_IWGRP|S_IROTH)))
-            ada->Mask |= FILE_GENERIC_WRITE | DELETE;
-        if (!(mode & S_IXUSR) && (mode & (S_IXGRP|S_IXOTH)))
-            ada->Mask |= FILE_GENERIC_EXECUTE;
+            ada->Mask |= FILE_GENERIC_WRITE | DELETE | FILE_DELETE_CHILD;
         ada->Mask &= ~STANDARD_RIGHTS_ALL; /* never deny standard rights */
         sid = (SID *)&ada->SidStart;
         memcpy( sid, user, FIELD_OFFSET(SID, SubAuthority[user->SubAuthorityCount]) );
@@ -399,11 +423,9 @@ struct security_descriptor *mode_to_sd( mode_t mode, const SID *user, const SID 
                              FIELD_OFFSET(SID, SubAuthority[world_sid->SubAuthorityCount]);
         aaa->Mask = 0;
         if (mode & S_IROTH)
-            aaa->Mask |= FILE_GENERIC_READ;
+            aaa->Mask |= FILE_GENERIC_READ | FILE_GENERIC_EXECUTE;
         if (mode & S_IWOTH)
-            aaa->Mask |= FILE_GENERIC_WRITE | DELETE;
-        if (mode & S_IXOTH)
-            aaa->Mask |= FILE_GENERIC_EXECUTE;
+            aaa->Mask |= FILE_GENERIC_WRITE | DELETE | FILE_DELETE_CHILD;
         sid = (SID *)&aaa->SidStart;
         memcpy( sid, world_sid, FIELD_OFFSET(SID, SubAuthority[world_sid->SubAuthorityCount]) );
     }
@@ -624,12 +646,6 @@ struct file *get_file_obj( struct process *process, obj_handle_t handle, unsigne
 int get_file_unix_fd( struct file *file )
 {
     return get_unix_fd( file->fd );
-}
-
-struct file *grab_file_unless_removable( struct file *file )
-{
-    if (is_fd_removable( file->fd )) return NULL;
-    return (struct file *)grab_object( file );
 }
 
 /* create a file */

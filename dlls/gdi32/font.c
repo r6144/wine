@@ -531,6 +531,7 @@ static HGDIOBJ FONT_SelectObject( HGDIOBJ handle, HDC hdc )
 {
     HGDIOBJ ret = 0;
     DC *dc = get_dc_ptr( hdc );
+    PHYSDEV physdev;
 
     if (!dc) return 0;
 
@@ -543,7 +544,8 @@ static HGDIOBJ FONT_SelectObject( HGDIOBJ handle, HDC hdc )
     if (GetDeviceCaps( dc->hSelf, TEXTCAPS ) & TC_VA_ABLE)
         dc->gdiFont = WineEngCreateFontInstance( dc, handle );
 
-    if (dc->funcs->pSelectFont) ret = dc->funcs->pSelectFont( dc->physDev, handle, dc->gdiFont );
+    physdev = GET_DC_PHYSDEV( dc, pSelectFont );
+    ret = physdev->funcs->pSelectFont( physdev, handle, dc->gdiFont );
 
     if (ret && dc->gdiFont) dc->gdiFont = 0;
 
@@ -678,21 +680,16 @@ static INT FONT_EnumFontFamiliesEx( HDC hDC, LPLOGFONTW plf,
 
     enum_gdi_fonts = GetDeviceCaps(hDC, TEXTCAPS) & TC_VA_ABLE;
 
-    if (!dc->funcs->pEnumDeviceFonts && !enum_gdi_fonts)
-    {
-        ret = 0;
-        goto done;
-    }
-
     if (enum_gdi_fonts)
         ret = WineEngEnumFonts( plf, FONT_EnumInstance, (LPARAM)&fe32 );
     fe32.dwFlags &= ~ENUM_CALLED;
-    if (ret && dc->funcs->pEnumDeviceFonts) {
-	ret2 = dc->funcs->pEnumDeviceFonts( dc->physDev, plf, FONT_EnumInstance, (LPARAM)&fe32 );
+    if (ret)
+    {
+        PHYSDEV physdev = GET_DC_PHYSDEV( dc, pEnumDeviceFonts );
+	ret2 = physdev->funcs->pEnumDeviceFonts( physdev, plf, FONT_EnumInstance, (LPARAM)&fe32 );
 	if(fe32.dwFlags & ENUM_CALLED) /* update ret iff a font gets enumed */
 	    ret = ret2;
     }
- done:
     release_dc_ptr( dc );
     return ret;
 }
@@ -806,18 +803,21 @@ INT WINAPI GetTextCharacterExtra( HDC hdc )
  */
 INT WINAPI SetTextCharacterExtra( HDC hdc, INT extra )
 {
-    INT prev;
+    INT ret = 0x80000000;
     DC * dc = get_dc_ptr( hdc );
-    if (!dc) return 0x80000000;
-    if (dc->funcs->pSetTextCharacterExtra)
-        prev = dc->funcs->pSetTextCharacterExtra( dc->physDev, extra );
-    else
+
+    if (dc)
     {
-        prev = dc->charExtra;
-        dc->charExtra = extra;
+        PHYSDEV physdev = GET_DC_PHYSDEV( dc, pSetTextCharacterExtra );
+        extra = physdev->funcs->pSetTextCharacterExtra( physdev, extra );
+        if (extra != 0x80000000)
+        {
+            ret = dc->charExtra;
+            dc->charExtra = extra;
+        }
+        release_dc_ptr( dc );
     }
-    release_dc_ptr( dc );
-    return prev;
+    return ret;
 }
 
 
@@ -826,12 +826,15 @@ INT WINAPI SetTextCharacterExtra( HDC hdc, INT extra )
  */
 BOOL WINAPI SetTextJustification( HDC hdc, INT extra, INT breaks )
 {
-    BOOL ret = TRUE;
+    BOOL ret;
+    PHYSDEV physdev;
     DC * dc = get_dc_ptr( hdc );
+
     if (!dc) return FALSE;
-    if (dc->funcs->pSetTextJustification)
-        ret = dc->funcs->pSetTextJustification( dc->physDev, extra, breaks );
-    else
+
+    physdev = GET_DC_PHYSDEV( dc, pSetTextJustification );
+    ret = physdev->funcs->pSetTextJustification( physdev, extra, breaks );
+    if (ret)
     {
         extra = abs((extra * dc->vportExtX + dc->wndExtX / 2) / dc->wndExtX);
         if (!extra) breaks = 0;
@@ -983,10 +986,11 @@ BOOL WINAPI GetTextExtentExPointI( HDC hdc, const WORD *indices, INT count, INT 
         size->cy = abs(INTERNAL_YDSTOWS(dc, size->cy));
         size->cx += count * dc->charExtra;
     }
-    else if(dc->funcs->pGetTextExtentExPoint) {
+    else
+    {
+        PHYSDEV physdev = GET_DC_PHYSDEV( dc, pGetTextExtentExPoint );
         FIXME("calling GetTextExtentExPoint\n");
-        ret = dc->funcs->pGetTextExtentExPoint( dc->physDev, indices, count,
-                                                max_ext, nfit, dxs, size );
+        ret = physdev->funcs->pGetTextExtentExPoint( physdev, indices, count, max_ext, nfit, dxs, size );
     }
 
     release_dc_ptr( dc );
@@ -1140,9 +1144,11 @@ BOOL WINAPI GetTextExtentExPointW( HDC hdc, LPCWSTR str, INT count,
     if (dc->gdiFont)
 	ret = WineEngGetTextExtentExPoint(dc->gdiFont, str, count,
 					  0, NULL, dxs, size);
-    else if (dc->funcs->pGetTextExtentExPoint)
-	ret = dc->funcs->pGetTextExtentExPoint(dc->physDev, str, count,
-					       0, NULL, dxs, size);
+    else
+    {
+        PHYSDEV physdev = GET_DC_PHYSDEV( dc, pGetTextExtentExPoint );
+	ret = physdev->funcs->pGetTextExtentExPoint(physdev, str, count, 0, NULL, dxs, size);
+    }
 
     /* Perform device size to world size transformations.  */
     if (ret)
@@ -1227,8 +1233,11 @@ BOOL WINAPI GetTextMetricsW( HDC hdc, TEXTMETRICW *metrics )
 
     if (dc->gdiFont)
         ret = WineEngGetTextMetrics(dc->gdiFont, metrics);
-    else if (dc->funcs->pGetTextMetrics)
-        ret = dc->funcs->pGetTextMetrics( dc->physDev, metrics );
+    else
+    {
+        PHYSDEV physdev = GET_DC_PHYSDEV( dc, pGetTextMetrics );
+        ret = physdev->funcs->pGetTextMetrics( physdev, metrics );
+    }
 
     if (ret)
     {
@@ -1245,14 +1254,14 @@ BOOL WINAPI GetTextMetricsW( HDC hdc, TEXTMETRICW *metrics )
 		(-abs(INTERNAL_YDSTOWS(dc, (y)))):		\
 		(abs(INTERNAL_YDSTOWS(dc, (y)))))
 
-    metrics->tmHeight           = HDPTOLP(metrics->tmHeight);
-    metrics->tmAscent           = HDPTOLP(metrics->tmAscent);
-    metrics->tmDescent          = HDPTOLP(metrics->tmDescent);
-    metrics->tmInternalLeading  = HDPTOLP(metrics->tmInternalLeading);
-    metrics->tmExternalLeading  = HDPTOLP(metrics->tmExternalLeading);
-    metrics->tmAveCharWidth     = WDPTOLP(metrics->tmAveCharWidth);
-    metrics->tmMaxCharWidth     = WDPTOLP(metrics->tmMaxCharWidth);
-    metrics->tmOverhang         = WDPTOLP(metrics->tmOverhang);
+        metrics->tmHeight           = HDPTOLP(metrics->tmHeight);
+        metrics->tmAscent           = HDPTOLP(metrics->tmAscent);
+        metrics->tmDescent          = HDPTOLP(metrics->tmDescent);
+        metrics->tmInternalLeading  = HDPTOLP(metrics->tmInternalLeading);
+        metrics->tmExternalLeading  = HDPTOLP(metrics->tmExternalLeading);
+        metrics->tmAveCharWidth     = WDPTOLP(metrics->tmAveCharWidth);
+        metrics->tmMaxCharWidth     = WDPTOLP(metrics->tmMaxCharWidth);
+        metrics->tmOverhang         = WDPTOLP(metrics->tmOverhang);
         ret = TRUE;
 #undef WDPTOLP
 #undef HDPTOLP
@@ -1555,6 +1564,49 @@ UINT WINAPI GetOutlineTextMetricsW(
     return ret;
 }
 
+static LPSTR FONT_GetCharsByRangeA(HDC hdc, UINT firstChar, UINT lastChar, PINT pByteLen)
+{
+    INT i, count = lastChar - firstChar + 1;
+    UINT c;
+    LPSTR str;
+
+    if (count <= 0)
+        return NULL;
+
+    switch (GdiGetCodePage(hdc))
+    {
+    case 932:
+    case 936:
+    case 949:
+    case 950:
+    case 1361:
+        if (lastChar > 0xffff)
+            return NULL;
+        if ((firstChar ^ lastChar) > 0xff)
+            return NULL;
+        break;
+    default:
+        if (lastChar > 0xff)
+            return NULL;
+        break;
+    }
+
+    str = HeapAlloc(GetProcessHeap(), 0, count * 2 + 1);
+    if (str == NULL)
+        return NULL;
+
+    for(i = 0, c = firstChar; c <= lastChar; i++, c++)
+    {
+        if (c > 0xff)
+            str[i++] = (BYTE)(c >> 8);
+        str[i] = (BYTE)c;
+    }
+    str[i] = '\0';
+
+    *pByteLen = i;
+
+    return str;
+}
 
 /***********************************************************************
  *           GetCharWidthW      (GDI32.@)
@@ -1564,14 +1616,17 @@ BOOL WINAPI GetCharWidth32W( HDC hdc, UINT firstChar, UINT lastChar,
                                LPINT buffer )
 {
     UINT i;
-    BOOL ret = FALSE;
+    BOOL ret;
     DC * dc = get_dc_ptr( hdc );
     if (!dc) return FALSE;
 
     if (dc->gdiFont)
         ret = WineEngGetCharWidth( dc->gdiFont, firstChar, lastChar, buffer );
-    else if (dc->funcs->pGetCharWidth)
-        ret = dc->funcs->pGetCharWidth( dc->physDev, firstChar, lastChar, buffer);
+    else
+    {
+        PHYSDEV physdev = GET_DC_PHYSDEV( dc, pGetCharWidth );
+        ret = physdev->funcs->pGetCharWidth( physdev, firstChar, lastChar, buffer);
+    }
 
     if (ret)
     {
@@ -1592,18 +1647,16 @@ BOOL WINAPI GetCharWidth32W( HDC hdc, UINT firstChar, UINT lastChar,
 BOOL WINAPI GetCharWidth32A( HDC hdc, UINT firstChar, UINT lastChar,
                                LPINT buffer )
 {
-    INT i, wlen, count = (INT)(lastChar - firstChar + 1);
+    INT i, wlen;
     LPSTR str;
     LPWSTR wstr;
     BOOL ret = TRUE;
 
-    if(count <= 0) return FALSE;
+    str = FONT_GetCharsByRangeA(hdc, firstChar, lastChar, &i);
+    if(str == NULL)
+        return FALSE;
 
-    str = HeapAlloc(GetProcessHeap(), 0, count);
-    for(i = 0; i < count; i++)
-	str[i] = (BYTE)(firstChar + i);
-
-    wstr = FONT_mbtowc(hdc, str, count, &wlen, NULL);
+    wstr = FONT_mbtowc(hdc, str, i, &wlen, NULL);
 
     for(i = 0; i < wlen; i++)
     {
@@ -1729,6 +1782,7 @@ BOOL WINAPI ExtTextOutW( HDC hdc, INT x, INT y, UINT flags,
     POINT *deltas = NULL, width = {0, 0};
     DWORD type;
     DC * dc = get_dc_ptr( hdc );
+    PHYSDEV physdev;
     INT breakRem;
     static int quietfixme = 0;
 
@@ -1741,17 +1795,13 @@ BOOL WINAPI ExtTextOutW( HDC hdc, INT x, INT y, UINT flags,
         FIXME("flags ETO_NUMERICSLOCAL | ETO_NUMERICSLATIN unimplemented\n");
         quietfixme = 1;
     }
-    if (!dc->funcs->pExtTextOut && !PATH_IsPathOpen(dc->path))
-    {
-        release_dc_ptr( dc );
-        return ret;
-    }
 
     update_dc( dc );
+    physdev = GET_DC_PHYSDEV( dc, pExtTextOut );
     type = GetObjectType(hdc);
     if(type == OBJ_METADC || type == OBJ_ENHMETADC)
     {
-        ret = dc->funcs->pExtTextOut(dc->physDev, x, y, flags, lprect, str, count, lpDx);
+        ret = physdev->funcs->pExtTextOut( physdev, x, y, flags, lprect, str, count, lpDx );
         release_dc_ptr( dc );
         return ret;
     }
@@ -1855,7 +1905,7 @@ BOOL WINAPI ExtTextOutW( HDC hdc, INT x, INT y, UINT flags,
     }
 
     if ((flags & ETO_OPAQUE) && !PATH_IsPathOpen(dc->path))
-        dc->funcs->pExtTextOut(dc->physDev, 0, 0, ETO_OPAQUE, &rc, NULL, 0, NULL);
+        physdev->funcs->pExtTextOut( physdev, 0, 0, ETO_OPAQUE, &rc, NULL, 0, NULL );
 
     if(count == 0)
     {
@@ -2007,7 +2057,16 @@ BOOL WINAPI ExtTextOutW( HDC hdc, INT x, INT y, UINT flags,
                 rc.right = x + width.x;
                 rc.top = y - tm.tmAscent;
                 rc.bottom = y + tm.tmDescent;
-                dc->funcs->pExtTextOut(dc->physDev, 0, 0, ETO_OPAQUE, &rc, NULL, 0, NULL);
+
+                if(flags & ETO_CLIPPED)
+                {
+                    rc.left = max(lprect->left, rc.left);
+                    rc.right = min(lprect->right, rc.right);
+                    rc.top = max(lprect->top, rc.top);
+                    rc.bottom = min(lprect->bottom, rc.bottom);
+                }
+                if(rc.left < rc.right && rc.top < rc.bottom)
+                    physdev->funcs->pExtTextOut( physdev, 0, 0, ETO_OPAQUE, &rc, NULL, 0, NULL );
             }
         }
     }
@@ -2058,9 +2117,10 @@ BOOL WINAPI ExtTextOutW( HDC hdc, INT x, INT y, UINT flags,
                                               (flags & ~ETO_OPAQUE) | ETO_GLYPH_INDEX, &rc,
                                               glyphs, span, deltas ? (INT*)(deltas + (i - span)) : NULL);
                     else
-                        dc->funcs->pExtTextOut(dc->physDev, x + offsets[i - span].x, y + offsets[i - span].y,
-                                               (flags & ~ETO_OPAQUE) | ETO_GLYPH_INDEX, &rc,
-                                               glyphs, span, deltas ? (INT*)(deltas + (i - span)) : NULL);
+                        physdev->funcs->pExtTextOut( physdev, x + offsets[i - span].x,
+                                                     y + offsets[i - span].y,
+                                                     (flags & ~ETO_OPAQUE) | ETO_GLYPH_INDEX, &rc, glyphs,
+                                                     span, deltas ? (INT*)(deltas + (i - span)) : NULL);
                     span = 0;
                 }
                 SelectObject(hdc, cur_font);
@@ -2075,10 +2135,10 @@ BOOL WINAPI ExtTextOutW( HDC hdc, INT x, INT y, UINT flags,
                                           (flags & ~ETO_OPAQUE) | ETO_GLYPH_INDEX, &rc,
                                           glyphs, span, deltas ? (INT*)(deltas + (count - span)) : NULL);
                 else
-                    ret = dc->funcs->pExtTextOut(dc->physDev, x + (offsets ? offsets[count - span].x : 0),
-                                                 y + (offsets ? offsets[count - span].y : 0),
-                                                 (flags & ~ETO_OPAQUE) | ETO_GLYPH_INDEX, &rc,
-                                                 glyphs, span, deltas ? (INT*)(deltas + (count - span)) : NULL);
+                    ret = physdev->funcs->pExtTextOut(physdev, x + (offsets ? offsets[count - span].x : 0),
+                                                      y + (offsets ? offsets[count - span].y : 0),
+                                                      (flags & ~ETO_OPAQUE) | ETO_GLYPH_INDEX, &rc, glyphs,
+                                                      span, deltas ? (INT*)(deltas + (count - span)) : NULL);
                 SelectObject(hdc, orig_font);
                 HeapFree(GetProcessHeap(), 0, offsets);
            }
@@ -2097,8 +2157,8 @@ BOOL WINAPI ExtTextOutW( HDC hdc, INT x, INT y, UINT flags,
             ret = PATH_ExtTextOut(dc, x, y, (flags & ~ETO_OPAQUE), &rc,
                                   glyphs ? glyphs : reordered_str, count, (INT*)deltas);
         else
-            ret = dc->funcs->pExtTextOut(dc->physDev, x, y, (flags & ~ETO_OPAQUE), &rc,
-                                         glyphs ? glyphs : reordered_str, count, (INT*)deltas);
+            ret = physdev->funcs->pExtTextOut( physdev, x, y, (flags & ~ETO_OPAQUE), &rc,
+                                               glyphs ? glyphs : reordered_str, count, (INT*)deltas );
     }
 
 done:
@@ -2272,25 +2332,25 @@ BOOL WINAPI PolyTextOutW( HDC hdc, const POLYTEXTW *pptxt, INT cStrings )
 }
 
 
-/* FIXME: all following APIs ******************************************/
-
-
 /***********************************************************************
  *           SetMapperFlags    (GDI32.@)
  */
-DWORD WINAPI SetMapperFlags( HDC hDC, DWORD dwFlag )
+DWORD WINAPI SetMapperFlags( HDC hdc, DWORD flags )
 {
-    DC *dc = get_dc_ptr( hDC );
-    DWORD ret = 0;
-    if(!dc) return 0;
-    if(dc->funcs->pSetMapperFlags)
+    DC *dc = get_dc_ptr( hdc );
+    DWORD ret = GDI_ERROR;
+
+    if (dc)
     {
-        ret = dc->funcs->pSetMapperFlags( dc->physDev, dwFlag );
-        /* FIXME: ret is just a success flag, we should return a proper value */
+        PHYSDEV physdev = GET_DC_PHYSDEV( dc, pSetMapperFlags );
+        flags = physdev->funcs->pSetMapperFlags( physdev, flags );
+        if (flags != GDI_ERROR)
+        {
+            ret = dc->mapperFlags;
+            dc->mapperFlags = flags;
+        }
+        release_dc_ptr( dc );
     }
-    else
-        FIXME("(%p, 0x%08x): stub - harmless\n", hDC, dwFlag);
-    release_dc_ptr( dc );
     return ret;
 }
 
@@ -2312,18 +2372,21 @@ BOOL WINAPI GetAspectRatioFilterEx( HDC hdc, LPSIZE pAspectRatio )
 BOOL WINAPI GetCharABCWidthsA(HDC hdc, UINT firstChar, UINT lastChar,
                                   LPABC abc )
 {
-    INT i, wlen, count = (INT)(lastChar - firstChar + 1);
+    INT i, wlen;
     LPSTR str;
     LPWSTR wstr;
     BOOL ret = TRUE;
 
-    if(count <= 0) return FALSE;
+    str = FONT_GetCharsByRangeA(hdc, firstChar, lastChar, &i);
+    if (str == NULL)
+        return FALSE;
 
-    str = HeapAlloc(GetProcessHeap(), 0, count);
-    for(i = 0; i < count; i++)
-	str[i] = (BYTE)(firstChar + i);
-
-    wstr = FONT_mbtowc(hdc, str, count, &wlen, NULL);
+    wstr = FONT_mbtowc(hdc, str, i, &wlen, NULL);
+    if (wstr == NULL)
+    {
+        HeapFree(GetProcessHeap(), 0, str);
+        return FALSE;
+    }
 
     for(i = 0; i < wlen; i++)
     {
@@ -2458,16 +2521,15 @@ DWORD WINAPI GetGlyphOutlineA( HDC hdc, UINT uChar, UINT fuFormat,
                                  LPGLYPHMETRICS lpgm, DWORD cbBuffer,
                                  LPVOID lpBuffer, const MAT2 *lpmat2 )
 {
-    LPWSTR p = NULL;
-    DWORD ret;
-    UINT c;
-
     if (!lpmat2) return GDI_ERROR;
 
     if(!(fuFormat & GGO_GLYPH_INDEX)) {
+        UINT cp;
         int len;
         char mbchs[2];
-        if(uChar > 0xff) { /* but, 2 bytes character only */
+
+        cp = GdiGetCodePage(hdc);
+        if (IsDBCSLeadByteEx(cp, uChar >> 8)) {
             len = 2;
             mbchs[0] = (uChar & 0xff00) >> 8;
             mbchs[1] = (uChar & 0xff);
@@ -2475,14 +2537,12 @@ DWORD WINAPI GetGlyphOutlineA( HDC hdc, UINT uChar, UINT fuFormat,
             len = 1;
             mbchs[0] = (uChar & 0xff);
         }
-        p = FONT_mbtowc(hdc, mbchs, len, NULL, NULL);
-	c = p[0];
-    } else
-        c = uChar;
-    ret = GetGlyphOutlineW(hdc, c, fuFormat, lpgm, cbBuffer, lpBuffer,
-			   lpmat2);
-    HeapFree(GetProcessHeap(), 0, p);
-    return ret;
+        uChar = 0;
+        MultiByteToWideChar(cp, 0, mbchs, len, (LPWSTR)&uChar, 1);
+    }
+
+    return GetGlyphOutlineW(hdc, uChar, fuFormat, lpgm, cbBuffer, lpBuffer,
+                            lpmat2);
 }
 
 /***********************************************************************
@@ -3001,19 +3061,16 @@ GetCharacterPlacementW(
  */
 BOOL WINAPI GetCharABCWidthsFloatA( HDC hdc, UINT first, UINT last, LPABCFLOAT abcf )
 {
-    INT i, wlen, count = (INT)(last - first + 1);
+    INT i, wlen;
     LPSTR str;
     LPWSTR wstr;
     BOOL ret = TRUE;
 
-    if (count <= 0) return FALSE;
+    str = FONT_GetCharsByRangeA(hdc, first, last, &i);
+    if (str == NULL)
+        return FALSE;
 
-    str = HeapAlloc(GetProcessHeap(), 0, count);
-
-    for(i = 0; i < count; i++)
-        str[i] = (BYTE)(first + i);
-
-    wstr = FONT_mbtowc( hdc, str, count, &wlen, NULL );
+    wstr = FONT_mbtowc( hdc, str, i, &wlen, NULL );
 
     for (i = 0; i < wlen; i++)
     {

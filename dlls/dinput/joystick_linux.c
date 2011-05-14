@@ -99,6 +99,25 @@ struct JoystickImpl
         POINTL                          povs[4];
 };
 
+static inline JoystickImpl *impl_from_IDirectInputDevice8A(IDirectInputDevice8A *iface)
+{
+    return CONTAINING_RECORD(CONTAINING_RECORD(CONTAINING_RECORD(iface, IDirectInputDeviceImpl, IDirectInputDevice8A_iface),
+           JoystickGenericImpl, base), JoystickImpl, generic);
+}
+static inline JoystickImpl *impl_from_IDirectInputDevice8W(IDirectInputDevice8W *iface)
+{
+    return CONTAINING_RECORD(CONTAINING_RECORD(CONTAINING_RECORD(iface, IDirectInputDeviceImpl, IDirectInputDevice8W_iface),
+           JoystickGenericImpl, base), JoystickImpl, generic);
+}
+static inline IDirectInputDevice8A *IDirectInputDevice8A_from_impl(JoystickImpl *This)
+{
+    return &This->generic.base.IDirectInputDevice8A_iface;
+}
+static inline IDirectInputDevice8W *IDirectInputDevice8W_from_impl(JoystickImpl *This)
+{
+    return &This->generic.base.IDirectInputDevice8W_iface;
+}
+
 static const GUID DInput_Wine_Joystick_GUID = { /* 9e573ed9-7734-11d2-8d4a-23903fb6bdf7 */
   0x9e573ed9,
   0x7734,
@@ -110,7 +129,7 @@ static const GUID DInput_Wine_Joystick_GUID = { /* 9e573ed9-7734-11d2-8d4a-23903
 static INT joystick_devices_count = -1;
 static struct JoyDev *joystick_devices;
 
-static void joy_polldev(JoystickGenericImpl *This);
+static void joy_polldev(LPDIRECTINPUTDEVICE8A iface);
 
 static INT find_joystick_devices(void)
 {
@@ -279,8 +298,8 @@ static BOOL joydev_enum_deviceW(DWORD dwDevType, DWORD dwFlags, LPDIDEVICEINSTAN
     return FALSE;
 }
 
-static HRESULT alloc_device(REFGUID rguid, const void *jvt, IDirectInputImpl *dinput,
-    LPDIRECTINPUTDEVICEA* pdev, unsigned short index)
+static HRESULT alloc_device(REFGUID rguid, IDirectInputImpl *dinput,
+                            JoystickImpl **pdev, unsigned short index)
 {
     DWORD i;
     JoystickImpl* newDevice;
@@ -288,7 +307,7 @@ static HRESULT alloc_device(REFGUID rguid, const void *jvt, IDirectInputImpl *di
     LPDIDATAFORMAT df = NULL;
     int idx = 0;
 
-    TRACE("%s %p %p %p %hu\n", debugstr_guid(rguid), jvt, dinput, pdev, index);
+    TRACE("%s %p %p %hu\n", debugstr_guid(rguid), dinput, pdev, index);
 
     newDevice = HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY,sizeof(JoystickImpl));
     if (newDevice == 0) {
@@ -313,7 +332,8 @@ static HRESULT alloc_device(REFGUID rguid, const void *jvt, IDirectInputImpl *di
         newDevice->generic.devcaps.dwButtons = 128;
     }
 
-    newDevice->generic.base.lpVtbl = jvt;
+    newDevice->generic.base.IDirectInputDevice8A_iface.lpVtbl = &JoystickAvt;
+    newDevice->generic.base.IDirectInputDevice8W_iface.lpVtbl = &JoystickWvt;
     newDevice->generic.base.ref = 1;
     newDevice->generic.base.dinput = dinput;
     newDevice->generic.base.guid = *rguid;
@@ -368,7 +388,11 @@ static HRESULT alloc_device(REFGUID rguid, const void *jvt, IDirectInputImpl *di
         newDevice->generic.props[i].lSaturation = 0;
     }
 
-    IDirectInput_AddRef((LPDIRECTINPUTDEVICE8A)newDevice->generic.base.dinput);
+    IDirectInput_AddRef(&newDevice->generic.base.dinput->IDirectInput7A_iface);
+
+    EnterCriticalSection(&dinput->crit);
+    list_add_tail(&dinput->devices_list, &newDevice->generic.base.entry);
+    LeaveCriticalSection(&dinput->crit);
 
     newDevice->generic.devcaps.dwSize = sizeof(newDevice->generic.devcaps);
     newDevice->generic.devcaps.dwFlags = DIDC_ATTACHED;
@@ -389,7 +413,7 @@ static HRESULT alloc_device(REFGUID rguid, const void *jvt, IDirectInputImpl *di
         _dump_DIDEVCAPS(&newDevice->generic.devcaps);
     }
 
-    *pdev = (LPDIRECTINPUTDEVICEA)newDevice;
+    *pdev = newDevice;
 
     return DI_OK;
 
@@ -426,57 +450,53 @@ static unsigned short get_joystick_index(REFGUID guid)
     return MAX_JOYSTICKS;
 }
 
-static HRESULT joydev_create_deviceA(IDirectInputImpl *dinput, REFGUID rguid, REFIID riid, LPDIRECTINPUTDEVICEA* pdev)
+static HRESULT joydev_create_device(IDirectInputImpl *dinput, REFGUID rguid, REFIID riid, LPVOID *pdev, int unicode)
 {
     unsigned short index;
 
-    TRACE("%p %s %p %p\n",dinput, debugstr_guid(rguid), riid, pdev);
+    TRACE("%p %s %s %p %i\n", dinput, debugstr_guid(rguid), debugstr_guid(riid), pdev, unicode);
     find_joystick_devices();
     *pdev = NULL;
 
     if ((index = get_joystick_index(rguid)) < MAX_JOYSTICKS &&
         joystick_devices_count && index < joystick_devices_count)
     {
-        if ((riid == NULL) ||
-	    IsEqualGUID(&IID_IDirectInputDeviceA,  riid) ||
-	    IsEqualGUID(&IID_IDirectInputDevice2A, riid) ||
-	    IsEqualGUID(&IID_IDirectInputDevice7A, riid) ||
-	    IsEqualGUID(&IID_IDirectInputDevice8A, riid))
+        JoystickImpl *This;
+        HRESULT hr;
+
+        if (riid == NULL)
+            ;/* nothing */
+        else if (IsEqualGUID(&IID_IDirectInputDeviceA,  riid) ||
+                 IsEqualGUID(&IID_IDirectInputDevice2A, riid) ||
+                 IsEqualGUID(&IID_IDirectInputDevice7A, riid) ||
+                 IsEqualGUID(&IID_IDirectInputDevice8A, riid))
         {
-            return alloc_device(rguid, &JoystickAvt, dinput, pdev, index);
+            unicode = 0;
+        }
+        else if (IsEqualGUID(&IID_IDirectInputDeviceW,  riid) ||
+                 IsEqualGUID(&IID_IDirectInputDevice2W, riid) ||
+                 IsEqualGUID(&IID_IDirectInputDevice7W, riid) ||
+                 IsEqualGUID(&IID_IDirectInputDevice8W, riid))
+        {
+            unicode = 1;
+        }
+        else
+        {
+            WARN("no interface\n");
+            return DIERR_NOINTERFACE;
         }
 
-        WARN("no interface\n");
-        return DIERR_NOINTERFACE;
+        hr = alloc_device(rguid, dinput, &This, index);
+        if (!This) return hr;
+
+        if (unicode)
+            *pdev = &This->generic.base.IDirectInputDevice8W_iface;
+        else
+            *pdev = &This->generic.base.IDirectInputDevice8A_iface;
+
+        return hr;
     }
 
-    return DIERR_DEVICENOTREG;
-}
-
-static HRESULT joydev_create_deviceW(IDirectInputImpl *dinput, REFGUID rguid, REFIID riid, LPDIRECTINPUTDEVICEW* pdev)
-{
-    unsigned short index;
-
-    TRACE("%p %s %p %p\n",dinput, debugstr_guid(rguid), riid, pdev);
-    find_joystick_devices();
-    *pdev = NULL;
-
-    if ((index = get_joystick_index(rguid)) < MAX_JOYSTICKS &&
-        joystick_devices_count && index < joystick_devices_count)
-    {
-        if ((riid == NULL) ||
-	    IsEqualGUID(&IID_IDirectInputDeviceW,  riid) ||
-	    IsEqualGUID(&IID_IDirectInputDevice2W, riid) ||
-	    IsEqualGUID(&IID_IDirectInputDevice7W, riid) ||
-	    IsEqualGUID(&IID_IDirectInputDevice8W, riid))
-        {
-            return alloc_device(rguid, &JoystickWvt, dinput, (LPDIRECTINPUTDEVICEA *)pdev, index);
-        }
-        WARN("no interface\n");
-        return DIERR_NOINTERFACE;
-    }
-
-    WARN("invalid device GUID %s\n",debugstr_guid(rguid));
     return DIERR_DEVICENOTREG;
 }
 
@@ -486,21 +506,20 @@ const struct dinput_device joystick_linux_device = {
   "Wine Linux joystick driver",
   joydev_enum_deviceA,
   joydev_enum_deviceW,
-  joydev_create_deviceA,
-  joydev_create_deviceW
+  joydev_create_device
 };
 
 /******************************************************************************
   *     Acquire : gets exclusive control of the joystick
   */
-static HRESULT WINAPI JoystickLinuxAImpl_Acquire(LPDIRECTINPUTDEVICE8A iface)
+static HRESULT WINAPI JoystickLinuxWImpl_Acquire(LPDIRECTINPUTDEVICE8W iface)
 {
-    JoystickImpl *This = (JoystickImpl *)iface;
+    JoystickImpl *This = impl_from_IDirectInputDevice8W(iface);
     HRESULT res;
 
     TRACE("(%p)\n",This);
 
-    res = IDirectInputDevice2AImpl_Acquire(iface);
+    res = IDirectInputDevice2WImpl_Acquire(iface);
     if (res != DI_OK)
         return res;
 
@@ -511,7 +530,7 @@ static HRESULT WINAPI JoystickLinuxAImpl_Acquire(LPDIRECTINPUTDEVICE8A iface)
         This->joyfd = open(This->joydev->device, O_RDONLY);
         if (This->joyfd==-1) {
             ERR("open(%s) failed: %s\n", This->joydev->device, strerror(errno));
-            IDirectInputDevice2AImpl_Unacquire(iface);
+            IDirectInputDevice2WImpl_Unacquire(iface);
             return DIERR_NOTFOUND;
         }
     }
@@ -519,17 +538,23 @@ static HRESULT WINAPI JoystickLinuxAImpl_Acquire(LPDIRECTINPUTDEVICE8A iface)
     return DI_OK;
 }
 
+static HRESULT WINAPI JoystickLinuxAImpl_Acquire(LPDIRECTINPUTDEVICE8A iface)
+{
+    JoystickImpl *This = impl_from_IDirectInputDevice8A(iface);
+    return JoystickLinuxWImpl_Acquire(IDirectInputDevice8W_from_impl(This));
+}
+
 /******************************************************************************
   *     Unacquire : frees the joystick
   */
-static HRESULT WINAPI JoystickLinuxAImpl_Unacquire(LPDIRECTINPUTDEVICE8A iface)
+static HRESULT WINAPI JoystickLinuxWImpl_Unacquire(LPDIRECTINPUTDEVICE8W iface)
 {
-    JoystickImpl *This = (JoystickImpl *)iface;
+    JoystickImpl *This = impl_from_IDirectInputDevice8W(iface);
     HRESULT res;
 
     TRACE("(%p)\n",This);
 
-    res = IDirectInputDevice2AImpl_Unacquire(iface);
+    res = IDirectInputDevice2WImpl_Unacquire(iface);
 
     if (res != DI_OK)
         return res;
@@ -544,10 +569,17 @@ static HRESULT WINAPI JoystickLinuxAImpl_Unacquire(LPDIRECTINPUTDEVICE8A iface)
     return DI_NOEFFECT;
 }
 
-static void joy_polldev(JoystickGenericImpl *This_in) {
+static HRESULT WINAPI JoystickLinuxAImpl_Unacquire(LPDIRECTINPUTDEVICE8A iface)
+{
+    JoystickImpl *This = impl_from_IDirectInputDevice8A(iface);
+    return JoystickLinuxWImpl_Unacquire(IDirectInputDevice8W_from_impl(This));
+}
+
+static void joy_polldev(LPDIRECTINPUTDEVICE8A iface)
+{
     struct pollfd plfd;
-    struct	js_event jse;
-    JoystickImpl *This = (JoystickImpl*) This_in;
+    struct js_event jse;
+    JoystickImpl *This = impl_from_IDirectInputDevice8A(iface);
 
     TRACE("(%p)\n", This);
 
@@ -614,7 +646,7 @@ static void joy_polldev(JoystickGenericImpl *This_in) {
             }
         }
         if (inst_id >= 0)
-            queue_event((LPDIRECTINPUTDEVICE8A)This, inst_id,
+            queue_event(iface, inst_id,
                         value, jse.time, This->generic.base.dinput->evsequence++);
     }
 }
@@ -655,54 +687,46 @@ static const IDirectInputDevice8AVtbl JoystickAvt =
 	IDirectInputDevice8AImpl_GetImageInfo
 };
 
-#if !defined(__STRICT_ANSI__) && defined(__GNUC__)
-# define XCAST(fun)	(typeof(JoystickWvt.fun))
-#else
-# define XCAST(fun)	(void*)
-#endif
-
 static const IDirectInputDevice8WVtbl JoystickWvt =
 {
-	IDirectInputDevice2WImpl_QueryInterface,
-	XCAST(AddRef)IDirectInputDevice2AImpl_AddRef,
-        XCAST(Release)IDirectInputDevice2AImpl_Release,
-	XCAST(GetCapabilities)JoystickAGenericImpl_GetCapabilities,
-        IDirectInputDevice2WImpl_EnumObjects,
-	XCAST(GetProperty)JoystickAGenericImpl_GetProperty,
-	XCAST(SetProperty)JoystickAGenericImpl_SetProperty,
-	XCAST(Acquire)JoystickLinuxAImpl_Acquire,
-	XCAST(Unacquire)JoystickLinuxAImpl_Unacquire,
-	XCAST(GetDeviceState)JoystickAGenericImpl_GetDeviceState,
-	XCAST(GetDeviceData)IDirectInputDevice2AImpl_GetDeviceData,
-	XCAST(SetDataFormat)IDirectInputDevice2AImpl_SetDataFormat,
-	XCAST(SetEventNotification)IDirectInputDevice2AImpl_SetEventNotification,
-	XCAST(SetCooperativeLevel)IDirectInputDevice2AImpl_SetCooperativeLevel,
-        JoystickWGenericImpl_GetObjectInfo,
-	JoystickWGenericImpl_GetDeviceInfo,
-	XCAST(RunControlPanel)IDirectInputDevice2AImpl_RunControlPanel,
-	XCAST(Initialize)IDirectInputDevice2AImpl_Initialize,
-	XCAST(CreateEffect)IDirectInputDevice2AImpl_CreateEffect,
-	IDirectInputDevice2WImpl_EnumEffects,
-	IDirectInputDevice2WImpl_GetEffectInfo,
-	XCAST(GetForceFeedbackState)IDirectInputDevice2AImpl_GetForceFeedbackState,
-	XCAST(SendForceFeedbackCommand)IDirectInputDevice2AImpl_SendForceFeedbackCommand,
-	XCAST(EnumCreatedEffectObjects)IDirectInputDevice2AImpl_EnumCreatedEffectObjects,
-	XCAST(Escape)IDirectInputDevice2AImpl_Escape,
-	XCAST(Poll)JoystickAGenericImpl_Poll,
-	XCAST(SendDeviceData)IDirectInputDevice2AImpl_SendDeviceData,
-        IDirectInputDevice7WImpl_EnumEffectsInFile,
-        IDirectInputDevice7WImpl_WriteEffectToFile,
-        IDirectInputDevice8WImpl_BuildActionMap,
-        IDirectInputDevice8WImpl_SetActionMap,
-        IDirectInputDevice8WImpl_GetImageInfo
+    IDirectInputDevice2WImpl_QueryInterface,
+    IDirectInputDevice2WImpl_AddRef,
+    IDirectInputDevice2WImpl_Release,
+    JoystickWGenericImpl_GetCapabilities,
+    IDirectInputDevice2WImpl_EnumObjects,
+    JoystickWGenericImpl_GetProperty,
+    JoystickWGenericImpl_SetProperty,
+    JoystickLinuxWImpl_Acquire,
+    JoystickLinuxWImpl_Unacquire,
+    JoystickWGenericImpl_GetDeviceState,
+    IDirectInputDevice2WImpl_GetDeviceData,
+    IDirectInputDevice2WImpl_SetDataFormat,
+    IDirectInputDevice2WImpl_SetEventNotification,
+    IDirectInputDevice2WImpl_SetCooperativeLevel,
+    JoystickWGenericImpl_GetObjectInfo,
+    JoystickWGenericImpl_GetDeviceInfo,
+    IDirectInputDevice2WImpl_RunControlPanel,
+    IDirectInputDevice2WImpl_Initialize,
+    IDirectInputDevice2WImpl_CreateEffect,
+    IDirectInputDevice2WImpl_EnumEffects,
+    IDirectInputDevice2WImpl_GetEffectInfo,
+    IDirectInputDevice2WImpl_GetForceFeedbackState,
+    IDirectInputDevice2WImpl_SendForceFeedbackCommand,
+    IDirectInputDevice2WImpl_EnumCreatedEffectObjects,
+    IDirectInputDevice2WImpl_Escape,
+    JoystickWGenericImpl_Poll,
+    IDirectInputDevice2WImpl_SendDeviceData,
+    IDirectInputDevice7WImpl_EnumEffectsInFile,
+    IDirectInputDevice7WImpl_WriteEffectToFile,
+    IDirectInputDevice8WImpl_BuildActionMap,
+    IDirectInputDevice8WImpl_SetActionMap,
+    IDirectInputDevice8WImpl_GetImageInfo
 };
-#undef XCAST
 
 #else  /* HAVE_LINUX_22_JOYSTICK_API */
 
 const struct dinput_device joystick_linux_device = {
   "Wine Linux joystick driver",
-  NULL,
   NULL,
   NULL,
   NULL

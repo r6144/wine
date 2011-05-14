@@ -54,9 +54,11 @@ typedef struct tagHEXEDIT_INFO
     INT   nScrollPos; /* first visible line */
 } HEXEDIT_INFO;
 
+const WCHAR szHexEditClass[] = {'H','e','x','E','d','i','t',0};
+
 static inline LRESULT HexEdit_SetFont (HEXEDIT_INFO *infoPtr, HFONT hFont, BOOL redraw);
 
-static inline BYTE hexchar_to_byte(TCHAR ch)
+static inline BYTE hexchar_to_byte(WCHAR ch)
 {
     if (ch >= '0' && ch <= '9')
         return ch - '0';
@@ -68,17 +70,19 @@ static inline BYTE hexchar_to_byte(TCHAR ch)
         return -1;
 }
 
-static LPTSTR HexEdit_GetLineText(BYTE *pData, LONG cbData, LONG pad)
+static LPWSTR HexEdit_GetLineText(BYTE *pData, LONG cbData, LONG pad)
 {
-    LPTSTR lpszLine = HeapAlloc(GetProcessHeap(), 0,
-        (cbData * 3 + pad * 3 + DIV_SPACES + cbData + 1) * sizeof(TCHAR));
+    static const WCHAR percent_02xW[] = {'%','0','2','X',' ',0};
+
+    LPWSTR lpszLine = HeapAlloc(GetProcessHeap(), 0,
+        (cbData * 3 + pad * 3 + DIV_SPACES + cbData + 1) * sizeof(WCHAR));
     LONG i;
 
     if (!lpszLine)
         return NULL;
 
     for (i = 0; i < cbData; i++)
-        wsprintf(lpszLine + i*3, TEXT("%02X "), pData[i]);
+        wsprintfW(lpszLine + i*3, percent_02xW, pData[i]);
     for (i = 0; i < pad * 3; i++)
         lpszLine[cbData * 3 + i] = ' ';
 
@@ -115,7 +119,7 @@ HexEdit_Paint(HEXEDIT_INFO *infoPtr)
     nXStart = GetSystemMetrics(SM_CXBORDER);
     nYStart = GetSystemMetrics(SM_CYBORDER);
 
-    if (GetWindowLong(infoPtr->hwndSelf, GWL_STYLE) & WS_DISABLED)
+    if (GetWindowLongW(infoPtr->hwndSelf, GWL_STYLE) & WS_DISABLED)
         clrOldText = SetTextColor(hdc, GetSysColor(COLOR_GRAYTEXT));
     else
         clrOldText = SetTextColor(hdc, GetSysColor(COLOR_WINDOWTEXT));
@@ -125,14 +129,14 @@ HexEdit_Paint(HEXEDIT_INFO *infoPtr)
         
     for (pData = infoPtr->pData + lByteOffset; pData < infoPtr->pData + infoPtr->cbData; pData += infoPtr->nBytesPerLine)
     {
-        LPTSTR lpszLine;
+        LPWSTR lpszLine;
         LONG nLineLen = min((LONG)((infoPtr->pData + infoPtr->cbData) - pData),
             infoPtr->nBytesPerLine);
 
         lpszLine = HexEdit_GetLineText(pData, nLineLen, infoPtr->nBytesPerLine - nLineLen);
 
         /* FIXME: draw hex <-> ASCII mapping highlighted? */
-        TextOut(hdc, nXStart, nYStart, lpszLine, infoPtr->nBytesPerLine * 3 + DIV_SPACES + nLineLen);
+        TextOutW(hdc, nXStart, nYStart, lpszLine, infoPtr->nBytesPerLine * 3 + DIV_SPACES + nLineLen);
 
         nYStart += infoPtr->nHeight;
         HeapFree(GetProcessHeap(), 0, lpszLine);
@@ -155,7 +159,7 @@ HexEdit_UpdateCaret(HEXEDIT_INFO *infoPtr)
     INT nByteLinePos = nCaretBytePos % infoPtr->nBytesPerLine;
     INT nLine = nCaretBytePos / infoPtr->nBytesPerLine;
     LONG nLineLen = min(infoPtr->cbData - nLine * infoPtr->nBytesPerLine, infoPtr->nBytesPerLine);
-    LPTSTR lpszLine = HexEdit_GetLineText(infoPtr->pData + nLine * infoPtr->nBytesPerLine, nLineLen, infoPtr->nBytesPerLine - nLineLen);
+    LPWSTR lpszLine = HexEdit_GetLineText(infoPtr->pData + nLine * infoPtr->nBytesPerLine, nLineLen, infoPtr->nBytesPerLine - nLineLen);
     INT nCharOffset;
 
     /* calculate offset of character caret is on in the line */
@@ -167,7 +171,7 @@ HexEdit_UpdateCaret(HEXEDIT_INFO *infoPtr)
     hdc = GetDC(infoPtr->hwndSelf);
     hOldFont = SelectObject(hdc, infoPtr->hFont);
 
-    GetTextExtentPoint32(hdc, lpszLine, nCharOffset, &size);
+    GetTextExtentPoint32W(hdc, lpszLine, nCharOffset, &size);
 
     SelectObject(hdc, hOldFont);
     ReleaseDC(infoPtr->hwndSelf, hdc);
@@ -219,7 +223,7 @@ HexEdit_EnsureVisible(HEXEDIT_INFO *infoPtr, INT nCaretPos)
     si.fMask = SIF_POS;
 
     SetScrollInfo(infoPtr->hwndSelf, SB_VERT, &si, FALSE);
-    SendMessage(infoPtr->hwndSelf, WM_VSCROLL, MAKELONG(SB_THUMBPOSITION, 0), 0);
+    SendMessageW(infoPtr->hwndSelf, WM_VSCROLL, MAKELONG(SB_THUMBPOSITION, 0), 0);
 }
 
 
@@ -253,7 +257,7 @@ HexEdit_GetData(HEXEDIT_INFO *infoPtr, INT cbData, BYTE *pData)
 }
 
 static inline LRESULT
-HexEdit_Char (HEXEDIT_INFO *infoPtr, TCHAR ch)
+HexEdit_Char (HEXEDIT_INFO *infoPtr, WCHAR ch)
 {
     INT nCaretBytePos = infoPtr->nCaretPos/2;
 
@@ -331,7 +335,7 @@ HexEdit_Char (HEXEDIT_INFO *infoPtr, TCHAR ch)
 }
 
 static inline LRESULT
-HexEdit_Create (HEXEDIT_INFO *infoPtr, LPCREATESTRUCT lpcs)
+HexEdit_Create (HEXEDIT_INFO *infoPtr, LPCREATESTRUCTW lpcs)
 {
     HexEdit_SetFont(infoPtr, GetStockObject(SYSTEM_FONT), FALSE);
     HexEdit_UpdateScrollbars(infoPtr);
@@ -347,7 +351,7 @@ HexEdit_Destroy (HEXEDIT_INFO *infoPtr)
     HeapFree(GetProcessHeap(), 0, infoPtr->pData);
     /* free info data */
     HeapFree(GetProcessHeap(), 0, infoPtr);
-    SetWindowLongPtr(hwnd, 0, 0);
+    SetWindowLongPtrW(hwnd, 0, 0);
     return 0;
 }
 
@@ -358,12 +362,12 @@ HexEdit_EraseBackground (HEXEDIT_INFO *infoPtr, HDC hdc)
     HBRUSH hBrush, hSolidBrush = NULL;
     RECT   rc;
 
-    if (GetWindowLong(infoPtr->hwndSelf, GWL_STYLE) & WS_DISABLED)
+    if (GetWindowLongW(infoPtr->hwndSelf, GWL_STYLE) & WS_DISABLED)
         hBrush = hSolidBrush = CreateSolidBrush(GetSysColor(COLOR_BTNFACE));
     else
     {
-        hBrush = (HBRUSH)SendMessage(GetParent(infoPtr->hwndSelf), WM_CTLCOLOREDIT,
-                                     (WPARAM)hdc, (LPARAM)infoPtr->hwndSelf);
+        hBrush = (HBRUSH)SendMessageW(GetParent(infoPtr->hwndSelf), WM_CTLCOLOREDIT,
+                                      (WPARAM)hdc, (LPARAM)infoPtr->hwndSelf);
         if (!hBrush)
             hBrush = hSolidBrush = CreateSolidBrush(GetSysColor(COLOR_WINDOW));
     }
@@ -467,15 +471,15 @@ HexEdit_LButtonDown (HEXEDIT_INFO *infoPtr)
 }
 
 
-static inline LRESULT HexEdit_NCCreate (HWND hwnd, LPCREATESTRUCT lpcs)
+static inline LRESULT HexEdit_NCCreate (HWND hwnd, LPCREATESTRUCTW lpcs)
 {
     HEXEDIT_INFO *infoPtr;
-    SetWindowLong(hwnd, GWL_EXSTYLE, 
-                  lpcs->dwExStyle | WS_EX_CLIENTEDGE);
+    SetWindowLongW(hwnd, GWL_EXSTYLE,
+                   lpcs->dwExStyle | WS_EX_CLIENTEDGE);
 
     /* allocate memory for info structure */
     infoPtr = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(HEXEDIT_INFO));
-    SetWindowLongPtr(hwnd, 0, (DWORD_PTR)infoPtr);
+    SetWindowLongPtrW(hwnd, 0, (DWORD_PTR)infoPtr);
 
     /* initialize info structure */
     infoPtr->nCaretPos = 0;
@@ -484,7 +488,7 @@ static inline LRESULT HexEdit_NCCreate (HWND hwnd, LPCREATESTRUCT lpcs)
     infoPtr->bFocusHex = TRUE;
     infoPtr->bInsert = TRUE;
 
-    return DefWindowProc(infoPtr->hwndSelf, WM_NCCREATE, 0, (LPARAM)lpcs);
+    return DefWindowProcW(infoPtr->hwndSelf, WM_NCCREATE, 0, (LPARAM)lpcs);
 }
 
 static inline LRESULT
@@ -503,7 +507,7 @@ HexEdit_SetFocus (HEXEDIT_INFO *infoPtr, HWND lostFocus)
 static inline LRESULT
 HexEdit_SetFont (HEXEDIT_INFO *infoPtr, HFONT hFont, BOOL redraw)
 {
-    TEXTMETRIC tm;
+    TEXTMETRICW tm;
     HDC hdc;
     HFONT hOldFont = NULL;
     LONG i;
@@ -515,7 +519,7 @@ HexEdit_SetFont (HEXEDIT_INFO *infoPtr, HFONT hFont, BOOL redraw)
     if (infoPtr->hFont)
         hOldFont = SelectObject(hdc, infoPtr->hFont);
 
-    GetTextMetrics(hdc, &tm);
+    GetTextMetricsW(hdc, &tm);
     infoPtr->nHeight = tm.tmHeight + tm.tmExternalLeading;
 
     GetClientRect(infoPtr->hwndSelf, &rcClient);
@@ -523,9 +527,9 @@ HexEdit_SetFont (HEXEDIT_INFO *infoPtr, HFONT hFont, BOOL redraw)
     for (i = 0; ; i++)
     {
         BYTE *pData = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, i);
-        LPTSTR lpszLine = HexEdit_GetLineText(pData, i, 0);
+        LPWSTR lpszLine = HexEdit_GetLineText(pData, i, 0);
         SIZE size;
-        GetTextExtentPoint32(hdc, lpszLine, lstrlen(lpszLine), &size);
+        GetTextExtentPoint32W(hdc, lpszLine, lstrlenW(lpszLine), &size);
         HeapFree(GetProcessHeap(), 0, lpszLine);
         HeapFree(GetProcessHeap(), 0, pData);
         if (size.cx > (rcClient.right - rcClient.left))
@@ -611,10 +615,10 @@ HexEdit_VScroll (HEXEDIT_INFO *infoPtr, INT action)
 static LRESULT WINAPI
 HexEdit_WindowProc (HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-    HEXEDIT_INFO *infoPtr = (HEXEDIT_INFO *)GetWindowLongPtr (hwnd, 0);
+    HEXEDIT_INFO *infoPtr = (HEXEDIT_INFO *)GetWindowLongPtrW(hwnd, 0);
 
     if (!infoPtr && (uMsg != WM_NCCREATE))
-        return DefWindowProc(hwnd, uMsg, wParam, lParam);
+        return DefWindowProcW(hwnd, uMsg, wParam, lParam);
 
     switch (uMsg)
     {
@@ -625,10 +629,10 @@ HexEdit_WindowProc (HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
             return HexEdit_GetData (infoPtr, (INT)wParam, (BYTE *)lParam);
 
 	case WM_CHAR:
-	    return HexEdit_Char (infoPtr, (TCHAR)wParam);
+	    return HexEdit_Char (infoPtr, (WCHAR)wParam);
 
 	case WM_CREATE:
-	    return HexEdit_Create (infoPtr, (LPCREATESTRUCT)lParam);
+	    return HexEdit_Create (infoPtr, (LPCREATESTRUCTW)lParam);
 
 	case WM_DESTROY:
 	    return HexEdit_Destroy (infoPtr);
@@ -652,7 +656,7 @@ HexEdit_WindowProc (HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 	    return HexEdit_LButtonDown (infoPtr);
 
 	case WM_NCCREATE:
-	    return HexEdit_NCCreate (hwnd, (LPCREATESTRUCT)lParam);
+	    return HexEdit_NCCreate (hwnd, (LPCREATESTRUCTW)lParam);
 
 	case WM_PAINT:
 	    HexEdit_Paint(infoPtr);
@@ -668,23 +672,23 @@ HexEdit_WindowProc (HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
             return HexEdit_VScroll (infoPtr, (INT)wParam);
 
 	default:
-	    return DefWindowProc(hwnd, uMsg, wParam, lParam);
+	    return DefWindowProcW(hwnd, uMsg, wParam, lParam);
     }
     return 0;
 }
 
 void HexEdit_Register(void)
 {
-    WNDCLASS wndClass;
+    WNDCLASSW wndClass;
 
-    ZeroMemory(&wndClass, sizeof(WNDCLASS));
+    ZeroMemory(&wndClass, sizeof(WNDCLASSW));
     wndClass.style         = 0;
     wndClass.lpfnWndProc   = HexEdit_WindowProc;
     wndClass.cbClsExtra    = 0;
     wndClass.cbWndExtra    = sizeof(HEXEDIT_INFO *);
     wndClass.hCursor       = NULL;
     wndClass.hbrBackground = NULL;
-    wndClass.lpszClassName = HEXEDIT_CLASS;
+    wndClass.lpszClassName = szHexEditClass;
 
-    RegisterClass(&wndClass);
+    RegisterClassW(&wndClass);
 }

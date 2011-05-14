@@ -27,11 +27,32 @@
 #include <assert.h>
 #include "msvcrt.h"
 #include "winnls.h"
+#include "wtypes.h"
 #include "wine/unicode.h"
 #include "wine/debug.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(msvcrt);
 
+static BOOL n_format_enabled = TRUE;
+
+#include "printf.h"
+#define PRINTF_WIDE
+#include "printf.h"
+#undef PRINTF_WIDE
+
+/* _get_printf_count_output - not exported in native msvcrt */
+int CDECL _get_printf_count_output( void )
+{
+    return n_format_enabled ? 1 : 0;
+}
+
+/* _set_printf_count_output - not exported in native msvcrt */
+int CDECL _set_printf_count_output( int enable )
+{
+    BOOL old = n_format_enabled;
+    n_format_enabled = (enable ? TRUE : FALSE);
+    return old ? 1 : 0;
+}
 
 /*********************************************************************
  *		_wcsdup (MSVCRT.@)
@@ -103,10 +124,10 @@ MSVCRT_wchar_t* CDECL _wcsset( MSVCRT_wchar_t* str, MSVCRT_wchar_t c )
 }
 
 /******************************************************************
- *		_wcsupr_s (MSVCRT.@)
- *
+ *		_wcsupr_s_l (MSVCRT.@)
  */
-INT CDECL MSVCRT__wcsupr_s( MSVCRT_wchar_t* str, MSVCRT_size_t n )
+int CDECL MSVCRT__wcsupr_s_l( MSVCRT_wchar_t* str, MSVCRT_size_t n,
+   MSVCRT__locale_t locale )
 {
   MSVCRT_wchar_t* ptr = str;
 
@@ -120,7 +141,45 @@ INT CDECL MSVCRT__wcsupr_s( MSVCRT_wchar_t* str, MSVCRT_size_t n )
   while (n--)
   {
     if (!*ptr) return 0;
+    /* FIXME: add locale support */
     *ptr = toupperW(*ptr);
+    ptr++;
+  }
+
+  /* MSDN claims that the function should return and set errno to
+   * ERANGE, which doesn't seem to be true based on the tests. */
+  *str = '\0';
+  *MSVCRT__errno() = MSVCRT_EINVAL;
+  return MSVCRT_EINVAL;
+}
+
+/******************************************************************
+ *		_wcsupr_s (MSVCRT.@)
+ *
+ */
+INT CDECL MSVCRT__wcsupr_s( MSVCRT_wchar_t* str, MSVCRT_size_t n )
+{
+  return MSVCRT__wcsupr_s_l( str, n, NULL );
+}
+
+/******************************************************************
+ *		_wcslwr_s (MSVCRT.@)
+ */
+int CDECL MSVCRT__wcslwr_s( MSVCRT_wchar_t* str, MSVCRT_size_t n )
+{
+  MSVCRT_wchar_t* ptr = str;
+
+  if (!str || !n)
+  {
+    if (str) *str = '\0';
+    *MSVCRT__errno() = MSVCRT_EINVAL;
+    return MSVCRT_EINVAL;
+  }
+
+  while (n--)
+  {
+    if (!*ptr) return 0;
+    *ptr = tolowerW(*ptr);
     ptr++;
   }
 
@@ -245,9 +304,9 @@ double CDECL MSVCRT__wcstod_l(const MSVCRT_wchar_t* str, MSVCRT_wchar_t** end,
 }
 
 /*********************************************************************
- *		_wcstombs_l (MSVCRT.@)
+ * wcsrtombs_l (INTERNAL)
  */
-MSVCRT_size_t CDECL MSVCRT__wcstombs_l(char *mbstr, const MSVCRT_wchar_t *wcstr,
+static MSVCRT_size_t CDECL MSVCRT_wcsrtombs_l(char *mbstr, const MSVCRT_wchar_t **wcstr,
         MSVCRT_size_t count, MSVCRT__locale_t locale)
 {
     char default_char = '\0';
@@ -259,14 +318,14 @@ MSVCRT_size_t CDECL MSVCRT__wcstombs_l(char *mbstr, const MSVCRT_wchar_t *wcstr,
 
     if(!mbstr)
         return WideCharToMultiByte(locale->locinfo->lc_codepage, WC_NO_BEST_FIT_CHARS,
-                wcstr, -1, NULL, 0, &default_char, &used_default)-1;
+                *wcstr, -1, NULL, 0, &default_char, &used_default)-1;
 
-    while(*wcstr) {
+    while(**wcstr) {
         char buf[3];
         MSVCRT_size_t i, size;
 
         size = WideCharToMultiByte(locale->locinfo->lc_codepage, WC_NO_BEST_FIT_CHARS,
-                wcstr, 1, buf, 3, &default_char, &used_default);
+                *wcstr, 1, buf, 3, &default_char, &used_default);
         if(used_default)
             return -1;
         if(tmp+size > count)
@@ -274,12 +333,23 @@ MSVCRT_size_t CDECL MSVCRT__wcstombs_l(char *mbstr, const MSVCRT_wchar_t *wcstr,
 
         for(i=0; i<size; i++)
             mbstr[tmp++] = buf[i];
-        wcstr++;
+        (*wcstr)++;
     }
 
-    if(tmp < count)
+    if(tmp < count) {
         mbstr[tmp] = '\0';
+        *wcstr = NULL;
+    }
     return tmp;
+}
+
+/*********************************************************************
+ *		_wcstombs_l (MSVCRT.@)
+ */
+MSVCRT_size_t CDECL MSVCRT__wcstombs_l(char *mbstr, const MSVCRT_wchar_t *wcstr,
+        MSVCRT_size_t count, MSVCRT__locale_t locale)
+{
+    return MSVCRT_wcsrtombs_l(mbstr, &wcstr, count, locale);
 }
 
 /*********************************************************************
@@ -288,26 +358,39 @@ MSVCRT_size_t CDECL MSVCRT__wcstombs_l(char *mbstr, const MSVCRT_wchar_t *wcstr,
 MSVCRT_size_t CDECL MSVCRT_wcstombs(char *mbstr, const MSVCRT_wchar_t *wcstr,
         MSVCRT_size_t count)
 {
-    return MSVCRT__wcstombs_l(mbstr, wcstr, count, NULL);
+    return MSVCRT_wcsrtombs_l(mbstr, &wcstr, count, NULL);
 }
 
 /*********************************************************************
- *		_wcstombs_s_l (MSVCRT.@)
+ *		wcsrtombs (MSVCRT.@)
  */
-MSVCRT_size_t CDECL MSVCRT__wcstombs_s_l(MSVCRT_size_t *ret, char *mbstr,
-        MSVCRT_size_t size, const MSVCRT_wchar_t *wcstr,
+MSVCRT_size_t CDECL MSVCRT_wcsrtombs(char *mbstr, const MSVCRT_wchar_t **wcstr,
+        MSVCRT_size_t count, MSVCRT_mbstate_t *mbstate)
+{
+    if(mbstate)
+        *mbstate = 0;
+
+    return MSVCRT_wcsrtombs_l(mbstr, wcstr, count, NULL);
+}
+
+/*********************************************************************
+ * MSVCRT_wcsrtombs_s_l (INTERNAL)
+ */
+static MSVCRT_size_t MSVCRT_wcsrtombs_s_l(MSVCRT_size_t *ret, char *mbstr,
+        MSVCRT_size_t size, const MSVCRT_wchar_t **wcstr,
         MSVCRT_size_t count, MSVCRT__locale_t locale)
 {
     MSVCRT_size_t conv;
 
-    if(!mbstr && !size) {
-        conv = MSVCRT__wcstombs_l(NULL, wcstr, 0, locale);
+    if(!mbstr && !size && wcstr) {
+        conv = MSVCRT_wcsrtombs_l(NULL, wcstr, 0, locale);
         if(ret)
-            *ret = conv;
+            *ret = conv+1;
         return 0;
     }
 
-    if (!MSVCRT_CHECK_PMT(wcstr != NULL) || !MSVCRT_CHECK_PMT(mbstr != NULL)) {
+    if (!MSVCRT_CHECK_PMT(wcstr != NULL) || !MSVCRT_CHECK_PMT(*wcstr != NULL)
+            || !MSVCRT_CHECK_PMT(mbstr != NULL)) {
         if(mbstr && size)
             mbstr[0] = '\0';
         *MSVCRT__errno() = MSVCRT_EINVAL;
@@ -319,7 +402,7 @@ MSVCRT_size_t CDECL MSVCRT__wcstombs_s_l(MSVCRT_size_t *ret, char *mbstr,
     else
         conv = count;
 
-    conv = MSVCRT__wcstombs_l(mbstr, wcstr, conv, locale);
+    conv = MSVCRT_wcsrtombs_l(mbstr, wcstr, conv, locale);
     if(conv<size)
         mbstr[conv++] = '\0';
     else if(conv==size && (count==MSVCRT__TRUNCATE || mbstr[conv-1]=='\0'))
@@ -338,12 +421,34 @@ MSVCRT_size_t CDECL MSVCRT__wcstombs_s_l(MSVCRT_size_t *ret, char *mbstr,
 }
 
 /*********************************************************************
+ *		_wcstombs_s_l (MSVCRT.@)
+ */
+MSVCRT_size_t CDECL MSVCRT__wcstombs_s_l(MSVCRT_size_t *ret, char *mbstr,
+        MSVCRT_size_t size, const MSVCRT_wchar_t *wcstr,
+        MSVCRT_size_t count, MSVCRT__locale_t locale)
+{
+    return MSVCRT_wcsrtombs_s_l(ret, mbstr, size, &wcstr,count, locale);
+}
+
+/*********************************************************************
  *		wcstombs_s (MSVCRT.@)
  */
 MSVCRT_size_t CDECL MSVCRT_wcstombs_s(MSVCRT_size_t *ret, char *mbstr,
         MSVCRT_size_t size, const MSVCRT_wchar_t *wcstr, MSVCRT_size_t count)
 {
-    return MSVCRT__wcstombs_s_l(ret, mbstr, size, wcstr, count, NULL);
+    return MSVCRT_wcsrtombs_s_l(ret, mbstr, size, &wcstr, count, NULL);
+}
+
+/*********************************************************************
+ *		wcsrtombs_s (MSVCRT.@)
+ */
+MSVCRT_size_t CDECL MSVCRT_wcsrtombs_s(MSVCRT_size_t *ret, char *mbstr, MSVCRT_size_t size,
+        const MSVCRT_wchar_t **wcstr, MSVCRT_size_t count, MSVCRT_mbstate_t *mbstate)
+{
+    if(mbstate)
+        *mbstate = 0;
+
+    return MSVCRT_wcsrtombs_s_l(ret, mbstr, size, wcstr, count, NULL);
 }
 
 /*********************************************************************
@@ -370,689 +475,36 @@ double CDECL MSVCRT__wtof_l(const MSVCRT_wchar_t *str, MSVCRT__locale_t locale)
     return MSVCRT__wcstod_l(str, NULL, locale);
 }
 
-typedef struct pf_flags_t
-{
-    char Sign, LeftAlign, Alternate, PadZero;
-    int FieldLength, Precision;
-    char IntegerLength, IntegerDouble;
-    char WideString;
-    char Format;
-} pf_flags;
-
-static inline BOOL pf_is_auto_grow(pf_output *out)
-{
-    return (out->unicode) ? !!out->grow.W : !!out->grow.A;
-}
-
-static inline int pf_check_auto_grow(pf_output *out, unsigned delta)
-{
-    if (pf_is_auto_grow(out) && out->used + delta > out->len)
-    {
-        out->len = max(out->len * 2, out->used + delta);
-        if (out->unicode)
-        {
-            if (out->buf.W != out->grow.W)
-                out->buf.W = MSVCRT_realloc(out->buf.W, out->len * sizeof(WCHAR));
-            else
-                out->buf.W = MSVCRT_malloc(out->len * sizeof(WCHAR));
-            if (!out->buf.W) return -1;
-        }
-        else
-        {
-            if (out->buf.A != out->grow.A)
-                out->buf.A = MSVCRT_realloc(out->buf.A, out->len * sizeof(char));
-            else
-                out->buf.A = MSVCRT_malloc(out->len * sizeof(char));
-            if (!out->buf.A) return -1;
-        }
-    }
-    return 0;
-}
-
-/*
- * writes a string of characters to the output
- * returns -1 if the string doesn't fit in the output buffer
- * return the length of the string if all characters were written
+/*********************************************************************
+ * arg_clbk_valist (INTERNAL)
  */
-static inline int pf_output_stringW( pf_output *out, LPCWSTR str, int len )
+printf_arg arg_clbk_valist(void *ctx, int arg_pos, int type, __ms_va_list *valist)
 {
-    int space;
+    printf_arg ret;
 
-    if( len < 0 )
-        len = strlenW( str );
-    if( out->unicode )
-    {
-        LPWSTR p;
-
-        if(pf_check_auto_grow(out, len) == -1) return -1;
-        space = out->len - out->used;
-        p = out->buf.W + out->used;
-        if( space >= len )
-        {
-            if (out->buf.W) memcpy( p, str, len*sizeof(WCHAR) );
-            out->used += len;
-            return len;
-        }
-        if( space > 0 && out->buf.W )
-            memcpy( p, str, space*sizeof(WCHAR) );
-        out->used += len;
-    }
-    else
-    {
-        int n = WideCharToMultiByte( CP_ACP, 0, str, len, NULL, 0, NULL, NULL );
-        LPSTR p;
-
-        if(pf_check_auto_grow(out, n) == -1) return -1;
-        space = out->len - out->used;
-        p = out->buf.A + out->used;
-        if( space >= n )
-        {
-            if (out->buf.A) WideCharToMultiByte( CP_ACP, 0, str, len, p, n, NULL, NULL );
-            out->used += n;
-            return len;
-        }
-        if( space > 0 && out->buf.A )
-            WideCharToMultiByte( CP_ACP, 0, str, len, p, space, NULL, NULL );
-        out->used += n;
-    }
-    return -1;
-}
-
-static inline int pf_output_stringA( pf_output *out, LPCSTR str, int len )
-{
-    int space;
-
-    if( len < 0 )
-        len = strlen( str );
-    if( !out->unicode )
-    {
-        LPSTR p;
-
-        if (pf_check_auto_grow(out, len) == -1) return -1;
-        p = out->buf.A + out->used;
-        space = out->len - out->used;
-        if( space >= len )
-        {
-            if (out->buf.A) memcpy( p, str, len );
-            out->used += len;
-            return len;
-        }
-        if( space > 0 && out->buf.A )
-            memcpy( p, str, space );
-        out->used += len;
-    }
-    else
-    {
-        int n = MultiByteToWideChar( CP_ACP, 0, str, len, NULL, 0 );
-        LPWSTR p;
-
-        if (pf_check_auto_grow(out, n) == -1) return -1;
-        p = out->buf.W + out->used;
-        space = out->len - out->used;
-        if( space >= n )
-        {
-            if (out->buf.W) MultiByteToWideChar( CP_ACP, 0, str, len, p, n );
-            out->used += n;
-            return len;
-        }
-        if( space > 0 && out->buf.W )
-            MultiByteToWideChar( CP_ACP, 0, str, len, p, space );
-        out->used += n;
-    }
-    return -1;
-}
-
-/* pf_fill: takes care of signs, alignment, zero and field padding */
-static inline int pf_fill( pf_output *out, int len, pf_flags *flags, char left )
-{
-    int i, r = 0;
-
-    if( flags->Sign && !( flags->Format == 'd' || flags->Format == 'i' ) )
-        flags->Sign = 0;
-
-    if( left && flags->Sign )
-    {
-        flags->FieldLength--;
-        if( flags->PadZero )
-            r = pf_output_stringA( out, &flags->Sign, 1 );
+    if(type == VT_I8)
+        ret.get_longlong = va_arg(*valist, LONGLONG);
+    else if(type == VT_INT)
+        ret.get_int = va_arg(*valist, int);
+    else if(type == VT_R8)
+        ret.get_double = va_arg(*valist, double);
+    else if(type == VT_PTR)
+        ret.get_ptr = va_arg(*valist, void*);
+    else {
+        ERR("Incorrect type\n");
+        ret.get_int = 0;
     }
 
-    if( ( !left &&  flags->LeftAlign ) || 
-        (  left && !flags->LeftAlign ))
-    {
-        for( i=0; (i<(flags->FieldLength-len)) && (r>=0); i++ )
-        {
-            if( left && flags->PadZero )
-                r = pf_output_stringA( out, "0", 1 );
-            else
-                r = pf_output_stringA( out, " ", 1 );
-        }
-    }
-
-    if( left && flags->Sign && !flags->PadZero )
-        r = pf_output_stringA( out, &flags->Sign, 1 );
-
-    return r;
-}
-
-static inline int pf_output_format_W( pf_output *out, LPCWSTR str,
-                                      int len, pf_flags *flags )
-{
-    int r = 0;
-
-    if( len < 0 )
-        len = strlenW( str );
-
-    if (flags->Precision >= 0 && flags->Precision < len)
-        len = flags->Precision;
-
-    r = pf_fill( out, len, flags, 1 );
-
-    if( r>=0 )
-        r = pf_output_stringW( out, str, len );
-
-    if( r>=0 )
-        r = pf_fill( out, len, flags, 0 );
-
-    return r;
-}
-
-static inline int pf_output_format_A( pf_output *out, LPCSTR str,
-                                      int len, pf_flags *flags )
-{
-    int r = 0;
-
-    if( len < 0 )
-        len = strlen( str );
-
-    if (flags->Precision >= 0 && flags->Precision < len)
-        len = flags->Precision;
-
-    r = pf_fill( out, len, flags, 1 );
-
-    if( r>=0 )
-        r = pf_output_stringA( out, str, len );
-
-    if( r>=0 )
-        r = pf_fill( out, len, flags, 0 );
-
-    return r;
-}
-
-static int pf_handle_string_format( pf_output *out, const void* str, int len,
-                             pf_flags *flags, BOOL capital_letter)
-{
-     if(str == NULL)  /* catch NULL pointer */
-        return pf_output_format_A( out, "(null)", -1, flags);
-
-     /* prefixes take priority over %c,%s vs. %C,%S, so we handle them first */
-    if(flags->WideString || flags->IntegerLength == 'l')
-        return pf_output_format_W( out, str, len, flags);
-    if(flags->IntegerLength == 'h')
-        return pf_output_format_A( out, str, len, flags);
-
-    /* %s,%c ->  chars in ansi functions & wchars in unicode
-     * %S,%C -> wchars in ansi functions &  chars in unicode */
-    if( capital_letter == out->unicode) /* either both TRUE or both FALSE */
-        return pf_output_format_A( out, str, len, flags);
-    else
-        return pf_output_format_W( out, str, len, flags);
-}
-
-static inline BOOL pf_is_integer_format( char fmt )
-{
-    static const char float_fmts[] = "diouxX";
-    if (!fmt)
-        return FALSE;
-    return strchr( float_fmts, fmt ) ? TRUE : FALSE;
-}
-
-static inline BOOL pf_is_double_format( char fmt )
-{
-    static const char float_fmts[] = "aeEfgG";
-    if (!fmt)
-        return FALSE;
-    return strchr( float_fmts, fmt ) ? TRUE : FALSE;
-}
-
-static inline BOOL pf_is_valid_format( char fmt )
-{
-    static const char float_fmts[] = "acCdeEfgGinouxX";
-    if (!fmt)
-        return FALSE;
-    return strchr( float_fmts, fmt ) ? TRUE : FALSE;
-}
-
-static void pf_rebuild_format_string( char *p, pf_flags *flags )
-{
-    *p++ = '%';
-    if( flags->Sign )
-        *p++ = flags->Sign;
-    if( flags->LeftAlign )
-        *p++ = flags->LeftAlign;
-    if( flags->Alternate )
-        *p++ = flags->Alternate;
-    if( flags->PadZero )
-        *p++ = flags->PadZero;
-    if( flags->FieldLength )
-    {
-        sprintf(p, "%d", flags->FieldLength);
-        p += strlen(p);
-    }
-    if( flags->Precision >= 0 )
-    {
-        sprintf(p, ".%d", flags->Precision);
-        p += strlen(p);
-    }
-    *p++ = flags->Format;
-    *p++ = 0;
-}
-
-/* pf_integer_conv:  prints x to buf, including alternate formats and
-   additional precision digits, but not field characters or the sign */
-static void pf_integer_conv( char *buf, int buf_len, pf_flags *flags,
-                             LONGLONG x )
-{
-    unsigned int base;
-    const char *digits;
-
-    int i, j, k;
-    char number[40], *tmp = number;
-
-    if( buf_len > sizeof number )
-        tmp = HeapAlloc( GetProcessHeap(), 0, buf_len );
-
-    base = 10;
-    if( flags->Format == 'o' )
-        base = 8;
-    else if( flags->Format == 'x' || flags->Format == 'X' )
-        base = 16;
-
-    if( flags->Format == 'X' )
-        digits = "0123456789ABCDEFX";
-    else
-        digits = "0123456789abcdefx";
-
-    if( x < 0 && ( flags->Format == 'd' || flags->Format == 'i' ) )
-    {
-        x = -x;
-        flags->Sign = '-';
-    }
-
-    /* Do conversion (backwards) */
-    i = 0;
-    if( x == 0 && flags->Precision )
-        tmp[i++] = '0';
-    else
-        while( x != 0 )
-        {
-            j = (ULONGLONG) x % base;
-            x = (ULONGLONG) x / base;
-            tmp[i++] = digits[j];
-        }
-    k = flags->Precision - i;
-    while( k-- > 0 )
-        tmp[i++] = '0';
-    if( flags->Alternate )
-    {
-        if( base == 16 )
-        {
-            tmp[i++] = digits[16];
-            tmp[i++] = '0';
-        }
-        else if( base == 8 && tmp[i-1] != '0' )
-            tmp[i++] = '0';
-    }
-
-    /* Reverse for buf */
-    j = 0;
-    while( i-- > 0 )
-        buf[j++] = tmp[i];
-    buf[j] = '\0';
-
-    /* Adjust precision so pf_fill won't truncate the number later */
-    flags->Precision = strlen( buf );
-
-    if( tmp != number )
-        HeapFree( GetProcessHeap(), 0, tmp );
-
-    return;
-}
-
-/* pf_fixup_exponent: convert a string containing a 2 digit exponent
-   to 3 digits, accounting for padding, in place. Needed to match
-   the native printf's which always use 3 digits. */
-static void pf_fixup_exponent( char *buf )
-{
-    char* tmp = buf;
-
-    while (tmp[0] && toupper(tmp[0]) != 'E')
-        tmp++;
-
-    if (tmp[0] && (tmp[1] == '+' || tmp[1] == '-') &&
-        isdigit(tmp[2]) && isdigit(tmp[3]))
-    {
-        char final;
-
-        if (isdigit(tmp[4]))
-            return; /* Exponent already 3 digits */
-
-        /* We have a 2 digit exponent. Prepend '0' to make it 3 */
-        tmp += 2;
-        final = tmp[2];
-        tmp[2] = tmp[1];
-        tmp[1] = tmp[0];
-        tmp[0] = '0';
-        if (final == '\0')
-        {
-            /* We didn't expand into trailing space, so this string isn't left
-             * justified. Terminate the string and strip a ' ' at the start of
-             * the string if there is one (as there may be if the string is
-             * right justified).
-             */
-            tmp[3] = '\0';
-            if (buf[0] == ' ')
-                memmove(buf, buf + 1, (tmp - buf) + 3);
-        }
-        /* Otherwise, we expanded into trailing space -> nothing to do */
-    }
+    return ret;
 }
 
 /*********************************************************************
- *  pf_vsnprintf  (INTERNAL)
- *
- *  implements both A and W vsnprintf functions
+ * arg_clbk_positional (INTERNAL)
  */
-int pf_vsnprintf( pf_output *out, const WCHAR *format,
-                  MSVCRT__locale_t locale, BOOL valid, __ms_va_list valist )
+static printf_arg arg_clbk_positional(void *ctx, int pos, int type, __ms_va_list *valist)
 {
-    int r;
-    LPCWSTR q, p = format;
-    pf_flags flags;
-
-    if(!locale)
-        locale = get_locale();
-
-    TRACE("format is %s\n",debugstr_w(format));
-    while (*p)
-    {
-        q = strchrW( p, '%' );
-
-        /* there's no % characters left, output the rest of the string */
-        if( !q )
-        {
-            r = pf_output_stringW(out, p, -1);
-            if( r<0 )
-                return r;
-            p += r;
-            continue;
-        }
-
-        /* there's characters before the %, output them */
-        if( q != p )
-        {
-            r = pf_output_stringW(out, p, q - p);
-            if( r<0 )
-                return r;
-            p = q;
-        }
-
-        /* we must be at a % now, skip over it */
-        assert( *p == '%' );
-        p++;
-
-        /* output a single % character */
-        if( *p == '%' )
-        {
-            r = pf_output_stringW(out, p++, 1);
-            if( r<0 )
-                return r;
-            continue;
-        }
-
-        /* parse the flags */
-        memset( &flags, 0, sizeof flags );
-        while (*p)
-        {
-            if( *p == '+' || *p == ' ' )
-            {
-                if ( flags.Sign != '+' )
-                    flags.Sign = *p;
-            }
-            else if( *p == '-' )
-                flags.LeftAlign = *p;
-            else if( *p == '0' )
-                flags.PadZero = *p;
-            else if( *p == '#' )
-                flags.Alternate = *p;
-            else
-                break;
-            p++;
-        }
-
-        /* deal with the field width specifier */
-        flags.FieldLength = 0;
-        if( *p == '*' )
-        {
-            flags.FieldLength = va_arg( valist, int );
-            if (flags.FieldLength < 0)
-            {
-                flags.LeftAlign = '-';
-                flags.FieldLength = -flags.FieldLength;
-            }
-            p++;
-        }
-        else while( isdigit(*p) )
-        {
-            flags.FieldLength *= 10;
-            flags.FieldLength += *p++ - '0';
-        }
-
-        /* deal with precision */
-        flags.Precision = -1;
-        if( *p == '.' )
-        {
-            flags.Precision = 0;
-            p++;
-            if( *p == '*' )
-            {
-                flags.Precision = va_arg( valist, int );
-                p++;
-            }
-            else while( isdigit(*p) )
-            {
-                flags.Precision *= 10;
-                flags.Precision += *p++ - '0';
-            }
-        }
-
-        /* deal with integer width modifier */
-        while( *p )
-        {
-            if( *p == 'l' && *(p+1) == 'l' )
-            {
-                flags.IntegerDouble++;
-                p += 2;
-            }
-            else if( *p == 'h' || *p == 'l' || *p == 'L' )
-            {
-                flags.IntegerLength = *p;
-                p++;
-            }
-            else if( *p == 'I' )
-            {
-                if( *(p+1) == '6' && *(p+2) == '4' )
-                {
-                    flags.IntegerDouble++;
-                    p += 3;
-                }
-                else if( *(p+1) == '3' && *(p+2) == '2' )
-                    p += 3;
-                else if( isdigit(*(p+1)) || *(p+1) == 0 )
-                    break;
-                else
-                    p++;
-            }
-            else if( *p == 'w' )
-                flags.WideString = *p++;
-            else if( *p == 'F' )
-                p++; /* ignore */
-            else
-                break;
-        }
-
-        flags.Format = *p;
-        r = 0;
-
-        if (flags.Format == '$')
-        {
-            FIXME("Positional parameters are not supported (%s)\n", wine_dbgstr_w(format));
-            return -1;
-        }
-        /* output a string */
-        if(  flags.Format == 's' || flags.Format == 'S' )
-            r = pf_handle_string_format( out, va_arg(valist, const void*), -1,
-                                         &flags, (flags.Format == 'S') );
-
-        /* output a single character */
-        else if( flags.Format == 'c' || flags.Format == 'C' )
-        {
-            INT ch = va_arg( valist, int );
-
-            r = pf_handle_string_format( out, &ch, 1, &flags, (flags.Format == 'C') );
-        }
-
-        /* output a pointer */
-        else if( flags.Format == 'p' )
-        {
-            char pointer[32];
-            void *ptr = va_arg( valist, void * );
-
-            flags.PadZero = 0;
-            if( flags.Alternate )
-                sprintf(pointer, "0X%0*lX", 2 * (int)sizeof(ptr), (ULONG_PTR)ptr);
-            else
-                sprintf(pointer, "%0*lX", 2 * (int)sizeof(ptr), (ULONG_PTR)ptr);
-            r = pf_output_format_A( out, pointer, -1, &flags );
-        }
-
-        /* deal with %n */
-        else if( flags.Format == 'n' )
-        {
-            int *x = va_arg(valist, int *);
-            *x = out->used;
-        }
-
-        /* deal with 64-bit integers */
-        else if( pf_is_integer_format( flags.Format ) && flags.IntegerDouble )
-        {
-            char number[40], *x = number;
-
-            /* Estimate largest possible required buffer size:
-               * Chooses the larger of the field or precision
-               * Includes extra bytes: 1 byte for null, 1 byte for sign,
-                 4 bytes for exponent, 2 bytes for alternate formats, 1 byte 
-                 for a decimal, and 1 byte for an additional float digit. */
-            int x_len = ((flags.FieldLength > flags.Precision) ? 
-                        flags.FieldLength : flags.Precision) + 10;
-
-            if( x_len >= sizeof number)
-                x = HeapAlloc( GetProcessHeap(), 0, x_len );
-
-            pf_integer_conv( x, x_len, &flags, va_arg(valist, LONGLONG) );
-
-            r = pf_output_format_A( out, x, -1, &flags );
-            if( x != number )
-                HeapFree( GetProcessHeap(), 0, x );
-        }
-
-        /* deal with integers and floats using libc's printf */
-        else if( pf_is_valid_format( flags.Format ) )
-        {
-            char fmt[20], number[40], *x = number, *decimal_point;
-
-            /* Estimate largest possible required buffer size:
-               * Chooses the larger of the field or precision
-               * Includes extra bytes: 1 byte for null, 1 byte for sign,
-                 4 bytes for exponent, 2 bytes for alternate formats, 1 byte 
-                 for a decimal, and 1 byte for an additional float digit. */
-            int x_len = ((flags.FieldLength > flags.Precision) ? 
-                        flags.FieldLength : flags.Precision) + 10;
-
-            if( x_len >= sizeof number)
-                x = HeapAlloc( GetProcessHeap(), 0, x_len );
-
-            pf_rebuild_format_string( fmt, &flags );
-
-            if( pf_is_double_format( flags.Format ) )
-            {
-                sprintf( x, fmt, va_arg(valist, double) );
-                if (toupper(flags.Format) == 'E' || toupper(flags.Format) == 'G')
-                    pf_fixup_exponent( x );
-            }
-            else
-                sprintf( x, fmt, va_arg(valist, int) );
-
-            decimal_point = strchr(x, '.');
-            if(decimal_point)
-                *decimal_point = *locale->locinfo->lconv->decimal_point;
-
-            r = pf_output_stringA( out, x, -1 );
-            if( x != number )
-                HeapFree( GetProcessHeap(), 0, x );
-            if(r < 0)
-                return r;
-        }
-        else
-        {
-            if( valid )
-            {
-                MSVCRT__invalid_parameter( NULL, NULL, NULL, 0, 0 );
-                *MSVCRT__errno() = MSVCRT_EINVAL;
-                return -1;
-            }
-
-            continue;
-        }
-
-        if( r<0 )
-            return r;
-        p++;
-    }
-
-    /* check we reached the end, and null terminate the string */
-    assert( *p == 0 );
-    pf_output_stringW( out, p, 1 );
-
-    return out->used - 1;
-}
-
-/*********************************************************************
- * vsnprintf_internal (INTERNAL)
- */
-static inline int vsnprintf_internal( char *str, MSVCRT_size_t len, const char *format,
-        MSVCRT__locale_t locale, BOOL valid, __ms_va_list valist )
-{
-    DWORD sz;
-    LPWSTR formatW = NULL;
-    pf_output out;
-    int r;
-
-    out.unicode = FALSE;
-    out.buf.A = str;
-    out.grow.A = NULL;
-    out.used = 0;
-    out.len = len;
-
-    sz = MultiByteToWideChar( CP_ACP, 0, format, -1, NULL, 0 );
-    formatW = HeapAlloc( GetProcessHeap(), 0, sz*sizeof(WCHAR) );
-    MultiByteToWideChar( CP_ACP, 0, format, -1, formatW, sz );
-
-    r = pf_vsnprintf( &out, formatW, locale, valid, valist );
-
-    HeapFree( GetProcessHeap(), 0, formatW );
-
-    return r;
+    printf_arg *args = ctx;
+    return args[pos];
 }
 
 /*********************************************************************
@@ -1061,7 +513,14 @@ static inline int vsnprintf_internal( char *str, MSVCRT_size_t len, const char *
 int CDECL MSVCRT_vsnprintf( char *str, MSVCRT_size_t len,
                             const char *format, __ms_va_list valist )
 {
-    return vsnprintf_internal(str, len, format, NULL, FALSE, valist);
+    static const char nullbyte = '\0';
+    struct _str_ctx_a ctx = {len, str};
+    int ret;
+
+    ret = pf_printf_a(puts_clbk_str_a, &ctx, format, NULL, FALSE, FALSE,
+            arg_clbk_valist, NULL, &valist);
+    puts_clbk_str_a(&ctx, 1, &nullbyte);
+    return ret;
 }
 
 /*********************************************************************
@@ -1070,7 +529,14 @@ int CDECL MSVCRT_vsnprintf( char *str, MSVCRT_size_t len,
 int CDECL MSVCRT_vsnprintf_l( char *str, MSVCRT_size_t len, const char *format,
                             MSVCRT__locale_t locale, __ms_va_list valist )
 {
-    return vsnprintf_internal(str, len, format, locale, FALSE, valist);
+    static const char nullbyte = '\0';
+    struct _str_ctx_a ctx = {len, str};
+    int ret;
+
+    ret = pf_printf_a(puts_clbk_str_a, &ctx, format, locale, FALSE, FALSE,
+            arg_clbk_valist, NULL, &valist);
+    puts_clbk_str_a(&ctx, 1, &nullbyte);
+    return ret;
 }
 
 /*********************************************************************
@@ -1080,6 +546,8 @@ int CDECL MSVCRT_vsnprintf_s_l( char *str, MSVCRT_size_t sizeOfBuffer,
         MSVCRT_size_t count, const char *format,
         MSVCRT__locale_t locale, __ms_va_list valist )
 {
+    static const char nullbyte = '\0';
+    struct _str_ctx_a ctx;
     int len, ret;
 
     if(sizeOfBuffer<count+1 || count==-1)
@@ -1087,7 +555,11 @@ int CDECL MSVCRT_vsnprintf_s_l( char *str, MSVCRT_size_t sizeOfBuffer,
     else
         len = count+1;
 
-    ret = vsnprintf_internal(str, len, format, locale, TRUE, valist);
+    ctx.len = len;
+    ctx.buf = str;
+    ret = pf_printf_a(puts_clbk_str_a, &ctx, format, locale, FALSE, TRUE,
+            arg_clbk_valist, NULL, &valist);
+    puts_clbk_str_a(&ctx, 1, &nullbyte);
 
     if(ret<0 || ret==len) {
         if(count!=MSVCRT__TRUNCATE && count>sizeOfBuffer) {
@@ -1177,30 +649,19 @@ int CDECL MSVCRT__scprintf(const char *format, ...)
 }
 
 /*********************************************************************
- * vsnwprintf_internal (INTERNAL)
- */
-static inline int vsnwprintf_internal(MSVCRT_wchar_t *str, MSVCRT_size_t len,
-        const MSVCRT_wchar_t *format, MSVCRT__locale_t locale, BOOL valid,
-        __ms_va_list valist)
-{
-    pf_output out;
-
-    out.unicode = TRUE;
-    out.buf.W = str;
-    out.grow.W = NULL;
-    out.used = 0;
-    out.len = len;
-
-    return pf_vsnprintf( &out, format, locale, valid, valist );
-}
-
-/*********************************************************************
  *              _vsnwprintf (MSVCRT.@)
  */
 int CDECL MSVCRT_vsnwprintf(MSVCRT_wchar_t *str, MSVCRT_size_t len,
         const MSVCRT_wchar_t *format, __ms_va_list valist)
 {
-    return vsnwprintf_internal(str, len, format, NULL, FALSE, valist);
+    static const MSVCRT_wchar_t nullbyte = '\0';
+    struct _str_ctx_w ctx = {len, str};
+    int ret;
+
+    ret = pf_printf_w(puts_clbk_str_w, &ctx, format, NULL, FALSE, FALSE,
+            arg_clbk_valist, NULL, &valist);
+    puts_clbk_str_w(&ctx, 1, &nullbyte);
+    return ret;
 }
 
 /*********************************************************************
@@ -1210,7 +671,14 @@ int CDECL MSVCRT_vsnwprintf_l(MSVCRT_wchar_t *str, MSVCRT_size_t len,
         const MSVCRT_wchar_t *format, MSVCRT__locale_t locale,
         __ms_va_list valist)
 {
-        return vsnwprintf_internal(str, len, format, locale, FALSE, valist);
+    static const MSVCRT_wchar_t nullbyte = '\0';
+    struct _str_ctx_w ctx = {len, str};
+    int ret;
+
+    ret = pf_printf_w(puts_clbk_str_w, &ctx, format, locale, FALSE, FALSE,
+            arg_clbk_valist, NULL, &valist);
+    puts_clbk_str_w(&ctx, 1, &nullbyte);
+    return ret;
 }
 
 /*********************************************************************
@@ -1220,13 +688,19 @@ int CDECL MSVCRT_vsnwprintf_s_l( MSVCRT_wchar_t *str, MSVCRT_size_t sizeOfBuffer
         MSVCRT_size_t count, const MSVCRT_wchar_t *format,
         MSVCRT__locale_t locale, __ms_va_list valist)
 {
+    static const MSVCRT_wchar_t nullbyte = '\0';
+    struct _str_ctx_w ctx;
     int len, ret;
 
     len = sizeOfBuffer;
     if(count!=-1 && len>count+1)
         len = count+1;
 
-    ret = vsnwprintf_internal(str, len, format, locale, TRUE, valist);
+    ctx.len = len;
+    ctx.buf = str;
+    ret = pf_printf_w(puts_clbk_str_w, &ctx, format, locale, FALSE, TRUE,
+            arg_clbk_valist, NULL, &valist);
+    puts_clbk_str_w(&ctx, 1, &nullbyte);
 
     if(ret<0 || ret==len) {
         if(count!=MSVCRT__TRUNCATE && count>sizeOfBuffer) {
@@ -1387,6 +861,105 @@ int CDECL MSVCRT_vswprintf_s_l(MSVCRT_wchar_t* str, MSVCRT_size_t numberOfElemen
 }
 
 /*********************************************************************
+ *		_vsprintf_p_l (MSVCRT.@)
+ */
+int CDECL MSVCRT_vsprintf_p_l(char *buffer, MSVCRT_size_t length, const char *format,
+        MSVCRT__locale_t locale, __ms_va_list args)
+{
+    static const char nullbyte = '\0';
+    printf_arg args_ctx[MSVCRT__ARGMAX+1];
+    struct _str_ctx_a puts_ctx = {length, buffer};
+    int ret;
+
+    memset(args_ctx, 0, sizeof(args_ctx));
+
+    ret = create_positional_ctx_a(args_ctx, format, args);
+    if(ret < 0) {
+        MSVCRT__invalid_parameter(NULL, NULL, NULL, 0, 0);
+        *MSVCRT__errno() = MSVCRT_EINVAL;
+        return ret;
+    } else if(ret == 0)
+        ret = pf_printf_a(puts_clbk_str_a, &puts_ctx, format, locale, FALSE, TRUE,
+                arg_clbk_valist, NULL, &args);
+    else
+        ret = pf_printf_a(puts_clbk_str_a, &puts_ctx, format, locale, TRUE, TRUE,
+                arg_clbk_positional, args_ctx, NULL);
+
+    puts_clbk_str_a(&puts_ctx, 1, &nullbyte);
+    return ret;
+}
+
+/*********************************************************************
+ *		_vsprintf_p (MSVCRT.@)
+ */
+int CDECL MSVCRT_vsprintf_p(char *buffer, MSVCRT_size_t length,
+        const char *format, __ms_va_list args)
+{
+    return MSVCRT_vsprintf_p_l(buffer, length, format, NULL, args);
+}
+
+/*********************************************************************
+ *		_sprintf_p_l (MSVCRT.@)
+ */
+int CDECL MSVCRT_sprintf_p_l(char *buffer, MSVCRT_size_t length,
+        const char *format, MSVCRT__locale_t locale, ...)
+{
+    __ms_va_list valist;
+    int r;
+
+    __ms_va_start(valist, locale);
+    r = MSVCRT_vsprintf_p_l(buffer, length, format, locale, valist);
+    __ms_va_end(valist);
+
+    return r;
+}
+
+/*********************************************************************
+ *		_vswprintf_p_l (MSVCRT.@)
+ */
+int CDECL MSVCRT_vswprintf_p_l(MSVCRT_wchar_t *buffer, MSVCRT_size_t length,
+        const MSVCRT_wchar_t *format, MSVCRT__locale_t locale, __ms_va_list args)
+{
+    static const MSVCRT_wchar_t nullbyte = '\0';
+    printf_arg args_ctx[MSVCRT__ARGMAX+1];
+    struct _str_ctx_w puts_ctx = {length, buffer};
+    int ret;
+
+    memset(args_ctx, 0, sizeof(args_ctx));
+
+    ret = create_positional_ctx_w(args_ctx, format, args);
+    if(ret < 0)  {
+        MSVCRT__invalid_parameter(NULL, NULL, NULL, 0, 0);
+        *MSVCRT__errno() = MSVCRT_EINVAL;
+        return ret;
+    } else if(ret == 0)
+        ret = pf_printf_w(puts_clbk_str_w, &puts_ctx, format, locale, TRUE, TRUE,
+                arg_clbk_valist, NULL, &args);
+    else
+        ret = pf_printf_w(puts_clbk_str_w, &puts_ctx, format, locale, TRUE, TRUE,
+                arg_clbk_positional, args_ctx, NULL);
+
+    puts_clbk_str_w(&puts_ctx, 1, &nullbyte);
+    return ret;
+}
+
+/*********************************************************************
+ *		_swprintf_p_l (MSVCRT.@)
+ */
+int CDECL MSVCRT_swprintf_p_l(MSVCRT_wchar_t *buffer, MSVCRT_size_t length,
+        const MSVCRT_wchar_t *format, MSVCRT__locale_t locale, ...)
+{
+    __ms_va_list valist;
+    int r;
+
+    __ms_va_start(valist, locale);
+    r = MSVCRT_vswprintf_p_l(buffer, length, format, locale, valist);
+    __ms_va_end(valist);
+
+    return r;
+}
+
+/*********************************************************************
  *		wcscoll (MSVCRT.@)
  */
 int CDECL MSVCRT_wcscoll( const MSVCRT_wchar_t* str1, const MSVCRT_wchar_t* str2 )
@@ -1443,11 +1016,26 @@ MSVCRT_wchar_t * CDECL MSVCRT_wcstok( MSVCRT_wchar_t *str, const MSVCRT_wchar_t 
 }
 
 /*********************************************************************
+ *		wctob (MSVCRT.@)
+ */
+INT CDECL MSVCRT_wctob( MSVCRT_wint_t wchar )
+{
+    MSVCRT__locale_t locale = get_locale();
+    char out;
+    BOOL error;
+
+    if(WideCharToMultiByte( locale->locinfo->lc_codepage, 0, &wchar, 1, &out, 1, NULL, &error ) && !error)
+        return (INT)out;
+    return MSVCRT_EOF;
+}
+
+/*********************************************************************
  *		wctomb (MSVCRT.@)
  */
 INT CDECL MSVCRT_wctomb( char *dst, MSVCRT_wchar_t ch )
 {
-  return WideCharToMultiByte( CP_ACP, 0, &ch, 1, dst, 6, NULL, NULL );
+    MSVCRT__locale_t locale = get_locale();
+    return WideCharToMultiByte( locale->locinfo->lc_codepage, 0, &ch, 1, dst, 6, NULL, NULL );
 }
 
 /*********************************************************************
@@ -1678,7 +1266,7 @@ INT CDECL MSVCRT_wcsncat_s(MSVCRT_wchar_t *dst, MSVCRT_size_t elem,
     if (srclen < (elem - dststart))
     {
         memcpy(&dst[dststart], src, srclen*sizeof(MSVCRT_wchar_t));
-        dst[srclen] = '\0';
+        dst[dststart+srclen] = '\0';
         return ret;
     }
     MSVCRT_INVALID_PMT("dst[elem] is too small");
@@ -1856,4 +1444,20 @@ MSVCRT_size_t CDECL MSVCRT_wcsnlen(const MSVCRT_wchar_t *s, MSVCRT_size_t maxlen
     for (i = 0; i < maxlen; i++)
         if (!s[i]) break;
     return i;
+}
+
+/*********************************************************************
+ *              _towupper_l (MSVCRT.@)
+ */
+int CDECL MSVCRT__towupper_l(MSVCRT_wint_t c, MSVCRT__locale_t locale)
+{
+    return toupperW(c);
+}
+
+/*********************************************************************
+ *              _towlower_l (MSVCRT.@)
+ */
+int CDECL MSVCRT__towlower_l(MSVCRT_wint_t c, MSVCRT__locale_t locale)
+{
+    return tolowerW(c);
 }

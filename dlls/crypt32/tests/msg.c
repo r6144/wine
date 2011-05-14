@@ -365,6 +365,8 @@ static BOOL WINAPI nop_stream_output(const void *pvArg, BYTE *pb, DWORD cb,
     return TRUE;
 }
 
+static const BYTE dataEmptyBareContent[] = { 0x04,0x00 };
+
 static void test_data_msg_update(void)
 {
     HCRYPTMSG msg;
@@ -390,20 +392,35 @@ static void test_data_msg_update(void)
 
     msg = CryptMsgOpenToEncode(PKCS_7_ASN_ENCODING, 0, CMSG_DATA, NULL, NULL,
      NULL);
-    /* Can't update a message with no data */
-    SetLastError(0xdeadbeef);
+    /* Starting with Vista, can update a message with no data. */
     ret = CryptMsgUpdate(msg, NULL, 0, TRUE);
-    /* This test returns FALSE on XP and earlier but TRUE on Vista, so can't be tested.
-     * GetLastError is either E_INVALIDARG (NT) or unset (9x/Vista), so it doesn't
-     * make sense to test this.
-     */
+    ok(ret || broken(!ret), "CryptMsgUpdate failed: %08x\n", GetLastError());
+    if (ret)
+    {
+        DWORD size;
 
-    /* Curiously, a valid update will now fail as well, presumably because of
-     * the last (invalid, but final) update.
-     */
-    ret = CryptMsgUpdate(msg, msgData, sizeof(msgData), TRUE);
-    ok(!ret && GetLastError() == CRYPT_E_MSG_ERROR,
-     "Expected CRYPT_E_MSG_ERROR, got %x\n", GetLastError());
+        ret = CryptMsgGetParam(msg, CMSG_BARE_CONTENT_PARAM, 0, NULL, &size);
+        ok(ret, "CryptMsgGetParam failed: %08x\n", GetLastError());
+        if (ret)
+        {
+            LPBYTE buf = CryptMemAlloc(size);
+
+            if (buf)
+            {
+                ret = CryptMsgGetParam(msg, CMSG_BARE_CONTENT_PARAM, 0, buf,
+                 &size);
+                ok(ret, "CryptMsgGetParam failed: %08x\n", GetLastError());
+                if (ret)
+                {
+                    ok(size == sizeof(dataEmptyBareContent),
+                     "unexpected size %d\n", size);
+                    ok(!memcmp(buf, dataEmptyBareContent, size),
+                     "unexpected value\n");
+                }
+                CryptMemFree(buf);
+            }
+        }
+    }
     CryptMsgClose(msg);
 
     msg = CryptMsgOpenToEncode(PKCS_7_ASN_ENCODING, CMSG_DETACHED_FLAG,
@@ -510,7 +527,6 @@ static void test_data_msg_get_param(void)
     CryptMsgClose(msg);
 }
 
-static const BYTE dataEmptyBareContent[] = { 0x04,0x00 };
 static const BYTE dataEmptyContent[] = {
 0x30,0x0f,0x06,0x09,0x2a,0x86,0x48,0x86,0xf7,0x0d,0x01,0x07,0x01,0xa0,0x02,
 0x04,0x00 };
@@ -837,6 +853,8 @@ static void test_hash_msg_get_param(void)
     ok(ret, "CryptMsgGetParam failed: %08x\n", GetLastError());
     ok(size == sizeof(buf), "Unexpected size %d\n", size);
     ret = CryptMsgGetParam(msg, CMSG_COMPUTED_HASH_PARAM, 0, buf, &size);
+    ok(ret, "CryptMsgGetParam failed: %08x\n", GetLastError());
+    ok(size == sizeof(buf), "Unexpected size %d\n", size);
     if (size == sizeof(buf))
         ok(!memcmp(buf, emptyHashParam, size), "Unexpected value\n");
     /* By getting the hash, further updates are not allowed */
@@ -1820,6 +1838,7 @@ static void test_signed_msg_encoding(void)
      CMSG_CONTENT_PARAM, signedWithCertWithValidPubKeyEmptyContent,
      sizeof(signedWithCertWithValidPubKeyEmptyContent));
     ret = CryptMsgUpdate(msg, msgData, sizeof(msgData), TRUE);
+    ok(ret, "CryptMsgUpdate failed: %08x\n", GetLastError());
     check_param("signedWithCertWithValidPubKeyContent", msg,
      CMSG_CONTENT_PARAM, signedWithCertWithValidPubKeyContent,
      sizeof(signedWithCertWithValidPubKeyContent));
@@ -2850,6 +2869,7 @@ static void test_decode_msg_get_param(void)
     ok(!ret && GetLastError() == CRYPT_E_INVALID_MSG_TYPE,
      "Expected CRYPT_E_INVALID_MSG_TYPE, got %x\n", GetLastError());
     ret = CryptMsgUpdate(msg, dataContent, sizeof(dataContent), TRUE);
+    ok(ret, "CryptMsgUpdate failed: %08x\n", GetLastError());
     check_param("data content", msg, CMSG_CONTENT_PARAM, msgData,
      sizeof(msgData));
     CryptMsgClose(msg);
@@ -2867,6 +2887,7 @@ static void test_decode_msg_get_param(void)
     CryptMsgClose(msg);
     msg = CryptMsgOpenToDecode(PKCS_7_ASN_ENCODING, 0, 0, 0, NULL, NULL);
     ret = CryptMsgUpdate(msg, hashContent, sizeof(hashContent), TRUE);
+    ok(ret, "CryptMsgUpdate failed: %08x\n", GetLastError());
     check_param("hash content", msg, CMSG_CONTENT_PARAM, msgData,
      sizeof(msgData));
     check_param("hash hash data", msg, CMSG_HASH_DATA_PARAM, hashParam,
@@ -2886,6 +2907,7 @@ static void test_decode_msg_get_param(void)
     if (buf)
     {
         ret = CryptMsgGetParam(msg, CMSG_COMPUTED_HASH_PARAM, 1, buf, &size);
+        ok(ret, "CryptMsgGetParam failed: %08x\n", GetLastError());
         ok(size == sizeof(hashParam), "Unexpected size %d\n", size);
         ok(!memcmp(buf, hashParam, size), "Unexpected value\n");
         CryptMemFree(buf);
@@ -3205,7 +3227,8 @@ static void test_msg_control(void)
         ok(!ret && GetLastError() == E_INVALIDARG,
          "Expected E_INVALIDARG, got %08x\n", GetLastError());
     }
-    ret = CryptMsgUpdate(msg, NULL, 0, TRUE);
+    ret = CryptMsgUpdate(msg, msgData, sizeof(msgData), TRUE);
+    ok(ret, "CryptMsgUpdate failed: %08x\n", GetLastError());
     /* or after an update. */
     for (i = 1; !old_crypt32 && (i <= CMSG_CTRL_ADD_CMS_SIGNER_INFO); i++)
     {
@@ -3230,6 +3253,7 @@ static void test_msg_control(void)
          "Expected E_INVALIDARG, got %08x\n", GetLastError());
     }
     ret = CryptMsgUpdate(msg, NULL, 0, TRUE);
+    ok(ret, "CryptMsgUpdate failed: %08x\n", GetLastError());
     /* or after an update. */
     for (i = 1; !old_crypt32 && (i <= CMSG_CTRL_ADD_CMS_SIGNER_INFO); i++)
     {
@@ -3253,6 +3277,7 @@ static void test_msg_control(void)
          "Expected E_INVALIDARG, got %08x\n", GetLastError());
     }
     ret = CryptMsgUpdate(msg, NULL, 0, TRUE);
+    ok(ret, "CryptMsgUpdate failed: %08x\n", GetLastError());
     /* or after an update. */
     for (i = 1; !old_crypt32 && (i <= CMSG_CTRL_ADD_CMS_SIGNER_INFO); i++)
     {
@@ -3617,8 +3642,8 @@ static void test_msg_get_and_verify_signer(void)
     /* Crash */
     if (0)
     {
-        ret = CryptMsgGetAndVerifySigner(NULL, 0, NULL, 0, NULL, NULL);
-        ret = CryptMsgGetAndVerifySigner(NULL, 0, NULL, 0, NULL, &signerIndex);
+        CryptMsgGetAndVerifySigner(NULL, 0, NULL, 0, NULL, NULL);
+        CryptMsgGetAndVerifySigner(NULL, 0, NULL, 0, NULL, &signerIndex);
     }
 
     msg = CryptMsgOpenToDecode(PKCS_7_ASN_ENCODING, 0, 0, 0, NULL, NULL);

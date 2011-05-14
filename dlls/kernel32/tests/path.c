@@ -486,10 +486,7 @@ static void test_CurrentDirectoryA(CHAR *origdir, CHAR *newdir)
 */
   if (0)
   {
-    SetLastError( 0xdeadbeef );
-    len = GetCurrentDirectoryA( 42, (LPSTR)(MAX_PATH + 42) );
-    ok( len == 0 && GetLastError() == ERROR_INVALID_PARAMETER,
-        "GetCurrentDirectoryA failed to fail %u err %u\n", len, GetLastError() );
+      GetCurrentDirectoryA( 42, (LPSTR)(MAX_PATH + 42) );
   }
 
 /* SetCurrentDirectoryA shouldn't care whether the string has a
@@ -1241,7 +1238,7 @@ static void test_GetLongPathNameW(void)
 
     /* NULL buffer with length crashes on Windows */
     if (0)
-    length = pGetLongPathNameW(shortpath, NULL, 20);
+        pGetLongPathNameW(shortpath, NULL, 20);
 
     ok(DeleteFileW(shortpath), "Could not delete temporary file\n");
     ok(RemoveDirectoryW(dirpath), "Could not delete temporary directory\n");
@@ -1302,7 +1299,8 @@ static void test_GetSystemDirectory(void)
     total = res;
 
     /* this crashes on XP */
-    if (0) res = GetSystemDirectory(NULL, total);
+    if (0)
+        GetSystemDirectory(NULL, total);
 
     SetLastError(0xdeadbeef);
     res = GetSystemDirectory(NULL, total-1);
@@ -1360,7 +1358,8 @@ static void test_GetWindowsDirectory(void)
 
     total = res;
     /* this crashes on XP */
-    if (0) res = GetWindowsDirectory(NULL, total);
+    if (0)
+        GetWindowsDirectory(NULL, total);
 
     SetLastError(0xdeadbeef);
     res = GetWindowsDirectory(NULL, total-1);
@@ -1415,7 +1414,7 @@ static void test_NeedCurrentDirectoryForExePathA(void)
 
     /* Crashes in Windows */
     if (0)
-        ok(pNeedCurrentDirectoryForExePathA(NULL), "returned FALSE for NULL\n");
+        pNeedCurrentDirectoryForExePathA(NULL);
 
     SetEnvironmentVariableA("NoDefaultCurrentDirectoryInExePath", NULL);
     ok(pNeedCurrentDirectoryForExePathA("."), "returned FALSE for \".\"\n");
@@ -1442,7 +1441,7 @@ static void test_NeedCurrentDirectoryForExePathW(void)
 
     /* Crashes in Windows */
     if (0)
-        ok(pNeedCurrentDirectoryForExePathW(NULL), "returned FALSE for NULL\n");
+        pNeedCurrentDirectoryForExePathW(NULL);
 
     SetEnvironmentVariableA("NoDefaultCurrentDirectoryInExePath", NULL);
     ok(pNeedCurrentDirectoryForExePathW(thispath), "returned FALSE for \".\"\n");
@@ -1565,8 +1564,7 @@ static void test_SearchPathA(void)
     SetLastError(0xdeadbeef);
     ret = pSearchPathA(pathA, fileA, NULL, sizeof(buffA)/sizeof(CHAR), buffA, &ptrA);
     ok(ret == 0, "Expected failure, got %d\n", ret);
-    ok(GetLastError() == ERROR_INVALID_PARAMETER ||
-       broken(GetLastError() == ERROR_FILE_NOT_FOUND) /* win9x */,
+    ok(GetLastError() == ERROR_INVALID_PARAMETER,
       "Expected ERROR_INVALID_PARAMETER, got %x\n", GetLastError());
 }
 
@@ -1582,24 +1580,10 @@ static void test_SearchPathW(void)
         return;
     }
 
-    /* SearchPathW is a stub on win9x and doesn't return sane error,
-       so quess if it's implemented indirectly */
-    SetLastError(0xdeadbeef);
-    GetWindowsDirectoryW(pathW, sizeof(pathW)/sizeof(WCHAR));
-    if (GetLastError() == ERROR_CALL_NOT_IMPLEMENTED)
-    {
-        win_skip("SearchPathW not implemented\n");
-        return;
-    }
-
 if (0)
 {
     /* NULL filename, crashes on nt4 */
-    SetLastError(0xdeadbeef);
-    ret = pSearchPathW(pathW, NULL, NULL, sizeof(buffW)/sizeof(WCHAR), buffW, &ptrW);
-    ok(ret == 0, "Expected failure, got %d\n", ret);
-    ok(GetLastError() == ERROR_INVALID_PARAMETER,
-       "Expected ERROR_INVALID_PARAMETER, got %x\n", GetLastError());
+    pSearchPathW(pathW, NULL, NULL, sizeof(buffW)/sizeof(WCHAR), buffW, &ptrW);
 }
 
     /* empty filename */
@@ -1614,7 +1598,7 @@ static void test_GetFullPathNameA(void)
 {
     char output[MAX_PATH], *filepart;
     DWORD ret;
-    int is_win9x, i;
+    int i;
 
     const struct
     {
@@ -1622,31 +1606,20 @@ static void test_GetFullPathNameA(void)
         DWORD len;
         LPSTR buffer;
         LPSTR *lastpart;
-        int win9x_crash;
     } invalid_parameters[] =
     {
-        {NULL, 0,        NULL,   NULL,      1},
-        {NULL, MAX_PATH, NULL,   NULL,      1},
-        {NULL, MAX_PATH, output, NULL,      1},
-        {NULL, MAX_PATH, output, &filepart, 1},
+        {NULL, 0,        NULL,   NULL},
+        {NULL, MAX_PATH, NULL,   NULL},
+        {NULL, MAX_PATH, output, NULL},
+        {NULL, MAX_PATH, output, &filepart},
         {"",   0,        NULL,   NULL},
         {"",   MAX_PATH, NULL,   NULL},
         {"",   MAX_PATH, output, NULL},
         {"",   MAX_PATH, output, &filepart},
     };
 
-    SetLastError(0xdeadbeef);
-    ret = GetFullPathNameW(NULL, 0, NULL, NULL);
-    is_win9x = !ret && GetLastError() == ERROR_CALL_NOT_IMPLEMENTED;
-
-    if (is_win9x)
-        win_skip("Skipping some tests that cause GetFullPathNameA to crash on Win9x\n");
-
     for (i = 0; i < sizeof(invalid_parameters)/sizeof(invalid_parameters[0]); i++)
     {
-        if (is_win9x && invalid_parameters[i].win9x_crash)
-            continue;
-
         SetLastError(0xdeadbeef);
         strcpy(output, "deadbeef");
         filepart = (char *)0xdeadbeef;
@@ -1658,7 +1631,6 @@ static void test_GetFullPathNameA(void)
         ok(!strcmp(output, "deadbeef"), "[%d] Expected the output buffer to be unchanged, got \"%s\"\n", i, output);
         ok(filepart == (char *)0xdeadbeef, "[%d] Expected output file part pointer to be untouched, got %p\n", i, filepart);
         ok(GetLastError() == 0xdeadbeef ||
-           GetLastError() == ERROR_BAD_PATHNAME || /* Win9x */
            GetLastError() == ERROR_INVALID_NAME, /* Win7 */
            "[%d] Expected GetLastError() to return 0xdeadbeef, got %u\n",
            i, GetLastError());

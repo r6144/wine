@@ -1966,6 +1966,49 @@ typedef struct
 #define STOCK_LAST          19
 
 #define CLR_INVALID         0xffffffff
+
+typedef USHORT COLOR16;
+
+typedef struct _TRIVERTEX
+{
+    LONG    x;
+    LONG    y;
+    COLOR16 Red;
+    COLOR16 Green;
+    COLOR16 Blue;
+    COLOR16 Alpha;
+} TRIVERTEX, *PTRIVERTEX, *LPTRIVERTEX;
+
+typedef struct _GRADIENT_TRIANGLE
+{
+    ULONG Vertex1;
+    ULONG Vertex2;
+    ULONG Vertex3;
+} GRADIENT_TRIANGLE, *PGRADIENT_TRIANGLE, *LPGRADIENT_TRIANGLE;
+
+typedef struct _GRADIENT_RECT
+{
+    ULONG UpperLeft;
+    ULONG LowerRight;
+} GRADIENT_RECT, *PGRADIENT_RECT, *LPGRADIENT_RECT;
+
+#define AC_SRC_OVER  0x00
+#define AC_SRC_ALPHA 0x01
+
+typedef struct _BLENDFUNCTION
+{
+    BYTE BlendOp;
+    BYTE BlendFlags;
+    BYTE SourceConstantAlpha;
+    BYTE AlphaFormat;
+} BLENDFUNCTION, *PBLENDFUNCTION;
+
+#define GRADIENT_FILL_RECT_H      0x00000000
+#define GRADIENT_FILL_RECT_V      0x00000001
+#define GRADIENT_FILL_TRIANGLE    0x00000002
+#define GRADIENT_FILL_OP_FLAG     0x000000ff
+
+
 /* Metafile header structure */
 #include <pshpack2.h>
 typedef struct
@@ -2347,7 +2390,6 @@ typedef struct {
     BYTE  Data[1];
 } EMRGDICOMMENT, *PEMRGDICOMMENT;
 
-#if 0
 typedef struct {
     EMR       emr;
     RECTL     rclBounds;
@@ -2356,7 +2398,6 @@ typedef struct {
     ULONG     ulMode;
     TRIVERTEX Ver[1];
 } EMRGRADIENTFILL, *PEMRGRADIENTFILL;
-#endif
 
 typedef struct {
     EMR   emr;
@@ -3255,47 +3296,6 @@ DECL_WINELIB_TYPE_AW(LPDISPLAY_DEVICE)
 #define	DISPLAY_DEVICE_MIRRORING_DRIVER		0x00000008
 #define	DISPLAY_DEVICE_VGA_COMPATIBLE		0x00000010
 
-typedef USHORT COLOR16;
-
-typedef struct _TRIVERTEX
-{
-    LONG    x;
-    LONG    y;
-    COLOR16 Red;
-    COLOR16 Green;
-    COLOR16 Blue;
-    COLOR16 Alpha;
-} TRIVERTEX, *PTRIVERTEX, *LPTRIVERTEX;
-
-typedef struct _GRADIENT_TRIANGLE
-{
-    ULONG Vertex1;
-    ULONG Vertex2;
-    ULONG Vertex3;
-} GRADIENT_TRIANGLE, *PGRADIENT_TRIANGLE, *LPGRADIENT_TRIANGLE;
-
-typedef struct _GRADIENT_RECT
-{
-    ULONG UpperLeft;
-    ULONG LowerRight;
-} GRADIENT_RECT, *PGRADIENT_RECT, *LPGRADIENT_RECT;
-
-#define AC_SRC_OVER  0x00
-#define AC_SRC_ALPHA 0x01
-
-typedef struct _BLENDFUNCTION
-{
-    BYTE BlendOp;
-    BYTE BlendFlags;
-    BYTE SourceConstantAlpha;
-    BYTE AlphaFormat;
-} BLENDFUNCTION, *PBLENDFUNCTION;
-
-#define GRADIENT_FILL_RECT_H      0x00000000
-#define GRADIENT_FILL_RECT_V      0x00000001
-#define GRADIENT_FILL_TRIANGLE    0x00000002
-#define GRADIENT_FILL_OP_FLAG     0x000000ff
-
 #define GDI_ERROR                               (~0u)
 #define HGDI_ERROR                              ((HANDLE)~(ULONG_PTR)0)
 
@@ -3590,6 +3590,7 @@ WINGDIAPI INT         WINAPI GetTextFaceW(HDC,INT,LPWSTR);
 WINGDIAPI BOOL        WINAPI GetTextMetricsA(HDC,LPTEXTMETRICA);
 WINGDIAPI BOOL        WINAPI GetTextMetricsW(HDC,LPTEXTMETRICW);
 #define                      GetTextMetrics WINELIB_NAME_AW(GetTextMetrics)
+WINGDIAPI BOOL        WINAPI GetTransform(HDC,DWORD,XFORM*);
 WINGDIAPI BOOL        WINAPI GetViewportExtEx(HDC,LPSIZE);
 WINGDIAPI BOOL        WINAPI GetViewportOrgEx(HDC,LPPOINT);
 WINGDIAPI BOOL        WINAPI GetWindowExtEx(HDC,LPSIZE);

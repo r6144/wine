@@ -378,6 +378,7 @@ static void testObjTrust(SAFE_PROVIDER_FUNCTIONS *funcs, GUID *actionID)
         {
             fileInfo.pgKnownSubject = (GUID *)0xdeadbeef;
             ret = funcs->pfnObjectTrust(&data);
+            ok(ret == S_FALSE, "Expected S_FALSE, got %08x\n", ret);
         }
         funcs->pfnFree(data.padwTrustStepErrors);
     }
@@ -447,6 +448,8 @@ static void testCertTrust(SAFE_PROVIDER_FUNCTIONS *funcs, GUID *actionID)
             WINTRUST_DATA wintrust_data = { 0 };
 
             ret = funcs->pfnAddCert2Chain(&data, 0, FALSE, 0, cert);
+            ok(ret == S_FALSE, "Expected S_FALSE, got %08x\n", ret);
+
             /* If pWintrustData isn't set, crashes attempting to access
              * pWintrustData->fdwRevocationChecks
              */
@@ -481,6 +484,7 @@ static void testCertTrust(SAFE_PROVIDER_FUNCTIONS *funcs, GUID *actionID)
             CertFreeCertificateContext(cert);
         }
     }
+    funcs->pfnFree(data.padwTrustStepErrors);
 }
 
 static void test_provider_funcs(void)
@@ -730,9 +734,16 @@ static void test_wintrust(void)
     r = WinVerifyTrust(INVALID_HANDLE_VALUE, &generic_action_v2, &wtd);
     ok(r == TRUST_E_NOSIGNATURE || r == CRYPT_E_FILE_ERROR,
      "expected TRUST_E_NOSIGNATURE or CRYPT_E_FILE_ERROR, got %08x\n", r);
+    wtd.dwStateAction = WTD_STATEACTION_CLOSE;
+    r = WinVerifyTrust(INVALID_HANDLE_VALUE, &generic_action_v2, &wtd);
+    ok(r == S_OK, "WinVerifyTrust failed: %08x\n", r);
+    wtd.dwStateAction = WTD_STATEACTION_VERIFY;
     hr = WinVerifyTrustEx(INVALID_HANDLE_VALUE, &generic_action_v2, &wtd);
-    ok(hr == TRUST_E_NOSIGNATURE || r == CRYPT_E_FILE_ERROR,
+    ok(hr == TRUST_E_NOSIGNATURE || hr == CRYPT_E_FILE_ERROR,
      "expected TRUST_E_NOSIGNATURE or CRYPT_E_FILE_ERROR, got %08x\n", hr);
+    wtd.dwStateAction = WTD_STATEACTION_CLOSE;
+    r = WinVerifyTrust(INVALID_HANDLE_VALUE, &generic_action_v2, &wtd);
+    ok(r == S_OK, "WinVerifyTrust failed: %08x\n", r);
 }
 
 static void test_get_known_usages(void)

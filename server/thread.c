@@ -57,8 +57,6 @@
 static const unsigned int supported_cpus = CPU_FLAG(CPU_x86);
 #elif defined(__x86_64__)
 static const unsigned int supported_cpus = CPU_FLAG(CPU_x86_64) | CPU_FLAG(CPU_x86);
-#elif defined(__ALPHA__)
-static const unsigned int supported_cpus = CPU_FLAG(CPU_ALPHA);
 #elif defined(__powerpc__)
 static const unsigned int supported_cpus = CPU_FLAG(CPU_POWERPC);
 #elif defined(__sparc__)
@@ -190,7 +188,6 @@ static inline void init_thread_structure( struct thread *thread )
     thread->state           = RUNNING;
     thread->exit_code       = 0;
     thread->priority        = 0;
-    thread->affinity        = ~0;
     thread->suspend         = 0;
     thread->desktop_users   = 0;
     thread->token           = NULL;
@@ -432,6 +429,24 @@ int set_thread_affinity( struct thread *thread, affinity_t affinity )
     return ret;
 }
 
+affinity_t get_thread_affinity( struct thread *thread )
+{
+    affinity_t mask = 0;
+#ifdef HAVE_SCHED_SETAFFINITY
+    if (thread->unix_tid != -1)
+    {
+        cpu_set_t set;
+        unsigned int i;
+
+        if (!sched_getaffinity( thread->unix_tid, sizeof(set), &set ))
+            for (i = 0; i < 8 * sizeof(mask); i++)
+                if (CPU_ISSET( i, &set )) mask |= 1 << i;
+    }
+#endif
+    if (!mask) mask = ~0;
+    return mask;
+}
+
 #define THREAD_PRIORITY_REALTIME_HIGHEST 6
 #define THREAD_PRIORITY_REALTIME_LOWEST -7
 
@@ -474,6 +489,12 @@ void stop_thread( struct thread *thread )
     if (thread->context) return;  /* already inside a debug event, no need for a signal */
     /* can't stop a thread while initialisation is in progress */
     if (is_process_init_done(thread->process)) send_thread_signal( thread, SIGUSR1 );
+}
+
+/* stop a thread if it's supposed to be suspended */
+void stop_thread_if_suspended( struct thread *thread )
+{
+    if (thread->suspend + thread->process->suspend > 0) stop_thread( thread );
 }
 
 /* suspend a thread */
@@ -1000,7 +1021,6 @@ static unsigned int get_context_system_regs( enum cpu_type cpu )
     {
     case CPU_x86:     return SERVER_CTX_DEBUG_REGISTERS;
     case CPU_x86_64:  return SERVER_CTX_DEBUG_REGISTERS;
-    case CPU_ALPHA:   return 0;
     case CPU_POWERPC: return 0;
     case CPU_ARM:     return 0;
     case CPU_SPARC:   return 0;
@@ -1026,9 +1046,6 @@ void break_thread( struct thread *thread )
         break;
     case CPU_x86_64:
         data.exception.address = thread->context->ctl.x86_64_regs.rip;
-        break;
-    case CPU_ALPHA:
-        data.exception.address = thread->context->ctl.alpha_regs.fir;
         break;
     case CPU_POWERPC:
         data.exception.address = thread->context->ctl.powerpc_regs.iar;
@@ -1157,6 +1174,10 @@ DECL_HANDLER(init_thread)
         process->peb      = req->entry;
         process->cpu      = req->cpu;
         reply->info_size  = init_process( current );
+        if (!process->parent)
+            process->affinity = current->affinity = get_thread_affinity( current );
+        else
+            set_thread_affinity( current, current->affinity );
     }
     else
     {
@@ -1167,11 +1188,11 @@ DECL_HANDLER(init_thread)
         }
         if (process->unix_pid != current->unix_pid)
             process->unix_pid = -1;  /* can happen with linuxthreads */
-        if (current->suspend + process->suspend > 0) stop_thread( current );
+        stop_thread_if_suspended( current );
         generate_debug_event( current, CREATE_THREAD_DEBUG_EVENT, &req->entry );
+        set_thread_affinity( current, current->affinity );
     }
     debug_level = max( debug_level, req->debug_level );
-    set_thread_affinity( current, current->affinity );
 
     reply->pid     = get_process_id( process );
     reply->tid     = get_thread_id( current );
@@ -1456,26 +1477,23 @@ DECL_HANDLER(get_thread_context)
         return;
     }
     if (!(thread = get_thread_from_handle( req->handle, THREAD_GET_CONTEXT ))) return;
+    reply->self = (thread == current);
 
-    if (req->suspend)
-    {
-        if (thread != current || !thread->suspend_context)
-        {
-            /* not suspended, shouldn't happen */
-            set_error( STATUS_INVALID_PARAMETER );
-        }
-        else
-        {
-            if (thread->context == thread->suspend_context) thread->context = NULL;
-            set_reply_data_ptr( thread->suspend_context, sizeof(context_t) );
-            thread->suspend_context = NULL;
-        }
-    }
-    else if (thread != current && !thread->context)
+    if (thread != current && !thread->context)
     {
         /* thread is not suspended, retry (if it's still running) */
-        if (thread->state != RUNNING) set_error( STATUS_ACCESS_DENIED );
-        else set_error( STATUS_PENDING );
+        if (thread->state == RUNNING)
+        {
+            set_error( STATUS_PENDING );
+            if (req->suspend)
+            {
+                release_object( thread );
+                /* make sure we have suspend access */
+                if (!(thread = get_thread_from_handle( req->handle, THREAD_SUSPEND_RESUME ))) return;
+                suspend_thread( thread );
+            }
+        }
+        else set_error( STATUS_UNSUCCESSFUL );
     }
     else if ((context = set_reply_data_size( sizeof(context_t) )))
     {
@@ -1486,7 +1504,6 @@ DECL_HANDLER(get_thread_context)
         if (thread->context) copy_context( context, thread->context, req->flags & ~flags );
         if (flags) get_thread_context( thread, context, flags );
     }
-    reply->self = (thread == current);
     release_object( thread );
 }
 
@@ -1502,26 +1519,23 @@ DECL_HANDLER(set_thread_context)
         return;
     }
     if (!(thread = get_thread_from_handle( req->handle, THREAD_SET_CONTEXT ))) return;
+    reply->self = (thread == current);
 
-    if (req->suspend)
-    {
-        if (thread != current || thread->context || context->cpu != thread->process->cpu)
-        {
-            /* nested suspend or exception, shouldn't happen */
-            set_error( STATUS_INVALID_PARAMETER );
-        }
-        else if ((thread->suspend_context = mem_alloc( sizeof(context_t) )))
-        {
-            memcpy( thread->suspend_context, get_req_data(), sizeof(context_t) );
-            thread->context = thread->suspend_context;
-            if (thread->debug_break) break_thread( thread );
-        }
-    }
-    else if (thread != current && !thread->context)
+    if (thread != current && !thread->context)
     {
         /* thread is not suspended, retry (if it's still running) */
-        if (thread->state != RUNNING) set_error( STATUS_ACCESS_DENIED );
-        else set_error( STATUS_PENDING );
+        if (thread->state == RUNNING)
+        {
+            set_error( STATUS_PENDING );
+            if (req->suspend)
+            {
+                release_object( thread );
+                /* make sure we have suspend access */
+                if (!(thread = get_thread_from_handle( req->handle, THREAD_SUSPEND_RESUME ))) return;
+                suspend_thread( thread );
+            }
+        }
+        else set_error( STATUS_UNSUCCESSFUL );
     }
     else if (context->cpu == thread->process->cpu)
     {
@@ -1533,8 +1547,53 @@ DECL_HANDLER(set_thread_context)
     }
     else set_error( STATUS_INVALID_PARAMETER );
 
-    reply->self = (thread == current);
     release_object( thread );
+}
+
+/* retrieve the suspended context of a thread */
+DECL_HANDLER(get_suspend_context)
+{
+    if (get_reply_max_size() < sizeof(context_t))
+    {
+        set_error( STATUS_INVALID_PARAMETER );
+        return;
+    }
+
+    if (current->suspend_context)
+    {
+        set_reply_data_ptr( current->suspend_context, sizeof(context_t) );
+        if (current->context == current->suspend_context)
+        {
+            current->context = NULL;
+            stop_thread_if_suspended( current );
+        }
+        current->suspend_context = NULL;
+    }
+    else set_error( STATUS_INVALID_PARAMETER );  /* not suspended, shouldn't happen */
+}
+
+/* store the suspended context of a thread */
+DECL_HANDLER(set_suspend_context)
+{
+    const context_t *context = get_req_data();
+
+    if (get_req_data_size() < sizeof(context_t))
+    {
+        set_error( STATUS_INVALID_PARAMETER );
+        return;
+    }
+
+    if (current->context || context->cpu != current->process->cpu)
+    {
+        /* nested suspend or exception, shouldn't happen */
+        set_error( STATUS_INVALID_PARAMETER );
+    }
+    else if ((current->suspend_context = mem_alloc( sizeof(context_t) )))
+    {
+        memcpy( current->suspend_context, get_req_data(), sizeof(context_t) );
+        current->context = current->suspend_context;
+        if (current->debug_break) break_thread( current );
+    }
 }
 
 /* fetch a selector entry for a thread */

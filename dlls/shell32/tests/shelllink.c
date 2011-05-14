@@ -431,7 +431,7 @@ void create_lnk_(int line, const WCHAR* path, lnk_desc_t* desc, int save_fails)
     if (0)
     {
         /* crashes on XP */
-        r = IPersistFile_GetCurFile(pf, NULL);
+        IPersistFile_GetCurFile(pf, NULL);
     }
 
         /* test GetCurFile before ::Save */
@@ -681,6 +681,24 @@ static void test_load_save(void)
     create_lnk(lnkfile, &desc, 0);
     check_lnk(lnkfile, &desc, 0x0);
 
+    /* Test omitting .exe from an absolute path */
+    p=strrchr(realpath, '.');
+    if (p)
+        *p='\0';
+
+    desc.description="absolute path without .exe";
+    desc.workdir=mydir;
+    desc.path=realpath;
+    desc.pidl=NULL;
+    desc.arguments="/option1 /option2 \"Some string\"";
+    desc.showcmd=SW_SHOWNORMAL;
+    desc.icon=mypath;
+    desc.icon_id=0;
+    desc.hotkey=0x1234;
+    create_lnk(lnkfile, &desc, 0);
+    strcat(realpath, ".exe");
+    check_lnk(lnkfile, &desc, 0x4);
+
     /* Overwrite the existing lnk file and test link to a command on the path */
     desc.description="command on path";
     desc.workdir=mypath;
@@ -696,6 +714,22 @@ static void test_load_save(void)
     SearchPathA( NULL, desc.path, NULL, MAX_PATH, realpath, NULL);
     desc.path=realpath;
     check_lnk(lnkfile, &desc, 0x0);
+
+    /* Test omitting .exe from a command on the path */
+    desc.description="command on path without .exe";
+    desc.workdir=mypath;
+    desc.path="rundll32";
+    desc.pidl=NULL;
+    desc.arguments="/option1 /option2 \"Some string\"";
+    desc.showcmd=SW_SHOWNORMAL;
+    desc.icon=mypath;
+    desc.icon_id=0;
+    desc.hotkey=0x1234;
+    create_lnk(lnkfile, &desc, 0);
+    /* Check that link is created to proper location */
+    SearchPathA( NULL, "rundll32", NULL, MAX_PATH, realpath, NULL);
+    desc.path=realpath;
+    check_lnk(lnkfile, &desc, 0x4);
 
     /* Create a temporary non-executable file */
     r=GetTempPath(sizeof(mypath), mypath);
@@ -726,6 +760,8 @@ static void test_load_save(void)
     check_lnk(lnkfile, &desc, 0x0);
 
     r=pGetShortPathNameA(mydir, mypath, sizeof(mypath));
+    ok(r<sizeof(mypath), "GetShortPathName failed (%d), err %d\n", r, GetLastError());
+
     strcpy(realpath, mypath);
     strcat(realpath, "\\test.txt");
     strcat(mypath, "\\\\test.txt");
@@ -746,6 +782,36 @@ static void test_load_save(void)
 
     r = DeleteFileA(mypath);
     ok(r, "failed to delete file %s (%d)\n", mypath, GetLastError());
+
+    /* Create a temporary .bat file */
+    strcpy(mypath, mydir);
+    strcat(mypath, "\\test.bat");
+    hf = CreateFile(mypath, GENERIC_WRITE, 0, NULL,
+                    CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    CloseHandle(hf);
+
+    strcpy(realpath, mypath);
+
+    p=strrchr(mypath, '.');
+    if (p)
+        *p='\0';
+
+    /* Try linking to the .bat file without the extension */
+    desc.description="batch file";
+    desc.workdir=mydir;
+    desc.path=mypath;
+    desc.pidl=NULL;
+    desc.arguments="";
+    desc.showcmd=SW_SHOWNORMAL;
+    desc.icon=mypath;
+    desc.icon_id=0;
+    desc.hotkey=0x1234;
+    create_lnk(lnkfile, &desc, 0);
+    desc.path = realpath;
+    check_lnk(lnkfile, &desc, 0x4);
+
+    r = DeleteFileA(realpath);
+    ok(r, "failed to delete file %s (%d)\n", realpath, GetLastError());
 
     /* FIXME: Also test saving a .lnk pointing to a pidl that cannot be
      * represented as a path.
@@ -822,7 +888,7 @@ static void test_datalink(void)
 if (0)
 {
     /* the following crashes */
-    r = IShellLinkDataList_GetFlags( dl, NULL );
+    IShellLinkDataList_GetFlags( dl, NULL );
 }
 
     flags = 0;
@@ -911,6 +977,7 @@ static void test_GetIconLocation(void)
     pidl = path_to_pidl(mypath);
     r = IShellLinkA_SetIDList(sl, pidl);
     ok(r == S_OK, "SetPath failed (0x%08x)\n", r);
+    pILFree(pidl);
 
     i = 0xdeadbeef;
     strcpy(buffer, "garbage");

@@ -31,6 +31,7 @@
 #include <limits.h>
 #include <errno.h>
 #include "msvcrt.h"
+#include "winnls.h"
 #include "wine/debug.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(msvcrt);
@@ -51,11 +52,14 @@ char* CDECL _strdup(const char* str)
 }
 
 /*********************************************************************
- *		_strlwr_s (MSVCRT.@)
+ *		_strlwr_s_l (MSVCRT.@)
  */
-int CDECL _strlwr_s(char *str, MSVCRT_size_t len)
+int CDECL _strlwr_s_l(char *str, MSVCRT_size_t len, MSVCRT__locale_t locale)
 {
     char *ptr = str;
+
+    if(!locale)
+        locale = get_locale();
 
     if (!str || !len)
     {
@@ -78,11 +82,97 @@ int CDECL _strlwr_s(char *str, MSVCRT_size_t len)
 
     while (*str)
     {
-        *str = tolower(*str);
+        *str = MSVCRT__tolower_l(*str, locale);
         str++;
     }
 
     return 0;
+}
+
+/*********************************************************************
+ *		_strlwr_s (MSVCRT.@)
+ */
+int CDECL _strlwr_s(char *str, MSVCRT_size_t len)
+{
+    return _strlwr_s_l(str, len, NULL);
+}
+
+/*********************************************************************
+ *		_strlwr_l (MSVCRT.@)
+ */
+int CDECL _strlwr_l(char *str, MSVCRT__locale_t locale)
+{
+    return _strlwr_s_l(str, -1, locale);
+}
+
+/*********************************************************************
+ *		_strlwr (MSVCRT.@)
+ */
+int CDECL _strlwr(char *str)
+{
+    return _strlwr_s_l(str, -1, NULL);
+}
+
+/*********************************************************************
+ *              _strupr_s_l (MSVCRT.@)
+ */
+int CDECL _strupr_s_l(char *str, MSVCRT_size_t len, MSVCRT__locale_t locale)
+{
+    char *ptr = str;
+
+    if(!locale)
+        locale = get_locale();
+
+    if (!str || !len)
+    {
+        *MSVCRT__errno() = MSVCRT_EINVAL;
+        return MSVCRT_EINVAL;
+    }
+
+    while (len && *ptr)
+    {
+        len--;
+        ptr++;
+    }
+
+    if (!len)
+    {
+        str[0] = '\0';
+        *MSVCRT__errno() = MSVCRT_EINVAL;
+        return MSVCRT_EINVAL;
+    }
+
+    while (*str)
+    {
+        *str = MSVCRT__toupper_l(*str, locale);
+        str++;
+    }
+
+    return 0;
+}
+
+/*********************************************************************
+ *              _strupr_s (MSVCRT.@)
+ */
+int CDECL _strupr_s(char *str, MSVCRT_size_t len)
+{
+    return _strupr_s_l(str, len, NULL);
+}
+
+/*********************************************************************
+ *              _strupr_l (MSVCRT.@)
+ */
+int CDECL _strupr_l(char *str, MSVCRT__locale_t locale)
+{
+    return _strupr_s_l(str, -1, locale);
+}
+
+/*********************************************************************
+ *              _strupr (MSVCRT.@)
+ */
+int CDECL _strupr(char *str)
+{
+    return _strupr_s_l(str, -1, NULL);
 }
 
 /*********************************************************************
@@ -333,12 +423,186 @@ double CDECL MSVCRT__atof_l( const char *str, MSVCRT__locale_t locale)
 }
 
 /*********************************************************************
+ *		_atoflt_l  (MSVCRT.@)
+ */
+int CDECL MSVCRT__atoflt_l( MSVCRT__CRT_FLOAT *value, char *str, MSVCRT__locale_t locale)
+{
+    unsigned __int64 d=0, hlp;
+    unsigned fpcontrol;
+    int exp=0, sign=1;
+    const char *p;
+    int ret=0;
+    BOOL found_digit = FALSE;
+
+    if(!locale)
+        locale = get_locale();
+
+    /* FIXME: use *_l functions */
+    p = str;
+    while(isspace(*p))
+        p++;
+
+    if(*p == '-') {
+        sign = -1;
+        p++;
+    } else if(*p == '+')
+        p++;
+
+    while(isdigit(*p)) {
+        found_digit = TRUE;
+        hlp = d*10+*(p++)-'0';
+        if(d>MSVCRT_UI64_MAX/10 || hlp<d) {
+            exp++;
+            break;
+        } else
+            d = hlp;
+    }
+    while(isdigit(*p)) {
+        exp++;
+        p++;
+    }
+
+    if(*p == *locale->locinfo->lconv->decimal_point)
+        p++;
+
+    while(isdigit(*p)) {
+        found_digit = TRUE;
+        hlp = d*10+*(p++)-'0';
+        if(d>MSVCRT_UI64_MAX/10 || hlp<d)
+            break;
+
+        d = hlp;
+        exp--;
+    }
+    while(isdigit(*p))
+        p++;
+
+    if(!found_digit) {
+        value->f = 0.0;
+        return 0;
+    }
+
+    if(*p=='e' || *p=='E' || *p=='d' || *p=='D') {
+        int e=0, s=1;
+
+        p++;
+        if(*p == '-') {
+            s = -1;
+            p++;
+        } else if(*p == '+')
+            p++;
+
+        if(isdigit(*p)) {
+            while(isdigit(*p)) {
+                if(e>INT_MAX/10 || (e=e*10+*p-'0')<0)
+                    e = INT_MAX;
+                p++;
+            }
+            e *= s;
+
+            if(exp<0 && e<0 && exp+e>=0) exp = INT_MIN;
+            else if(exp>0 && e>0 && exp+e<0) exp = INT_MAX;
+            else exp += e;
+        } else {
+            if(*p=='-' || *p=='+')
+                p--;
+            p--;
+        }
+    }
+
+    fpcontrol = _control87(0, 0);
+    _control87(MSVCRT__EM_DENORMAL|MSVCRT__EM_INVALID|MSVCRT__EM_ZERODIVIDE
+            |MSVCRT__EM_OVERFLOW|MSVCRT__EM_UNDERFLOW|MSVCRT__EM_INEXACT, 0xffffffff);
+
+    if(exp>0)
+        value->f = (float)sign*d*powf(10, exp);
+    else
+        value->f = (float)sign*d/powf(10, -exp);
+
+    _control87(fpcontrol, 0xffffffff);
+
+    if((d && value->f==0.0) || isinf(value->f))
+        ret = exp > 0 ? MSVCRT__OVERFLOW : MSVCRT__UNDERFLOW;
+
+    return ret;
+}
+
+/*********************************************************************
+ *		_strcoll_l (MSVCRT.@)
+ */
+int CDECL MSVCRT_strcoll_l( const char* str1, const char* str2, MSVCRT__locale_t locale )
+{
+    if(!locale)
+        locale = get_locale();
+
+    return CompareStringA(locale->locinfo->lc_handle[MSVCRT_LC_CTYPE], 0, str1, -1, str2, -1)-2;
+}
+
+/*********************************************************************
  *		strcoll (MSVCRT.@)
  */
 int CDECL MSVCRT_strcoll( const char* str1, const char* str2 )
 {
-    /* FIXME: handle Windows locale */
-    return strcoll( str1, str2 );
+    return MSVCRT_strcoll_l(str1, str2, NULL);
+}
+
+/*********************************************************************
+ *		_stricoll_l (MSVCRT.@)
+ */
+int CDECL MSVCRT__stricoll_l( const char* str1, const char* str2, MSVCRT__locale_t locale )
+{
+    if(!locale)
+        locale = get_locale();
+
+    return CompareStringA(locale->locinfo->lc_handle[MSVCRT_LC_CTYPE], NORM_IGNORECASE,
+            str1, -1, str2, -1)-2;
+}
+
+/*********************************************************************
+ *		_stricoll (MSVCRT.@)
+ */
+int CDECL MSVCRT__stricoll( const char* str1, const char* str2 )
+{
+    return MSVCRT__stricoll_l(str1, str2, NULL);
+}
+
+/*********************************************************************
+ *              _strncoll_l (MSVCRT.@)
+ */
+int CDECL MSVCRT_strncoll_l( const char* str1, const char* str2, MSVCRT_size_t count, MSVCRT__locale_t locale )
+{
+    if(!locale)
+        locale = get_locale();
+
+    return CompareStringA(locale->locinfo->lc_handle[MSVCRT_LC_CTYPE], 0, str1, count, str2, count)-2;
+}
+
+/*********************************************************************
+ *              strncoll (MSVCRT.@)
+ */
+int CDECL MSVCRT_strncoll( const char* str1, const char* str2, MSVCRT_size_t count )
+{
+    return MSVCRT_strncoll_l(str1, str2, count, NULL);
+}
+
+/*********************************************************************
+ *              _strnicoll_l (MSVCRT.@)
+ */
+int CDECL MSVCRT__strnicoll_l( const char* str1, const char* str2, MSVCRT_size_t count, MSVCRT__locale_t locale )
+{
+    if(!locale)
+        locale = get_locale();
+
+    return CompareStringA(locale->locinfo->lc_handle[MSVCRT_LC_CTYPE], NORM_IGNORECASE,
+            str1, count, str2, count)-2;
+}
+
+/*********************************************************************
+ *              _strnicoll (MSVCRT.@)
+ */
+int CDECL MSVCRT__strnicoll( const char* str1, const char* str2, MSVCRT_size_t count )
+{
+    return MSVCRT__strnicoll_l(str1, str2, count, NULL);
 }
 
 /*********************************************************************
@@ -439,16 +703,6 @@ MSVCRT_size_t CDECL MSVCRT_strxfrm( char *dest, const char *src, MSVCRT_size_t l
     return strxfrm( dest, src, len );
 }
 
-/*********************************************************************
- *		_stricoll (MSVCRT.@)
- */
-int CDECL MSVCRT__stricoll( const char* str1, const char* str2 )
-{
-  /* FIXME: handle collates */
-  TRACE("str1 %s str2 %s\n", debugstr_a(str1), debugstr_a(str2));
-  return lstrcmpiA( str1, str2 );
-}
-
 /********************************************************************
  *		_atoldbl (MSVCRT.@)
  */
@@ -456,8 +710,10 @@ int CDECL MSVCRT__atoldbl(MSVCRT__LDOUBLE *value, const char *str)
 {
   /* FIXME needs error checking for huge/small values */
 #ifdef HAVE_STRTOLD
+  long double ld;
   TRACE("str %s value %p\n",str,value);
-  value->x = strtold(str,0);
+  ld = strtold(str,0);
+  memcpy(value, &ld, 10);
 #else
   FIXME("stub, str %s value %p\n",str,value);
 #endif
@@ -470,8 +726,10 @@ int CDECL MSVCRT__atoldbl(MSVCRT__LDOUBLE *value, const char *str)
 int CDECL __STRINGTOLD( MSVCRT__LDOUBLE *value, char **endptr, const char *str, int flags )
 {
 #ifdef HAVE_STRTOLD
+    long double ld;
     FIXME("%p %p %s %x partial stub\n", value, endptr, str, flags );
-    value->x = strtold(str,endptr);
+    ld = strtold(str,0);
+    memcpy(value, &ld, 10);
 #else
     FIXME("%p %p %s %x stub\n", value, endptr, str, flags );
 #endif
@@ -919,6 +1177,43 @@ int CDECL MSVCRT__ui64toa_s(unsigned __int64 value, char *str,
 }
 
 /*********************************************************************
+ *      _ui64tow_s  (MSVCRT.@)
+ */
+int CDECL MSVCRT__ui64tow_s( unsigned __int64 value, MSVCRT_wchar_t *str,
+                             MSVCRT_size_t size, int radix )
+{
+    MSVCRT_wchar_t buffer[65], *pos;
+    int digit;
+
+    if (!MSVCRT_CHECK_PMT(str != NULL) || !MSVCRT_CHECK_PMT(size > 0) ||
+        !MSVCRT_CHECK_PMT(radix>=2) || !MSVCRT_CHECK_PMT(radix<=36)) {
+        *MSVCRT__errno() = MSVCRT_EINVAL;
+        return MSVCRT_EINVAL;
+    }
+
+    pos = &buffer[64];
+    *pos = '\0';
+
+    do {
+	digit = value % radix;
+	value = value / radix;
+	if (digit < 10)
+	    *--pos = '0' + digit;
+	else
+	    *--pos = 'a' + digit - 10;
+    } while (value != 0);
+
+    if(buffer-pos+65 > size) {
+        MSVCRT_INVALID_PMT("str[size] is too small");
+        *MSVCRT__errno() = MSVCRT_EINVAL;
+        return MSVCRT_EINVAL;
+    }
+
+    memcpy(str, pos, buffer-pos+65);
+    return 0;
+}
+
+/*********************************************************************
  *  _ultoa_s (MSVCRT.@)
  */
 int CDECL _ultoa_s(MSVCRT_ulong value, char *str, MSVCRT_size_t size, int radix)
@@ -1139,7 +1434,7 @@ struct _I10_OUTPUT_DATA {
 
 /*********************************************************************
  *              $I10_OUTPUT (MSVCRT.@)
- * ld - long double to be printed to data
+ * ld80 - long double (Intel 80 bit FP in 12 bytes) to be printed to data
  * prec - precision of part, we're interested in
  * flag - 0 for first prec digits, 1 for fractional part
  * data - data to be populated
@@ -1152,16 +1447,22 @@ struct _I10_OUTPUT_DATA {
  *      Native sets last byte of data->str to '0' or '9', I don't know what
  *      it means. Current implementation sets it always to '0'.
  */
-int CDECL MSVCRT_I10_OUTPUT(MSVCRT__LDOUBLE ld, int prec, int flag, struct _I10_OUTPUT_DATA *data)
+int CDECL MSVCRT_I10_OUTPUT(MSVCRT__LDOUBLE ld80, int prec, int flag, struct _I10_OUTPUT_DATA *data)
 {
     static const char inf_str[] = "1#INF";
     static const char nan_str[] = "1#QNAN";
 
-    double d = ld.x;
+    /* MS' long double type wants 12 bytes for Intel's 80 bit FP format.
+     * Some UNIX have sizeof(long double) == 16, yet only 80 bit are used.
+     * Assume long double uses 80 bit FP, never seen 128 bit FP. */
+    long double ld = 0;
+    double d;
     char format[8];
     char buf[I10_OUTPUT_MAX_PREC+9]; /* 9 = strlen("0.e+0000") + '\0' */
     char *p;
 
+    memcpy(&ld, &ld80, 10);
+    d = ld;
     TRACE("(%lf %d %x %p)\n", d, prec, flag, data);
 
     if(d<0) {

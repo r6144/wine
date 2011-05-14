@@ -75,6 +75,7 @@ static BOOL  (WINAPI * pGetPrinterDriverW)(HANDLE, LPWSTR, DWORD, LPBYTE, DWORD,
 static BOOL  (WINAPI * pGetPrinterW)(HANDLE, DWORD, LPBYTE, DWORD, LPDWORD);
 static BOOL  (WINAPI * pSetDefaultPrinterA)(LPCSTR);
 static DWORD (WINAPI * pXcvDataW)(HANDLE, LPCWSTR, PBYTE, DWORD, PBYTE, DWORD, PDWORD, PDWORD);
+static BOOL  (WINAPI * pIsValidDevmodeW)(PDEVMODEW, SIZE_T);
 
 
 /* ################################ */
@@ -372,6 +373,7 @@ static void test_AddMonitor(void)
     mi2a.pEnvironment = entry->env;
     SetLastError(MAGIC_DEAD);
     res = AddMonitorA(NULL, 2, (LPBYTE) &mi2a);
+    ok(res, "AddMonitor error %d\n", GetLastError());
     /* NT: ERROR_INVALID_PARAMETER,  9x: ERROR_PRIVILEGE_NOT_HELD */
     }
 
@@ -1937,6 +1939,7 @@ static void test_SetDefaultPrinter(void)
     org_value[0] = '\0';
     SetLastError(MAGIC_DEAD);
     res = GetProfileStringA("windows", "device", NULL, org_value, size);
+    ok(res, "GetProfileString error %d\n", GetLastError());
 
     /* first part: with the default Printer */
     SetLastError(MAGIC_DEAD);
@@ -2011,11 +2014,13 @@ static void test_SetDefaultPrinter(void)
 
     /* restore the original value */
     res = pSetDefaultPrinterA(default_printer);          /* the nice way */
+    ok(res, "SetDefaultPrinter error %d\n", GetLastError());
     WriteProfileStringA("windows", "device", org_value); /* the old way */
 
     buffer[0] = '\0';
     SetLastError(MAGIC_DEAD);
     res = GetProfileStringA("windows", "device", NULL, buffer, size);
+    ok(res, "GetProfileString error %d\n", GetLastError());
     ok(!lstrcmpA(org_value, buffer), "'%s' (expected '%s')\n", buffer, org_value);
 
 }
@@ -2305,6 +2310,7 @@ static void test_GetPrinter(void)
         {
             DWORD double_needed;
             ret = pGetPrinterW(hprn, level, NULL, 0, &double_needed);
+            ok(!ret, "level %d: GetPrinter error %d\n", level, GetLastError());
             ok(double_needed == needed, "level %d: GetPrinterA returned different size %d than GetPrinterW (%d)\n", level, needed, double_needed);
         }
 
@@ -2313,6 +2319,7 @@ static void test_GetPrinter(void)
         SetLastError(0xdeadbeef);
         filled = -1;
         ret = GetPrinter(hprn, level, buf, needed, &filled);
+        ok(ret, "level %d: GetPrinter error %d\n", level, GetLastError());
         ok(needed == filled, "needed %d != filled %d\n", needed, filled);
 
         if (level == 2)
@@ -2540,6 +2547,7 @@ static void test_GetPrinterDriver(void)
         {
             DWORD double_needed;
             ret = pGetPrinterDriverW(hprn, NULL, level, NULL, 0, &double_needed);
+            ok(!ret, "level %d: GetPrinterDriver error %d\n", level, GetLastError());
             ok(double_needed == needed, "GetPrinterDriverA returned different size %d than GetPrinterDriverW (%d)\n", needed, double_needed);
         }
 
@@ -2845,6 +2853,26 @@ static void test_DeviceCapabilities(void)
     GlobalFree(prn_dlg.hDevNames);
 }
 
+static void test_IsValidDevmodeW(void)
+{
+    BOOL br;
+
+    if (!pIsValidDevmodeW)
+    {
+        win_skip("IsValidDevmodeW not implemented.\n");
+        return;
+    }
+
+    br = pIsValidDevmodeW(NULL, 0);
+    ok(br == FALSE, "Got %d\n", br);
+
+    br = pIsValidDevmodeW(NULL, 1);
+    ok(br == FALSE, "Got %d\n", br);
+
+    br = pIsValidDevmodeW(NULL, sizeof(DEVMODEW));
+    ok(br == FALSE, "Got %d\n", br);
+}
+
 START_TEST(info)
 {
     hwinspool = GetModuleHandleA("winspool.drv");
@@ -2856,6 +2884,7 @@ START_TEST(info)
     pGetPrinterW = (void *) GetProcAddress(hwinspool, "GetPrinterW");
     pSetDefaultPrinterA = (void *) GetProcAddress(hwinspool, "SetDefaultPrinterA");
     pXcvDataW = (void *) GetProcAddress(hwinspool, "XcvDataW");
+    pIsValidDevmodeW = (void *) GetProcAddress(hwinspool, "IsValidDevmodeW");
 
     on_win9x = check_win9x();
     if (on_win9x)
@@ -2891,6 +2920,7 @@ START_TEST(info)
     test_SetDefaultPrinter();
     test_XcvDataW_MonitorUI();
     test_XcvDataW_PortIsValid();
+    test_IsValidDevmodeW();
 
     /* Cleanup our temporary file */
     DeleteFileA(tempfileA);

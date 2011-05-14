@@ -21,6 +21,7 @@
 #include <stdio.h>
 
 #define COBJMACROS
+#define CONST_VTABLE
 
 #include "shlobj.h"
 #include "wine/test.h"
@@ -67,25 +68,28 @@ enum { OnItemClick = 0, OnPropertyItemCommit, OnItemStateChanging, OnItemStateCh
        LastEvent };
 
 typedef struct {
-    const INameSpaceTreeControlEventsVtbl *lpVtbl;
+    INameSpaceTreeControlEvents INameSpaceTreeControlEvents_iface;
     UINT qi_called_count;     /* Keep track of calls to QueryInterface */
     BOOL qi_enable_events;    /* If FALSE, QueryInterface returns only E_NOINTERFACE */
     UINT count[LastEvent];    /* Keep track of calls to all On* functions. */
     LONG ref;
 } INameSpaceTreeControlEventsImpl;
 
-#define NSTCE_IMPL(iface)                       \
-    ((INameSpaceTreeControlEventsImpl*)iface)
+static inline INameSpaceTreeControlEventsImpl *impl_from_INameSpaceTreeControlEvents(INameSpaceTreeControlEvents *iface)
+{
+    return CONTAINING_RECORD(iface, INameSpaceTreeControlEventsImpl, INameSpaceTreeControlEvents_iface);
+}
 
 static HRESULT WINAPI NSTCEvents_fnQueryInterface(
     INameSpaceTreeControlEvents* iface,
     REFIID riid,
     void **ppvObject)
 {
-    NSTCE_IMPL(iface)->qi_called_count++;
+    INameSpaceTreeControlEventsImpl *This = impl_from_INameSpaceTreeControlEvents(iface);
 
-    if(NSTCE_IMPL(iface)->qi_enable_events &&
-       IsEqualIID(riid, &IID_INameSpaceTreeControlEvents))
+    This->qi_called_count++;
+
+    if(This->qi_enable_events && IsEqualIID(riid, &IID_INameSpaceTreeControlEvents))
     {
         IUnknown_AddRef(iface);
         *ppvObject = iface;
@@ -98,13 +102,17 @@ static HRESULT WINAPI NSTCEvents_fnQueryInterface(
 static ULONG WINAPI NSTCEvents_fnAddRef(
     INameSpaceTreeControlEvents* iface)
 {
-    return InterlockedIncrement(&NSTCE_IMPL(iface)->ref);
+    INameSpaceTreeControlEventsImpl *This = impl_from_INameSpaceTreeControlEvents(iface);
+
+    return InterlockedIncrement(&This->ref);
 }
 
 static ULONG WINAPI NSTCEvents_fnRelease(
     INameSpaceTreeControlEvents* iface)
 {
-    return InterlockedDecrement(&NSTCE_IMPL(iface)->ref);
+    INameSpaceTreeControlEventsImpl *This = impl_from_INameSpaceTreeControlEvents(iface);
+
+    return InterlockedDecrement(&This->ref);
 }
 
 static HRESULT WINAPI NSTCEvents_fnOnItemClick(
@@ -113,8 +121,10 @@ static HRESULT WINAPI NSTCEvents_fnOnItemClick(
     NSTCEHITTEST nstceHitTest,
     NSTCECLICKTYPE nstceClickType)
 {
+    INameSpaceTreeControlEventsImpl *This = impl_from_INameSpaceTreeControlEvents(iface);
+
     ok(psi != NULL, "NULL IShellItem\n");
-    NSTCE_IMPL(iface)->count[OnItemClick]++;
+    This->count[OnItemClick]++;
     return E_NOTIMPL;
 }
 
@@ -122,8 +132,10 @@ static HRESULT WINAPI NSTCEvents_fnOnPropertyItemCommit(
     INameSpaceTreeControlEvents* iface,
     IShellItem *psi)
 {
+    INameSpaceTreeControlEventsImpl *This = impl_from_INameSpaceTreeControlEvents(iface);
+
     ok(psi != NULL, "NULL IShellItem\n");
-    NSTCE_IMPL(iface)->count[OnPropertyItemCommit]++;
+    This->count[OnPropertyItemCommit]++;
     return E_NOTIMPL;
 }
 
@@ -133,8 +145,10 @@ static HRESULT WINAPI NSTCEvents_fnOnItemStateChanging(
     NSTCITEMSTATE nstcisMask,
     NSTCITEMSTATE nstcisState)
 {
+    INameSpaceTreeControlEventsImpl *This = impl_from_INameSpaceTreeControlEvents(iface);
+
     ok(psi != NULL, "NULL IShellItem\n");
-    NSTCE_IMPL(iface)->count[OnItemStateChanging]++;
+    This->count[OnItemStateChanging]++;
     return E_NOTIMPL;
 }
 
@@ -144,8 +158,10 @@ static HRESULT WINAPI NSTCEvents_fnOnItemStateChanged(
     NSTCITEMSTATE nstcisMask,
     NSTCITEMSTATE nstcisState)
 {
+    INameSpaceTreeControlEventsImpl *This = impl_from_INameSpaceTreeControlEvents(iface);
+
     ok(psi != NULL, "NULL IShellItem\n");
-    NSTCE_IMPL(iface)->count[OnItemStateChanged]++;
+    This->count[OnItemStateChanged]++;
     return E_NOTIMPL;
 }
 
@@ -153,6 +169,8 @@ static HRESULT WINAPI NSTCEvents_fnOnSelectionChanged(
     INameSpaceTreeControlEvents* iface,
     IShellItemArray *psiaSelection)
 {
+    INameSpaceTreeControlEventsImpl *This = impl_from_INameSpaceTreeControlEvents(iface);
+
     ok(psiaSelection != NULL, "IShellItemArray was NULL.\n");
     if(psiaSelection)
     {
@@ -162,7 +180,7 @@ static HRESULT WINAPI NSTCEvents_fnOnSelectionChanged(
         ok(hr == S_OK, "Got 0x%08x\n", hr);
         ok(count == 1, "Got count 0x%x\n", count);
     }
-    NSTCE_IMPL(iface)->count[OnSelectionChanged]++;
+    This->count[OnSelectionChanged]++;
     return E_NOTIMPL;
 }
 
@@ -172,7 +190,9 @@ static HRESULT WINAPI NSTCEvents_fnOnKeyboardInput(
     WPARAM wParam,
     LPARAM lParam)
 {
-    NSTCE_IMPL(iface)->count[OnKeyboardInput]++;
+    INameSpaceTreeControlEventsImpl *This = impl_from_INameSpaceTreeControlEvents(iface);
+
+    This->count[OnKeyboardInput]++;
     ok(wParam == 0x1234, "Got unexpected wParam %lx\n", wParam);
     ok(lParam == 0x1234, "Got unexpected lParam %lx\n", lParam);
     return E_NOTIMPL;
@@ -182,8 +202,10 @@ static HRESULT WINAPI NSTCEvents_fnOnBeforeExpand(
     INameSpaceTreeControlEvents* iface,
     IShellItem *psi)
 {
+    INameSpaceTreeControlEventsImpl *This = impl_from_INameSpaceTreeControlEvents(iface);
+
     ok(psi != NULL, "NULL IShellItem\n");
-    NSTCE_IMPL(iface)->count[OnBeforeExpand]++;
+    This->count[OnBeforeExpand]++;
     return E_NOTIMPL;
 }
 
@@ -191,8 +213,10 @@ static HRESULT WINAPI NSTCEvents_fnOnAfterExpand(
     INameSpaceTreeControlEvents* iface,
     IShellItem *psi)
 {
+    INameSpaceTreeControlEventsImpl *This = impl_from_INameSpaceTreeControlEvents(iface);
+
     ok(psi != NULL, "NULL IShellItem\n");
-    NSTCE_IMPL(iface)->count[OnAfterExpand]++;
+    This->count[OnAfterExpand]++;
     return E_NOTIMPL;
 }
 
@@ -200,8 +224,10 @@ static HRESULT WINAPI NSTCEvents_fnOnBeginLabelEdit(
     INameSpaceTreeControlEvents* iface,
     IShellItem *psi)
 {
+    INameSpaceTreeControlEventsImpl *This = impl_from_INameSpaceTreeControlEvents(iface);
+
     ok(psi != NULL, "NULL IShellItem\n");
-    NSTCE_IMPL(iface)->count[OnBeginLabelEdit]++;
+    This->count[OnBeginLabelEdit]++;
     return E_NOTIMPL;
 }
 
@@ -209,8 +235,10 @@ static HRESULT WINAPI NSTCEvents_fnOnEndLabelEdit(
     INameSpaceTreeControlEvents* iface,
     IShellItem *psi)
 {
+    INameSpaceTreeControlEventsImpl *This = impl_from_INameSpaceTreeControlEvents(iface);
+
     ok(psi != NULL, "NULL IShellItem\n");
-    NSTCE_IMPL(iface)->count[OnEndLabelEdit]++;
+    This->count[OnEndLabelEdit]++;
     return E_NOTIMPL;
 }
 
@@ -220,8 +248,10 @@ static HRESULT WINAPI NSTCEvents_fnOnGetToolTip(
     LPWSTR pszTip,
     int cchTip)
 {
+    INameSpaceTreeControlEventsImpl *This = impl_from_INameSpaceTreeControlEvents(iface);
+
     ok(psi != NULL, "NULL IShellItem\n");
-    NSTCE_IMPL(iface)->count[OnGetToolTip]++;
+    This->count[OnGetToolTip]++;
     return E_NOTIMPL;
 }
 
@@ -229,8 +259,10 @@ static HRESULT WINAPI NSTCEvents_fnOnBeforeItemDelete(
     INameSpaceTreeControlEvents* iface,
     IShellItem *psi)
 {
+    INameSpaceTreeControlEventsImpl *This = impl_from_INameSpaceTreeControlEvents(iface);
+
     ok(psi != NULL, "NULL IShellItem\n");
-    NSTCE_IMPL(iface)->count[OnBeforeItemDelete]++;
+    This->count[OnBeforeItemDelete]++;
     return E_NOTIMPL;
 }
 
@@ -239,8 +271,10 @@ static HRESULT WINAPI NSTCEvents_fnOnItemAdded(
     IShellItem *psi,
     BOOL fIsRoot)
 {
+    INameSpaceTreeControlEventsImpl *This = impl_from_INameSpaceTreeControlEvents(iface);
+
     ok(psi != NULL, "NULL IShellItem\n");
-    NSTCE_IMPL(iface)->count[OnItemAdded]++;
+    This->count[OnItemAdded]++;
     return S_OK;
 }
 
@@ -249,8 +283,10 @@ static HRESULT WINAPI NSTCEvents_fnOnItemDeleted(
     IShellItem *psi,
     BOOL fIsRoot)
 {
+    INameSpaceTreeControlEventsImpl *This = impl_from_INameSpaceTreeControlEvents(iface);
+
     ok(psi != NULL, "NULL IShellItem\n");
-    NSTCE_IMPL(iface)->count[OnItemDeleted]++;
+    This->count[OnItemDeleted]++;
     return S_OK;
 }
 
@@ -260,7 +296,9 @@ static HRESULT WINAPI NSTCEvents_fnOnBeforeContextMenu(
     REFIID riid,
     void **ppv)
 {
-    NSTCE_IMPL(iface)->count[OnBeforeContextMenu]++;
+    INameSpaceTreeControlEventsImpl *This = impl_from_INameSpaceTreeControlEvents(iface);
+
+    This->count[OnBeforeContextMenu]++;
     return E_NOTIMPL;
 }
 
@@ -271,7 +309,9 @@ static HRESULT WINAPI NSTCEvents_fnOnAfterContextMenu(
     REFIID riid,
     void **ppv)
 {
-    NSTCE_IMPL(iface)->count[OnAfterContextMenu]++;
+    INameSpaceTreeControlEventsImpl *This = impl_from_INameSpaceTreeControlEvents(iface);
+
+    This->count[OnAfterContextMenu]++;
     return E_NOTIMPL;
 }
 
@@ -279,8 +319,10 @@ static HRESULT WINAPI NSTCEvents_fnOnBeforeStateImageChange(
     INameSpaceTreeControlEvents* iface,
     IShellItem *psi)
 {
+    INameSpaceTreeControlEventsImpl *This = impl_from_INameSpaceTreeControlEvents(iface);
+
     ok(psi != NULL, "NULL IShellItem\n");
-    NSTCE_IMPL(iface)->count[OnBeforeStateImageChange]++;
+    This->count[OnBeforeStateImageChange]++;
     return E_NOTIMPL;
 }
 
@@ -290,8 +332,10 @@ static HRESULT WINAPI NSTCEvents_fnOnGetDefaultIconIndex(
     int *piDefaultIcon,
     int *piOpenIcon)
 {
+    INameSpaceTreeControlEventsImpl *This = impl_from_INameSpaceTreeControlEvents(iface);
+
     ok(psi != NULL, "NULL IShellItem\n");
-    NSTCE_IMPL(iface)->count[OnGetDefaultIconIndex]++;
+    This->count[OnGetDefaultIconIndex]++;
     return E_NOTIMPL;
 }
 
@@ -318,13 +362,12 @@ static const INameSpaceTreeControlEventsVtbl vt_NSTCEvents = {
     NSTCEvents_fnOnBeforeStateImageChange,
     NSTCEvents_fnOnGetDefaultIconIndex
 };
-#undef NSTCE_IMPL
 
 static INameSpaceTreeControlEventsImpl *create_nstc_events(void)
 {
     INameSpaceTreeControlEventsImpl *This;
     This = HeapAlloc(GetProcessHeap(), 0, sizeof(INameSpaceTreeControlEventsImpl));
-    This->lpVtbl = &vt_NSTCEvents;
+    This->INameSpaceTreeControlEvents_iface.lpVtbl = &vt_NSTCEvents;
     This->ref = 1;
 
     return This;
@@ -768,7 +811,6 @@ static void test_basics(void)
         }
         ILFree(pidl_desktop);
     }
-    ok(psidesktop != psidesktop2, "psidesktop == psidesktop2\n");
     IShellFolder_Release(psfdesktop);
 
     if(FAILED(hr))
@@ -776,6 +818,8 @@ static void test_basics(void)
         win_skip("Test setup failed.\n");
         return;
     }
+
+    ok(psidesktop != psidesktop2, "psidesktop == psidesktop2\n");
 
     CreateFilesFolders();
     GetCurrentDirectoryW(MAX_PATH, curdirW);
@@ -1040,8 +1084,8 @@ static void test_basics(void)
     if(0)
     {
         /* Crashes under Windows 7 */
-        hr = INameSpaceTreeControl_AppendRoot(pnstc, NULL, SHCONTF_FOLDERS, 0, NULL);
-        hr = INameSpaceTreeControl_InsertRoot(pnstc, 0, NULL, SHCONTF_FOLDERS, 0, NULL);
+        INameSpaceTreeControl_AppendRoot(pnstc, NULL, SHCONTF_FOLDERS, 0, NULL);
+        INameSpaceTreeControl_InsertRoot(pnstc, 0, NULL, SHCONTF_FOLDERS, 0, NULL);
     }
 
     /* Note the usage of psidesktop and psidesktop2 */
@@ -1088,7 +1132,7 @@ static void test_basics(void)
     if(0)
     {
         /* Crashes on native. */
-        hr = INameSpaceTreeControl_GetRootItems(pnstc, NULL);
+        INameSpaceTreeControl_GetRootItems(pnstc, NULL);
     }
 
     hr = INameSpaceTreeControl_GetRootItems(pnstc, &psia);
@@ -1316,7 +1360,7 @@ static void test_basics(void)
     if(0)
     {
         /* Crashes under Windows 7 */
-        hr = INameSpaceTreeControl_GetSelectedItems(pnstc, NULL);
+        INameSpaceTreeControl_GetSelectedItems(pnstc, NULL);
     }
 
     psia = (void*)0xdeadbeef;
@@ -1506,9 +1550,9 @@ static void test_basics(void)
     if(0)
     {
         /* Crashes under win 7 */
-        hr = INameSpaceTreeControl_GetItemRect(pnstc, NULL, NULL);
-        hr = INameSpaceTreeControl_GetItemRect(pnstc, psitestdir, NULL);
-        hr = INameSpaceTreeControl_GetItemRect(pnstc, NULL, &rc);
+        INameSpaceTreeControl_GetItemRect(pnstc, NULL, NULL);
+        INameSpaceTreeControl_GetItemRect(pnstc, psitestdir, NULL);
+        INameSpaceTreeControl_GetItemRect(pnstc, NULL, &rc);
     }
 
     hr = INameSpaceTreeControl_GetItemRect(pnstc, psitestdir, &rc);
@@ -1568,6 +1612,7 @@ static void test_basics(void)
     ok(hr == E_POINTER, "Got 0x%08x\n", hr);
 
     psi = (void*)0xdeadbeef;
+    pt.x = pt.y = 0;
     hr = INameSpaceTreeControl_HitTest(pnstc, &pt, &psi);
     ok(hr == S_FALSE, "Got 0x%08x\n", hr);
     ok(psi == NULL, "Got psi %p\n", psi);
@@ -1578,7 +1623,6 @@ static void test_basics(void)
     ok(hr == S_OK, "Got 0x%08x\n", hr);
     process_msgs();
 
-    pt.x = pt.y = 0;
     hr = INameSpaceTreeControl_HitTest(pnstc, &pt, &psi);
     ok(hr == S_OK, "Got 0x%08x\n", hr);
     if(SUCCEEDED(hr))
@@ -1646,10 +1690,10 @@ static void test_basics(void)
     if(0)
     {
         /* Crashes under Windows 7 */
-        hr = INameSpaceTreeControl_GetItemCustomState(pnstc, NULL, NULL);
-        hr = INameSpaceTreeControl_GetItemCustomState(pnstc, NULL, &cbstate);
-        hr = INameSpaceTreeControl_GetItemCustomState(pnstc, psitestdir, NULL);
-        hr = INameSpaceTreeControl_SetItemCustomState(pnstc, NULL, 0);
+        INameSpaceTreeControl_GetItemCustomState(pnstc, NULL, NULL);
+        INameSpaceTreeControl_GetItemCustomState(pnstc, NULL, &cbstate);
+        INameSpaceTreeControl_GetItemCustomState(pnstc, psitestdir, NULL);
+        INameSpaceTreeControl_SetItemCustomState(pnstc, NULL, 0);
     }
 
     hr = INameSpaceTreeControl_AppendRoot(pnstc, psitestdir,
@@ -1755,17 +1799,17 @@ static void test_events(void)
 
     /* Create two instances of INameSpaceTreeControlEvents */
     pnstceimpl = create_nstc_events();
-    pnstce = (INameSpaceTreeControlEvents*)pnstceimpl;
+    pnstce = &pnstceimpl->INameSpaceTreeControlEvents_iface;
     ZeroMemory(&pnstceimpl->count, sizeof(UINT)*LastEvent);
     pnstceimpl2 = create_nstc_events();
-    pnstce2 = (INameSpaceTreeControlEvents*)pnstceimpl2;
+    pnstce2 = &pnstceimpl2->INameSpaceTreeControlEvents_iface;
 
     if(0)
     {
         /* Crashes native */
-        hr = INameSpaceTreeControl_TreeAdvise(pnstc, NULL, NULL);
-        hr = INameSpaceTreeControl_TreeAdvise(pnstc, NULL, &cookie1);
-        hr = INameSpaceTreeControl_TreeAdvise(pnstc, (IUnknown*)pnstce, NULL);
+        INameSpaceTreeControl_TreeAdvise(pnstc, NULL, NULL);
+        INameSpaceTreeControl_TreeAdvise(pnstc, NULL, &cookie1);
+        INameSpaceTreeControl_TreeAdvise(pnstc, (IUnknown*)pnstce, NULL);
     }
 
     /* TreeAdvise in NameSpaceTreeController seems to support only one
@@ -2000,12 +2044,12 @@ static void test_events(void)
     if(0)
     {
         /* Crashes on Windows 7 */
-        hr = INameSpaceTreeControl_SetItemState(pnstc, NULL, 0, 0);
-        hr = INameSpaceTreeControl_GetItemState(pnstc, NULL, 0, NULL);
-        hr = INameSpaceTreeControl_GetItemState(pnstc, psidesktop, 0, NULL);
-        hr = INameSpaceTreeControl_GetItemState(pnstc, NULL, 0, &itemstate);
-        hr = INameSpaceTreeControl_GetItemState(pnstc, psidesktop, 0, NULL);
-        hr = INameSpaceTreeControl_GetItemState(pnstc, NULL, 0, &itemstate);
+        INameSpaceTreeControl_SetItemState(pnstc, NULL, 0, 0);
+        INameSpaceTreeControl_GetItemState(pnstc, NULL, 0, NULL);
+        INameSpaceTreeControl_GetItemState(pnstc, psidesktop, 0, NULL);
+        INameSpaceTreeControl_GetItemState(pnstc, NULL, 0, &itemstate);
+        INameSpaceTreeControl_GetItemState(pnstc, psidesktop, 0, NULL);
+        INameSpaceTreeControl_GetItemState(pnstc, NULL, 0, &itemstate);
     }
 
     itemstate = 0xDEADBEEF;
@@ -2258,7 +2302,7 @@ static void test_events(void)
     if(0)
     {
         /* Crashes on Windows 7 */
-        hr = INameSpaceTreeControl_EnsureItemVisible(pnstc, NULL);
+        INameSpaceTreeControl_EnsureItemVisible(pnstc, NULL);
     }
 
     hr = INameSpaceTreeControl_EnsureItemVisible(pnstc, psidesktop);
@@ -2338,6 +2382,9 @@ static void test_events(void)
         HeapFree(GetProcessHeap(), 0, pnstceimpl);
         HeapFree(GetProcessHeap(), 0, pnstceimpl2);
     }
+
+    IShellItem_Release(psi);
+    IShellItem_Release(psidesktop);
 }
 
 static void setup_window(void)

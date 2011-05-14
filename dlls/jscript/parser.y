@@ -38,7 +38,6 @@ typedef struct _statement_list_t {
 
 static literal_t *new_string_literal(parser_ctx_t*,const WCHAR*);
 static literal_t *new_null_literal(parser_ctx_t*);
-static literal_t *new_boolean_literal(parser_ctx_t*,VARIANT_BOOL);
 
 typedef struct _property_list_t {
     prop_val_t *head;
@@ -178,8 +177,9 @@ static source_elements_t *source_elements_add_statement(source_elements_t*,state
 /* tokens */
 %token <identifier> tIdentifier
 %token <ival> tAssignOper tEqOper tShiftOper tRelOper
-%token <literal> tNumericLiteral
+%token <literal> tNumericLiteral tBooleanLiteral
 %token <wstr> tStringLiteral
+%token tEOF
 
 %type <source_elements> SourceElements
 %type <source_elements> FunctionBody
@@ -253,7 +253,7 @@ static source_elements_t *source_elements_add_statement(source_elements_t*,state
 
 /* ECMA-262 3rd Edition    14 */
 Program
-       : SourceElements HtmlComment
+       : SourceElements HtmlComment tEOF
                                 { program_parsed(ctx, $1); }
 
 HtmlComment
@@ -496,7 +496,7 @@ Expression_opt
 
 Expression_err
         : Expression            { $$ = $1; }
-        | error                 { set_error(ctx, IDS_SYNTAX_ERROR); YYABORT; }
+        | error                 { set_error(ctx, JS_E_SYNTAX); YYABORT; }
 
 /* ECMA-262 3rd Edition    11.14 */
 Expression
@@ -811,6 +811,7 @@ Literal
 BooleanLiteral
         : kTRUE                 { $$ = new_boolean_literal(ctx, VARIANT_TRUE); }
         | kFALSE                { $$ = new_boolean_literal(ctx, VARIANT_FALSE); }
+        | tBooleanLiteral       { $$ = $1; }
 
 semicolon_opt
         : ';'
@@ -818,15 +819,15 @@ semicolon_opt
 
 left_bracket
         : '('
-        | error                 { set_error(ctx, IDS_LBRACKET); YYABORT; }
+        | error                 { set_error(ctx, JS_E_MISSING_LBRACKET); YYABORT; }
 
 right_bracket
         : ')'
-        | error                 { set_error(ctx, IDS_RBRACKET); YYABORT; }
+        | error                 { set_error(ctx, JS_E_MISSING_RBRACKET); YYABORT; }
 
 semicolon
         : ';'
-        | error                 { set_error(ctx, IDS_SEMICOLON); YYABORT; }
+        | error                 { set_error(ctx, JS_E_MISSING_SEMICOLON); YYABORT; }
 
 %%
 
@@ -850,16 +851,6 @@ static literal_t *new_null_literal(parser_ctx_t *ctx)
     literal_t *ret = parser_alloc(ctx, sizeof(literal_t));
 
     ret->type = LT_NULL;
-
-    return ret;
-}
-
-static literal_t *new_boolean_literal(parser_ctx_t *ctx, VARIANT_BOOL bval)
-{
-    literal_t *ret = parser_alloc(ctx, sizeof(literal_t));
-
-    ret->type = LT_BOOL;
-    ret->u.bval = bval;
 
     return ret;
 }
@@ -1459,14 +1450,14 @@ static int parser_error(const char *str)
 
 static void set_error(parser_ctx_t *ctx, UINT error)
 {
-    ctx->hres = JSCRIPT_ERROR|error;
+    ctx->hres = error;
 }
 
 static BOOL explicit_error(parser_ctx_t *ctx, void *obj, WCHAR next)
 {
     if(obj || *(ctx->ptr-1)==next) return TRUE;
 
-    set_error(ctx, IDS_SYNTAX_ERROR);
+    set_error(ctx, JS_E_SYNTAX);
     return FALSE;
 }
 
@@ -1603,7 +1594,7 @@ HRESULT script_parse(script_ctx_t *ctx, const WCHAR *code, const WCHAR *delimite
         return E_OUTOFMEMORY;
 
     parser_ctx->ref = 1;
-    parser_ctx->hres = JSCRIPT_ERROR|IDS_SYNTAX_ERROR;
+    parser_ctx->hres = JS_E_SYNTAX;
     parser_ctx->is_html = delimiter && !strcmpiW(delimiter, html_tagW);
 
     parser_ctx->begin = heap_strdupW(code);

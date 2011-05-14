@@ -52,13 +52,14 @@
 #include "winerror.h"
 #include "winuser.h"
 #include "mmddk.h"
+#include "mmreg.h"
+#include "dsound.h"
+#include "dsdriver.h"
 
 #include "alsa.h"
 #include "wine/library.h"
 #include "wine/unicode.h"
 #include "wine/debug.h"
-
-#ifdef HAVE_ALSA
 
 WINE_DEFAULT_DEBUG_CHANNEL(dsalsa);
 
@@ -168,11 +169,8 @@ static snd_pcm_uframes_t CommitAll(IDsDriverBufferImpl *This)
 static void CheckXRUN(IDsDriverBufferImpl* This)
 {
     snd_pcm_state_t state = snd_pcm_state(This->pcm);
-    snd_pcm_sframes_t delay;
     int err;
 
-    snd_pcm_hwsync(This->pcm);
-    snd_pcm_delay(This->pcm, &delay);
     if ( state == SND_PCM_STATE_XRUN )
     {
         err = snd_pcm_prepare(This->pcm);
@@ -962,5 +960,3 @@ DWORD wodDsDesc(UINT wDevID, PDSDRIVERDESC desc)
     *desc = WOutDev[wDevID].ds_desc;
     return MMSYSERR_NOERROR;
 }
-
-#endif /* HAVE_ALSA */

@@ -219,6 +219,7 @@ static NTSTATUS create_disk_device( enum device_type type, struct disk_device **
         format = floppyW;
         break;
     case DEVICE_CDROM:
+    case DEVICE_DVD:
         format = cdromW;
         break;
     case DEVICE_RAMDISK:
@@ -255,6 +256,11 @@ static NTSTATUS create_disk_device( enum device_type type, struct disk_device **
             break;
         case DEVICE_CDROM:
             device->devnum.DeviceType = FILE_DEVICE_CD_ROM;
+            device->devnum.DeviceNumber = i;
+            device->devnum.PartitionNumber = ~0u;
+            break;
+        case DEVICE_DVD:
+            device->devnum.DeviceType = FILE_DEVICE_DVD;
             device->devnum.DeviceNumber = i;
             device->devnum.PartitionNumber = ~0u;
             break;
@@ -541,6 +547,7 @@ static int add_drive( const char *device, enum device_type type )
         last = 2;
         break;
     case DEVICE_CDROM:
+    case DEVICE_DVD:
         first = 3;
         last = 26;
         break;
@@ -666,7 +673,11 @@ NTSTATUS add_volume( const char *udi, const char *device, const char *mount_poin
 
     EnterCriticalSection( &device_section );
     LIST_FOR_EACH_ENTRY( volume, &volumes_list, struct volume, entry )
-        if (volume->udi && !strcmp( udi, volume->udi )) goto found;
+        if (volume->udi && !strcmp( udi, volume->udi ))
+        {
+            grab_volume( volume );
+            goto found;
+        }
 
     /* udi not found, search for a non-dynamic volume */
     if ((volume = find_matching_volume( udi, device, mount_point, type ))) set_volume_udi( volume, udi );
@@ -884,6 +895,26 @@ static NTSTATUS WINAPI harddisk_ioctl( DEVICE_OBJECT *device, IRP *irp )
         irp->IoStatus.u.Status = STATUS_SUCCESS;
         break;
     }
+    case IOCTL_DISK_GET_DRIVE_GEOMETRY_EX:
+    {
+        DISK_GEOMETRY_EX info;
+        DWORD len = min( sizeof(info), irpsp->Parameters.DeviceIoControl.OutputBufferLength );
+
+        FIXME("The DISK_PARTITION_INFO and DISK_DETECTION_INFO structures will not be filled\n");
+
+        info.Geometry.Cylinders.QuadPart = 10000;
+        info.Geometry.MediaType = (dev->devnum.DeviceType == FILE_DEVICE_DISK) ? FixedMedia : RemovableMedia;
+        info.Geometry.TracksPerCylinder = 255;
+        info.Geometry.SectorsPerTrack = 63;
+        info.Geometry.BytesPerSector = 512;
+        info.DiskSize.QuadPart = info.Geometry.Cylinders.QuadPart * info.Geometry.TracksPerCylinder *
+                                 info.Geometry.SectorsPerTrack * info.Geometry.BytesPerSector;
+        info.Data[0]  = 0;
+        memcpy( irp->MdlAddress->StartVa, &info, len );
+        irp->IoStatus.Information = len;
+        irp->IoStatus.u.Status = STATUS_SUCCESS;
+        break;
+    }
     case IOCTL_STORAGE_GET_DEVICE_NUMBER:
     {
         DWORD len = min( sizeof(dev->devnum), irpsp->Parameters.DeviceIoControl.OutputBufferLength );
@@ -896,6 +927,16 @@ static NTSTATUS WINAPI harddisk_ioctl( DEVICE_OBJECT *device, IRP *irp )
     case IOCTL_CDROM_READ_TOC:
         irp->IoStatus.u.Status = STATUS_INVALID_DEVICE_REQUEST;
         break;
+    case IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS:
+    {
+        DWORD len = min( 32, irpsp->Parameters.DeviceIoControl.OutputBufferLength );
+
+        FIXME( "returning zero-filled buffer for IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS\n" );
+        memset( irp->MdlAddress->StartVa, 0, len );
+        irp->IoStatus.Information = len;
+        irp->IoStatus.u.Status = STATUS_SUCCESS;
+        break;
+    }
     default:
         FIXME( "unsupported ioctl %x\n", irpsp->Parameters.DeviceIoControl.IoControlCode );
         irp->IoStatus.u.Status = STATUS_NOT_SUPPORTED;

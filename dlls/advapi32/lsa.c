@@ -414,7 +414,7 @@ NTSTATUS WINAPI LsaLookupNames2( LSA_HANDLE policy, ULONG flags, ULONG count,
             (*sids)[i].Sid = sid;
             (*sids)[i].Use = use;
 
-            sid += sid_size;
+            sid = (SID *)((char *)sid + sid_size);
             sid_size_total -= sid_size;
             if (domain_size)
             {
@@ -656,7 +656,6 @@ NTSTATUS WINAPI LsaQueryInformationPolicy(
 
             xdi->info.DomainSid = &xdi->sid;
 
-            /* read the computer SID from the registry */
             if (!ADVAPI_GetComputerSid(&xdi->sid))
             {
                 HeapFree(GetProcessHeap(), 0, xdi);

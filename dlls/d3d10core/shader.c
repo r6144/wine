@@ -162,9 +162,7 @@ static ULONG STDMETHODCALLTYPE d3d10_vertex_shader_AddRef(ID3D10VertexShader *if
     TRACE("%p increasing refcount to %u\n", This, refcount);
 
     if (refcount == 1)
-    {
-        IWineD3DVertexShader_AddRef(This->wined3d_shader);
-    }
+        wined3d_shader_incref(This->wined3d_shader);
 
     return refcount;
 }
@@ -177,9 +175,7 @@ static ULONG STDMETHODCALLTYPE d3d10_vertex_shader_Release(ID3D10VertexShader *i
     TRACE("%p decreasing refcount to %u\n", This, refcount);
 
     if (!refcount)
-    {
-        IWineD3DVertexShader_Release(This->wined3d_shader);
-    }
+        wined3d_shader_decref(This->wined3d_shader);
 
     return refcount;
 }
@@ -259,7 +255,7 @@ HRESULT d3d10_vertex_shader_init(struct d3d10_vertex_shader *shader, struct d3d1
         return hr;
     }
 
-    hr = IWineD3DDevice_CreateVertexShader(device->wined3d_device, shader_info.shader_code,
+    hr = wined3d_shader_create_vs(device->wined3d_device, shader_info.shader_code,
             &shader->output_signature, shader, &d3d10_vertex_shader_wined3d_parent_ops, &shader->wined3d_shader);
     if (FAILED(hr))
     {
@@ -311,9 +307,7 @@ static ULONG STDMETHODCALLTYPE d3d10_geometry_shader_Release(ID3D10GeometryShade
     TRACE("%p decreasing refcount to %u\n", This, refcount);
 
     if (!refcount)
-    {
-        IWineD3DGeometryShader_Release(This->wined3d_shader);
-    }
+        wined3d_shader_decref(This->wined3d_shader);
 
     return refcount;
 }
@@ -393,7 +387,7 @@ HRESULT d3d10_geometry_shader_init(struct d3d10_geometry_shader *shader, struct 
         return hr;
     }
 
-    hr = IWineD3DDevice_CreateGeometryShader(device->wined3d_device, shader_info.shader_code,
+    hr = wined3d_shader_create_gs(device->wined3d_device, shader_info.shader_code,
             &shader->output_signature, shader, &d3d10_geometry_shader_wined3d_parent_ops, &shader->wined3d_shader);
     if (FAILED(hr))
     {
@@ -435,9 +429,7 @@ static ULONG STDMETHODCALLTYPE d3d10_pixel_shader_AddRef(ID3D10PixelShader *ifac
     TRACE("%p increasing refcount to %u\n", This, refcount);
 
     if (refcount == 1)
-    {
-        IWineD3DPixelShader_AddRef(This->wined3d_shader);
-    }
+        wined3d_shader_incref(This->wined3d_shader);
 
     return refcount;
 }
@@ -450,9 +442,7 @@ static ULONG STDMETHODCALLTYPE d3d10_pixel_shader_Release(ID3D10PixelShader *ifa
     TRACE("%p decreasing refcount to %u\n", This, refcount);
 
     if (!refcount)
-    {
-        IWineD3DPixelShader_Release(This->wined3d_shader);
-    }
+        wined3d_shader_decref(This->wined3d_shader);
 
     return refcount;
 }
@@ -532,7 +522,7 @@ HRESULT d3d10_pixel_shader_init(struct d3d10_pixel_shader *shader, struct d3d10_
         return hr;
     }
 
-    hr = IWineD3DDevice_CreatePixelShader(device->wined3d_device, shader_info.shader_code,
+    hr = wined3d_shader_create_ps(device->wined3d_device, shader_info.shader_code,
             &shader->output_signature, shader, &d3d10_pixel_shader_wined3d_parent_ops, &shader->wined3d_shader);
     if (FAILED(hr))
     {

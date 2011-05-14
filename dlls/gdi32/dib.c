@@ -178,140 +178,95 @@ int DIB_GetBitmapInfo( const BITMAPINFOHEADER *header, LONG *width,
     return -1;
 }
 
+/* nulldrv fallback implementation using SetDIBits/StretchBlt */
+INT CDECL nulldrv_StretchDIBits( PHYSDEV dev, INT xDst, INT yDst, INT widthDst, INT heightDst,
+                                 INT xSrc, INT ySrc, INT widthSrc, INT heightSrc, const void *bits,
+                                 const BITMAPINFO *info, UINT coloruse, DWORD rop )
+{
+    DC *dc = get_nulldrv_dc( dev );
+    INT ret;
+    LONG width, height;
+    WORD planes, bpp;
+    DWORD compr, size;
+    HBITMAP hBitmap;
+    HDC hdcMem;
+
+    /* make sure we have a real implementation for StretchBlt and SetDIBits */
+    if (GET_DC_PHYSDEV( dc, pStretchBlt ) == dev || GET_DC_PHYSDEV( dc, pSetDIBits ) == dev)
+        return 0;
+
+    if (DIB_GetBitmapInfo( &info->bmiHeader, &width, &height, &planes, &bpp, &compr, &size ) == -1)
+        return 0;
+
+    if (width < 0) return 0;
+
+    if (xSrc == 0 && ySrc == 0 && widthDst == widthSrc && heightDst == heightSrc &&
+        info->bmiHeader.biCompression == BI_RGB)
+    {
+        /* Windows appears to have a fast case optimization
+         * that uses the wrong origin for top-down DIBs */
+        if (height < 0 && heightSrc < abs(height)) ySrc = abs(height) - heightSrc;
+
+        if (xDst == 0 && yDst == 0 && info->bmiHeader.biCompression == BI_RGB && rop == SRCCOPY)
+        {
+            BITMAP bm;
+            hBitmap = GetCurrentObject( dev->hdc, OBJ_BITMAP );
+            if (GetObjectW( hBitmap, sizeof(bm), &bm ) &&
+                bm.bmWidth == widthSrc && bm.bmHeight == heightSrc &&
+                bm.bmBitsPixel == bpp && bm.bmPlanes == planes)
+            {
+                /* fast path */
+                return SetDIBits( dev->hdc, hBitmap, 0, height, bits, info, coloruse );
+            }
+        }
+    }
+
+    hdcMem = CreateCompatibleDC( dev->hdc );
+    hBitmap = CreateCompatibleBitmap( dev->hdc, width, height );
+    SelectObject( hdcMem, hBitmap );
+    if (coloruse == DIB_PAL_COLORS)
+        SelectPalette( hdcMem, GetCurrentObject( dev->hdc, OBJ_PAL ), FALSE );
+
+    if (info->bmiHeader.biCompression == BI_RLE4 || info->bmiHeader.biCompression == BI_RLE8)
+    {
+        /* when RLE compression is used, there may be some gaps (ie the DIB doesn't
+         * contain all the rectangle described in bmiHeader, but only part of it.
+         * This mean that those undescribed pixels must be left untouched.
+         * So, we first copy on a memory bitmap the current content of the
+         * destination rectangle, blit the DIB bits on top of it - hence leaving
+         * the gaps untouched -, and blitting the rectangle back.
+         * This insure that gaps are untouched on the destination rectangle
+         */
+        StretchBlt( hdcMem, xSrc, abs(height) - heightSrc - ySrc, widthSrc, heightSrc,
+                    dev->hdc, xDst, yDst, widthDst, heightDst, rop );
+    }
+    ret = SetDIBits( hdcMem, hBitmap, 0, height, bits, info, coloruse );
+    if (ret) StretchBlt( dev->hdc, xDst, yDst, widthDst, heightDst,
+                         hdcMem, xSrc, abs(height) - heightSrc - ySrc, widthSrc, heightSrc, rop );
+    DeleteDC( hdcMem );
+    DeleteObject( hBitmap );
+    return ret;
+}
 
 /***********************************************************************
  *           StretchDIBits   (GDI32.@)
  */
-INT WINAPI StretchDIBits(HDC hdc, INT xDst, INT yDst, INT widthDst,
-                       INT heightDst, INT xSrc, INT ySrc, INT widthSrc,
-                       INT heightSrc, const void *bits,
-                       const BITMAPINFO *info, UINT wUsage, DWORD dwRop )
+INT WINAPI StretchDIBits(HDC hdc, INT xDst, INT yDst, INT widthDst, INT heightDst,
+                         INT xSrc, INT ySrc, INT widthSrc, INT heightSrc, const void *bits,
+                         const BITMAPINFO *info, UINT coloruse, DWORD rop )
 {
     DC *dc;
-    INT ret;
+    INT ret = 0;
 
-    if (!bits || !info)
-	return 0;
+    if (!bits || !info) return 0;
 
-    if (!(dc = get_dc_ptr( hdc ))) return 0;
-
-    if(dc->funcs->pStretchDIBits)
+    if ((dc = get_dc_ptr( hdc )))
     {
+        PHYSDEV physdev = GET_DC_PHYSDEV( dc, pStretchDIBits );
         update_dc( dc );
-        ret = dc->funcs->pStretchDIBits(dc->physDev, xDst, yDst, widthDst,
-                                        heightDst, xSrc, ySrc, widthSrc,
-                                        heightSrc, bits, info, wUsage, dwRop);
+        ret = physdev->funcs->pStretchDIBits( physdev, xDst, yDst, widthDst, heightDst,
+                                              xSrc, ySrc, widthSrc, heightSrc, bits, info, coloruse, rop );
         release_dc_ptr( dc );
-    }
-    else /* use StretchBlt */
-    {
-        LONG height;
-        LONG width;
-        WORD planes, bpp;
-        DWORD compr, size;
-        HBITMAP hBitmap;
-        BOOL fastpath = FALSE;
-
-        release_dc_ptr( dc );
-
-        if (DIB_GetBitmapInfo( &info->bmiHeader, &width, &height, &planes, &bpp, &compr, &size ) == -1)
-        {
-            ERR("Invalid bitmap\n");
-            return 0;
-        }
-
-        if (width < 0)
-        {
-            ERR("Bitmap has a negative width\n");
-            return 0;
-        }
-
-        if (xSrc == 0 && ySrc == 0 && widthDst == widthSrc && heightDst == heightSrc &&
-            info->bmiHeader.biCompression == BI_RGB)
-        {
-            /* Windows appears to have a fast case optimization
-             * that uses the wrong origin for top-down DIBs */
-            if (height < 0 && heightSrc < abs(height)) ySrc = abs(height) - heightSrc;
-        }
-
-        hBitmap = GetCurrentObject(hdc, OBJ_BITMAP);
-
-        if (xDst == 0 && yDst == 0 && xSrc == 0 && ySrc == 0 &&
-            widthDst == widthSrc && heightDst == heightSrc &&
-            info->bmiHeader.biCompression == BI_RGB &&
-            dwRop == SRCCOPY)
-        {
-            BITMAPOBJ *bmp;
-            if ((bmp = GDI_GetObjPtr( hBitmap, OBJ_BITMAP )))
-            {
-                if (bmp->bitmap.bmBitsPixel == bpp &&
-                    bmp->bitmap.bmWidth == widthSrc &&
-                    bmp->bitmap.bmHeight == heightSrc &&
-                    bmp->bitmap.bmPlanes == planes)
-                    fastpath = TRUE;
-                GDI_ReleaseObj( hBitmap );
-            }
-        }
-
-        if (fastpath)
-        {
-            /* fast path */
-            TRACE("using fast path\n");
-            ret = SetDIBits( hdc, hBitmap, 0, height, bits, info, wUsage);
-        }
-        else
-        {
-            /* slow path - need to use StretchBlt */
-            HBITMAP hOldBitmap;
-            HPALETTE hpal = NULL;
-            HDC hdcMem;
-
-            hdcMem = CreateCompatibleDC( hdc );
-            hBitmap = CreateCompatibleBitmap(hdc, width, height);
-            hOldBitmap = SelectObject( hdcMem, hBitmap );
-            if(wUsage == DIB_PAL_COLORS)
-            {
-                hpal = GetCurrentObject(hdc, OBJ_PAL);
-                hpal = SelectPalette(hdcMem, hpal, FALSE);
-            }
-
-            if (info->bmiHeader.biCompression == BI_RLE4 ||
-	            info->bmiHeader.biCompression == BI_RLE8) {
-
-                /* when RLE compression is used, there may be some gaps (ie the DIB doesn't
-                 * contain all the rectangle described in bmiHeader, but only part of it.
-                 * This mean that those undescribed pixels must be left untouched.
-                 * So, we first copy on a memory bitmap the current content of the
-                 * destination rectangle, blit the DIB bits on top of it - hence leaving
-                 * the gaps untouched -, and blitting the rectangle back.
-                 * This insure that gaps are untouched on the destination rectangle
-                 * Not doing so leads to trashed images (the gaps contain what was on the
-                 * memory bitmap => generally black or garbage)
-                 * Unfortunately, RLE DIBs without gaps will be slowed down. But this is
-                 * another speed vs correctness issue. Anyway, if speed is needed, then the
-                 * pStretchDIBits function shall be implemented.
-                 * ericP (2000/09/09)
-                 */
-
-                /* copy existing bitmap from destination dc */
-                StretchBlt( hdcMem, xSrc, abs(height) - heightSrc - ySrc,
-                            widthSrc, heightSrc, hdc, xDst, yDst, widthDst, heightDst,
-                            dwRop );
-            }
-
-            ret = SetDIBits(hdcMem, hBitmap, 0, height, bits, info, wUsage);
-
-            /* Origin for DIBitmap may be bottom left (positive biHeight) or top
-               left (negative biHeight) */
-            if (ret) StretchBlt( hdc, xDst, yDst, widthDst, heightDst,
-                                 hdcMem, xSrc, abs(height) - heightSrc - ySrc,
-                                 widthSrc, heightSrc, dwRop );
-            if(hpal)
-                SelectPalette(hdcMem, hpal, FALSE);
-            SelectObject( hdcMem, hOldBitmap );
-            DeleteDC( hdcMem );
-            DeleteObject( hBitmap );
-        }
     }
     return ret;
 }
@@ -341,6 +296,7 @@ INT WINAPI SetDIBits( HDC hdc, HBITMAP hbitmap, UINT startscan,
 {
     DC *dc = get_dc_ptr( hdc );
     BOOL delete_hdc = FALSE;
+    PHYSDEV physdev;
     BITMAPOBJ *bitmap;
     INT result = 0;
 
@@ -362,19 +318,10 @@ INT WINAPI SetDIBits( HDC hdc, HBITMAP hbitmap, UINT startscan,
         return 0;
     }
 
-    if (!bitmap->funcs && !BITMAP_SetOwnerDC( hbitmap, dc )) goto done;
+    physdev = GET_DC_PHYSDEV( dc, pSetDIBits );
+    if (BITMAP_SetOwnerDC( hbitmap, physdev ))
+        result = physdev->funcs->pSetDIBits( physdev, hbitmap, startscan, lines, bits, info, coloruse );
 
-    result = lines;
-    if (bitmap->funcs)
-    {
-        if (bitmap->funcs != dc->funcs)
-            ERR( "not supported: DDB bitmap %p not belonging to device %p\n", hbitmap, hdc );
-        else if (dc->funcs->pSetDIBits)
-            result = dc->funcs->pSetDIBits( dc->physDev, hbitmap, startscan, lines,
-                                            bits, info, coloruse );
-    }
-
- done:
     GDI_ReleaseObj( hbitmap );
     release_dc_ptr( dc );
     if (delete_hdc) DeleteDC(hdc);
@@ -390,26 +337,19 @@ INT WINAPI SetDIBitsToDevice(HDC hdc, INT xDest, INT yDest, DWORD cx,
                            UINT lines, LPCVOID bits, const BITMAPINFO *info,
                            UINT coloruse )
 {
-    INT ret;
+    INT ret = 0;
     DC *dc;
 
     if (!bits) return 0;
 
-    if (!(dc = get_dc_ptr( hdc ))) return 0;
-
-    if(dc->funcs->pSetDIBitsToDevice)
+    if ((dc = get_dc_ptr( hdc )))
     {
+        PHYSDEV physdev = GET_DC_PHYSDEV( dc, pSetDIBitsToDevice );
         update_dc( dc );
-        ret = dc->funcs->pSetDIBitsToDevice( dc->physDev, xDest, yDest, cx, cy, xSrc,
-					     ySrc, startscan, lines, bits,
-					     info, coloruse );
+        ret = physdev->funcs->pSetDIBitsToDevice( physdev, xDest, yDest, cx, cy, xSrc,
+                                                  ySrc, startscan, lines, bits, info, coloruse );
+        release_dc_ptr( dc );
     }
-    else {
-        FIXME("unimplemented on hdc %p\n", hdc);
-	ret = 0;
-    }
-
-    release_dc_ptr( dc );
     return ret;
 }
 
@@ -426,6 +366,8 @@ UINT WINAPI SetDIBColorTable( HDC hdc, UINT startpos, UINT entries, CONST RGBQUA
 
     if ((bitmap = GDI_GetObjPtr( dc->hBitmap, OBJ_BITMAP )))
     {
+        PHYSDEV physdev = GET_DC_PHYSDEV( dc, pSetDIBColorTable );
+
         /* Check if currently selected bitmap is a DIB */
         if (bitmap->color_table)
         {
@@ -437,11 +379,8 @@ UINT WINAPI SetDIBColorTable( HDC hdc, UINT startpos, UINT entries, CONST RGBQUA
             }
         }
         GDI_ReleaseObj( dc->hBitmap );
+        physdev->funcs->pSetDIBColorTable( physdev, startpos, entries, colors );
     }
-
-    if (dc->funcs->pSetDIBColorTable)
-        dc->funcs->pSetDIBColorTable(dc->physDev, startpos, entries, colors);
-
     release_dc_ptr( dc );
     return result;
 }
@@ -453,29 +392,24 @@ UINT WINAPI SetDIBColorTable( HDC hdc, UINT startpos, UINT entries, CONST RGBQUA
 UINT WINAPI GetDIBColorTable( HDC hdc, UINT startpos, UINT entries, RGBQUAD *colors )
 {
     DC * dc;
+    BITMAPOBJ *bitmap;
     UINT result = 0;
 
     if (!(dc = get_dc_ptr( hdc ))) return 0;
 
-    if (dc->funcs->pGetDIBColorTable)
-        result = dc->funcs->pGetDIBColorTable(dc->physDev, startpos, entries, colors);
-    else
+    if ((bitmap = GDI_GetObjPtr( dc->hBitmap, OBJ_BITMAP )))
     {
-        BITMAPOBJ *bitmap = GDI_GetObjPtr( dc->hBitmap, OBJ_BITMAP );
-        if (bitmap)
+        /* Check if currently selected bitmap is a DIB */
+        if (bitmap->color_table)
         {
-            /* Check if currently selected bitmap is a DIB */
-            if (bitmap->color_table)
+            if (startpos < bitmap->nb_colors)
             {
-                if (startpos < bitmap->nb_colors)
-                {
-                    if (startpos + entries > bitmap->nb_colors) entries = bitmap->nb_colors - startpos;
-                    memcpy(colors, bitmap->color_table + startpos, entries * sizeof(RGBQUAD));
-                    result = entries;
-                }
+                if (startpos + entries > bitmap->nb_colors) entries = bitmap->nb_colors - startpos;
+                memcpy(colors, bitmap->color_table + startpos, entries * sizeof(RGBQUAD));
+                result = entries;
             }
-            GDI_ReleaseObj( dc->hBitmap );
         }
+        GDI_ReleaseObj( dc->hBitmap );
     }
     release_dc_ptr( dc );
     return result;
@@ -840,7 +774,17 @@ INT WINAPI GetDIBits(
     case 16:
         if (info->bmiHeader.biCompression == BI_BITFIELDS)
         {
-            if (bmp->dib) memcpy( info->bmiColors, bmp->dib->dsBitfields, 3 * sizeof(DWORD) );
+            if (bmp->dib)
+            {
+                if (bmp->dib->dsBmih.biCompression == BI_BITFIELDS)
+                    memcpy( info->bmiColors, bmp->dib->dsBitfields, 3 * sizeof(DWORD) );
+                else
+                {
+                    ((PDWORD)info->bmiColors)[0] = 0x7c00;
+                    ((PDWORD)info->bmiColors)[1] = 0x03e0;
+                    ((PDWORD)info->bmiColors)[2] = 0x001f;
+                }
+            }
             else
             {
                 ((PDWORD)info->bmiColors)[0] = 0xf800;
@@ -854,7 +798,8 @@ INT WINAPI GetDIBits(
     case 32:
         if (info->bmiHeader.biCompression == BI_BITFIELDS)
         {
-            if (bmp->dib) memcpy( info->bmiColors, bmp->dib->dsBitfields, 3 * sizeof(DWORD) );
+            if (bmp->dib && bmp->dib->dsBmih.biCompression == BI_BITFIELDS)
+                memcpy( info->bmiColors, bmp->dib->dsBitfields, 3 * sizeof(DWORD) );
             else
             {
                 ((PDWORD)info->bmiColors)[0] = 0xff0000;
@@ -871,18 +816,29 @@ INT WINAPI GetDIBits(
         if(bmp->dib && bmp->dib->dsBm.bmBitsPixel >= 15 && bpp >= 15)
         {
             /*FIXME: Only RGB dibs supported for now */
-            unsigned int srcwidth = bmp->dib->dsBm.bmWidth, srcwidthb = bmp->dib->dsBm.bmWidthBytes;
+            unsigned int srcwidth = bmp->dib->dsBm.bmWidth;
+            int srcwidthb = bmp->dib->dsBm.bmWidthBytes;
             unsigned int dstwidth = width;
             int dstwidthb = DIB_GetDIBWidthBytes( width, bpp );
             LPBYTE dbits = bits, sbits = (LPBYTE) bmp->dib->dsBm.bmBits + (startscan * srcwidthb);
             unsigned int x, y, width, widthb;
 
-            if ((height < 0) ^ (bmp->dib->dsBmih.biHeight < 0))
+            /*
+             * If copying from a top-down source bitmap, move the source
+             * pointer to the end of the source bitmap and negate the width
+             * so that we copy the bits upside-down.
+             */
+            if (bmp->dib->dsBmih.biHeight < 0)
             {
-                dbits = (LPBYTE)bits + (dstwidthb * (lines-1));
+                sbits += (srcwidthb * (int)(abs(bmp->dib->dsBmih.biHeight) - 2 * startscan - 1));
+                srcwidthb = -srcwidthb;
+            }
+            /*Same for the destination.*/
+            if (height < 0)
+            {
+                dbits = (LPBYTE)bits + (dstwidthb * (lines - 1));
                 dstwidthb = -dstwidthb;
             }
-
             switch( bpp ) {
 
 	    case 15:
@@ -897,7 +853,7 @@ INT WINAPI GetDIBits(
 
                     case 16: /* 16 bpp srcDIB -> 16 bpp dstDIB */
                         {
-                            widthb = min(srcwidthb, abs(dstwidthb));
+                            widthb = min(abs(srcwidthb), abs(dstwidthb));
                             /* FIXME: BI_BITFIELDS not supported yet */
                             for (y = 0; y < lines; y++, dbits+=dstwidthb, sbits+=srcwidthb)
                                 memcpy(dbits, sbits, widthb);
@@ -975,7 +931,7 @@ INT WINAPI GetDIBits(
 
                     case 24: /* 24 bpp srcDIB -> 24 bpp dstDIB */
                         {
-                            widthb = min(srcwidthb, abs(dstwidthb));
+                            widthb = min(abs(srcwidthb), abs(dstwidthb));
                             for (y = 0; y < lines; y++, dbits+=dstwidthb, sbits+=srcwidthb)
                                 memcpy(dbits, sbits, widthb);
                         }
@@ -1051,7 +1007,7 @@ INT WINAPI GetDIBits(
 
                     case 32: /* 32 bpp srcDIB -> 32 bpp dstDIB */
                         {
-                            widthb = min(srcwidthb, abs(dstwidthb));
+                            widthb = min(abs(srcwidthb), abs(dstwidthb));
                             /* FIXME: BI_BITFIELDS not supported yet */
                             for (y = 0; y < lines; y++, dbits+=dstwidthb, sbits+=srcwidthb) {
                                 memcpy(dbits, sbits, widthb);
@@ -1075,15 +1031,10 @@ INT WINAPI GetDIBits(
         /* Otherwise, get bits from the XImage */
         else
         {
-            if (!bmp->funcs && !BITMAP_SetOwnerDC( hbitmap, dc )) lines = 0;
-            else
-            {
-                if (bmp->funcs && bmp->funcs->pGetDIBits)
-                    lines = bmp->funcs->pGetDIBits( dc->physDev, hbitmap, startscan,
-                                                    lines, bits, info, coloruse );
-                else
-                    lines = 0;  /* FIXME: should copy from bmp->bitmap.bmBits */
-            }
+            PHYSDEV physdev = GET_DC_PHYSDEV( dc, pGetDIBits );
+            if (!BITMAP_SetOwnerDC( hbitmap, physdev )) lines = 0;
+            else lines = physdev->funcs->pGetDIBits( physdev, hbitmap, startscan,
+                                                     lines, bits, info, coloruse );
         }
     }
     else lines = abs(height);
@@ -1122,7 +1073,6 @@ HBITMAP WINAPI CreateDIBitmap( HDC hdc, const BITMAPINFOHEADER *header,
     LONG height;
     WORD planes, bpp;
     DWORD compr, size;
-    DC *dc;
 
     if (!header) return 0;
 
@@ -1154,16 +1104,6 @@ HBITMAP WINAPI CreateDIBitmap( HDC hdc, const BITMAPINFOHEADER *header,
                 DeleteObject( handle );
                 handle = 0;
             }
-        }
-
-        else if (hdc && ((dc = get_dc_ptr( hdc )) != NULL) )
-        {
-            if (!BITMAP_SetOwnerDC( handle, dc ))
-            {
-                DeleteObject( handle );
-                handle = 0;
-            }
-            release_dc_ptr( dc );
         }
     }
 
@@ -1276,8 +1216,9 @@ HBITMAP WINAPI CreateDIBSection(HDC hdc, CONST BITMAPINFO *bmi, UINT usage,
 
     if (!(dib = HeapAlloc( GetProcessHeap(), 0, sizeof(*dib) ))) return 0;
 
-    TRACE("format (%d,%d), planes %d, bpp %d, size %d, %s\n",
-          width, height, planes, bpp, sizeImage, usage == DIB_PAL_COLORS? "PAL" : "RGB");
+    TRACE("format (%d,%d), planes %d, bpp %d, %s, size %d %s\n",
+          width, height, planes, bpp, compression == BI_BITFIELDS? "BI_BITFIELDS" : "BI_RGB",
+          sizeImage, usage == DIB_PAL_COLORS? "PAL" : "RGB");
 
     dib->dsBm.bmType       = 0;
     dib->dsBm.bmWidth      = width;
@@ -1315,24 +1256,24 @@ HBITMAP WINAPI CreateDIBSection(HDC hdc, CONST BITMAPINFO *bmi, UINT usage,
     dib->dsBmih.biSizeImage = dib->dsBm.bmWidthBytes * dib->dsBm.bmHeight;
 
     /* set dsBitfields values */
-    if (usage == DIB_PAL_COLORS || bpp <= 8)
+    dib->dsBitfields[0] = dib->dsBitfields[1] = dib->dsBitfields[2] = 0;
+
+    if((bpp == 15 || bpp == 16) && compression == BI_RGB)
     {
-        dib->dsBitfields[0] = dib->dsBitfields[1] = dib->dsBitfields[2] = 0;
+        /* In this case Windows changes biCompression to BI_BITFIELDS,
+           however for now we won't do this, as there are a lot
+           of places where BI_BITFIELDS is currently unsupported. */
+
+        /* dib->dsBmih.biCompression = compression = BI_BITFIELDS;*/
+        dib->dsBitfields[0] = 0x7c00;
+        dib->dsBitfields[1] = 0x03e0;
+        dib->dsBitfields[2] = 0x001f;
     }
-    else switch( bpp )
+    else if(compression == BI_BITFIELDS)
     {
-    case 15:
-    case 16:
-        dib->dsBitfields[0] = (compression == BI_BITFIELDS) ? *(const DWORD *)bmi->bmiColors       : 0x7c00;
-        dib->dsBitfields[1] = (compression == BI_BITFIELDS) ? *((const DWORD *)bmi->bmiColors + 1) : 0x03e0;
-        dib->dsBitfields[2] = (compression == BI_BITFIELDS) ? *((const DWORD *)bmi->bmiColors + 2) : 0x001f;
-        break;
-    case 24:
-    case 32:
-        dib->dsBitfields[0] = (compression == BI_BITFIELDS) ? *(const DWORD *)bmi->bmiColors       : 0xff0000;
-        dib->dsBitfields[1] = (compression == BI_BITFIELDS) ? *((const DWORD *)bmi->bmiColors + 1) : 0x00ff00;
-        dib->dsBitfields[2] = (compression == BI_BITFIELDS) ? *((const DWORD *)bmi->bmiColors + 2) : 0x0000ff;
-        break;
+        dib->dsBitfields[0] =  *(const DWORD *)bmi->bmiColors;
+        dib->dsBitfields[1] =  *((const DWORD *)bmi->bmiColors + 1);
+        dib->dsBitfields[2] =  *((const DWORD *)bmi->bmiColors + 2);
     }
     if (bpp >= 15 && (dib->dsBitfields[0] == 0 || dib->dsBitfields[1] == 0 || dib->dsBitfields[2] == 0))
 	ERR("mask is zero\n");
@@ -1381,19 +1322,17 @@ HBITMAP WINAPI CreateDIBSection(HDC hdc, CONST BITMAPINFO *bmi, UINT usage,
 
     if (ret && ((bmp = GDI_GetObjPtr(ret, OBJ_BITMAP))))
     {
+        PHYSDEV physdev = GET_DC_PHYSDEV( dc, pCreateDIBSection );
         bmp->dib = dib;
-        bmp->funcs = dc->funcs;
+        bmp->funcs = physdev->funcs;
         /* create local copy of DIB palette */
         if (bpp <= 8) DIB_CopyColorTable( dc, bmp, usage, bmi );
         GDI_ReleaseObj( ret );
 
-        if (dc->funcs->pCreateDIBSection)
+        if (!physdev->funcs->pCreateDIBSection( physdev, ret, bmi, usage ))
         {
-            if (!dc->funcs->pCreateDIBSection(dc->physDev, ret, bmi, usage))
-            {
-                DeleteObject( ret );
-                ret = 0;
-            }
+            DeleteObject( ret );
+            ret = 0;
         }
     }
 

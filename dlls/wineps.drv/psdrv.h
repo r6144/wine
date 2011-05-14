@@ -351,7 +351,9 @@ typedef struct {
     BOOL                had_passthrough_rect; /* See the comment in PSDRV_Rectangle */
 } JOB;
 
-typedef struct {
+typedef struct
+{
+    void               *reserved[3];    /* reserved for gdi */
     HDC                 hdc;
     PSFONT		font;		/* Current PS font */
     DOWNLOAD            *downloaded_fonts;
@@ -417,7 +419,6 @@ extern BOOL PSDRV_AddAFMtoList(FONTFAMILY **head, const AFM *afm,
 extern void PSDRV_FreeAFMList( FONTFAMILY *head );
 
 extern INT PSDRV_XWStoDS( PSDRV_PDEVICE *physDev, INT width );
-extern INT PSDRV_YWStoDS( PSDRV_PDEVICE *physDev, INT height );
 
 extern BOOL PSDRV_Brush(PSDRV_PDEVICE *physDev, BOOL EO);
 extern BOOL PSDRV_SetFont( PSDRV_PDEVICE *physDev );

@@ -85,7 +85,7 @@ typedef struct
 
 typedef struct
 {
-    unsigned int  nb_args;
+    int           nb_args;
     enum arg_type args[MAX_ARGUMENTS];
 } ORD_FUNCTION;
 
@@ -140,7 +140,7 @@ typedef struct
 
 enum target_cpu
 {
-    CPU_x86, CPU_x86_64, CPU_SPARC, CPU_ALPHA, CPU_POWERPC, CPU_ARM, CPU_LAST = CPU_ARM
+    CPU_x86, CPU_x86_64, CPU_SPARC, CPU_POWERPC, CPU_ARM, CPU_LAST = CPU_ARM
 };
 
 enum target_platform
@@ -361,5 +361,6 @@ extern char **lib_path;
 extern char *as_command;
 extern char *ld_command;
 extern char *nm_command;
+extern char *cpu_option;
 
 #endif  /* __WINE_BUILD_H */

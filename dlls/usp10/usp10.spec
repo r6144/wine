@@ -16,15 +16,15 @@
 @ stdcall ScriptGetProperties(ptr long)
 @ stdcall ScriptIsComplex(wstr long long)
 @ stdcall ScriptItemize(wstr long long ptr ptr ptr ptr)
-@ stub ScriptItemizeOpenType
+@ stdcall ScriptItemizeOpenType(wstr long long ptr ptr ptr ptr ptr)
 @ stdcall ScriptJustify(ptr ptr long long long ptr)
 @ stdcall ScriptLayout(long ptr ptr ptr)
 @ stdcall ScriptPlace(ptr ptr ptr long ptr ptr ptr ptr ptr)
-@ stub ScriptPlaceOpenType
+@ stdcall ScriptPlaceOpenType(ptr ptr ptr long long ptr ptr long wstr ptr ptr long ptr ptr long ptr ptr ptr)
 @ stub ScriptPositionSingleGlyph
 @ stdcall ScriptRecordDigitSubstitution(ptr ptr)
 @ stdcall ScriptShape(ptr ptr ptr long long ptr ptr ptr ptr ptr)
-@ stub ScriptShapeOpenType
+@ stdcall ScriptShapeOpenType(ptr ptr ptr long long ptr ptr long wstr long long ptr ptr ptr ptr ptr)
 @ stdcall ScriptStringAnalyse(ptr ptr long long long long long ptr ptr ptr ptr ptr ptr)
 @ stdcall ScriptStringCPtoX(ptr long long ptr)
 @ stdcall ScriptStringFree(ptr)

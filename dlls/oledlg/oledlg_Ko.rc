@@ -19,80 +19,59 @@
 
 #include "resource.h"
 
+#pragma code_page(65001)
+
 LANGUAGE LANG_KOREAN, SUBLANG_DEFAULT
 
 UIINSERTOBJECT DIALOG  0, 0, 294, 151
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "∞¥√º ª¿‘"
+CAPTION "Í∞ùÏ≤¥ ÏÇΩÏûÖ"
 FONT 9, "MS Shell Dlg"
 BEGIN
     LISTBOX         IDC_OBJTYPELIST,82,19,131,66,LBS_SORT |
                     LBS_NOINTEGRALHEIGHT | WS_VISIBLE | WS_VSCROLL |
                     WS_TABSTOP
-    LTEXT           "∞¥√º ≈∏¿‘:",IDC_OBJTYPELBL,82,7,53,8,WS_VISIBLE
-    DEFPUSHBUTTON   "»Æ¿Œ",IDOK,221,7,66,14
-    PUSHBUTTON      "√Îº“",IDCANCEL,221,24,66,14
-    GROUPBOX        "∞·∞˙",IDC_RESULT,7,103,208,41
-    CONTROL         "ªı∑Œ ∏∏µÈ±‚",IDC_CREATENEW,"Button",BS_AUTORADIOBUTTON | 
+    LTEXT           "Í∞ùÏ≤¥ ÌÉÄÏûÖ:",IDC_OBJTYPELBL,82,7,53,8,WS_VISIBLE
+    DEFPUSHBUTTON   "ÌôïÏù∏",IDOK,221,7,66,14
+    PUSHBUTTON      "Ï∑®ÏÜå",IDCANCEL,221,24,66,14
+    GROUPBOX        "Í≤∞Í≥º",IDC_RESULT,7,103,208,41
+    CONTROL         "ÏÉàÎ°ú ÎßåÎì§Í∏∞",IDC_CREATENEW,"Button",BS_AUTORADIOBUTTON |
                     WS_GROUP,7,20,62,10
-    CONTROL         "ƒ¡∆Æ∑— ∏∏µÈ±‚",IDC_CREATECONTROL,"Button",
+    CONTROL         "Ïª®Ìä∏Î°§ ÎßåÎì§Í∏∞",IDC_CREATECONTROL,"Button",
                     BS_AUTORADIOBUTTON | NOT WS_VISIBLE,7,54,62,10
-    CONTROL         "∆ƒ¿œ∑Œ∫Œ≈Õ ∏∏µÈ±‚",IDC_CREATEFROMFILE,"Button",
+    CONTROL         "ÌååÏùºÎ°úÎ∂ÄÌÑ∞ ÎßåÎì§Í∏∞",IDC_CREATEFROMFILE,"Button",
                     BS_AUTORADIOBUTTON,7,37,67,10
     LTEXT           "",IDC_RESULTDESC,49,112,159,23
-    PUSHBUTTON      "ƒ¡∆Æ∑— √ﬂ∞°(&A)...",IDC_ADDCONTROL,81,88,63,14,NOT WS_VISIBLE
-    CONTROL         "æ∆¿Ãƒ‹¿∏∑Œ ∫∏±‚",IDC_ASICON,"Button",BS_AUTOCHECKBOX | 
+    PUSHBUTTON      "Ïª®Ìä∏Î°§ Ï∂îÍ∞Ä(&A)...",IDC_ADDCONTROL,81,88,63,14,NOT WS_VISIBLE
+    CONTROL         "ÏïÑÏù¥ÏΩòÏúºÎ°ú Î≥¥Í∏∞",IDC_ASICON,"Button",BS_AUTOCHECKBOX |
                     WS_TABSTOP | NOT WS_VISIBLE,223,58,64,10
-    PUSHBUTTON      "√£±‚...",IDC_BROWSE,155,88,50,14,NOT WS_VISIBLE
-    LTEXT           "∆ƒ¿œ:",IDC_FILELBL,58,21,20,8, NOT WS_VISIBLE
+    PUSHBUTTON      "Ï∞æÍ∏∞...",IDC_BROWSE,155,88,50,14,NOT WS_VISIBLE
+    LTEXT           "ÌååÏùº:",IDC_FILELBL,58,21,20,8, NOT WS_VISIBLE
     EDITTEXT        IDC_FILE,83,37,132,13,ES_AUTOHSCROLL | NOT WS_VISIBLE
 END
 
-STRINGTABLE
-{
-  IDS_RESULTOBJDESC	"ªı  %s ∞¥√º∏¶ πÆº≠ø° ª¿‘"
-  IDS_RESULTFILEOBJDESC	"¿€º∫«— «Æ±◊∏≤¿ª ªÁøÎ«œø© »∞º∫»≠Ω√≈≥ºˆ ¿÷¥¬ ∞¥√º∏¶ πÆº≠∆ƒ¿œ ≥ªøÎ¿∏∑Œ ª¿‘«œΩ√ø¿."
-  IDS_BROWSE            "√£±‚"
-  IDS_NOTOLEMOD         "¿Ã ∆ƒ¿œ¿∫ ø√πŸ∏• OLE∏µ‚¿Ã æ∆¥—∞≈∑Œ ∫∏¿‘¥œ¥Ÿ. OLEƒ¡∆Æ∑—¿ª µÓ∑œ«“ºˆ æ¯Ω¿¥œ¥Ÿ."
-  IDS_NOTOLEMODCAPTION  "ƒ¡∆Æ∑— ¥ı«œ±‚"
-}
-
 IDD_PASTESPECIAL4 DIALOG 3, 15, 299, 140
 STYLE DS_MODALFRAME | DS_SETFONT | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "∆Ø∫∞«œ∞‘  ∫Ÿø©≥÷±‚"
+CAPTION "ÌäπÎ≥ÑÌïòÍ≤å  Î∂ôÏó¨ÎÑ£Í∏∞"
 FONT 9, "MS Shell Dlg"
 BEGIN
-    LTEXT         "ø¯∫ª:", -1, 6, 9, 30, 8, WS_VISIBLE | WS_GROUP
-    CONTROL       "∫Ÿø©≥÷±‚(&P)", IDC_PS_PASTE, "Button", BS_AUTORADIOBUTTON | WS_TABSTOP | WS_GROUP | WS_VISIBLE,
+    LTEXT         "ÏõêÎ≥∏:", -1, 6, 9, 30, 8, WS_VISIBLE | WS_GROUP
+    CONTROL       "Î∂ôÏó¨ÎÑ£Í∏∞(&P)", IDC_PS_PASTE, "Button", BS_AUTORADIOBUTTON | WS_TABSTOP | WS_GROUP | WS_VISIBLE,
                   1, 44, 55, 10
-    CONTROL       "∏µ≈©∑Œ ∫Ÿø©≥÷±‚(&L)", IDC_PS_PASTELINK, "Button", BS_AUTORADIOBUTTON | WS_VISIBLE,
+    CONTROL       "ÎßÅÌÅ¨Î°ú Î∂ôÏó¨ÎÑ£Í∏∞(&L)", IDC_PS_PASTELINK, "Button", BS_AUTORADIOBUTTON | WS_VISIBLE,
                   1, 61, 69, 10
-    LTEXT         "¥Ÿ∏• ¿Ã∏ß¿∏∑Œ(&A):", -1, 73, 25, 59, 8, WS_VISIBLE | WS_GROUP
+    LTEXT         "Îã§Î•∏ Ïù¥Î¶ÑÏúºÎ°ú(&A):", -1, 73, 25, 59, 8, WS_VISIBLE | WS_GROUP
     LISTBOX       IDC_PS_PASTELIST,     73, 36, 150, 57, LBS_NOTIFY | LBS_USETABSTOPS | WS_VSCROLL | WS_BORDER | NOT WS_VISIBLE
     LISTBOX       IDC_PS_PASTELINKLIST, 73, 36, 150, 57, LBS_NOTIFY | LBS_USETABSTOPS | WS_VSCROLL | WS_BORDER | NOT WS_VISIBLE
     LISTBOX       IDC_PS_DISPLAYLIST,   73, 36, 150, 57, LBS_NOTIFY | LBS_USETABSTOPS | WS_VSCROLL | WS_BORDER | WS_VISIBLE
-    CONTROL       "»Æ¿Œ", IDOK, "Button", BS_DEFPUSHBUTTON | WS_TABSTOP | WS_GROUP | WS_VISIBLE, 226, 6, 66, 14
-    CONTROL       "√Îº“", IDCANCEL, "Button", BS_PUSHBUTTON | WS_TABSTOP | WS_VISIBLE, 226, 23, 66, 14
-    CONTROL       "µµøÚ∏ª(&H)", IDC_OLEUIHELP, "Button", BS_PUSHBUTTON | WS_TABSTOP | WS_VISIBLE, 226, 42, 66, 14
-    CONTROL       "æ∆¿Ãƒ‹¿∏∑Œ ∫∏±‚(&D)", IDC_PS_DISPLAYASICON, "Button", BS_AUTOCHECKBOX | WS_TABSTOP | WS_VISIBLE, 226, 59, 70, 14
+    CONTROL       "ÌôïÏù∏", IDOK, "Button", BS_DEFPUSHBUTTON | WS_TABSTOP | WS_GROUP | WS_VISIBLE, 226, 6, 66, 14
+    CONTROL       "Ï∑®ÏÜå", IDCANCEL, "Button", BS_PUSHBUTTON | WS_TABSTOP | WS_VISIBLE, 226, 23, 66, 14
+    CONTROL       "ÎèÑÏõÄÎßê(&H)", IDC_OLEUIHELP, "Button", BS_PUSHBUTTON | WS_TABSTOP | WS_VISIBLE, 226, 42, 66, 14
+    CONTROL       "ÏïÑÏù¥ÏΩòÏúºÎ°ú Î≥¥Í∏∞(&D)", IDC_PS_DISPLAYASICON, "Button", BS_AUTOCHECKBOX | WS_TABSTOP | WS_VISIBLE, 226, 59, 70, 14
     CONTROL       "", IDC_PS_ICONDISPLAY, "Static", SS_ICON | WS_VISIBLE, 224, 75, 66, 44
-    CONTROL       "æ∆¿Ãƒ‹ πŸ≤Ÿ±‚(&I)...", IDC_PS_CHANGEICON, "Button", BS_PUSHBUTTON | WS_TABSTOP | WS_VISIBLE, 224, 123, 66, 14
+    CONTROL       "ÏïÑÏù¥ÏΩò Î∞îÍæ∏Í∏∞(&I)...", IDC_PS_CHANGEICON, "Button", BS_PUSHBUTTON | WS_TABSTOP | WS_VISIBLE, 224, 123, 66, 14
     CONTROL       "", IDC_PS_RESULTIMAGE, "Static", SS_ICON | WS_VISIBLE, 8, 101, 42, 34
-    CONTROL       "<< ∞·∞˙ ≈ÿΩ∫∆Æ¥¬ ø©±‚¥Ÿ∞° >>", IDC_PS_RESULTTEXT, "Static", SS_NOPREFIX | WS_VISIBLE, 54, 100, 159, 35
-    CONTROL       "∞·∞˙", -1, "Button", BS_GROUPBOX | WS_GROUP | WS_VISIBLE, 6, 90, 212, 48
+    CONTROL       "<< Í≤∞Í≥º ÌÖçÏä§Ìä∏Îäî Ïó¨Í∏∞Îã§Í∞Ä >>", IDC_PS_RESULTTEXT, "Static", SS_NOPREFIX | WS_VISIBLE, 54, 100, 159, 35
+    CONTROL       "Í≤∞Í≥º", -1, "Button", BS_GROUPBOX | WS_GROUP | WS_VISIBLE, 6, 90, 212, 48
     CONTROL       "", IDC_PS_SOURCETEXT, "Edit", ES_READONLY | ES_AUTOHSCROLL | WS_VISIBLE, 37, 9, 180, 8
 END
-
-STRINGTABLE
-{
-    IDS_PS_PASTE_DATA                     "¥ÁΩ≈¿« πÆº≠ %sø° ≈¨∏≥∫∏µÂ¿« ≥ªøÎ ª¿‘«œ±‚."
-    IDS_PS_PASTE_OBJECT                   "¥ÁΩ≈¿« πÆº≠ø° ≈¨∏≥∫∏µÂ¿« ≥ªøÎµÈ¿ª √∑∫Œ«œ∏È  %s∏¶ ªÁøÎ«ÿº≠ ¿Ã∞Õ¿ª Ω««‡«“ ºˆ ¿÷Ω¿¥œ¥Ÿ."
-    IDS_PS_PASTE_OBJECT_AS_ICON           "¥ÁΩ≈¿« πÆº≠ø° ≈¨∏≥∫∏µÂ¿« ≥ªøÎµÈ¿ª √∑∫Œ«œ∏È  %s∏¶ ªÁøÎ«ÿº≠ ¿Ã∞Õ¿ª Ω««‡«“ ºˆ ¿÷Ω¿¥œ¥Ÿ. ¿Ã∞Õ¿∫ æ∆¿Ãƒ‹¿∏∑Œ ≥™≈∏≥ª¡˙ ∞Ã¥œ¥Ÿ."
-    IDS_PS_PASTE_LINK_DATA                "¥ÁΩ≈¿« πÆº≠ %sø° ≈¨∏≥∫∏µÂ¿« ≥ªøÎ ª¿‘«œ±‚.  ¿Ã µ•¿Ã≈Õ¥¬ ø¯∫ª ∆ƒ¿œø° ø¨∞·µ«æÓ ¿÷æÓº≠ ∆ƒ¿œ¿Ã πŸ≤Ó∏È ¥ÁΩ≈¿« πÆº≠µµ πŸ≤∞Ã¥œ¥Ÿ."
-    IDS_PS_PASTE_LINK_OBJECT              "¥ÁΩ≈¿« πÆº≠ø° ≈¨∏≥∫∏µÂø° ¿÷¥¬ ±◊∏≤¿ª ¡˝æÓ≥÷Ω¿¥œ¥Ÿ.  ¿Ã ±◊∏≤¿∫ ø¯∫ª ∆ƒ¿œø° ø¨∞·µ«æÓ ¿÷æÓº≠ ∆ƒ¿œ¿Ã πŸ≤Ó∏È ¥ÁΩ≈¿« πÆº≠µµ πŸ≤∞Ã¥œ¥Ÿ."
-    IDS_PS_PASTE_LINK_OBJECT_AS_ICON      "¥ÁΩ≈¿« πÆº≠ø° ≈¨∏≥∫∏µÂø° ¿÷¥¬ ¥‹√‡æ∆¿Ãƒ‹¿ª ¡˝æÓ≥÷Ω¿¥œ¥Ÿ.  ¿Ã ¥‹√‡æ∆¿Ãƒ‹¿∫ ø¯∫ª ∆ƒ¿œø° ø¨∞·µ«æÓ ¿÷æÓº≠ ∆ƒ¿œ¿Ã πŸ≤Ó∏È ¥ÁΩ≈¿« πÆº≠µµ πŸ≤∞Ã¥œ¥Ÿt."
-    IDS_PS_NON_OLE                        "¥ÁΩ≈¿« πÆº≠ø° ≈¨∏≥∫∏µÂ¿« ≥ªøÎ ª¿‘«œ±‚."
-    IDS_PS_UNKNOWN_TYPE                   "æÀºˆ æ¯¥¬ «¸Ωƒ"
-    IDS_PS_UNKNOWN_SRC                    "æÀºˆ æ¯¥¬ ø¯∫ª"
-    IDS_PS_UNKNOWN_APP                    "≥ª∞° ∏∏µÁ «¡∑Œ±◊∑•"
-}

@@ -32,12 +32,17 @@
 #include <usp10.h>
 
 typedef struct _itemTest {
-    char todo_flag[4];
+    char todo_flag[5];
     int iCharPos;
     int fRTL;
     int fLayoutRTL;
     int uBidiLevel;
+    ULONG scriptTag;
 } itemTest;
+
+/* Uniscribe 1.6 calls */
+static HRESULT (WINAPI *pScriptItemizeOpenType)( const WCHAR *pwcInChars, int cInChars, int cMaxItems, const SCRIPT_CONTROL *psControl, const SCRIPT_STATE *psState, SCRIPT_ITEM *pItems, ULONG *pScriptTags, int *pcItems);
+
 
 static inline void _test_items_ok(LPCWSTR string, DWORD cchString,
                          SCRIPT_CONTROL *Control, SCRIPT_STATE *State,
@@ -47,8 +52,13 @@ static inline void _test_items_ok(LPCWSTR string, DWORD cchString,
     HRESULT hr;
     int x, outnItems;
     SCRIPT_ITEM outpItems[15];
+    ULONG tags[15] = {-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1};
 
-    hr = ScriptItemize(string, cchString, 15, Control, State, outpItems, &outnItems);
+    if (pScriptItemizeOpenType)
+        hr = pScriptItemizeOpenType(string, cchString, 15, Control, State, outpItems, tags, &outnItems);
+    else
+        hr = ScriptItemize(string, cchString, 15, Control, State, outpItems, &outnItems);
+
     winetest_ok(!hr, "ScriptItemize should return S_OK not %08x\n", hr);
     if (nItemsBroken && broken(nItemsBroken == outnItems))
     {
@@ -80,46 +90,64 @@ static inline void _test_items_ok(LPCWSTR string, DWORD cchString,
             winetest_ok(outpItems[x].a.s.uBidiLevel == items[x].uBidiLevel, "%i:Wrong BidiLevel(%i)\n",x,outpItems[x].a.s.uBidiLevel);
         if (x != outnItems)
             winetest_ok(outpItems[x].a.eScript != SCRIPT_UNDEFINED, "%i: Undefined script\n",x);
+        if (pScriptItemizeOpenType)
+        {
+            if (items[x].todo_flag[4])
+                todo_wine winetest_ok(tags[x] == items[x].scriptTag,"%i:Incorrect Script Tag %x != %x\n",x,tags[x],items[x].scriptTag);
+            else
+                winetest_ok(tags[x] == items[x].scriptTag,"%i:Incorrect Script Tag %x != %x\n",x,tags[x],items[x].scriptTag);
+        }
     }
 }
 
 #define test_items_ok(a,b,c,d,e,f,g,h) (winetest_set_location(__FILE__,__LINE__), 0) ? 0 : _test_items_ok(a,b,c,d,e,f,g,h)
 
+#define MS_MAKE_TAG( _x1, _x2, _x3, _x4 ) \
+          ( ( (ULONG)_x4 << 24 ) |     \
+            ( (ULONG)_x3 << 16 ) |     \
+            ( (ULONG)_x2 <<  8 ) |     \
+              (ULONG)_x1         )
+
+#define latn_tag MS_MAKE_TAG('l','a','t','n')
+#define arab_tag MS_MAKE_TAG('a','r','a','b')
+#define thai_tag MS_MAKE_TAG('t','h','a','i')
+#define hebr_tag MS_MAKE_TAG('h','e','b','r')
+#define syrc_tag MS_MAKE_TAG('s','y','r','c')
 
 static void test_ScriptItemize( void )
 {
     static const WCHAR test1[] = {'t', 'e', 's', 't',0};
-    static const itemTest t11[2] = {{{0,0,0,0},0,0,0,0},{{0,0,0,0},4,0,0,0}};
-    static const itemTest t12[2] = {{{0,0,0,0},0,0,0,2},{{0,0,0,0},4,0,0,0}};
+    static const itemTest t11[2] = {{{0,0,0,0,0},0,0,0,0,latn_tag},{{0,0,0,0,0},4,0,0,0,-1}};
+    static const itemTest t12[2] = {{{0,0,0,0,0},0,0,0,2,latn_tag},{{0,0,0,0,0},4,0,0,0,-1}};
 
     static const WCHAR test1b[] = {' ', ' ', ' ', ' ',0};
-    static const itemTest t1b1[2] = {{{0,0,0,0},0,0,0,0},{{0,0,0,0},4,0,0,0}};
-    static const itemTest t1b2[2] = {{{0,0,0,0},0,1,1,1},{{0,0,0,0},4,0,0,0}};
+    static const itemTest t1b1[2] = {{{0,0,0,0,0},0,0,0,0,0},{{0,0,0,0,0},4,0,0,0,-1}};
+    static const itemTest t1b2[2] = {{{0,0,0,0,0},0,1,1,1,0},{{0,0,0,0,0},4,0,0,0,-1}};
 
     /* Arabic, English*/
     static const WCHAR test2[] = {'1','2','3','-','5','2',0x064a,0x064f,0x0633,0x0627,0x0648,0x0650,0x064a,'7','1','.',0};
-    static const itemTest t21[7] = {{{0,0,0,0},0,0,0,0},{{0,0,0,0},3,0,0,0},{{0,0,0,0},4,0,0,0},{{0,0,0,0},6,1,1,1},{{0,0,0,0},13,0,0,0},{{0,0,0,0},15,0,0,0},{{0,0,0,0},16,0,0,0}};
-    static const itemTest t22[5] = {{{0,0,0,1},0,0,0,2},{{0,0,0,0},6,1,1,1},{{0,0,1,0},13,0,1,2},{{0,0,0,0},15,0,0,0},{{0,0,0,0},16,0,0,0}};
-    static const itemTest t23[5] = {{{0,0,1,0},0,0,1,2},{{0,0,0,0},6,1,1,1},{{0,0,1,0},13,0,1,2},{{0,0,0,0},15,1,1,1},{{0,0,0,0},16,0,0,0}};
+    static const itemTest t21[7] = {{{0,0,0,0,0},0,0,0,0,0},{{0,0,0,0,0},3,0,0,0,0},{{0,0,0,0,0},4,0,0,0,0},{{0,0,0,0,0},6,1,1,1,arab_tag},{{0,0,0,0,0},13,0,0,0,0},{{0,0,0,0,0},15,0,0,0,0},{{0,0,0,0,0},16,0,0,0,-1}};
+    static const itemTest t22[5] = {{{0,0,0,1,0},0,0,0,2,0},{{0,0,0,0,0},6,1,1,1,arab_tag},{{0,0,1,0,0},13,0,1,2,0},{{0,0,0,0,0},15,0,0,0,0},{{0,0,0,0,0},16,0,0,0,-1}};
+    static const itemTest t23[5] = {{{0,0,1,0,0},0,0,1,2,0},{{0,0,0,0,0},6,1,1,1,arab_tag},{{0,0,1,0,0},13,0,1,2,0},{{0,0,0,0,0},15,1,1,1,0},{{0,0,0,0,0},16,0,0,0,-1}};
 
     static const WCHAR test2b[] = {'A','B','C','-','D','E','F',' ',0x0621,0x0623,0x0624,0};
-    static const itemTest t2b1[5] = {{{0,0,0,0},0,0,0,0},{{0,0,0,0},3,0,0,0},{{0,0,0,0},4,0,0,0},{{0,0,0,0},8,1,1,1},{{0,0,0,0},11,0,0,0}};
-    static const itemTest t2b2[5] = {{{0,0,0,0},0,0,0,2},{{0,0,0,0},3,0,0,2},{{0,0,0,0},4,0,0,2},{{0,0,0,0},7,1,1,1},{{0,0,0,0},11,0,0,0}};
-    static const itemTest t2b3[3] = {{{0,0,0,0},0,0,0,2},{{0,0,0,0},7,1,1,1},{{0,0,0,0},11,0,0,0}};
+    static const itemTest t2b1[5] = {{{0,0,0,0,0},0,0,0,0,latn_tag},{{0,0,0,0,0},3,0,0,0,0},{{0,0,0,0,0},4,0,0,0,latn_tag},{{0,0,0,0,0},8,1,1,1,arab_tag},{{0,0,0,0,0},11,0,0,0,-1}};
+    static const itemTest t2b2[5] = {{{0,0,0,0,0},0,0,0,2,latn_tag},{{0,0,0,0,0},3,0,0,2,0},{{0,0,0,0,0},4,0,0,2,latn_tag},{{0,0,0,0,0},7,1,1,1,arab_tag},{{0,0,0,0,0},11,0,0,0,-1}};
+    static const itemTest t2b3[3] = {{{0,0,0,0,0},0,0,0,2,latn_tag},{{0,0,0,0,0},7,1,1,1,arab_tag},{{0,0,0,0,0},11,0,0,0,-1}};
 
     /* leading space */
     static const WCHAR test2c[] = {' ',0x0621,0x0623,0x0624,'A','B','C','-','D','E','F',0};
-    static const itemTest t2c1[5] = {{{0,0,0,0},0,1,1,1},{{0,0,0,0},4,0,0,0},{{0,0,0,0},7,0,0,0},{{0,0,0,0},8,0,0,0},{{0,0,0,0},11,0,0,0}};
-    static const itemTest t2c2[6] = {{{0,0,0,0},0,0,0,0},{{0,0,0,0},1,1,1,1},{{0,0,0,0},4,0,0,0},{{0,0,0,0},7,0,0,0},{{0,0,0,0},8,0,0,0},{{0,0,0,0},11,0,0,0}};
-    static const itemTest t2c3[5] = {{{0,0,0,0},0,1,1,1},{{0,0,0,0},4,0,0,2},{{0,0,0,0},7,0,0,2},{{0,0,0,0},8,0,0,2},{{0,0,0,0},11,0,0,0}};
-    static const itemTest t2c4[3] = {{{0,0,0,0},0,1,1,1},{{0,0,0,0},4,0,0,2},{{0,0,0,0},11,0,0,0}};
+    static const itemTest t2c1[5] = {{{0,0,0,0,0},0,1,1,1,arab_tag},{{0,0,0,0,0},4,0,0,0,latn_tag},{{0,0,0,0,0},7,0,0,0,0},{{0,0,0,0,0},8,0,0,0,latn_tag},{{0,0,0,0,0},11,0,0,0,-1}};
+    static const itemTest t2c2[6] = {{{0,0,0,0,1},0,0,0,0,0},{{0,0,0,0,0},1,1,1,1,arab_tag},{{0,0,0,0,0},4,0,0,0,latn_tag},{{0,0,0,0,0},7,0,0,0,0},{{0,0,0,0,0},8,0,0,0,latn_tag},{{0,0,0,0,0},11,0,0,0,-1}};
+    static const itemTest t2c3[5] = {{{0,0,0,0,0},0,1,1,1,arab_tag},{{0,0,0,0,0},4,0,0,2,latn_tag},{{0,0,0,0,0},7,0,0,2,0},{{0,0,0,0,0},8,0,0,2,latn_tag},{{0,0,0,0,0},11,0,0,0,-1}};
+    static const itemTest t2c4[3] = {{{0,0,0,0,0},0,1,1,1,arab_tag},{{0,0,0,0,0},4,0,0,2,latn_tag},{{0,0,0,0,0},11,0,0,0,-1}};
 
     /* trailing space */
     static const WCHAR test2d[] = {'A','B','C','-','D','E','F',0x0621,0x0623,0x0624,' ',0};
-    static const itemTest t2d1[5] = {{{0,0,0,0},0,0,0,0},{{0,0,0,0},3,0,0,0},{{0,0,0,0},4,0,0,0},{{0,0,0,0},7,1,1,1},{{0,0,0,0},11,0,0,0}};
-    static const itemTest t2d2[6] = {{{0,0,0,0},0,0,0,0},{{0,0,0,0},3,0,0,0},{{0,0,0,0},4,0,0,0},{{0,0,0,0},7,1,1,1},{{0,0,0,0},10,0,0,0},{{0,0,0,0},11,0,0,0}};
-    static const itemTest t2d3[5] = {{{0,0,0,0},0,0,0,2},{{0,0,0,0},3,0,0,2},{{0,0,0,0},4,0,0,2},{{0,0,0,0},7,1,1,1},{{0,0,0,0},11,0,0,0}};
-    static const itemTest t2d4[3] = {{{0,0,0,0},0,0,0,2},{{0,0,0,0},7,1,1,1},{{0,0,0,0},11,0,0,0}};
+    static const itemTest t2d1[5] = {{{0,0,0,0,0},0,0,0,0,latn_tag},{{0,0,0,0,0},3,0,0,0,0},{{0,0,0,0,0},4,0,0,0,latn_tag},{{0,0,0,0,0},7,1,1,1,arab_tag},{{0,0,0,0,0},11,0,0,0,-1}};
+    static const itemTest t2d2[6] = {{{0,0,0,0,0},0,0,0,0,latn_tag},{{0,0,0,0,0},3,0,0,0,0},{{0,0,0,0,0},4,0,0,0,latn_tag},{{0,0,0,0,0},7,1,1,1,arab_tag},{{0,0,0,0,0},10,0,0,0,0},{{0,0,0,0,0},11,0,0,0,-1}};
+    static const itemTest t2d3[5] = {{{0,0,0,0,0},0,0,0,2,latn_tag},{{0,0,0,0,0},3,0,0,2,0},{{0,0,0,0,0},4,0,0,2,latn_tag},{{0,0,0,0,0},7,1,1,1,arab_tag},{{0,0,0,0,0},11,0,0,0,-1}};
+    static const itemTest t2d4[3] = {{{0,0,0,0,0},0,0,0,2,latn_tag},{{0,0,0,0,0},7,1,1,1,arab_tag},{{0,0,0,0,0},11,0,0,0,-1}};
 
     /* Thai */
     static const WCHAR test3[] =
@@ -128,14 +156,14 @@ static void test_ScriptItemize( void )
 ,0x0e04,0x0e27,0x0e32,0x0e21,0x0e2a, 0x0e33,0x0e40,0x0e23,0x0e47,0x0e08,
  0x0e2d,0x0e22,0x0e39,0x0e48,0x0e17,0x0e35,0x0e48,0x0e19,0x0e31,0x0e48,0x0e19,0};
 
-    static const itemTest t31[2] = {{{0,0,0,0},0,0,0,0},{{0,0,0,0},41,0,0,0}};
-    static const itemTest t32[2] = {{{0,0,0,0},0,0,0,2},{{0,0,0,0},41,0,0,0}};
+    static const itemTest t31[2] = {{{0,0,0,0,0},0,0,0,0,thai_tag},{{0,0,0,0,0},41,0,0,0,-1}};
+    static const itemTest t32[2] = {{{0,0,0,0,0},0,0,0,2,thai_tag},{{0,0,0,0,0},41,0,0,0,-1}};
 
     static const WCHAR test4[]  = {'1','2','3','-','5','2',' ','i','s',' ','7','1','.',0};
 
-    static const itemTest t41[6] = {{{0,0,0,0},0,0,0,0},{{0,0,0,0},3,0,0,0},{{0,0,0,0},4,0,0,0},{{0,0,0,0},7,0,0,0},{{0,0,0,0},10,0,0,0},{{0,0,0,0},12,0,0,0}};
-    static const itemTest t42[5] = {{{0,0,1,0},0,0,1,2},{{0,0,0,0},6,1,1,1},{{0,0,0,0},7,0,0,2},{{0,0,0,0},10,0,0,2},{{0,0,0,0},12,0,0,0}};
-    static const itemTest t43[4] = {{{0,0,1,0},0,0,1,2},{{0,0,0,0},6,1,1,1},{{0,0,0,0},7,0,0,2},{{0,0,0,0},12,0,0,0}};
+    static const itemTest t41[6] = {{{0,0,0,0,0},0,0,0,0,0},{{0,0,0,0,0},3,0,0,0,0},{{0,0,0,0,0},4,0,0,0,0},{{0,0,0,0,0},7,0,0,0,latn_tag},{{0,0,0,0,0},10,0,0,0,0},{{0,0,0,0,0},12,0,0,0,-1}};
+    static const itemTest t42[5] = {{{0,0,1,0,0},0,0,1,2,0},{{0,0,0,0,1},6,1,1,1,0},{{0,0,0,0,0},7,0,0,2,latn_tag},{{0,0,0,0,0},10,0,0,2,0},{{0,0,0,0,0},12,0,0,0,-1}};
+    static const itemTest t43[4] = {{{0,0,1,0,0},0,0,1,2,0},{{0,0,0,0,1},6,1,1,1,0},{{0,0,0,0,0},7,0,0,2,latn_tag},{{0,0,0,0,0},12,0,0,0,-1}};
 
     /* Arabic */
     static const WCHAR test5[]  =
@@ -143,34 +171,39 @@ static void test_ScriptItemize( void )
 0x0627,0x062c,0x064c,' ',0x0639,0x064e,0x0644,0x0649,' ',
 0x0631,0x064f,0x0624,0x0648,0x0633,0x0650,' ',0x0627,0x0644
 ,0x0623,0x0635,0x0650,0x062d,0x0651,0x064e,0x0627,0x0621,0x0650,0};
-    static const itemTest t51[2] = {{{0,0,0,0},0,1,1,1},{{0,0,0,0},38,0,0,0}};
+    static const itemTest t51[2] = {{{0,0,0,0,0},0,1,1,1,arab_tag},{{0,0,0,0,0},38,0,0,0,-1}};
 
     /* Hebrew */
     static const WCHAR test6[]  = {0x05e9, 0x05dc, 0x05d5, 0x05dd, '.',0};
-    static const itemTest t61[3] = {{{0,0,0,0},0,1,1,1},{{0,0,0,0},4,0,0,0},{{0,0,0,0},5,0,0,0}};
-    static const itemTest t62[3] = {{{0,0,0,0},0,1,1,1},{{0,0,0,0},4,1,1,1},{{0,0,0,0},5,0,0,0}};
-    static const itemTest t63[2] = {{{0,0,0,0},0,1,1,1},{{0,0,0,0},5,0,0,0}};
+    static const itemTest t61[3] = {{{0,0,0,0,0},0,1,1,1,hebr_tag},{{0,0,0,0,0},4,0,0,0,0},{{0,0,0,0,0},5,0,0,0,-1}};
+    static const itemTest t62[3] = {{{0,0,0,0,0},0,1,1,1,hebr_tag},{{0,0,0,0,0},4,1,1,1,0},{{0,0,0,0,0},5,0,0,0,-1}};
+    static const itemTest t63[2] = {{{0,0,0,0,0},0,1,1,1,hebr_tag},{{0,0,0,0,0},5,0,0,0,-1}};
     static const WCHAR test7[]  = {'p','a','r','t',' ','o','n','e',' ',0x05d7, 0x05dc, 0x05e7, ' ', 0x05e9, 0x05ea, 0x05d9, 0x05d9, 0x05dd, ' ','p','a','r','t',' ','t','h','r','e','e', 0};
-    static const itemTest t71[4] = {{{0,0,0,0},0,0,0,0},{{0,0,0,0},9,1,1,1},{{0,0,0,0},19,0,0,0},{{0,0,0,0},29,0,0,0}};
-    static const itemTest t72[4] = {{{0,0,0,0},0,0,0,0},{{0,0,0,0},9,1,1,1},{{0,0,0,0},18,0,0,0},{{0,0,0,0},29,0,0,0}};
-    static const itemTest t73[4] = {{{0,0,0,0},0,0,0,2},{{0,0,0,0},8,1,1,1},{{0,0,0,0},19,0,0,2},{{0,0,0,0},29,0,0,0}};
+    static const itemTest t71[4] = {{{0,0,0,0,0},0,0,0,0,latn_tag},{{0,0,0,0,0},9,1,1,1,hebr_tag},{{0,0,0,0,0},19,0,0,0,latn_tag},{{0,0,0,0,0},29,0,0,0,-1}};
+    static const itemTest t72[4] = {{{0,0,0,0,0},0,0,0,0,latn_tag},{{0,0,0,0,0},9,1,1,1,hebr_tag},{{0,0,0,0,0},18,0,0,0,latn_tag},{{0,0,0,0,0},29,0,0,0,-1}};
+    static const itemTest t73[4] = {{{0,0,0,0,0},0,0,0,2,latn_tag},{{0,0,0,0,0},8,1,1,1,hebr_tag},{{0,0,0,0,0},19,0,0,2,latn_tag},{{0,0,0,0,0},29,0,0,0,-1}};
     static const WCHAR test8[] = {0x0633, 0x0644, 0x0627, 0x0645,0};
-    static const itemTest t81[2] = {{{0,0,0,0},0,1,1,1},{{0,0,0,0},4,0,0,0}};
+    static const itemTest t81[2] = {{{0,0,0,0,0},0,1,1,1,arab_tag},{{0,0,0,0,0},4,0,0,0,-1}};
 
     /* Syriac  (Like Arabic )*/
     static const WCHAR test9[] = {0x0710, 0x0712, 0x0712, 0x0714, '.',0};
-    static const itemTest t91[3] = {{{0,0,0,0},0,1,1,1},{{0,0,0,0},4,0,0,0},{{0,0,0,0},5,0,0,0}};
-    static const itemTest t92[3] = {{{0,0,0,0},0,1,1,1},{{0,0,0,0},4,1,1,1},{{0,0,0,0},5,0,0,0}};
-    static const itemTest t93[2] = {{{0,0,0,0},0,1,1,1},{{0,0,0,0},5,0,0,0}};
+    static const itemTest t91[3] = {{{0,0,0,0,0},0,1,1,1,syrc_tag},{{0,0,0,0,0},4,0,0,0,0},{{0,0,0,0,0},5,0,0,0,-1}};
+    static const itemTest t92[3] = {{{0,0,0,0,0},0,1,1,1,syrc_tag},{{0,0,0,0,0},4,1,1,1,0},{{0,0,0,0,0},5,0,0,0,-1}};
+    static const itemTest t93[2] = {{{0,0,0,0,0},0,1,1,1,syrc_tag},{{0,0,0,0,0},5,0,0,0,-1}};
 
     static const WCHAR test10[] = {0x0717, 0x0718, 0x071a, 0x071b,0};
-    static const itemTest t101[2] = {{{0,0,0,0},0,1,1,1},{{0,0,0,0},4,0,0,0}};
+    static const itemTest t101[2] = {{{0,0,0,0,0},0,1,1,1,syrc_tag},{{0,0,0,0,0},4,0,0,0,-1}};
 
     SCRIPT_ITEM items[15];
     SCRIPT_CONTROL  Control;
     SCRIPT_STATE    State;
     HRESULT hr;
+    HMODULE usp10;
     int nItems;
+
+    usp10 = LoadLibraryA("usp10.dll");
+    ok (usp10 != 0,"Unable to LoadLibrary on usp10.dll");
+    pScriptItemizeOpenType = (void*)GetProcAddress(usp10, "ScriptItemizeOpenType");
 
     memset(&Control, 0, sizeof(Control));
     memset(&State, 0, sizeof(State));
@@ -467,6 +500,7 @@ static void test_ScriptItemIzeShapePlace(HDC hdc, unsigned short pwOutGlyphs[256
     /* This test determines that the pointer returned by ScriptGetProperties is valid
      * by checking a known value in the table                                                */
     hr = ScriptGetProperties(&ppSp, &iMaxProps);
+    ok(hr == S_OK, "ScriptGetProperties failed: 0x%08x\n", hr);
     trace("number of script properties %d\n", iMaxProps);
     ok (iMaxProps > 0, "Number of scripts returned should not be 0\n");
     if  (iMaxProps > 0)
@@ -489,7 +523,6 @@ static void test_ScriptItemIzeShapePlace(HDC hdc, unsigned short pwOutGlyphs[256
     /* It would appear that we have a valid SCRIPT_ANALYSIS and can continue
      * ie. ScriptItemize has succeeded and that pItem has been set                            */
     cInChars = 5;
-    cMaxItems = 255;
     if (hr == 0) {
         psc = NULL;                                   /* must be null on first call           */
         cChars = cInChars;
@@ -556,7 +589,7 @@ static void test_ScriptItemIzeShapePlace(HDC hdc, unsigned short pwOutGlyphs[256
                  ok (hr == 0, "ScriptPlace should return 0 not (%08x)\n", hr);
              }
         }
-        hr = ScriptFreeCache( &psc);
+        ScriptFreeCache( &psc);
         ok (!psc, "psc is not null after ScriptFreeCache\n");
 
     }
@@ -696,7 +729,7 @@ static void test_ScriptGetCMap(HDC hdc, unsigned short pwOutGlyphs[256])
     ok (cnt == cInChars, "Translation not correct. WCHAR %d - %04x != %04x\n",
                          cnt, pwOutGlyphs[cnt], pwOutGlyphs3[cnt]);
 
-    hr = ScriptFreeCache( &psc);
+    ScriptFreeCache( &psc);
     ok (!psc, "psc is not null after ScriptFreeCache\n");
 
     cInChars = cChars = 4;
@@ -727,7 +760,7 @@ static void test_ScriptGetCMap(HDC hdc, unsigned short pwOutGlyphs[256])
     ok(pwOutGlyphs3[7] == pwOutGlyphs2[7], "glyph not mirrored correctly\n");
     ok(pwOutGlyphs3[8] == pwOutGlyphs2[8], "glyph not mirrored correctly\n");
 
-    hr = ScriptFreeCache( &psc);
+    ScriptFreeCache( &psc);
     ok (!psc, "psc is not null after ScriptFreeCache\n");
 }
 
@@ -838,11 +871,9 @@ static void test_ScriptTextOut(HDC hdc)
     /* It would appear that we have a valid SCRIPT_ANALYSIS and can continue
      * ie. ScriptItemize has succeeded and that pItem has been set                            */
     cInChars = 5;
-    cMaxItems = 255;
     if (hr == 0) {
         psc = NULL;                                   /* must be null on first call           */
         cChars = cInChars;
-        cMaxGlyphs = cInChars;
         cMaxGlyphs = 256;
         hr = ScriptShape(hdc, &psc, TestItem1, cChars,
                          cMaxGlyphs, &pItem[0].a,
@@ -958,11 +989,9 @@ static void test_ScriptTextOut2(HDC hdc)
     /* It would appear that we have a valid SCRIPT_ANALYSIS and can continue
      * ie. ScriptItemize has succeeded and that pItem has been set                            */
     cInChars = 5;
-    cMaxItems = 255;
     if (hr == 0) {
         psc = NULL;                                   /* must be null on first call           */
         cChars = cInChars;
-        cMaxGlyphs = cInChars;
         cMaxGlyphs = 256;
         hr = ScriptShape(hdc2, &psc, TestItem1, cChars,
                          cMaxGlyphs, &pItem[0].a,
@@ -1036,11 +1065,9 @@ static void test_ScriptTextOut3(HDC hdc)
     /* It would appear that we have a valid SCRIPT_ANALYSIS and can continue
      * ie. ScriptItemize has succeeded and that pItem has been set                            */
     cInChars = 2;
-    cMaxItems = 255;
     if (hr == 0) {
         psc = NULL;                                   /* must be null on first call           */
         cChars = cInChars;
-        cMaxGlyphs = cInChars;
         cMaxGlyphs = 256;
         hr = ScriptShape(hdc, &psc, TestItem1, cChars,
                          cMaxGlyphs, &pItem[0].a,
@@ -1080,13 +1107,16 @@ static void test_ScriptXtoX(void)
     int iX, iCP;
     int cChars;
     int cGlyphs;
-    WORD pwLogClust[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    WORD pwLogClust[10] = {0, 0, 0, 1, 1, 2, 2, 3, 3, 3};
+    WORD pwLogClust_RTL[10] = {3, 3, 3, 2, 2, 1, 1, 0, 0, 0};
     SCRIPT_VISATTR psva[10];
     int piAdvance[10] = {200, 190, 210, 180, 170, 204, 189, 195, 212, 203};
     int piCP, piX;
     int piTrailing;
     BOOL fTrailing;
     HRESULT hr;
+    static const int offsets[13] = {0, 66, 133, 200, 295, 390, 495, 600, 1051, 1502, 1953, 1953, 1953};
+    static const int offsets_RTL[13] = {780, 720, 660, 600, 495, 390, 295, 200, 133, 66, 0, 0, 0};
 
     hr = ScriptItemize(test, lstrlenW(test), sizeof(items)/sizeof(items[0]), NULL, NULL, items, NULL);
     ok(!hr, "ScriptItemize should return S_OK not %08x\n", hr);
@@ -1101,119 +1131,140 @@ static void test_ScriptXtoX(void)
     else /* win2k3 */
         ok(piCP == 10, "Negative iX should return piCP=10 not %d\n", piCP);
 
+    for(iCP = 0; iCP < 10; iCP++)
+    {
+        iX = offsets[iCP]+1;
+        cChars = 10;
+        cGlyphs = 10;
+        hr = ScriptXtoCP(iX, cChars, cGlyphs, pwLogClust, psva, piAdvance, &items[0].a, &piCP, &piTrailing);
+        ok(hr == S_OK, "ScriptXtoCP should return S_OK not %08x\n", hr);
+        ok(piCP == iCP, "iX=%d should return piCP=%d not %d\n", iX, iCP, piCP);
+        ok(piTrailing == 0, "iX=%d should return piTrailing=0 not %d\n", iX, piTrailing);
+    }
+
+    for(iCP = 0; iCP < 10; iCP++)
+    {
+        iX = offsets[iCP+1]-1;
+        cChars = 10;
+        cGlyphs = 10;
+        hr = ScriptXtoCP(iX, cChars, cGlyphs, pwLogClust, psva, piAdvance, &items[0].a, &piCP, &piTrailing);
+        ok(hr == S_OK, "ScriptXtoCP should return S_OK not %08x\n", hr);
+        ok(piCP == iCP, "iX=%d should return piCP=%d not %d\n", iX, iCP, piCP);
+        ok(piTrailing == 1, "iX=%d should return piTrailing=1 not %d\n", iX, piTrailing);
+    }
+
+    /* 0,1,2 are actually fractional offsets meaning that they will not be reporting the same iCP as comes in so don't test those */
+    for(iCP = 3; iCP < 10; iCP++)
+    {
+        iX = offsets[iCP];
+        cChars = 10;
+        cGlyphs = 10;
+        hr = ScriptXtoCP(iX, cChars, cGlyphs, pwLogClust, psva, piAdvance, &items[0].a, &piCP, &piTrailing);
+        ok(hr == S_OK, "ScriptXtoCP should return S_OK not %08x\n", hr);
+        ok(piCP == iCP, "iX=%d should return piCP=%d not %d\n", iX, iCP, piCP);
+        ok(piTrailing == 0, "iX=%d should return piTrailing=0 not %d\n", iX, piTrailing);
+    }
+
+    items[0].a.fRTL = TRUE;
+
+    iX = -1;
+    cChars = 10;
+    cGlyphs = 10;
+    hr = ScriptXtoCP(iX, cChars, cGlyphs, pwLogClust_RTL, psva, piAdvance, &items[0].a, &piCP, &piTrailing);
+    ok(hr == S_OK, "ScriptXtoCP should return S_OK not %08x\n", hr);
+    if (piTrailing)
+        ok(piCP == -1, "Negative iX should return piCP=-1 not %d\n", piCP);
+    else /* win2k3 */
+        ok(piCP == 10, "Negative iX should return piCP=10 not %d\n", piCP);
+
     iX = 1954;
     cChars = 10;
     cGlyphs = 10;
-    hr = ScriptXtoCP(iX, cChars, cGlyphs, pwLogClust, psva, piAdvance, &items[0].a, &piCP, &piTrailing);
+    hr = ScriptXtoCP(iX, cChars, cGlyphs, pwLogClust_RTL, psva, piAdvance, &items[0].a, &piCP, &piTrailing);
     ok(hr == S_OK, "ScriptXtoCP should return S_OK not %08x\n", hr);
-    if (piTrailing) /* win2k3 */
-        ok(piCP == -1, "Negative iX should return piCP=-1 not %d\n", piCP);
-    else
-        ok(piCP == 10, "Negative iX should return piCP=10 not %d\n", piCP);
-
-    iX = 779;
-    cChars = 10;
-    cGlyphs = 10;
-    hr = ScriptXtoCP(iX, cChars, cGlyphs, pwLogClust, psva, piAdvance, &items[0].a, &piCP, &piTrailing);
-    ok(hr == S_OK, "ScriptXtoCP should return S_OK not %08x\n", hr);
-    ok(piCP == 3 ||
-       piCP == -1, /* win2k3 */
-       "iX=%d should return piCP=3 or piCP=-1 not %d\n", iX, piCP);
+    ok(piCP == -1, "iX=%d should return piCP=-1 not %d\n", iX, piCP);
     ok(piTrailing == 1, "iX=%d should return piTrailing=1 not %d\n", iX, piTrailing);
 
-    iX = 780;
-    cChars = 10;
-    cGlyphs = 10;
-    hr = ScriptXtoCP(iX, cChars, cGlyphs, pwLogClust, psva, piAdvance, &items[0].a, &piCP, &piTrailing);
-    ok(hr == S_OK, "ScriptXtoCP should return S_OK not %08x\n", hr);
-    ok(piCP == 3 ||
-       piCP == -1, /* win2k3 */
-       "iX=%d should return piCP=3 or piCP=-1 not %d\n", iX, piCP);
-    ok(piTrailing == 1, "iX=%d should return piTrailing=1 not %d\n", iX, piTrailing);
+    for(iCP = 0; iCP < 10; iCP++)
+    {
+        iX = offsets_RTL[iCP]-1;
+        cChars = 10;
+        cGlyphs = 10;
+        hr = ScriptXtoCP(iX, cChars, cGlyphs, pwLogClust_RTL, psva, piAdvance, &items[0].a, &piCP, &piTrailing);
+        ok(hr == S_OK, "ScriptXtoCP should return S_OK not %08x\n", hr);
+        ok(piCP == iCP, "iX=%d should return piCP=%d not %d\n", iX, iCP, piCP);
+        ok(piTrailing == 0, "iX=%d should return piTrailing=0 not %d\n", iX, piTrailing);
+    }
 
-    iX = 868;
-    cChars = 10;
-    cGlyphs = 10;
-    hr = ScriptXtoCP(iX, cChars, cGlyphs, pwLogClust, psva, piAdvance, &items[0].a, &piCP, &piTrailing);
-    ok(hr == S_OK, "ScriptXtoCP should return S_OK not %08x\n", hr);
-    ok(piCP == 4 ||
-       piCP == -1, /* win2k3 */
-       "iX=%d should return piCP=4 or piCP=-1 not %d\n", iX, piCP);
+    for(iCP = 0; iCP < 10; iCP++)
+    {
+        iX = offsets_RTL[iCP+1]+1;
+        cChars = 10;
+        cGlyphs = 10;
+        hr = ScriptXtoCP(iX, cChars, cGlyphs, pwLogClust_RTL, psva, piAdvance, &items[0].a, &piCP, &piTrailing);
+        ok(hr == S_OK, "ScriptXtoCP should return S_OK not %08x\n", hr);
+        ok(piCP == iCP, "iX=%d should return piCP=%d not %d\n", iX, iCP, piCP);
+        ok(piTrailing == 1, "iX=%d should return piTrailing=1 not %d\n", iX, piTrailing);
+    }
 
-    iX = 0;
-    cChars = 10;
-    cGlyphs = 10;
-    hr = ScriptXtoCP(iX, cChars, cGlyphs, pwLogClust, psva, piAdvance, &items[0].a, &piCP, &piTrailing);
-    ok(hr == S_OK, "ScriptXtoCP should return S_OK not %08x\n", hr);
-    ok(piCP == 0 ||
-       piCP == 10, /* win2k3 */
-       "iX=%d should return piCP=0 piCP=10 not %d\n", iX, piCP);
+    for(iCP = 0; iCP < 10; iCP++)
+    {
+        iX = offsets_RTL[iCP];
+        cChars = 10;
+        cGlyphs = 10;
+        hr = ScriptXtoCP(iX, cChars, cGlyphs, pwLogClust_RTL, psva, piAdvance, &items[0].a, &piCP, &piTrailing);
+        ok(hr == S_OK, "ScriptXtoCP should return S_OK not %08x\n", hr);
+        ok(piCP == iCP, "iX=%d should return piCP=%d not %d\n", iX, iCP, piCP);
+        ok(piTrailing == 0, "iX=%d should return piTrailing=0 not %d\n", iX, piTrailing);
+    }
 
-    iX = 195;
-    cChars = 10;
-    cGlyphs = 10;
-    hr = ScriptXtoCP(iX, cChars, cGlyphs, pwLogClust, psva, piAdvance, &items[0].a, &piCP, &piTrailing);
-    ok(hr == S_OK, "ScriptXtoCP should return S_OK not %08x\n", hr);
-    ok(piCP == 0, "iX=%d should return piCP=0 not %d\n", iX, piCP);
+    items[0].a.fRTL = FALSE;
 
-    iX = 196;
-    cChars = 10;
-    cGlyphs = 10;
-    hr = ScriptXtoCP(iX, cChars, cGlyphs, pwLogClust, psva, piAdvance, &items[0].a, &piCP, &piTrailing);
-    ok(hr == S_OK, "ScriptXtoCP should return S_OK not %08x\n", hr);
-    ok(piCP == 1 ||
-       piCP == 0, /* win2k3 */
-       "iX=%d should return piCP=1 or piCP=0 not %d\n", iX, piCP);
+    for(iCP = 0; iCP <= 11; iCP++)
+    {
+        fTrailing = FALSE;
+        cChars = 10;
+        cGlyphs = 10;
+        hr = ScriptCPtoX(iCP, fTrailing, cChars, cGlyphs, pwLogClust, psva, piAdvance, &items[0].a, &piX);
+        ok(hr == S_OK, "ScriptCPtoX should return S_OK not %08x\n", hr);
+        ok(piX == offsets[iCP],
+           "iCP=%d should return piX=%d not %d\n", iCP, offsets[iCP], piX);
+    }
 
-    iCP=5;
-    fTrailing = FALSE;
-    cChars = 10;
-    cGlyphs = 10;
-    hr = ScriptCPtoX(iCP, fTrailing, cChars, cGlyphs, pwLogClust, psva, piAdvance, &items[0].a, &piX);
-    ok(hr == S_OK, "ScriptCPtoX should return S_OK not %08x\n", hr);
-    ok(piX == 976 ||
-       piX == 100, /* win2k3 */
-       "iCP=%d should return piX=976 or piX=100 not %d\n", iCP, piX);
+    for(iCP = 0; iCP <= 11; iCP++)
+    {
+        fTrailing = TRUE;
+        cChars = 10;
+        cGlyphs = 10;
+        hr = ScriptCPtoX(iCP, fTrailing, cChars, cGlyphs, pwLogClust, psva, piAdvance, &items[0].a, &piX);
+        ok(hr == S_OK, "ScriptCPtoX should return S_OK not %08x\n", hr);
+        ok(piX == offsets[iCP+1],
+           "iCP=%d should return piX=%d not %d\n", iCP, offsets[iCP+1], piX);
+    }
 
-    iCP=5;
-    fTrailing = TRUE;
-    cChars = 10;
-    cGlyphs = 10;
-    hr = ScriptCPtoX(iCP, fTrailing, cChars, cGlyphs, pwLogClust, psva, piAdvance, &items[0].a, &piX);
-    ok(hr == S_OK, "ScriptCPtoX should return S_OK not %08x\n", hr);
-    ok(piX == 1171 ||
-       piX == 80, /* win2k3 */
-       "iCP=%d should return piX=1171 or piX=80 not %d\n", iCP, piX);
+    items[0].a.fRTL = TRUE;
 
-    iCP=6;
-    fTrailing = FALSE;
-    cChars = 10;
-    cGlyphs = 10;
-    hr = ScriptCPtoX(iCP, fTrailing, cChars, cGlyphs, pwLogClust, psva, piAdvance, &items[0].a, &piX);
-    ok(hr == S_OK, "ScriptCPtoX should return S_OK not %08x\n", hr);
-    ok(piX == 1171 ||
-       piX == 80, /* win2k3 */
-       "iCP=%d should return piX=1171 or piX=80 not %d\n", iCP, piX);
+    for(iCP = 0; iCP <= 11; iCP++)
+    {
+        fTrailing = FALSE;
+        cChars = 10;
+        cGlyphs = 10;
+        hr = ScriptCPtoX(iCP, fTrailing, cChars, cGlyphs, pwLogClust_RTL, psva, piAdvance, &items[0].a, &piX);
+        ok(hr == S_OK, "ScriptCPtoX should return S_OK not %08x\n", hr);
+        ok(piX == offsets_RTL[iCP],
+           "iCP=%d should return piX=%d not %d\n", iCP, offsets_RTL[iCP], piX);
+    }
 
-    iCP=11;
-    fTrailing = FALSE;
-    cChars = 10;
-    cGlyphs = 10;
-    hr = ScriptCPtoX(iCP, fTrailing, cChars, cGlyphs, pwLogClust, psva, piAdvance, &items[0].a, &piX);
-    ok(hr == S_OK, "ScriptCPtoX should return S_OK not %08x\n", hr);
-    ok(piX == 1953 ||
-       piX == 0, /* win2k3 */
-       "iCP=%d should return piX=1953 or piX=0 not %d\n", iCP, piX);
-
-    iCP=11;
-    fTrailing = TRUE;
-    cChars = 10;
-    cGlyphs = 10;
-    hr = ScriptCPtoX(iCP, fTrailing, cChars, cGlyphs, pwLogClust, psva, piAdvance, &items[0].a, &piX);
-    ok(hr == S_OK, "ScriptCPtoX should return S_OK not %08x\n", hr);
-    ok(piX == 1953 ||
-       piX == 0, /* win2k3 */
-       "iCP=%d should return piX=1953 or piX=0 not %d\n", iCP, piX);
+    for(iCP = 0; iCP <= 11; iCP++)
+    {
+        fTrailing = TRUE;
+        cChars = 10;
+        cGlyphs = 10;
+        hr = ScriptCPtoX(iCP, fTrailing, cChars, cGlyphs, pwLogClust_RTL, psva, piAdvance, &items[0].a, &piX);
+        ok(hr == S_OK, "ScriptCPtoX should return S_OK not %08x\n", hr);
+        ok(piX == offsets_RTL[iCP+1],
+           "iCP=%d should return piX=%d not %d\n", iCP, offsets_RTL[iCP+1], piX);
+    }
 }
 
 static void test_ScriptString(HDC hdc)
@@ -1222,7 +1273,7 @@ static void test_ScriptString(HDC hdc)
  *
  * This set of tests are for the string functions of uniscribe.  The ScriptStringAnalyse
  * function allocates memory pointed to by the SCRIPT_STRING_ANALYSIS ssa pointer.  This
- * memory if freed by ScriptStringFree.  There needs to be a valid hdc for this as
+ * memory is freed by ScriptStringFree.  There needs to be a valid hdc for this as
  * ScriptStringAnalyse calls ScriptSItemize, ScriptShape and ScriptPlace which require it.
  *
  */
@@ -1234,10 +1285,7 @@ static void test_ScriptString(HDC hdc)
     int             Charset;
     DWORD           Flags = SSA_GLYPHS;
     int             ReqWidth = 100;
-    SCRIPT_CONTROL  Control;
-    SCRIPT_STATE    State;
     const int       Dx[5] = {10, 10, 10, 10, 10};
-    SCRIPT_TABDEF   Tabdef;
     const BYTE      InClass = 0;
     SCRIPT_STRING_ANALYSIS ssa = NULL;
 
@@ -1256,20 +1304,20 @@ static void test_ScriptString(HDC hdc)
     Charset = -1;     /* this flag indicates unicode input */
     /* Test without hdc to get E_PENDING */
     hr = ScriptStringAnalyse( NULL, teststr, len, Glyphs, Charset, Flags,
-                             ReqWidth, &Control, &State, Dx, &Tabdef,
-                             &InClass, &ssa);
+                              ReqWidth, NULL, NULL, Dx, NULL,
+                              &InClass, &ssa);
     ok(hr == E_PENDING, "ScriptStringAnalyse Stub should return E_PENDING not %08x\n", hr);
 
     /* test with hdc, this should be a valid test  */
     hr = ScriptStringAnalyse( hdc, teststr, len, Glyphs, Charset, Flags,
-                              ReqWidth, &Control, &State, Dx, &Tabdef,
+                              ReqWidth, NULL, NULL, Dx, NULL,
                               &InClass, &ssa);
     ok(hr == S_OK, "ScriptStringAnalyse should return S_OK not %08x\n", hr);
     ScriptStringFree(&ssa);
 
     /* test makes sure that a call with a valid pssa still works */
     hr = ScriptStringAnalyse( hdc, teststr, len, Glyphs, Charset, Flags,
-                              ReqWidth, &Control, &State, Dx, &Tabdef,
+                              ReqWidth, NULL, NULL, Dx, NULL,
                               &InClass, &ssa);
     ok(hr == S_OK, "ScriptStringAnalyse should return S_OK not %08x\n", hr);
     ok(ssa != NULL, "ScriptStringAnalyse pssa should not be NULL\n");
@@ -1314,9 +1362,6 @@ static void test_ScriptStringXtoCP_CPtoX(HDC hdc)
     int             Charset = -1;                       /* unicode                        */
     DWORD           Flags = SSA_GLYPHS;
     int             ReqWidth = 100;
-    SCRIPT_CONTROL  Control;
-    SCRIPT_STATE    State;
-    SCRIPT_TABDEF   Tabdef;
     const BYTE      InClass = 0;
     SCRIPT_STRING_ANALYSIS ssa = NULL;
 
@@ -1331,12 +1376,9 @@ static void test_ScriptStringXtoCP_CPtoX(HDC hdc)
      * Here we generate an SCRIPT_STRING_ANALYSIS that will be used as input to the
      * following character positions to X and X to character position functions.
      */
-    memset(&Control, 0, sizeof(SCRIPT_CONTROL));
-    memset(&State, 0, sizeof(SCRIPT_STATE));
-    memset(&Tabdef, 0, sizeof(SCRIPT_TABDEF));
 
     hr = ScriptStringAnalyse( hdc, String, String_len, Glyphs, Charset, Flags,
-                              ReqWidth, &Control, &State, NULL, &Tabdef,
+                              ReqWidth, NULL, NULL, NULL, NULL,
                               &InClass, &ssa);
     ok(hr == S_OK ||
        hr == E_INVALIDARG, /* NT */
@@ -1427,6 +1469,7 @@ static void test_ScriptStringXtoCP_CPtoX(HDC hdc)
             /* having a leading rtl character seems to confuse usp */
             /* this looks to be a windows bug we should emulate */
             hr = ScriptStringCPtoX(ssa, 0, TRUE, &X);
+            ok(hr == S_OK, "ScriptStringCPtoX should return S_OK not %08x\n", hr);
             X--;
             hr = ScriptStringXtoCP(ssa, X, &Ch, &iTrailing);
             ok(hr == S_OK, "ScriptStringXtoCP should return S_OK not %08x\n", hr);
@@ -1437,6 +1480,7 @@ static void test_ScriptStringXtoCP_CPtoX(HDC hdc)
         else
         {
             hr = ScriptStringCPtoX(ssa, 0, FALSE, &X);
+            ok(hr == S_OK, "ScriptStringCPtoX should return S_OK not %08x\n", hr);
             X--;
             hr = ScriptStringXtoCP(ssa, X, &Ch, &iTrailing);
             ok(hr == S_OK, "ScriptStringXtoCP should return S_OK not %08x\n", hr);
@@ -1447,9 +1491,15 @@ static void test_ScriptStringXtoCP_CPtoX(HDC hdc)
 
         /* Check beyond the end boundary of the whole string */
         if (rtl[String_len-1])
+        {
             hr = ScriptStringCPtoX(ssa, String_len-1, FALSE, &X);
+            ok(hr == S_OK, "ScriptStringCPtoX should return S_OK not %08x\n", hr);
+        }
         else
+        {
             hr = ScriptStringCPtoX(ssa, String_len-1, TRUE, &X);
+            ok(hr == S_OK, "ScriptStringCPtoX should return S_OK not %08x\n", hr);
+        }
         X++;
         hr = ScriptStringXtoCP(ssa, X, &Ch, &iTrailing);
         ok(hr == S_OK, "ScriptStringXtoCP should return S_OK not %08x\n", hr);
@@ -1468,7 +1518,7 @@ static void test_ScriptStringXtoCP_CPtoX(HDC hdc)
          * generate an SSA for the subsequent tests.
          */
         hr = ScriptStringAnalyse( hdc, String, String_len, Glyphs, Charset, Flags,
-                                  ReqWidth, &Control, &State, NULL, &Tabdef,
+                                  ReqWidth, NULL, NULL, NULL, NULL,
                                   &InClass, &ssa);
         ok(hr == S_OK, "ScriptStringAnalyse should return S_OK not %08x\n", hr);
 

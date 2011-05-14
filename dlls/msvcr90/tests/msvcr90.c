@@ -19,6 +19,10 @@
 #include <stdarg.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <math.h>
+#include <fcntl.h>
+#include <share.h>
+#include <sys/stat.h>
 
 #include <windef.h>
 #include <winbase.h>
@@ -67,13 +71,107 @@ static errno_t (__cdecl *p_itoa_s)(int,char*,size_t,int);
 static int (__cdecl *p_wcsncat_s)(wchar_t *dst, size_t elem, const wchar_t *src, size_t count);
 static void (__cdecl *p_qsort_s)(void *, size_t, size_t, int (__cdecl *)(void *, const void *, const void *), void *);
 static int (__cdecl *p_controlfp_s)(unsigned int *, unsigned int, unsigned int);
+static int (__cdecl *p_atoflt)(_CRT_FLOAT *, char *);
+static unsigned int (__cdecl *p_set_abort_behavior)(unsigned int, unsigned int);
+static int (__cdecl *p_sopen_s)(int*, const char*, int, int, int);
+static int (__cdecl *p_wsopen_s)(int*, const wchar_t*, int, int, int);
+static void* (__cdecl *p_realloc_crt)(void*, size_t);
+static void* (__cdecl *p_malloc)(size_t);
+static void (__cdecl *p_free)(void*);
+
+/* type info */
+typedef struct __type_info
+{
+  void *vtable;
+  char *name;
+  char  mangled[16];
+} type_info;
+
+
+struct __type_info_node
+{
+    void *memPtr;
+    struct __type_info_node* next;
+};
+
+static char* (WINAPI *p_type_info_name_internal_method)(type_info*, struct __type_info_node *);
+static void  (WINAPI *ptype_info_dtor)(type_info*);
 
 static void* (WINAPI *pEncodePointer)(void *);
 
 static int cb_called[4];
 static int g_qsort_s_context_counter;
 
+static inline int almost_equal_f(float f1, float f2)
+{
+    return f1-f2 > -1e-30 && f1-f2 < 1e-30;
+}
+
 /* ########## */
+
+/* thiscall emulation */
+/* Emulate a __thiscall */
+#ifdef __i386__
+#ifdef _MSC_VER
+static inline void* do_call_func1(void *func, void *_this)
+{
+  volatile void* retval = 0;
+  __asm
+  {
+    push ecx
+    mov ecx, _this
+    call func
+    mov retval, eax
+    pop ecx
+  }
+  return (void*)retval;
+}
+
+static inline void* do_call_func2(void *func, void *_this, const void* arg)
+{
+  volatile void* retval = 0;
+  __asm
+  {
+    push ecx
+    push arg
+    mov ecx, _this
+    call func
+    mov retval, eax
+    pop ecx
+  }
+  return (void*)retval;
+}
+#else
+static void* do_call_func1(void *func, void *_this)
+{
+  void *ret, *dummy;
+  __asm__ __volatile__ ("call *%2"
+                        : "=a" (ret), "=c" (dummy)
+                        : "g" (func), "1" (_this)
+                        : "edx", "memory" );
+  return ret;
+}
+
+static void* do_call_func2(void *func, void *_this, const void* arg)
+{
+  void *ret, *dummy;
+  __asm__ __volatile__ ("pushl %3\n\tcall *%2"
+                        : "=a" (ret), "=c" (dummy)
+                        : "r" (func), "r" (arg), "1" (_this)
+                        : "edx", "memory" );
+  return ret;
+}
+#endif
+
+#define call_func1(func,_this)   do_call_func1(func,_this)
+#define call_func2(func,_this,a) do_call_func2(func,_this,(const void*)a)
+
+#else
+
+#define call_func1(func,_this) func(_this)
+#define call_func2(func,_this,a) func(_this,a)
+
+#endif /* __i386__ */
 
 static void __cdecl test_invalid_parameter_handler(const wchar_t *expression,
         const wchar_t *function, const wchar_t *file,
@@ -446,25 +544,35 @@ static void test_wcsncat_s(void)
 }
 
 /* Based on dlls/ntdll/tests/string.c */
-static __cdecl int intcomparefunc(void *context, const void *a, const void*b)
+static __cdecl int intcomparefunc(void *context, const void *a, const void *b)
 {
+    const int *p = a, *q = b;
+
     ok (a != b, "must never get the same pointer\n");
     ++*(int *) context;
-    return (*(int*)a) - (*(int*)b);
+
+    return *p - *q;
 }
 
-static __cdecl int charcomparefunc(void *context, const void *a, const void*b)
+static __cdecl int charcomparefunc(void *context, const void *a, const void *b)
 {
+    const char *p = a, *q = b;
+
     ok (a != b, "must never get the same pointer\n");
     ++*(int *) context;
-    return (*(char*)a) - (*(char*)b);
+
+    return *p - *q;
 }
 
-static __cdecl int strcomparefunc(void *context, const void *a, const void*b)
+static __cdecl int strcomparefunc(void *context, const void *a, const void *b)
 {
+    const char * const *p = a;
+    const char * const *q = b;
+
     ok (a != b, "must never get the same pointer\n");
     ++*(int *) context;
-    return lstrcmpA(*(char**)a,*(char**)b);
+
+    return lstrcmpA(*p, *q);
 }
 
 static void test_qsort_s(void)
@@ -509,7 +617,7 @@ static void test_qsort_s(void)
 
     /* overflow without side effects, other overflow values crash */
     g_qsort_s_context_counter = 0;
-    p_qsort_s((void*)arr2, (1 << (8*sizeof(size_t) - 1)) + 1, sizeof(int), intcomparefunc, &g_qsort_s_context_counter);
+    p_qsort_s((void*)arr2, (((size_t)1) << (8*sizeof(size_t) - 1)) + 1, sizeof(int), intcomparefunc, &g_qsort_s_context_counter);
     ok(g_qsort_s_context_counter == 0, "callback shouldn't have been called\n");
     ok(arr2[0] == 23, "should remain unsorted, arr2[0] is %d\n", arr2[0]);
     ok(arr2[1] == 42, "should remain unsorted, arr2[1] is %d\n", arr2[1]);
@@ -617,6 +725,184 @@ static void test_controlfp_s(void)
     ok( cur != 0xdeadbeef, "value not set\n" );
 }
 
+typedef struct
+{
+    const char *str;
+    float flt;
+    int ret;
+} _atoflt_test;
+
+static const _atoflt_test _atoflt_testdata[] = {
+    { "12.1", 12.1, 0 },
+    { "-13.721", -13.721, 0 },
+    { "INF", 0.0, 0 },
+    { ".21e12", 0.21e12, 0 },
+    { "214353e-3", 214.353, 0 },
+    { "1d9999999999999999999", 0.0, _OVERFLOW },
+    { "  d10", 0.0, 0 },
+    /* more significant digits */
+    { "1.23456789", 1.23456789, 0 },
+    { "1.23456789e1", 12.3456789, 0 },
+    { "1e39", 0.0, _OVERFLOW },
+    { "1e-39", 0.0, _UNDERFLOW },
+    { NULL }
+};
+
+static void test__atoflt(void)
+{
+    _CRT_FLOAT flt;
+    int ret, i = 0;
+
+    if (!p_atoflt)
+    {
+        win_skip("_atoflt not found\n");
+        return;
+    }
+
+if (0)
+{
+    /* crashes on native */
+    p_atoflt(NULL, NULL);
+    p_atoflt(NULL, (char*)_atoflt_testdata[0].str);
+    p_atoflt(&flt, NULL);
+}
+
+    while (_atoflt_testdata[i].str)
+    {
+        ret = p_atoflt(&flt, (char*)_atoflt_testdata[i].str);
+        ok(ret == _atoflt_testdata[i].ret, "got ret %d, expected ret %d, for %s\n", ret,
+            _atoflt_testdata[i].ret, _atoflt_testdata[i].str);
+
+        if (ret == 0)
+          ok(almost_equal_f(flt.f, _atoflt_testdata[i].flt), "got %f, expected %f, for %s\n", flt.f,
+              _atoflt_testdata[i].flt, _atoflt_testdata[i].str);
+
+        i++;
+    }
+}
+
+static void test__set_abort_behavior(void)
+{
+    unsigned int res;
+
+    if (!p_set_abort_behavior)
+    {
+        win_skip("_set_abort_behavior not found\n");
+        return;
+    }
+
+    /* default is _WRITE_ABORT_MSG | _CALL_REPORTFAULT */
+    res = p_set_abort_behavior(0, 0);
+    ok (res == (_WRITE_ABORT_MSG | _CALL_REPORTFAULT),
+        "got 0x%x (expected 0x%x)\n", res, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+
+    /* no internal mask */
+    p_set_abort_behavior(0xffffffff, 0xffffffff);
+    res = p_set_abort_behavior(0, 0);
+    ok (res == 0xffffffff, "got 0x%x (expected 0x%x)\n", res, 0xffffffff);
+
+    /* set to default value */
+    p_set_abort_behavior(_WRITE_ABORT_MSG | _CALL_REPORTFAULT, 0xffffffff);
+}
+
+static void test__sopen_s(void)
+{
+    int ret, fd;
+
+    if(!p_sopen_s)
+    {
+        win_skip("_sopen_s not found\n");
+        return;
+    }
+
+    SET_EXPECT(invalid_parameter_handler);
+    ret = p_sopen_s(NULL, "test", _O_RDONLY, _SH_DENYNO, _S_IREAD);
+    ok(ret == EINVAL, "got %d, expected EINVAL\n", ret);
+    CHECK_CALLED(invalid_parameter_handler);
+
+    fd = 0xdead;
+    ret = p_sopen_s(&fd, "test", _O_RDONLY, _SH_DENYNO, _S_IREAD);
+    ok(ret == ENOENT, "got %d, expected ENOENT\n", ret);
+    ok(fd == -1, "got %d\n", fd);
+}
+
+static void test__wsopen_s(void)
+{
+    wchar_t testW[] = {'t','e','s','t',0};
+    int ret, fd;
+
+    if(!p_wsopen_s)
+    {
+        win_skip("_wsopen_s not found\n");
+        return;
+    }
+
+    SET_EXPECT(invalid_parameter_handler);
+    ret = p_wsopen_s(NULL, testW, _O_RDONLY, _SH_DENYNO, _S_IREAD);
+    ok(ret == EINVAL, "got %d, expected EINVAL\n", ret);
+    CHECK_CALLED(invalid_parameter_handler);
+
+    fd = 0xdead;
+    ret = p_wsopen_s(&fd, testW, _O_RDONLY, _SH_DENYNO, _S_IREAD);
+    ok(ret == ENOENT, "got %d, expected ENOENT\n", ret);
+    ok(fd == -1, "got %d\n", fd);
+}
+
+static void test__realloc_crt(void)
+{
+    void *mem;
+
+    if(!p_realloc_crt)
+    {
+        win_skip("_realloc_crt not found\n");
+        return;
+    }
+
+if (0)
+{
+    /* crashes on some systems starting Vista */
+    p_realloc_crt(NULL, 10);
+}
+
+    mem = p_malloc(10);
+    ok(mem != NULL, "memory not allocated\n");
+
+    mem = p_realloc_crt(mem, 20);
+    ok(mem != NULL, "memory not reallocated\n");
+
+    mem = p_realloc_crt(mem, 0);
+    ok(mem == NULL, "memory not freed\n");
+
+    mem = p_realloc_crt(NULL, 0);
+    ok(mem != NULL, "memory not (re)allocated for size 0\n");
+    p_free(mem);
+}
+
+static void test_typeinfo(void)
+{
+    static type_info t1 = { NULL, NULL,{'.','?','A','V','t','e','s','t','1','@','@',0,0,0,0,0 } };
+    struct __type_info_node node;
+    char *name;
+
+    if (!p_type_info_name_internal_method)
+    {
+        win_skip("public: char const * __thiscall type_info::_name_internal_method(struct \
+                  __type_info_node *)const not supported\n");
+        return;
+    }
+
+    /* name */
+    t1.name = NULL;
+    node.memPtr = NULL;
+    node.next = NULL;
+    name = call_func2(p_type_info_name_internal_method, &t1, &node);
+    ok(name != NULL, "got %p\n", name);
+    ok(name && t1.name && !strcmp(name, t1.name), "bad name '%s' for t1\n", name);
+
+    ok(t1.name && !strcmp(t1.name, "class test1"), "demangled to '%s' for t1\n", t1.name);
+    call_func1(ptype_info_dtor, &t1);
+}
+
 START_TEST(msvcr90)
 {
     HMODULE hcrt;
@@ -648,6 +934,25 @@ START_TEST(msvcr90)
     p_wcsncat_s = (void *)GetProcAddress( hcrt,"wcsncat_s" );
     p_qsort_s = (void *) GetProcAddress(hcrt, "qsort_s");
     p_controlfp_s = (void *) GetProcAddress(hcrt, "_controlfp_s");
+    p_atoflt = (void* )GetProcAddress(hcrt, "_atoflt");
+    p_set_abort_behavior = (void *) GetProcAddress(hcrt, "_set_abort_behavior");
+    p_sopen_s = (void*) GetProcAddress(hcrt, "_sopen_s");
+    p_wsopen_s = (void*) GetProcAddress(hcrt, "_wsopen_s");
+    p_realloc_crt = (void*) GetProcAddress(hcrt, "_realloc_crt");
+    p_malloc = (void*) GetProcAddress(hcrt, "malloc");
+    p_free = (void*)GetProcAddress(hcrt, "free");
+    if (sizeof(void *) == 8)
+    {
+        p_type_info_name_internal_method = (void*)GetProcAddress(hcrt,
+                                "?_name_internal_method@type_info@@QEBAPEBDPEAU__type_info_node@@@Z");
+        ptype_info_dtor = (void*)GetProcAddress(hcrt, "??1type_info@@UEAA@XZ");
+    }
+    else
+    {
+        p_type_info_name_internal_method = (void*)GetProcAddress(hcrt,
+                                "?_name_internal_method@type_info@@QBEPBDPAU__type_info_node@@@Z");
+        ptype_info_dtor = (void*)GetProcAddress(hcrt, "??1type_info@@UAE@XZ");
+    }
 
     hkernel32 = GetModuleHandleA("kernel32.dll");
     pEncodePointer = (void *) GetProcAddress(hkernel32, "EncodePointer");
@@ -660,4 +965,10 @@ START_TEST(msvcr90)
     test_wcsncat_s();
     test_qsort_s();
     test_controlfp_s();
+    test__atoflt();
+    test__set_abort_behavior();
+    test__sopen_s();
+    test__wsopen_s();
+    test__realloc_crt();
+    test_typeinfo();
 }

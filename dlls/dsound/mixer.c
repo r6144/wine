@@ -5,6 +5,7 @@
  * Copyright 2000-2002 TransGaming Technologies, Inc.
  * Copyright 2007 Peter Dons Tychsen
  * Copyright 2007 Maarten Lankhorst
+ * Copyright 2011 Owen Rudge for CodeWeavers
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -30,9 +31,13 @@
 #include "windef.h"
 #include "winbase.h"
 #include "mmsystem.h"
+#include "wingdi.h"
+#include "mmreg.h"
 #include "winternl.h"
 #include "wine/debug.h"
 #include "dsound.h"
+#include "ks.h"
+#include "ksmedia.h"
 #include "dsdriver.h"
 #include "dsound_private.h"
 
@@ -177,21 +182,32 @@ void DSOUND_RecalcFormat(IDirectSoundBufferImpl *dsb)
 {
 	BOOL needremix = TRUE, needresample = (dsb->freq != dsb->device->pwfx->nSamplesPerSec);
 	DWORD bAlign = dsb->pwfx->nBlockAlign, pAlign = dsb->device->pwfx->nBlockAlign;
+	WAVEFORMATEXTENSIBLE *pwfxe;
+	BOOL ieee = FALSE;
 
 	TRACE("(%p)\n",dsb);
+
+	pwfxe = (WAVEFORMATEXTENSIBLE *) dsb->pwfx;
+
+	if ((pwfxe->Format.wFormatTag == WAVE_FORMAT_IEEE_FLOAT) || ((pwfxe->Format.wFormatTag == WAVE_FORMAT_EXTENSIBLE)
+	    && (IsEqualGUID(&pwfxe->SubFormat, &KSDATAFORMAT_SUBTYPE_IEEE_FLOAT))))
+		ieee = TRUE;
 
 	/* calculate the 10ms write lead */
 	dsb->writelead = (dsb->freq / 100) * dsb->pwfx->nBlockAlign;
 
 	if ((dsb->pwfx->wBitsPerSample == dsb->device->pwfx->wBitsPerSample) &&
-	    (dsb->pwfx->nChannels == dsb->device->pwfx->nChannels) && !needresample)
+	    (dsb->pwfx->nChannels == dsb->device->pwfx->nChannels) && !needresample && !ieee)
 		needremix = FALSE;
 	HeapFree(GetProcessHeap(), 0, dsb->tmp_buffer);
 	dsb->tmp_buffer = NULL;
 	dsb->max_buffer_len = dsb->freqAcc = dsb->freqAccNext = 0;
 	dsb->freqneeded = needresample;
 
-	dsb->convert = convertbpp[dsb->pwfx->wBitsPerSample/8 - 1][dsb->device->pwfx->wBitsPerSample/8 - 1];
+	if (ieee)
+		dsb->convert = convertbpp[4][dsb->device->pwfx->wBitsPerSample/8 - 1];
+	else
+		dsb->convert = convertbpp[dsb->pwfx->wBitsPerSample/8 - 1][dsb->device->pwfx->wBitsPerSample/8 - 1];
 
 	dsb->resampleinmixer = FALSE;
 
@@ -278,22 +294,30 @@ static inline void cp_fields(const IDirectSoundBufferImpl *dsb, const BYTE *ibuf
     INT istep = dsb->pwfx->wBitsPerSample / 8, ostep = device->pwfx->wBitsPerSample / 8;
 
     if (device->pwfx->nChannels == dsb->pwfx->nChannels ||
-        (device->pwfx->nChannels == 2 && dsb->pwfx->nChannels == 6)) {
+        (device->pwfx->nChannels == 2 && dsb->pwfx->nChannels == 6) ||
+        (device->pwfx->nChannels == 8 && dsb->pwfx->nChannels == 2) ||
+        (device->pwfx->nChannels == 6 && dsb->pwfx->nChannels == 2)) {
         dsb->convert(ibuf, obuf, istride, ostride, count, freqAcc, adj);
-        if (device->pwfx->nChannels == 2)
+        if (device->pwfx->nChannels == 2 || dsb->pwfx->nChannels == 2)
             dsb->convert(ibuf + istep, obuf + ostep, istride, ostride, count, freqAcc, adj);
+        return;
     }
 
     if (device->pwfx->nChannels == 1 && dsb->pwfx->nChannels == 2)
     {
         dsb->convert(ibuf, obuf, istride, ostride, count, freqAcc, adj);
+        return;
     }
 
     if (device->pwfx->nChannels == 2 && dsb->pwfx->nChannels == 1)
     {
         dsb->convert(ibuf, obuf, istride, ostride, count, freqAcc, adj);
         dsb->convert(ibuf, obuf + ostep, istride, ostride, count, freqAcc, adj);
+        return;
     }
+
+    WARN("Unable to remap channels: device=%u, buffer=%u\n", device->pwfx->nChannels,
+            dsb->pwfx->nChannels);
 }
 
 /**
@@ -648,7 +672,6 @@ static DWORD DSOUND_MixOne(IDirectSoundBufferImpl *dsb, DWORD writepos, DWORD mi
  * writepos = the current safe-to-write position in the primary buffer
  * mixlen = the maximum amount to mix into the primary buffer
  *          (beyond the current writepos)
- * mustlock = Do we have to fight for lock because we otherwise risk an underrun?
  * recover = true if the sound device may have been reset and the write
  *           position in the device buffer changed
  * all_stopped = reports back if all buffers have stopped
@@ -656,12 +679,11 @@ static DWORD DSOUND_MixOne(IDirectSoundBufferImpl *dsb, DWORD writepos, DWORD mi
  * Returns:  the length beyond the writepos that was mixed to.
  */
 
-static DWORD DSOUND_MixToPrimary(const DirectSoundDevice *device, DWORD writepos, DWORD mixlen, BOOL mustlock, BOOL recover, BOOL *all_stopped)
+static DWORD DSOUND_MixToPrimary(const DirectSoundDevice *device, DWORD writepos, DWORD mixlen, BOOL recover, BOOL *all_stopped)
 {
 	INT i, len;
 	DWORD minlen = 0;
 	IDirectSoundBufferImpl	*dsb;
-	BOOL gotall = TRUE;
 
 	/* unless we find a running buffer, all have stopped */
 	*all_stopped = TRUE;
@@ -674,11 +696,7 @@ static DWORD DSOUND_MixToPrimary(const DirectSoundDevice *device, DWORD writepos
 
 		if (dsb->buflen && dsb->state && !dsb->hwbuf) {
 			TRACE("Checking %p, mixlen=%d\n", dsb, mixlen);
-			if (!RtlAcquireResourceShared(&dsb->lock, mustlock))
-			{
-				gotall = FALSE;
-				continue;
-			}
+			RtlAcquireResourceShared(&dsb->lock, TRUE);
 			/* if buffer is stopping it is stopped now */
 			if (dsb->state == STATE_STOPPING) {
 				dsb->state = STATE_STOPPED;
@@ -710,7 +728,6 @@ static DWORD DSOUND_MixToPrimary(const DirectSoundDevice *device, DWORD writepos
 	}
 
 	TRACE("Mixed at least %d from all buffers\n", minlen);
-	if (!gotall) return 0;
 	return minlen;
 }
 
@@ -798,7 +815,6 @@ static void DSOUND_PerformMix(DirectSoundDevice *device)
 		DWORD playpos, writepos, writelead, maxq, frag, prebuff_max, prebuff_left, size1, size2, mixplaypos, mixplaypos2;
 		LPVOID buf1, buf2;
 		BOOL lock = (device->hwbuf && !(device->drvdesc.dwFlags & DSDDESC_DONTNEEDPRIMARYLOCK));
-		BOOL mustlock = FALSE;
 		int nfiller;
 
 		/* the sound of silence */
@@ -881,15 +897,11 @@ static void DSOUND_PerformMix(DirectSoundDevice *device)
 		TRACE("prebuff_left = %d, prebuff_max = %dx%d=%d, writelead=%d\n",
 			prebuff_left, device->prebuf, device->fraglen, prebuff_max, writelead);
 
-		/* Do we risk an 'underrun' if we don't advance pointer? */
-		if (writelead/device->fraglen <= ds_snd_queue_min || recover)
-			mustlock = TRUE;
-
 		if (lock)
 			IDsDriverBuffer_Lock(device->hwbuf, &buf1, &size1, &buf2, &size2, writepos, maxq, 0);
 
 		/* do the mixing */
-		frag = DSOUND_MixToPrimary(device, writepos, maxq, mustlock, recover, &all_stopped);
+		frag = DSOUND_MixToPrimary(device, writepos, maxq, recover, &all_stopped);
 
 		if (frag + writepos > device->buflen)
 		{

@@ -89,7 +89,7 @@ static void append_productcode(MSIPACKAGE* package, LPCWSTR action_property,
     strcatW(newprop,productid);
 
     r = msi_set_property( package->db, action_property, newprop );
-    if (r == ERROR_SUCCESS && !strcmpW( action_property, cszSourceDir ))
+    if (r == ERROR_SUCCESS && !strcmpW( action_property, szSourceDir ))
         msi_reset_folders( package, TRUE );
 
     TRACE("Found Related Product... %s now %s\n",
@@ -194,7 +194,7 @@ static UINT ITERATE_FindRelatedProducts(MSIRECORD *rec, LPVOID param)
             action_property = MSI_RecordGetString(rec, 7);
             append_productcode(package, action_property, productid);
             MSI_RecordSetStringW(uirow, 1, productid);
-            ui_actiondata(package, szFindRelatedProducts, uirow);
+            msi_ui_actiondata(package, szFindRelatedProducts, uirow);
         }
         index ++;
     }
@@ -218,13 +218,13 @@ UINT ACTION_FindRelatedProducts(MSIPACKAGE *package)
         return ERROR_SUCCESS;
     }
 
-    if (check_unique_action(package, szFindRelatedProducts))
+    if (msi_action_is_unique(package, szFindRelatedProducts))
     {
         TRACE("Skipping FindRelatedProducts action: already done in UI sequence\n");
         return ERROR_SUCCESS;
     }
     else
-        register_unique_action(package, szFindRelatedProducts);
+        msi_register_unique_action(package, szFindRelatedProducts);
 
     rc = MSI_DatabaseOpenViewW(package->db, Query, &view);
     if (rc != ERROR_SUCCESS)

@@ -253,3 +253,22 @@ void CDECL MSVCRT_qsort_s(void *base, MSVCRT_size_t nmemb, MSVCRT_size_t size,
     MSVCRT_mergesort(base, secondarr, size, compar, 0, nmemb-1, context);
     MSVCRT_free(secondarr);
 }
+
+/*********************************************************************
+ * _get_output_format (MSVCRT.@)
+ */
+unsigned int CDECL _get_output_format(void)
+{
+   return 0;
+}
+
+/*********************************************************************
+ * _resetstkoflw (MSVCRT.@)
+ */
+int CDECL _resetstkoflw(void)
+{
+    int stack_addr;
+
+    /* causes stack fault that updates NtCurrentTeb()->Tib.StackLimit */
+    return VirtualProtect( &stack_addr, 1, PAGE_GUARD|PAGE_READWRITE, NULL );
+}

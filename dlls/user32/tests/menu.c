@@ -425,7 +425,7 @@ static void test_menu_ownerdraw(void)
     MOD_maxid = k-1;
     assert( k <= sizeof(MOD_rc)/sizeof(RECT));
     /* display the menu */
-    ret = TrackPopupMenu( hmenu, TPM_RETURNCMD, 100,100, 0, hwnd, NULL);
+    TrackPopupMenu( hmenu, TPM_RETURNCMD, 100,100, 0, hwnd, NULL);
 
     /* columns have a 4 pixel gap between them */
     ok( MOD_rc[0].right + 4 ==  MOD_rc[2].left,
@@ -449,7 +449,7 @@ static void test_menu_ownerdraw(void)
     leftcol= MOD_rc[0].left;
     ModifyMenu( hmenu, 0, MF_BYCOMMAND| MF_OWNERDRAW| MF_SEPARATOR, 0, 0); 
     /* display the menu */
-    ret = TrackPopupMenu( hmenu, TPM_RETURNCMD, 100,100, 0, hwnd, NULL);
+    TrackPopupMenu( hmenu, TPM_RETURNCMD, 100,100, 0, hwnd, NULL);
     /* left should be 4 pixels less now */
     ok( leftcol == MOD_rc[0].left + 4, 
             "columns should be 4 pixels to the left (actual %d).\n",
@@ -562,13 +562,15 @@ static void test_mbs_help( int ispop, int hassub, int mnuopt,
         ReleaseDC( hwnd, hdc);
     }
     if(ispop)
-        ret = TrackPopupMenu( hmenu, TPM_RETURNCMD, 100,100, 0, hwnd, NULL);
+        TrackPopupMenu( hmenu, TPM_RETURNCMD, 100,100, 0, hwnd, NULL);
     else {
         ret = SetMenu( hwnd, hmenu);
         ok(ret, "SetMenu failed with error %d\n", GetLastError());
         DrawMenuBar( hwnd);
     }
     ret = GetMenuItemRect( hwnd, hmenu, 0, &rc);
+    ok(ret, "GetMenuItemRect failed with error %d\n", GetLastError());
+
     if (0)  /* comment out menu size checks, behavior is different in almost every Windows version */
             /* the tests should however succeed on win2000, XP and Wine (at least up to 1.1.15) */
             /* with a variety of dpis and desktop font sizes */
@@ -660,6 +662,7 @@ static void test_menu_bmp_and_string(void)
     MENUINFO mi= {sizeof(MENUINFO)};
     MENUITEMINFOA mii= {sizeof(MENUITEMINFOA)};
     int count, szidx, txtidx, bmpidx, hassub, mnuopt, ispop;
+    BOOL got;
 
     if( !pGetMenuInfo)
     {
@@ -681,12 +684,14 @@ static void test_menu_bmp_and_string(void)
     ok( hsysmenu != NULL, "GetSystemMenu failed with error %d\n", GetLastError());
     mi.fMask = MIM_STYLE;
     mi.dwStyle = 0;
-    ok( pGetMenuInfo( hsysmenu, &mi), "GetMenuInfo failed gle=%d\n", GetLastError());
+    got = pGetMenuInfo( hsysmenu, &mi);
+    ok( got, "GetMenuInfo failed gle=%d\n", GetLastError());
     ok( MNS_CHECKORBMP == mi.dwStyle, "System Menu Style is %08x, without the bit %08x\n",
         mi.dwStyle, MNS_CHECKORBMP);
     mii.fMask = MIIM_BITMAP;
     mii.hbmpItem = NULL;
-    ok( GetMenuItemInfoA( hsysmenu, SC_CLOSE, FALSE, &mii), "GetMenuItemInfoA failed gle=%d\n", GetLastError());
+    got = GetMenuItemInfoA( hsysmenu, SC_CLOSE, FALSE, &mii);
+    ok( got, "GetMenuItemInfoA failed gle=%d\n", GetLastError());
     ok( HBMMENU_POPUP_CLOSE == mii.hbmpItem, "Item info did not get the right hbitmap: got %p  expected %p\n",
         mii.hbmpItem, HBMMENU_POPUP_CLOSE);
 
@@ -954,7 +959,9 @@ static void check_menu_item_info( int line, HMENU hmenu, BOOL ansi, UINT mask, U
                              "wrong bmpitem %p/%p\n", info.hbmpItem, item );
     ok_(__FILE__, line)( info.dwTypeData == type_data || (ULONG_PTR)info.dwTypeData == LOWORD(type_data),
                          "wrong type data %p/%p\n", info.dwTypeData, type_data );
-    ok_(__FILE__, line)( info.cch == out_len, "wrong len %x/%x\n", info.cch, out_len );
+    ok_(__FILE__, line)( info.cch == out_len ||
+                         broken(! ansi && info.cch == 2 * out_len) /* East-Asian */,
+                         "wrong len %x/%x\n", info.cch, out_len );
     if (expname)
     {
         if(ansi)
@@ -2031,6 +2038,7 @@ static void test_menu_input(void) {
     HINSTANCE hInstance = GetModuleHandleA( NULL );
     HANDLE hThread, hWnd;
     DWORD tid;
+    ATOM aclass;
 
     if (!pSendInput)
     {
@@ -2048,11 +2056,14 @@ static void test_menu_input(void) {
     wclass.lpszMenuName  = 0;
     wclass.cbClsExtra    = 0;
     wclass.cbWndExtra    = 0;
-    assert (RegisterClassA( &wclass ));
-    assert (hWnd = CreateWindowA( wclass.lpszClassName, "MenuTest",
-                                  WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, 0,
-                                  400, 200, NULL, NULL, hInstance, NULL) );
-
+    aclass = RegisterClassA( &wclass );
+    ok (aclass, "MenuTest class not created\n");
+    if (!aclass) return;
+    hWnd = CreateWindowA( wclass.lpszClassName, "MenuTest",
+                          WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, 0,
+                          400, 200, NULL, NULL, hInstance, NULL);
+    ok (hWnd != NULL, "MenuTest window not created\n");
+    if (!hWnd) return;
     /* fixed menus */
     hMenus[3] = CreatePopupMenu();
     AppendMenu(hMenus[3], MF_STRING, 0, "&Enabled");
@@ -2118,6 +2129,7 @@ static void test_menu_hilitemenuitem( void )
     HMENU hMenu, hPopupMenu;
     WNDCLASSA wclass;
     HWND hWnd;
+    ATOM aclass;
 
     wclass.lpszClassName = "HiliteMenuTestClass";
     wclass.style         = CS_HREDRAW | CS_VREDRAW;
@@ -2129,10 +2141,14 @@ static void test_menu_hilitemenuitem( void )
     wclass.lpszMenuName  = 0;
     wclass.cbClsExtra    = 0;
     wclass.cbWndExtra    = 0;
-    assert (RegisterClassA( &wclass ));
-    assert (hWnd = CreateWindowA( wclass.lpszClassName, "HiliteMenuTest",
-                                  WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, 0,
-                                  400, 200, NULL, NULL, wclass.hInstance, NULL) );
+    aclass = RegisterClassA( &wclass );
+    ok (aclass, "HiliteMenuTest class could not be created\n");
+    if (!aclass) return;
+    hWnd = CreateWindowA( wclass.lpszClassName, "HiliteMenuTest",
+                          WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, 0,
+                          400, 200, NULL, NULL, wclass.hInstance, NULL);
+    ok (hWnd != NULL, "HiliteMenuTest window could not be created\n");
+    if (!hWnd) return;
 
     hMenu = CreateMenu();
     hPopupMenu = CreatePopupMenu();
@@ -2884,7 +2900,8 @@ static void test_menu_trackpopupmenu(void)
         }
         /* display the menu */
         /* start with an invalid menu handle */
-        gle = 0xdeadbeef;
+        SetLastError(0xdeadbeef);
+
         gflag_initmenupopup = gflag_entermenuloop = gflag_initmenu = 0;
         ret = MyTrackPopupMenu( Ex, NULL, TPM_RETURNCMD, 100,100, hwnd, NULL);
         gle = GetLastError();
@@ -2900,7 +2917,7 @@ static void test_menu_trackpopupmenu(void)
                 gflag_entermenuloop ? "WM_INITMENULOOP ": "",
                 gflag_initmenu ? "WM_INITMENU": "");
         /* another one but not NULL */
-        gle = 0xdeadbeef;
+        SetLastError(0xdeadbeef);
         gflag_initmenupopup = gflag_entermenuloop = gflag_initmenu = 0;
         ret = MyTrackPopupMenu( Ex, (HMENU)hwnd, TPM_RETURNCMD, 100,100, hwnd, NULL);
         gle = GetLastError();
@@ -2915,8 +2932,22 @@ static void test_menu_trackpopupmenu(void)
                 gflag_initmenupopup ? " WM_INITMENUPOPUP ": " ",
                 gflag_entermenuloop ? "WM_INITMENULOOP ": "",
                 gflag_initmenu ? "WM_INITMENU": "");
+
+        /* invalid window */
+        SetLastError(0xdeadbeef);
+        gflag_initmenupopup = gflag_entermenuloop = gflag_initmenu = 0;
+        ret = MyTrackPopupMenu( Ex, hmenu, TPM_RETURNCMD, 100,100, 0, NULL);
+        gle = GetLastError();
+        ok( !ret, "TrackPopupMenu%s should have failed\n", Ex ? "Ex" : "");
+        ok( gle == ERROR_INVALID_WINDOW_HANDLE, "TrackPopupMenu%s error got %u\n", Ex ? "Ex" : "", gle );
+        ok( !(gflag_initmenupopup || gflag_entermenuloop || gflag_initmenu),
+                "got unexpected message(s)%s%s%s\n",
+                gflag_initmenupopup ? " WM_INITMENUPOPUP ": " ",
+                gflag_entermenuloop ? "WM_INITMENULOOP ": "",
+                gflag_initmenu ? "WM_INITMENU": "");
+
         /* now a somewhat successful call */
-        gle = 0xdeadbeef;
+        SetLastError(0xdeadbeef);
         gflag_initmenupopup = gflag_entermenuloop = gflag_initmenu = 0;
         ret = MyTrackPopupMenu( Ex, hmenu, TPM_RETURNCMD, 100,100, hwnd, NULL);
         gle = GetLastError();
@@ -2934,7 +2965,7 @@ static void test_menu_trackpopupmenu(void)
         /* and another */
         ret = AppendMenuA( hmenu, MF_STRING, 1, "winetest");
         ok( ret, "AppendMenA has failed!\n");
-        gle = 0xdeadbeef;
+        SetLastError(0xdeadbeef);
         gflag_initmenupopup = gflag_entermenuloop = gflag_initmenu = 0;
         ret = MyTrackPopupMenu( Ex, hmenu, TPM_RETURNCMD, 100,100, hwnd, NULL);
         gle = GetLastError();
@@ -3062,14 +3093,14 @@ static void test_menu_cancelmode(void)
      */
     /* menu owner is top level window */
     g_hwndtosend = hwnd;
-    ret = TrackPopupMenu( menu, TPM_RETURNCMD, 100,100, 0, hwnd, NULL);
+    TrackPopupMenu( menu, TPM_RETURNCMD, 100,100, 0, hwnd, NULL);
     todo_wine {
         ok( g_got_enteridle == 0, "received %d WM_ENTERIDLE messages, none expected\n", g_got_enteridle);
     }
     ok( g_got_enteridle < 2, "received %d WM_ENTERIDLE messages, should be less than 2\n", g_got_enteridle);
     /* menu owner is child window */
     g_hwndtosend = hwndchild;
-    ret = TrackPopupMenu( menu, TPM_RETURNCMD, 100,100, 0, hwndchild, NULL);
+    TrackPopupMenu( menu, TPM_RETURNCMD, 100,100, 0, hwndchild, NULL);
     todo_wine {
         ok(g_got_enteridle == 0, "received %d WM_ENTERIDLE messages, none expected\n", g_got_enteridle);
     }
@@ -3077,7 +3108,7 @@ static void test_menu_cancelmode(void)
     /* now send the WM_CANCELMODE messages to the WRONG window */
     /* those should fail ( to have any effect) */
     g_hwndtosend = hwnd;
-    ret = TrackPopupMenu( menu, TPM_RETURNCMD, 100,100, 0, hwndchild, NULL);
+    TrackPopupMenu( menu, TPM_RETURNCMD, 100,100, 0, hwndchild, NULL);
     ok( g_got_enteridle == 2, "received %d WM_ENTERIDLE messages, should be 2\n", g_got_enteridle);
     /* cleanup */
     DestroyMenu( menu);
@@ -3177,6 +3208,7 @@ static void test_menualign(void)
     if( pGetMenuInfo) {
         mi.fMask = MIM_STYLE;
         ret = pGetMenuInfo( menu, &mi);
+        ok( ret, "GetMenuInfo failed: %d\n", GetLastError());
         ok( menu != NULL, "GetMenuInfo() failed\n");
         ok( 0 == mi.dwStyle, "menuinfo style is %x\n", mi.dwStyle);
     }

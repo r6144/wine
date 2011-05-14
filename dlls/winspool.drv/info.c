@@ -1775,6 +1775,38 @@ LONG WINAPI DocumentPropertiesW(HWND hWnd, HANDLE hPrinter,
     return ret;
 }
 
+/*****************************************************************************
+ *          IsValidDevmodeA            [WINSPOOL.@]
+ *
+ * Validate a DEVMODE structure and fix errors if possible.
+ *
+ */
+BOOL WINAPI IsValidDevmodeA(PDEVMODEA *pDevMode, SIZE_T size)
+{
+    FIXME("(%p,%ld): stub\n", pDevMode, size);
+
+    if(!pDevMode)
+        return FALSE;
+
+    return TRUE;
+}
+
+/*****************************************************************************
+ *          IsValidDevmodeW            [WINSPOOL.@]
+ *
+ * Validate a DEVMODE structure and fix errors if possible.
+ *
+ */
+BOOL WINAPI IsValidDevmodeW(PDEVMODEW *pDevMode, SIZE_T size)
+{
+    FIXME("(%p,%ld): stub\n", pDevMode, size);
+
+    if(!pDevMode)
+        return FALSE;
+
+    return TRUE;
+}
+
 /******************************************************************
  *              OpenPrinterA        [WINSPOOL.@]
  *
@@ -2614,7 +2646,7 @@ HANDLE WINAPI AddPrinterA(LPSTR pName, DWORD Level, LPBYTE pPrinter)
     PRINTER_INFO_2A *piA = (PRINTER_INFO_2A*)pPrinter;
     HANDLE ret;
 
-    TRACE("(%s,%d,%p): stub\n", debugstr_a(pName), Level, pPrinter);
+    TRACE("(%s, %d, %p)\n", debugstr_a(pName), Level, pPrinter);
     if(Level != 2) {
         ERR("Level = %d, unsupported!\n", Level);
 	SetLastError(ERROR_INVALID_LEVEL);
@@ -7193,7 +7225,7 @@ static BOOL get_job_info_2(job_t *job, JOB_INFO_2W *ji2, LPBYTE buf, DWORD cbBuf
     DWORD shift;
     BOOL space = (cbBuf > 0);
     LPBYTE ptr = buf;
-    LPDEVMODEA  dmA;
+    LPDEVMODEA  dmA = NULL;
     LPDEVMODEW  devmode;
 
     *pcbNeeded = 0;

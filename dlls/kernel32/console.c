@@ -5,7 +5,7 @@
  * Copyright 1997 Karl Garrison
  * Copyright 1998 John Richardson
  * Copyright 1998 Marcus Meissner
- * Copyright 2001,2002,2004,2005 Eric Pouech
+ * Copyright 2001,2002,2004,2005,2010 Eric Pouech
  * Copyright 2001 Alexandre Julliard
  *
  * This library is free software; you can redistribute it and/or
@@ -216,6 +216,7 @@ static BOOL restore_console_mode(HANDLE hin)
     if ((fd = get_console_bare_fd(hin)) == -1) return FALSE;
     ret = tcsetattr(fd, TCSANOW, &S_termios) >= 0;
     close(fd);
+    TERM_Exit();
     return ret;
 }
 
@@ -486,12 +487,27 @@ HANDLE WINAPI GetConsoleInputWaitHandle(void)
 BOOL WINAPI WriteConsoleInputA( HANDLE handle, const INPUT_RECORD *buffer,
                                 DWORD count, LPDWORD written )
 {
-    INPUT_RECORD *recW;
+    INPUT_RECORD *recW = NULL;
     BOOL ret;
 
-    if (!(recW = HeapAlloc( GetProcessHeap(), 0, count * sizeof(*recW) ))) return FALSE;
-    memcpy( recW, buffer, count*sizeof(*recW) );
-    input_records_AtoW( recW, count );
+    if (count > 0)
+    {
+        if (!buffer)
+        {
+            SetLastError( ERROR_INVALID_ACCESS );
+            return FALSE;
+        }
+
+        if (!(recW = HeapAlloc( GetProcessHeap(), 0, count * sizeof(*recW) )))
+        {
+            SetLastError( ERROR_NOT_ENOUGH_MEMORY );
+            return FALSE;
+        }
+
+        memcpy( recW, buffer, count * sizeof(*recW) );
+        input_records_AtoW( recW, count );
+    }
+
     ret = WriteConsoleInputW( handle, recW, count, written );
     HeapFree( GetProcessHeap(), 0, recW );
     return ret;
@@ -504,20 +520,32 @@ BOOL WINAPI WriteConsoleInputA( HANDLE handle, const INPUT_RECORD *buffer,
 BOOL WINAPI WriteConsoleInputW( HANDLE handle, const INPUT_RECORD *buffer,
                                 DWORD count, LPDWORD written )
 {
+    DWORD events_written = 0;
     BOOL ret;
 
     TRACE("(%p,%p,%d,%p)\n", handle, buffer, count, written);
 
-    if (written) *written = 0;
+    if (count > 0 && !buffer)
+    {
+        SetLastError(ERROR_INVALID_ACCESS);
+        return FALSE;
+    }
+
     SERVER_START_REQ( write_console_input )
     {
         req->handle = console_handle_unmap(handle);
         wine_server_add_data( req, buffer, count * sizeof(INPUT_RECORD) );
-        if ((ret = !wine_server_call_err( req )) && written)
-            *written = reply->written;
+        if ((ret = !wine_server_call_err( req )))
+            events_written = reply->written;
     }
     SERVER_END_REQ;
 
+    if (written) *written = events_written;
+    else
+    {
+        SetLastError(ERROR_INVALID_ACCESS);
+        ret = FALSE;
+    }
     return ret;
 }
 
@@ -613,18 +641,30 @@ BOOL WINAPI WriteConsoleOutputCharacterA( HANDLE hConsoleOutput, LPCSTR str, DWO
                                           COORD coord, LPDWORD lpNumCharsWritten )
 {
     BOOL ret;
-    LPWSTR strW;
-    DWORD lenW;
+    LPWSTR strW = NULL;
+    DWORD lenW = 0;
 
     TRACE("(%p,%s,%d,%dx%d,%p)\n", hConsoleOutput,
           debugstr_an(str, length), length, coord.X, coord.Y, lpNumCharsWritten);
 
-    lenW = MultiByteToWideChar( GetConsoleOutputCP(), 0, str, length, NULL, 0 );
+    if (length > 0)
+    {
+        if (!str)
+        {
+            SetLastError( ERROR_INVALID_ACCESS );
+            return FALSE;
+        }
 
-    if (lpNumCharsWritten) *lpNumCharsWritten = 0;
+        lenW = MultiByteToWideChar( GetConsoleOutputCP(), 0, str, length, NULL, 0 );
 
-    if (!(strW = HeapAlloc( GetProcessHeap(), 0, lenW * sizeof(WCHAR) ))) return FALSE;
-    MultiByteToWideChar( GetConsoleOutputCP(), 0, str, length, strW, lenW );
+        if (!(strW = HeapAlloc( GetProcessHeap(), 0, lenW * sizeof(WCHAR) )))
+        {
+            SetLastError( ERROR_NOT_ENOUGH_MEMORY );
+            return FALSE;
+        }
+
+        MultiByteToWideChar( GetConsoleOutputCP(), 0, str, length, strW, lenW );
+    }
 
     ret = WriteConsoleOutputCharacterW( hConsoleOutput, strW, lenW, coord, lpNumCharsWritten );
     HeapFree( GetProcessHeap(), 0, strW );
@@ -655,6 +695,14 @@ BOOL WINAPI WriteConsoleOutputAttribute( HANDLE hConsoleOutput, CONST WORD *attr
 
     TRACE("(%p,%p,%d,%dx%d,%p)\n", hConsoleOutput,attr,length,coord.X,coord.Y,lpNumAttrsWritten);
 
+    if ((length > 0 && !attr) || !lpNumAttrsWritten)
+    {
+        SetLastError(ERROR_INVALID_ACCESS);
+        return FALSE;
+    }
+
+    *lpNumAttrsWritten = 0;
+
     SERVER_START_REQ( write_console_output )
     {
         req->handle = console_handle_unmap(hConsoleOutput);
@@ -664,9 +712,7 @@ BOOL WINAPI WriteConsoleOutputAttribute( HANDLE hConsoleOutput, CONST WORD *attr
         req->wrap   = TRUE;
         wine_server_add_data( req, attr, length * sizeof(WORD) );
         if ((ret = !wine_server_call_err( req )))
-        {
-            if (lpNumAttrsWritten) *lpNumAttrsWritten = reply->written;
-        }
+            *lpNumAttrsWritten = reply->written;
     }
     SERVER_END_REQ;
     return ret;
@@ -710,6 +756,14 @@ BOOL WINAPI FillConsoleOutputCharacterW( HANDLE hConsoleOutput, WCHAR ch, DWORD 
     TRACE("(%p,%s,%d,(%dx%d),%p)\n",
           hConsoleOutput, debugstr_wn(&ch, 1), length, coord.X, coord.Y, lpNumCharsWritten);
 
+    if (!lpNumCharsWritten)
+    {
+        SetLastError(ERROR_INVALID_ACCESS);
+        return FALSE;
+    }
+
+    *lpNumCharsWritten = 0;
+
     SERVER_START_REQ( fill_console_output )
     {
         req->handle  = console_handle_unmap(hConsoleOutput);
@@ -720,9 +774,7 @@ BOOL WINAPI FillConsoleOutputCharacterW( HANDLE hConsoleOutput, WCHAR ch, DWORD 
         req->data.ch = ch;
         req->count   = length;
         if ((ret = !wine_server_call_err( req )))
-        {
-            if (lpNumCharsWritten) *lpNumCharsWritten = reply->written;
-        }
+            *lpNumCharsWritten = reply->written;
     }
     SERVER_END_REQ;
     return ret;
@@ -751,6 +803,14 @@ BOOL WINAPI FillConsoleOutputAttribute( HANDLE hConsoleOutput, WORD attr, DWORD 
     TRACE("(%p,%d,%d,(%dx%d),%p)\n",
           hConsoleOutput, attr, length, coord.X, coord.Y, lpNumAttrsWritten);
 
+    if (!lpNumAttrsWritten)
+    {
+        SetLastError(ERROR_INVALID_ACCESS);
+        return FALSE;
+    }
+
+    *lpNumAttrsWritten = 0;
+
     SERVER_START_REQ( fill_console_output )
     {
         req->handle    = console_handle_unmap(hConsoleOutput);
@@ -761,9 +821,7 @@ BOOL WINAPI FillConsoleOutputAttribute( HANDLE hConsoleOutput, WORD attr, DWORD 
         req->data.attr = attr;
         req->count     = length;
         if ((ret = !wine_server_call_err( req )))
-        {
-            if (lpNumAttrsWritten) *lpNumAttrsWritten = reply->written;
-        }
+            *lpNumAttrsWritten = reply->written;
     }
     SERVER_END_REQ;
     return ret;
@@ -779,15 +837,26 @@ BOOL WINAPI ReadConsoleOutputCharacterA(HANDLE hConsoleOutput, LPSTR lpstr, DWOR
 {
     DWORD read;
     BOOL ret;
-    LPWSTR wptr = HeapAlloc(GetProcessHeap(), 0, count * sizeof(WCHAR));
+    LPWSTR wptr;
 
-    if (read_count) *read_count = 0;
-    if (!wptr) return FALSE;
+    if (!read_count)
+    {
+        SetLastError(ERROR_INVALID_ACCESS);
+        return FALSE;
+    }
+
+    *read_count = 0;
+
+    if (!(wptr = HeapAlloc(GetProcessHeap(), 0, count * sizeof(WCHAR))))
+    {
+        SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+        return FALSE;
+    }
 
     if ((ret = ReadConsoleOutputCharacterW( hConsoleOutput, wptr, count, coord, &read )))
     {
         read = WideCharToMultiByte( GetConsoleOutputCP(), 0, wptr, read, lpstr, count, NULL, NULL);
-        if (read_count) *read_count = read;
+        *read_count = read;
     }
     HeapFree( GetProcessHeap(), 0, wptr );
     return ret;
@@ -805,6 +874,14 @@ BOOL WINAPI ReadConsoleOutputCharacterW( HANDLE hConsoleOutput, LPWSTR buffer, D
 
     TRACE( "(%p,%p,%d,%dx%d,%p)\n", hConsoleOutput, buffer, count, coord.X, coord.Y, read_count );
 
+    if (!read_count)
+    {
+        SetLastError(ERROR_INVALID_ACCESS);
+        return FALSE;
+    }
+
+    *read_count = 0;
+
     SERVER_START_REQ( read_console_output )
     {
         req->handle = console_handle_unmap(hConsoleOutput);
@@ -814,9 +891,7 @@ BOOL WINAPI ReadConsoleOutputCharacterW( HANDLE hConsoleOutput, LPWSTR buffer, D
         req->wrap   = TRUE;
         wine_server_set_reply( req, buffer, count * sizeof(WCHAR) );
         if ((ret = !wine_server_call_err( req )))
-        {
-            if (read_count) *read_count = wine_server_reply_size(reply) / sizeof(WCHAR);
-        }
+            *read_count = wine_server_reply_size(reply) / sizeof(WCHAR);
     }
     SERVER_END_REQ;
     return ret;
@@ -834,6 +909,14 @@ BOOL WINAPI ReadConsoleOutputAttribute(HANDLE hConsoleOutput, LPWORD lpAttribute
     TRACE("(%p,%p,%d,%dx%d,%p)\n",
           hConsoleOutput, lpAttribute, length, coord.X, coord.Y, read_count);
 
+    if (!read_count)
+    {
+        SetLastError(ERROR_INVALID_ACCESS);
+        return FALSE;
+    }
+
+    *read_count = 0;
+
     SERVER_START_REQ( read_console_output )
     {
         req->handle = console_handle_unmap(hConsoleOutput);
@@ -843,9 +926,7 @@ BOOL WINAPI ReadConsoleOutputAttribute(HANDLE hConsoleOutput, LPWORD lpAttribute
         req->wrap   = TRUE;
         wine_server_set_reply( req, lpAttribute, length * sizeof(WORD) );
         if ((ret = !wine_server_call_err( req )))
-        {
-            if (read_count) *read_count = wine_server_reply_size(reply) / sizeof(WORD);
-        }
+            *read_count = wine_server_reply_size(reply) / sizeof(WORD);
     }
     SERVER_END_REQ;
     return ret;
@@ -992,7 +1073,13 @@ BOOL WINAPI GetNumberOfConsoleInputEvents( HANDLE handle, LPDWORD nrofevents )
         req->flush  = FALSE;
         if ((ret = !wine_server_call_err( req )))
         {
-            if (nrofevents) *nrofevents = reply->read;
+            if (nrofevents)
+                *nrofevents = reply->read;
+            else
+            {
+                SetLastError(ERROR_INVALID_ACCESS);
+                ret = FALSE;
+            }
         }
     }
     SERVER_END_REQ;
@@ -1009,141 +1096,97 @@ BOOL WINAPI GetNumberOfConsoleInputEvents( HANDLE handle, LPDWORD nrofevents )
  *      0 for error, 1 for no INPUT_RECORD ready, 2 with INPUT_RECORD ready
  */
 enum read_console_input_return {rci_error = 0, rci_timeout = 1, rci_gotone = 2};
-static const int vkkeyscan_table[256] =
-{
-     0,0,0,0,0,0,0,0,8,9,0,0,0,13,0,0,0,0,0,19,145,556,0,0,0,0,0,27,0,0,0,
-     0,32,305,478,307,308,309,311,222,313,304,312,443,188,189,190,191,48,
-     49,50,51,52,53,54,55,56,57,442,186,444,187,446,447,306,321,322,323,
-     324,325,326,327,328,329,330,331,332,333,334,335,336,337,338,339,340,
-     341,342,343,344,345,346,219,220,221,310,445,192,65,66,67,68,69,70,71,
-     72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,475,476,477,
-     448,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-     0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-     0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-     0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,400,0,0,0,0,0,0
-};
-
-static const int mapvkey_0[256] =
-{
-     0,0,0,0,0,0,0,0,14,15,0,0,0,28,0,0,42,29,56,69,58,0,0,0,0,0,0,1,0,0,
-     0,0,57,73,81,79,71,75,72,77,80,0,0,0,55,82,83,0,11,2,3,4,5,6,7,8,9,
-     10,0,0,0,0,0,0,0,30,48,46,32,18,33,34,35,23,36,37,38,50,49,24,25,16,
-     19,31,20,22,47,17,45,21,44,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,55,78,0,74,
-     0,53,59,60,61,62,63,64,65,66,67,68,87,88,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-     0,0,0,0,0,0,69,70,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-     0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,39,13,51,12,52,53,41,0,0,0,0,0,0,0,0,0,
-     0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,26,43,27,40,76,96,0,0,0,0,0,0,0,0,
-     0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-};
-
-static inline void init_complex_char(INPUT_RECORD* ir, BOOL down, WORD vk, WORD kc, DWORD cks)
-{
-    ir->EventType			 = KEY_EVENT;
-    ir->Event.KeyEvent.bKeyDown	         = down;
-    ir->Event.KeyEvent.wRepeatCount	 = 1;
-    ir->Event.KeyEvent.wVirtualScanCode  = vk;
-    ir->Event.KeyEvent.wVirtualKeyCode   = kc;
-    ir->Event.KeyEvent.dwControlKeyState = cks;
-    ir->Event.KeyEvent.uChar.UnicodeChar = 0;
-}
-
-/******************************************************************
- *		handle_simple_char
- *
- *
- */
-static BOOL handle_simple_char(HANDLE conin, unsigned real_inchar)
-{
-    unsigned            vk;
-    unsigned            inchar;
-    char                ch;
-    unsigned            numEvent = 0;
-    DWORD               cks = 0, written;
-    INPUT_RECORD        ir[8];
-
-    switch (real_inchar)
-    {
-    case   9: inchar = real_inchar;
-        real_inchar = 27; /* so that we don't think key is ctrl- something */
-        break;
-    case  13:
-    case  10: inchar = '\r';
-        real_inchar = 27; /* Fixme: so that we don't think key is ctrl- something */
-        break;
-    case 127: inchar = '\b';
-        break;
-    default:
-        inchar = real_inchar;
-        break;
-    }
-    if ((inchar & ~0xFF) != 0) FIXME("What a char (%u)\n", inchar);
-    vk = vkkeyscan_table[inchar];
-    if (vk & 0x0100)
-        init_complex_char(&ir[numEvent++], 1, 0x2a, 0x10, SHIFT_PRESSED);
-    if ((vk & 0x0200) || (unsigned char)real_inchar <= 26)
-        init_complex_char(&ir[numEvent++], 1, 0x1d, 0x11, LEFT_CTRL_PRESSED);
-    if (vk & 0x0400)
-        init_complex_char(&ir[numEvent++], 1, 0x38, 0x12, LEFT_ALT_PRESSED);
-
-    ir[numEvent].EventType                        = KEY_EVENT;
-    ir[numEvent].Event.KeyEvent.bKeyDown          = 1;
-    ir[numEvent].Event.KeyEvent.wRepeatCount      = 1;
-    ir[numEvent].Event.KeyEvent.dwControlKeyState = cks;
-    if (vk & 0x0100)
-        ir[numEvent].Event.KeyEvent.dwControlKeyState |= SHIFT_PRESSED;
-    if ((vk & 0x0200) || (unsigned char)real_inchar <= 26)
-        ir[numEvent].Event.KeyEvent.dwControlKeyState |= LEFT_CTRL_PRESSED;
-    if (vk & 0x0400)
-        ir[numEvent].Event.KeyEvent.dwControlKeyState |= LEFT_ALT_PRESSED;
-    ir[numEvent].Event.KeyEvent.wVirtualKeyCode = vk;
-    ir[numEvent].Event.KeyEvent.wVirtualScanCode = mapvkey_0[vk & 0x00ff]; /* VirtualKeyCodes to ScanCode */
-
-    ch = inchar;
-    MultiByteToWideChar(CP_UNIXCP, 0, &ch, 1, &ir[numEvent].Event.KeyEvent.uChar.UnicodeChar, 1);
-    ir[numEvent + 1] = ir[numEvent];
-    ir[numEvent + 1].Event.KeyEvent.bKeyDown = 0;
-
-    numEvent += 2;
-
-    if (vk & 0x0400)
-        init_complex_char(&ir[numEvent++], 0, 0x38, 0x12, LEFT_ALT_PRESSED);
-    if ((vk & 0x0200) || (unsigned char)real_inchar <= 26)
-        init_complex_char(&ir[numEvent++], 0, 0x1d, 0x11, 0);
-    if (vk & 0x0100)
-        init_complex_char(&ir[numEvent++], 0, 0x2a, 0x10, 0);
-
-    return WriteConsoleInputW(conin, ir, numEvent, &written);
-}
 
 static enum read_console_input_return bare_console_fetch_input(HANDLE handle, int fd, DWORD timeout)
 {
-    struct pollfd pollfd;
-    char          ch;
-    enum read_console_input_return ret;
+    enum read_console_input_return      ret;
+    char                                input[8];
+    WCHAR                               inputw[8];
+    int                                 i;
+    size_t                              idx = 0, idxw;
+    unsigned                            numEvent;
+    INPUT_RECORD                        ir[8];
+    DWORD                               written;
+    struct pollfd                       pollfd;
+    BOOL                                locked = FALSE, next_char;
 
-    pollfd.fd = fd;
-    pollfd.events = POLLIN;
-    pollfd.revents = 0;
-
-    switch (poll(&pollfd, 1, timeout))
+    do
     {
-    case 1:
-        RtlEnterCriticalSection(&CONSOLE_CritSect);
-        switch (read(fd, &ch, 1))
+        if (idx == sizeof(input))
         {
-        case 1: ret = handle_simple_char(handle, ch) ? rci_gotone : rci_error; break;
-        /* actually another thread likely beat us to reading the char
-         * return gotone, while not perfect, it should work in most of the cases (as the new event
-         * should be now in the queue)
-         */
-        case 0: ret = rci_gotone; break;
+            FIXME("buffer too small (%s)\n", wine_dbgstr_an(input, idx));
+            ret = rci_error;
+            break;
+        }
+        pollfd.fd = fd;
+        pollfd.events = POLLIN;
+        pollfd.revents = 0;
+        next_char = FALSE;
+
+        switch (poll(&pollfd, 1, timeout))
+        {
+        case 1:
+            if (!locked)
+            {
+                RtlEnterCriticalSection(&CONSOLE_CritSect);
+                locked = TRUE;
+            }
+            i = read(fd, &input[idx], 1);
+            if (i < 0)
+            {
+                ret = rci_error;
+                break;
+            }
+            if (i == 0)
+            {
+                /* actually another thread likely beat us to reading the char
+                 * return rci_gotone, while not perfect, it should work in most of the cases (as the new event
+                 * should be now in the queue, fed from the other thread)
+                 */
+                ret = rci_gotone;
+                break;
+            }
+
+            idx++;
+            numEvent = TERM_FillInputRecord(input, idx, ir);
+            switch (numEvent)
+            {
+            case 0:
+                /* we need more char(s) to tell if it matches a key-db entry. wait 1/2s for next char */
+                timeout = 500;
+                next_char = TRUE;
+                break;
+            case -1:
+                /* we haven't found the string into key-db, push full input string into server */
+                idxw = MultiByteToWideChar(CP_UNIXCP, 0, input, idx, inputw, sizeof(inputw) / sizeof(inputw[0]));
+
+                /* we cannot translate yet... likely we need more chars (wait max 1/2s for next char) */
+                if (idxw == 0)
+                {
+                    timeout = 500;
+                    next_char = TRUE;
+                    break;
+                }
+                for (i = 0; i < idxw; i++)
+                {
+                    numEvent = TERM_FillSimpleChar(inputw[i], ir);
+                    WriteConsoleInputW(handle, ir, numEvent, &written);
+                }
+                ret = rci_gotone;
+                break;
+            default:
+                /* we got a transformation from key-db... push this into server */
+                ret = WriteConsoleInputW(handle, ir, numEvent, &written) ? rci_gotone : rci_error;
+                break;
+            }
+            break;
+        case 0: ret = rci_timeout; break;
         default: ret = rci_error; break;
         }
-        RtlLeaveCriticalSection(&CONSOLE_CritSect);
-        return ret;
-    case 0: return rci_timeout;
-    default: return rci_error;
-    }
+    } while (next_char);
+    if (locked) RtlLeaveCriticalSection(&CONSOLE_CritSect);
+
+    return ret;
 }
 
 static enum read_console_input_return read_console_input(HANDLE handle, PINPUT_RECORD ir, DWORD timeout)
@@ -1696,6 +1739,14 @@ BOOL WINAPI WriteConsoleOutputCharacterW( HANDLE hConsoleOutput, LPCWSTR str, DW
     TRACE("(%p,%s,%d,%dx%d,%p)\n", hConsoleOutput,
           debugstr_wn(str, length), length, coord.X, coord.Y, lpNumCharsWritten);
 
+    if ((length > 0 && !str) || !lpNumCharsWritten)
+    {
+        SetLastError(ERROR_INVALID_ACCESS);
+        return FALSE;
+    }
+
+    *lpNumCharsWritten = 0;
+
     SERVER_START_REQ( write_console_output )
     {
         req->handle = console_handle_unmap(hConsoleOutput);
@@ -1705,9 +1756,7 @@ BOOL WINAPI WriteConsoleOutputCharacterW( HANDLE hConsoleOutput, LPCWSTR str, DW
         req->wrap   = TRUE;
         wine_server_add_data( req, str, length * sizeof(WCHAR) );
         if ((ret = !wine_server_call_err( req )))
-        {
-            if (lpNumCharsWritten) *lpNumCharsWritten = reply->written;
-        }
+            *lpNumCharsWritten = reply->written;
     }
     SERVER_END_REQ;
     return ret;
@@ -2994,6 +3043,7 @@ BOOL CONSOLE_Init(RTL_USER_PROCESS_PARAMETERS *params)
         /* This is wine specific: we have no parent (we're started from unix)
          * so, create a simple console with bare handles
          */
+        TERM_Init();
         wine_server_send_fd(0);
         SERVER_START_REQ( alloc_console )
         {

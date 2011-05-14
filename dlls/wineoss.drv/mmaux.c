@@ -31,17 +31,18 @@
 #ifdef HAVE_SYS_IOCTL_H
 # include <sys/ioctl.h>
 #endif
+#ifdef HAVE_SYS_ERRNO_H
+#include <sys/errno.h>
+#endif
+#include <sys/soundcard.h>
 
 #include "windef.h"
 #include "winbase.h"
 #include "mmddk.h"
-#include "oss.h"
 #include "wine/unicode.h"
 #include "wine/debug.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(mmaux);
-
-#ifdef HAVE_OSS
 
 #define MIXER_DEV "/dev/mixer"
 
@@ -220,8 +221,6 @@ static DWORD AUX_SetVolume(WORD wDevID, DWORD dwParam)
     return MMSYSERR_NOERROR;
 }
 
-#endif
-
 /**************************************************************************
  *		auxMessage (WINEOSS.2)
  */
@@ -231,7 +230,6 @@ DWORD WINAPI OSS_auxMessage(UINT wDevID, UINT wMsg, DWORD_PTR dwUser,
     TRACE("(%04X, %04X, %08lX, %08lX, %08lX);\n",
 	  wDevID, wMsg, dwUser, dwParam1, dwParam2);
 
-#ifdef HAVE_OSS
     switch (wMsg) {
     case DRVM_INIT:
         return OSS_AuxInit();
@@ -254,7 +252,4 @@ DWORD WINAPI OSS_auxMessage(UINT wDevID, UINT wMsg, DWORD_PTR dwUser,
 	WARN("unknown message !\n");
     }
     return MMSYSERR_NOTSUPPORTED;
-#else
-    return MMSYSERR_NOTENABLED;
-#endif
 }

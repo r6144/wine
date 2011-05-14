@@ -62,7 +62,7 @@ static CRITICAL_SECTION wined3d_cs = {&wined3d_cs_debug, -1, 0, 0, 0, 0};
 
 /* When updating default value here, make sure to update winecfg as well,
  * where appropriate. */
-wined3d_settings_t wined3d_settings =
+struct wined3d_settings wined3d_settings =
 {
     VS_HW,          /* Hardware by default */
     PS_HW,          /* Hardware by default */
@@ -78,9 +78,9 @@ wined3d_settings_t wined3d_settings =
 };
 
 /* Do not call while under the GL lock. */
-IWineD3D * WINAPI WineDirect3DCreate(UINT version, void *parent)
+struct wined3d * CDECL wined3d_create(UINT version, void *parent)
 {
-    IWineD3DImpl *object;
+    struct wined3d *object;
     HRESULT hr;
 
     object = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*object));
@@ -100,7 +100,7 @@ IWineD3D * WINAPI WineDirect3DCreate(UINT version, void *parent)
 
     TRACE("Created wined3d object %p for d3d%d support.\n", object, version);
 
-    return (IWineD3D *)object;
+    return object;
 }
 
 static DWORD get_config_key(HKEY defkey, HKEY appkey, const char *name, char *buffer, DWORD size)
@@ -355,8 +355,13 @@ static BOOL wined3d_dll_destroy(HINSTANCE hInstDLL)
 
     for (i = 0; i < wndproc_table.count; ++i)
     {
-        struct wined3d_wndproc *entry = &wndproc_table.entries[i];
-        SetWindowLongPtrW(entry->window, GWLP_WNDPROC, (LONG_PTR)entry->proc);
+        /* Trying to unregister these would be futile. These entries can only
+         * exist if either we skipped them in wined3d_unregister_window() due
+         * to the application replacing the wndproc after the entry was
+         * registered, or if the application still has an active wined3d
+         * device. In the latter case the application has bigger problems than
+         * these entries. */
+        WARN("Leftover wndproc table entry %p.\n", &wndproc_table.entries[i]);
     }
     HeapFree(GetProcessHeap(), 0, wndproc_table.entries);
 

@@ -5,7 +5,7 @@
  * Copyright 2000 Martin Fuchs
  * Copyright 2002 Steven Edwards
  * Copyright 2002 Alexandre Julliard
- * Copyright 2005,2007 YunSong Hwang
+ * Copyright 2005,2007,2010,2011 YunSong Hwang
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -24,226 +24,72 @@
 
 #include "resource.h"
 
+#pragma code_page(65001)
+
 LANGUAGE LANG_KOREAN, SUBLANG_DEFAULT
-
-/* Menu */
-
-IDM_WINEFILE MENU
-{
-    POPUP "∆ƒ¿œ(&F)"  {
-        MENUITEM "ø≠±‚(&O)\tEnter",                ID_ACTIVATE
-        MENUITEM "¿Ãµø(&M)...\tF7",                ID_FILE_MOVE
-        MENUITEM "∫πªÁ(&C)...\tF8",                ID_FILE_COPY
-        MENUITEM "≈¨∏≥∫∏µÂ∑Œ(&I)...\tF9",        118
-        MENUITEM "¡ˆøÏ±‚(&D)\tDel",                ID_FILE_DELETE
-        MENUITEM "¿Ã∏ßπŸ≤Ÿ±‚(&N)...",                  109
-        MENUITEM "º”º∫(&I)...\tAlt+Enter",   ID_EDIT_PROPERTIES
-        MENUITEM SEPARATOR
-        MENUITEM "æ–√‡(&O)...",                119
-        MENUITEM "æ–√‡ «Æ±‚(&O)...",              120
-        MENUITEM SEPARATOR
-        MENUITEM "Ω««‡(&R)...",                     ID_RUN
-        MENUITEM "¿Œº‚(&P)...",                   102
-        MENUITEM "ø¨∞·...",                103
-        MENUITEM SEPARATOR
-        MENUITEM "µ∑∫≈‰∏Æ ∏∏µÈ±‚(&E)...",        111
-        MENUITEM "√£±‚(&H)...",                  104
-        MENUITEM "∆ƒ¿œ º±≈√(&S)...",            116
-        MENUITEM SEPARATOR
-#ifndef _NO_EXTENSIONS
-        MENUITEM "≥™∞°±‚(Ex)\tAlt+X",                ID_FILE_EXIT
-#else
-        MENUITEM "≥™∞°±‚(&x)",                       ID_FILE_EXIT
-#endif
-    }
-
-    POPUP "µΩ∫≈©(&D)"  {
-        MENUITEM "µΩ∫≈© ∫πªÁ(&C)...",               201
-        MENUITEM "µΩ∫≈© ∂Û∫ß(&L)...",              202
-        MENUITEM SEPARATOR
-        MENUITEM "µΩ∫≈© ∆˜∏À(&F)...",             ID_FORMAT_DISK
-#ifdef _WIN95
-        MENUITEM "Ω√Ω∫≈€ µΩ∫≈© ∏∏µÈ±‚(&M)...", -1 /*TODO*/
-#endif
-        MENUITEM SEPARATOR
-        MENUITEM "≥◊∆Æøˆ≈© µÂ∂Û¿Ã∫Í ø¨∞·(&N)",      ID_CONNECT_NETWORK_DRIVE
-        MENUITEM "≥◊∆Æøˆ≈© µÂ∂Û¿Ã∫Í ø¨∞· ≤˜±‚(&D)",   ID_DISCONNECT_NETWORK_DRIVE
-        MENUITEM SEPARATOR
-        MENUITEM "∞¯¿Ø...",                 254
-        MENUITEM "∞¯¿Ø ¡¶∞≈(&R)...",            255
-        MENUITEM SEPARATOR
-        MENUITEM "µÂ∂Û¿Ã∫Í º±≈√(&S)...",            251
-    }
-
-    POPUP "µ∑∫≈‰∏Æ(&R)"  {
-        MENUITEM "¥Ÿ¿Ω ¥‹∞Ë(&N)\t+",              301
-        MENUITEM "∆Æ∏Æ »Æ¿Â(&T)\t*",             302
-        MENUITEM "∏µŒ »Æ¿Â(&A)\tStrg+*",         303
-        MENUITEM "∆Æ∏Æ ¡§∏Æ(&T)\t-",           304
-        MENUITEM SEPARATOR
-        MENUITEM "«œ¿ß √º≈©(&M)",              505
-    }
-
-    POPUP "∫∏±‚(&V)"  {
-        MENUITEM "∆Æ∏Æ «œ∞Ì ±‚∑∫≈‰∏Æ(&r)",         413
-        MENUITEM "ø¿¡˜ ∆Æ∏Æ∏∏(&e)",                  411
-        MENUITEM "ø¿¡˜ µ∑∫≈‰∏Æ∏∏(&O)",             412
-        MENUITEM SEPARATOR
-        MENUITEM "≥™¥©±‚(&l)",                      ID_VIEW_SPLIT
-        MENUITEM SEPARATOR
-        MENUITEM "¿Ã∏ß(&N)",                       ID_VIEW_NAME
-        MENUITEM "∏µÁ ∆ƒ¿œ º≥∏Ì(&A)",           ID_VIEW_ALL_ATTRIBUTES, CHECKED
-        MENUITEM "∫Œ∫– º≥∏Ì(&P)...",         ID_VIEW_SELECTED_ATTRIBUTES
-        MENUITEM SEPARATOR
-        MENUITEM "¿Ã∏ß¿∏∑Œ ¡§∑ƒ(&S)",               ID_VIEW_SORT_NAME
-        MENUITEM "≈∏¿‘¿∏∑Œ ¡§∑ƒ(&b)",               ID_VIEW_SORT_TYPE
-        MENUITEM "≈©±‚∑Œ ¡§∑ƒ(&z)",               ID_VIEW_SORT_SIZE
-        MENUITEM "≥Ø¬•∑Œ ¡§∑ƒ(&D)",               ID_VIEW_SORT_DATE
-        MENUITEM SEPARATOR
-        MENUITEM "&...∑Œ ø©∞˙",              ID_VIEW_FILTER
-    }
-
-    POPUP "ø…º«(&O)"  {
-        MENUITEM "»Æ¿Œ(&C)...",            501
-        MENUITEM "±€≤√(&F)...",                    ID_SELECT_FONT
-        MENUITEM "µµ±∏πŸ ªÁøÎ¿⁄ ¡§¿«(&b)...",       512
-        MENUITEM SEPARATOR
-        MENUITEM "µµ±∏πŸ(&T)",                    ID_VIEW_TOOL_BAR, CHECKED
-        MENUITEM "µÂ∂Û¿Ã∫Í πŸ(&D)",                   ID_VIEW_DRIVE_BAR, CHECKED
-        MENUITEM "ªÛ≈¬πŸ(&S)",                 ID_VIEW_STATUSBAR, CHECKED
-#ifndef _NO_EXTENSIONS
-        MENUITEM "¿¸√º »≠∏È(&u)\tCtrl+Shift+S",  ID_VIEW_FULLSCREEN
-#endif
-        MENUITEM SEPARATOR
-        MENUITEM "Ω««‡Ω√ √÷º“»≠(&M)",            504
-        MENUITEM "≥™∞•∂ß º≥¡§ ¿˙¿Â(&S)",      511
-    }
-
-
-    POPUP "∫∏æ»(&S)"  {
-        MENUITEM "¡¢±Ÿ(&A)...",                  605
-        MENUITEM "∑Œ±Î(&L)...",                 606
-        MENUITEM "º“¿Ø¿⁄(&O)...",                   607
-    }
-
-    POPUP "√¢(&W)"  {
-        MENUITEM "ªı √¢(&W)",                 ID_WINDOW_NEW
-        MENUITEM "¡§∑ƒ\tCtrl+F5",          ID_WINDOW_CASCADE
-        MENUITEM "∞°∑Œ πŸµœ∆«Ωƒ ¡§∑ƒ(&H)",          ID_WINDOW_TILE_HORZ
-        MENUITEM "ºº∑Œ πŸµœ∆«Ωƒ ¡§∑ƒ(&V)\tCtrl+F4",   ID_WINDOW_TILE_VERT
-#ifndef _NO_EXTENSIONS
-        MENUITEM "¿⁄µø ¡§∑ƒ",       ID_WINDOW_AUTOSORT
-#endif
-        MENUITEM "Ω…π˙∑Œ ¡§∑ƒ(&S)",            ID_WINDOW_ARRANGE
-        MENUITEM "ªı∑Œ ¿–±‚(&R)\tF5",                ID_REFRESH
-    }
-
-    POPUP "µµøÚ∏ª(&H)"  {
-        MENUITEM "µµøÚ∏ª ∏Ò¬˜(&H)\tF1",            ID_HELP
-        MENUITEM "µµøÚ∏ª √£±‚(&S)...\tF1",         ID_HELP
-        MENUITEM "µµøÚ∏ª ªÁøÎπ˝(&U)\tF1",             ID_HELP_USING
-        MENUITEM SEPARATOR
-        MENUITEM "Winefile ∞¸∑√ ¡§∫∏(&I)...",     ID_ABOUT
-    }
-}
 
 IDD_SELECT_DESTINATION DIALOG 15, 13, 210, 63
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "∏Ò¿˚¡ˆ º±≈√"
+CAPTION "Î™©Ï†ÅÏßÄ ÏÑ†ÌÉù"
 FONT 9, "MS Shell Dlg"
 {
     CONTROL         "", 101, "Static", SS_SIMPLE|SS_NOPREFIX, 3, 6, 162, 10
-    CONTROL         "∞Ê∑Œ(&P):", -1, "Static", SS_LEFTNOWORDWRAP|WS_GROUP, 3, 18, 60, 10
+    CONTROL         "Í≤ΩÎ°ú(&P):", -1, "Static", SS_LEFTNOWORDWRAP|WS_GROUP, 3, 18, 60, 10
     EDITTEXT        201, 3, 29, 134, 12, ES_AUTOHSCROLL
-    DEFPUSHBUTTON   "»Æ¿Œ", 1, 158, 6, 47, 14
-    PUSHBUTTON      "√Îº“", 2, 158, 23, 47, 14
-    PUSHBUTTON      "√£±‚(&B)", 254, 158, 43, 47, 14
+    DEFPUSHBUTTON   "ÌôïÏù∏", 1, 158, 6, 47, 14
+    PUSHBUTTON      "Ï∑®ÏÜå", 2, 158, 23, 47, 14
+    PUSHBUTTON      "Ï∞æÍ∏∞(&B)", 254, 158, 43, 47, 14
 }
 
 IDD_DIALOG_VIEW_TYPE DIALOG 15, 13, 161, 97
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "∆ƒ¿œ ≈∏¿‘¿∏∑Œ"
+CAPTION "ÌååÏùº ÌÉÄÏûÖÏúºÎ°ú"
 FONT 9, "MS Shell Dlg"
 BEGIN
-    LTEXT           "¿Ã∏ß(&N):",-1,7,8,22,10
+    LTEXT           "Ïù¥Î¶Ñ(&N):",-1,7,8,22,10
     EDITTEXT        IDC_VIEW_PATTERN,31,7,63,12,ES_AUTOHSCROLL
-    GROUPBOX        "∆ƒ¿œ ≈∏¿‘",-1,7,23,87,56
-    CONTROL         "µ∑∫≈‰∏Æ(&D)",IDC_VIEW_TYPE_DIRECTORIES,"Button",
+    GROUPBOX        "ÌååÏùº ÌÉÄÏûÖ",-1,7,23,87,56
+    CONTROL         "ÎîîÎ†âÌÜ†Î¶¨(&D)",IDC_VIEW_TYPE_DIRECTORIES,"Button",
                     BS_AUTOCHECKBOX | WS_TABSTOP,13,32,70,10
-    CONTROL         "«Æ±◊∏≤(&P)",IDC_VIEW_TYPE_PROGRAMS,"Button",
+    CONTROL         "ÌíÄÍ∑∏Î¶º(&P)",IDC_VIEW_TYPE_PROGRAMS,"Button",
                     BS_AUTOCHECKBOX | WS_TABSTOP,13,43,70,10
-    CONTROL         "πÆº≠∆ƒ¿œ(&M)",IDC_VIEW_TYPE_DOCUMENTS,"Button",
+    CONTROL         "Î¨∏ÏÑúÌååÏùº(&M)",IDC_VIEW_TYPE_DOCUMENTS,"Button",
                     BS_AUTOCHECKBOX | WS_TABSTOP,13,54,70,10
-    CONTROL         "¥Ÿ∏• ∆ƒ¿œ(&O)",IDC_VIEW_TYPE_OTHERS,"Button",
+    CONTROL         "Îã§Î•∏ ÌååÏùº(&O)",IDC_VIEW_TYPE_OTHERS,"Button",
                     BS_AUTOCHECKBOX | WS_TABSTOP,13,65,70,10
-    CONTROL         "º˚±Ë/Ω√Ω∫≈€ ∆ƒ¿œ ∫∏ø©¡÷±‚(&S)",IDC_VIEW_TYPE_HIDDEN,
+    CONTROL         "Ïà®ÍπÄ/ÏãúÏä§ÌÖú ÌååÏùº Î≥¥Ïó¨Ï£ºÍ∏∞(&S)",IDC_VIEW_TYPE_HIDDEN,
                     "Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,81,106,9
-    DEFPUSHBUTTON   "»Æ¿Œ",IDOK,104,7,50,14
-    PUSHBUTTON      "√Îº“",IDCANCEL,104,24,50,14
+    DEFPUSHBUTTON   "ÌôïÏù∏",IDOK,104,7,50,14
+    PUSHBUTTON      "Ï∑®ÏÜå",IDCANCEL,104,24,50,14
 END
 
 IDD_DIALOG_PROPERTIES DIALOG  0, 0, 248, 215
 STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "%s º”º∫"
+CAPTION "%s ÏÜçÏÑ±"
 FONT 9, "MS Shell Dlg"
 BEGIN
-    DEFPUSHBUTTON   "»Æ¿Œ",IDOK,191,7,50,14
-    PUSHBUTTON      "√Îº“",IDCANCEL,191,29,50,14
-    LTEXT           "∆ƒ¿œ ¿Ã∏ß(&F):",-1,7,7,59,9
+    DEFPUSHBUTTON   "ÌôïÏù∏",IDOK,191,7,50,14
+    PUSHBUTTON      "Ï∑®ÏÜå",IDCANCEL,191,29,50,14
+    LTEXT           "ÌååÏùº Ïù¥Î¶Ñ(&F):",-1,7,7,59,9
 
     EDITTEXT        IDC_STATIC_PROP_FILENAME,71,7,120,9,ES_READONLY | NOT WS_BORDER | WS_TABSTOP
-    LTEXT           "øœ¿¸«— ∞Ê∑Œ(&P):",-1,7,18,59,9
+    LTEXT           "ÏôÑÏ†ÑÌïú Í≤ΩÎ°ú(&P):",-1,7,18,59,9
     EDITTEXT        IDC_STATIC_PROP_PATH,71,18,120,9, ES_READONLY | NOT WS_BORDER | WS_TABSTOP
-    LTEXT           "∏∂¡ˆ∏∑ ∫Ø»≠:",-1,7,29,59,9
+    LTEXT           "ÎßàÏßÄÎßâ Î≥ÄÌôî:",-1,7,29,59,9
     EDITTEXT        IDC_STATIC_PROP_LASTCHANGE,71,29,120,9,ES_READONLY | NOT WS_BORDER | WS_TABSTOP
-    LTEXT           "πˆ¡Ø:",-1,7,40,59,9
+    LTEXT           "Î≤ÑÏ†º:",-1,7,40,59,9
     EDITTEXT        IDC_STATIC_PROP_VERSION,71,40,120,9,ES_READONLY | NOT WS_BORDER | WS_TABSTOP
-    LTEXT           "¿˙¿€±«(&Y):",-1,7,51,59,9
+    LTEXT           "Ï†ÄÏûëÍ∂å(&Y):",-1,7,51,59,9
     EDITTEXT        IDC_STATIC_PROP_COPYRIGHT,71,51,120,9,ES_READONLY | NOT WS_BORDER | WS_TABSTOP
-    LTEXT           "≈©±‚:",-1,7,62,59,9
+    LTEXT           "ÌÅ¨Í∏∞:",-1,7,62,59,9
     EDITTEXT        IDC_STATIC_PROP_SIZE,71,62,120,9,ES_READONLY | NOT WS_BORDER | WS_TABSTOP
-    GROUPBOX        "º”º∫",-1,7,79,158,46
-    CONTROL         "¿–±‚ ¿¸øÎ(&R)",IDC_CHECK_READONLY,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,17,91,68,9
-    CONTROL         "º˚±Ë(&I)",IDC_CHECK_HIDDEN,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,92,91,68,9
-    CONTROL         "æ∆ƒ´¿Ã∫Í(&A)",IDC_CHECK_ARCHIVE,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,17,101,68,9
-    CONTROL         "Ω√Ω∫≈€(&S)",IDC_CHECK_SYSTEM,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,92,101,68,9
-    CONTROL         "æ–√‡(&C)",IDC_CHECK_COMPRESSED,"Button", BS_AUTOCHECKBOX | WS_TABSTOP,17,111,68,9
-    GROUPBOX        "πˆ¡Ø ¡§∫∏(&V)",-1,7,129,234,79
+    GROUPBOX        "ÏÜçÏÑ±",-1,7,79,158,46
+    CONTROL         "ÏùΩÍ∏∞ Ï†ÑÏö©(&R)",IDC_CHECK_READONLY,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,17,91,68,9
+    CONTROL         "Ïà®ÍπÄ(&I)",IDC_CHECK_HIDDEN,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,92,91,68,9
+    CONTROL         "ÏïÑÏπ¥Ïù¥Î∏å(&A)",IDC_CHECK_ARCHIVE,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,17,101,68,9
+    CONTROL         "ÏãúÏä§ÌÖú(&S)",IDC_CHECK_SYSTEM,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,92,101,68,9
+    CONTROL         "ÏïïÏ∂ï(&C)",IDC_CHECK_COMPRESSED,"Button", BS_AUTOCHECKBOX | WS_TABSTOP,17,111,68,9
+    GROUPBOX        "Î≤ÑÏ†º Ï†ïÎ≥¥(&V)",-1,7,129,234,79
     LISTBOX         IDC_LIST_PROP_VERSION_TYPES,13,139,107,63,LBS_SORT | LBS_NOINTEGRALHEIGHT | WS_VSCROLL | WS_TABSTOP
     EDITTEXT        IDC_LIST_PROP_VERSION_VALUES,123,139,111,63,ES_MULTILINE | ES_READONLY | WS_VSCROLL
 END
-
-
-STRINGTABLE
-{
-    IDS_FONT_SEL_DLG_NAME   "±€≤√ º≥¡§ ¿˚øÎ"
-    IDS_FONT_SEL_ERROR      "ªı ±€≤√ º±≈√ ø°∑Ø."
-}
-
-STRINGTABLE
-{
-    IDS_WINEFILE            "Winefile"
-    IDS_ERROR               "ø°∑Ø"
-    IDS_ROOT_FS             "∑Á∆Æ ∆ƒ¿œΩ√Ω∫≈€"
-    IDS_UNIXFS              "¿Ø¥–Ω∫ ∆ƒ¿œΩ√Ω∫≈€"
-    IDS_DESKTOP             "µ•Ω∫≈©≈æ"
-    IDS_SHELL               "ºø"
-    IDS_TITLEFMT            "%s - %s"
-    IDS_NO_IMPL             "æ∆¡˜ ±∏«ˆæ»µ "
-    IDS_WINE_FILE           "Wine ∆ƒ¿œ"
-}
-
-STRINGTABLE
-{
-    IDS_COL_NAME            "¿Ã∏ß"
-    IDS_COL_SIZE            "≈©±‚"
-    IDS_COL_CDATE           "Ω√(CDate)"
-    IDS_COL_ADATE           "√ (ADate)"
-    IDS_COL_MDATE           "∫–(MDate)"
-    IDS_COL_IDX             "¿Œµ¶Ω∫/æ∆¿Ã≥ÎµÂ"
-    IDS_COL_LINKS           "∏µ≈©"
-    IDS_COL_ATTR            "º”º∫"
-    IDS_COL_SEC             "∫∏æ»"
-
-    IDS_FREE_SPACE_FMT      "%s of %s ªÁøÎ∞°¥…"
-}

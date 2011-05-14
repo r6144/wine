@@ -1100,7 +1100,7 @@ ULONG WINAPI GetAdaptersAddresses(ULONG family, ULONG flags, PVOID reserved,
         }
         if (!(flags & GAA_FLAG_SKIP_DNS_SERVER))
         {
-            firstDns = (PIP_ADAPTER_DNS_SERVER_ADDRESS)((BYTE *)aa + total_size - dns_server_size - dns_suffix_size);
+            firstDns = (PIP_ADAPTER_DNS_SERVER_ADDRESS)((BYTE *)first_aa + total_size - dns_server_size - dns_suffix_size);
             get_dns_server_addresses(firstDns, &dns_server_size);
             for (aa = first_aa; aa; aa = aa->Next)
             {
@@ -1115,10 +1115,13 @@ ULONG WINAPI GetAdaptersAddresses(ULONG family, ULONG flags, PVOID reserved,
         {
             if (aa->IfType != IF_TYPE_SOFTWARE_LOOPBACK && aa->OperStatus == IfOperStatusUp)
                 aa->DnsSuffix = dnsSuffix;
+            else
+                aa->DnsSuffix = (WCHAR *)((BYTE*)dnsSuffix + dns_suffix_size - 2);
         }
         ret = ERROR_SUCCESS;
     }
-    if (*buflen < total_size) ret = ERROR_BUFFER_OVERFLOW;
+    else
+        ret = ERROR_BUFFER_OVERFLOW;
     *buflen = total_size;
 
     TRACE("num adapters %u\n", table->numIndexes);
@@ -2029,7 +2032,8 @@ DWORD WINAPI IpRenewAddress(PIP_ADAPTER_INDEX_MAP AdapterInfo)
 DWORD WINAPI NotifyAddrChange(PHANDLE Handle, LPOVERLAPPED overlapped)
 {
   FIXME("(Handle %p, overlapped %p): stub\n", Handle, overlapped);
-  return ERROR_NOT_SUPPORTED;
+  if (Handle) *Handle = INVALID_HANDLE_VALUE;
+  return ERROR_IO_PENDING;
 }
 
 

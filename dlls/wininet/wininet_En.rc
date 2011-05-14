@@ -30,8 +30,8 @@ FONT 8, "MS Shell Dlg"
  LTEXT "Realm", -1, 40, 46, 50, 10
  LTEXT "User", -1, 40, 66, 50, 10
  LTEXT "Password", -1, 40, 86, 50, 10
- LTEXT "" IDC_PROXY, 80, 26, 150, 14, 0
- LTEXT "" IDC_REALM, 80, 46, 150, 14, 0
+ LTEXT "", IDC_PROXY, 80, 26, 150, 14, 0
+ LTEXT "", IDC_REALM, 80, 46, 150, 14, 0
  EDITTEXT IDC_USERNAME, 80, 66, 150, 14, ES_AUTOHSCROLL | WS_BORDER | WS_TABSTOP
  EDITTEXT IDC_PASSWORD, 80, 86, 150, 14, ES_AUTOHSCROLL | WS_BORDER | WS_TABSTOP | ES_PASSWORD
  CHECKBOX "&Save this password (insecure)", IDC_SAVEPASSWORD,
@@ -50,8 +50,8 @@ FONT 8, "MS Shell Dlg"
  LTEXT "Realm", -1, 40, 46, 50, 10
  LTEXT "User", -1, 40, 66, 50, 10
  LTEXT "Password", -1, 40, 86, 50, 10
- LTEXT "" IDC_SERVER, 80, 26, 150, 14, 0
- LTEXT "" IDC_REALM, 80, 46, 150, 14, 0
+ LTEXT "", IDC_SERVER, 80, 26, 150, 14, 0
+ LTEXT "", IDC_REALM, 80, 46, 150, 14, 0
  EDITTEXT IDC_USERNAME, 80, 66, 150, 14, ES_AUTOHSCROLL | WS_BORDER | WS_TABSTOP
  EDITTEXT IDC_PASSWORD, 80, 86, 150, 14, ES_AUTOHSCROLL | WS_BORDER | WS_TABSTOP | ES_PASSWORD
  CHECKBOX "&Save this password (insecure)", IDC_SAVEPASSWORD,
@@ -70,13 +70,4 @@ FONT 8, "MS Shell Dlg"
  LTEXT "Do you want to continue anyway?", -1, 40, 46, 200, 20
  PUSHBUTTON "Yes", IDOK, 40, 66, 56, 14, WS_GROUP | WS_TABSTOP | BS_DEFPUSHBUTTON
  PUSHBUTTON "No", IDCANCEL, 100, 66, 56, 14, WS_GROUP | WS_TABSTOP
-}
-
-STRINGTABLE
-{
-  IDS_LANCONNECTION "LAN Connection"
-  IDS_CERT_CA_INVALID   "The certificate is issued by an unknown or untrusted publisher."
-  IDS_CERT_DATE_INVALID "The date on the certificate is invalid."
-  IDS_CERT_CN_INVALID   "The name on the certificate does not match the site."
-  IDS_CERT_ERRORS       "There is at least one unspecified security problem with this certificate."
 }

@@ -51,6 +51,9 @@
 #ifdef HAVE_SYS_STAT_H
 # include <sys/stat.h>
 #endif
+#ifdef HAVE_SYS_SYSCALL_H
+# include <sys/syscall.h>
+#endif
 #ifdef HAVE_SYS_UIO_H
 #include <sys/uio.h>
 #endif
@@ -87,8 +90,6 @@ WINE_DEFAULT_DEBUG_CHANNEL(server);
 static const enum cpu_type client_cpu = CPU_x86;
 #elif defined(__x86_64__)
 static const enum cpu_type client_cpu = CPU_x86_64;
-#elif defined(__ALPHA__)
-static const enum cpu_type client_cpu = CPU_ALPHA;
 #elif defined(__powerpc__)
 static const enum cpu_type client_cpu = CPU_POWERPC;
 #elif defined(__sparc__)
@@ -943,10 +944,8 @@ static void send_server_task_port(void)
 static int get_unix_tid(void)
 {
     int ret = -1;
-#if defined(linux) && defined(__i386__)
-    ret = syscall(224 /*SYS_gettid*/);
-#elif defined(linux) && defined(__x86_64__)
-    ret = syscall(186 /*SYS_gettid*/);
+#ifdef linux
+    ret = syscall( SYS_gettid );
 #elif defined(__sun)
     ret = pthread_self();
 #elif defined(__APPLE__)
@@ -1121,7 +1120,7 @@ size_t server_init_thread( void *entry_point )
             if (!strcmp( arch, "win32" ) && (is_win64 || is_wow64))
                 fatal_error( "WINEARCH set to win32 but '%s' is a 64-bit installation.\n",
                              wine_get_config_dir() );
-            if (!strcmp( arch, "win64" ) && !is_wow64)
+            if (!strcmp( arch, "win64" ) && !is_win64 && !is_wow64)
                 fatal_error( "WINEARCH set to win64 but '%s' is a 32-bit installation.\n",
                              wine_get_config_dir() );
         }

@@ -40,6 +40,7 @@
 #include "htiframe.h"
 
 #include "wine/unicode.h"
+#include "wine/list.h"
 #include "resource.h"
 
 
@@ -86,6 +87,8 @@ typedef struct _task_header_t {
 
 typedef struct _IDocHostContainerVtbl
 {
+    ULONG (*addref)(DocHost*);
+    ULONG (*release)(DocHost*);
     void (WINAPI* GetDocObjRect)(DocHost*,RECT*);
     HRESULT (WINAPI* SetStatusText)(DocHost*,LPCWSTR);
     void (WINAPI* SetURL)(DocHost*,LPCWSTR);
@@ -182,6 +185,14 @@ struct WebBrowser {
     DocHost doc_host;
 };
 
+typedef struct {
+    DocHost doc_host;
+
+    LONG ref;
+
+    InternetExplorer *ie;
+} IEDocHost;
+
 struct InternetExplorer {
     IWebBrowser2 IWebBrowser2_iface;
     HlinkFrame hlink_frame;
@@ -191,8 +202,10 @@ struct InternetExplorer {
     HWND frame_hwnd;
     HWND status_hwnd;
     HMENU menu;
+    BOOL nohome;
 
-    DocHost doc_host;
+    struct list entry;
+    IEDocHost *doc_host;
 };
 
 void WebBrowser_OleObject_Init(WebBrowser*);
@@ -216,6 +229,7 @@ void ConnectionPointContainer_Destroy(ConnectionPointContainer*);
 void HlinkFrame_Init(HlinkFrame*,IUnknown*,DocHost*);
 BOOL HlinkFrame_QI(HlinkFrame*,REFIID,void**);
 
+HRESULT ShellBrowser_Create(IShellBrowser**);
 HRESULT WebBrowserV1_Create(IUnknown*,REFIID,void**);
 HRESULT WebBrowserV2_Create(IUnknown*,REFIID,void**);
 
@@ -227,6 +241,7 @@ HRESULT navigate_url(DocHost*,LPCWSTR,const VARIANT*,const VARIANT*,VARIANT*,VAR
 HRESULT go_home(DocHost*);
 void set_doc_state(DocHost*,READYSTATE);
 HRESULT get_location_url(DocHost*,BSTR*);
+void handle_navigation_error(DocHost*,HRESULT,BSTR,IHTMLWindow2*);
 
 #define WM_DOCHOSTTASK (WM_USER+0x300)
 void push_dochost_task(DocHost*,task_header_t*,task_proc_t,BOOL);
@@ -234,6 +249,8 @@ LRESULT  process_dochost_task(DocHost*,LPARAM);
 
 HRESULT InternetExplorer_Create(IUnknown*,REFIID,void**);
 void InternetExplorer_WebBrowser_Init(InternetExplorer*);
+
+void released_obj(void);
 
 HRESULT CUrlHistory_Create(IUnknown*,REFIID,void**);
 

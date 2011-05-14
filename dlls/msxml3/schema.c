@@ -25,6 +25,18 @@
 
 #include <assert.h>
 #include <stdarg.h>
+#ifdef HAVE_LIBXML2
+# include <libxml/parser.h>
+# include <libxml/xmlerror.h>
+# include <libxml/tree.h>
+# include <libxml/xmlschemas.h>
+# include <libxml/schemasInternals.h>
+# include <libxml/hash.h>
+# include <libxml/parser.h>
+# include <libxml/parserInternals.h>
+# include <libxml/xmlIO.h>
+#endif
+
 #include "windef.h"
 #include "winbase.h"
 #include "winuser.h"
@@ -47,14 +59,6 @@ WINE_DEFAULT_DEBUG_CHANNEL(msxml);
 
 #ifdef HAVE_LIBXML2
 
-#include <libxml/tree.h>
-#include <libxml/xmlschemas.h>
-#include <libxml/schemasInternals.h>
-#include <libxml/hash.h>
-#include <libxml/parser.h>
-#include <libxml/parserInternals.h>
-#include <libxml/xmlIO.h>
-
 xmlDocPtr XDR_to_XSD_doc(xmlDocPtr xdr_doc, xmlChar const* nsURI);
 
 static const xmlChar XSD_schema[] = "schema";
@@ -63,11 +67,13 @@ static const xmlChar XDR_schema[] = "Schema";
 static const xmlChar XDR_nsURI[] = "urn:schemas-microsoft-com:xml-data";
 static const xmlChar DT_nsURI[] = "urn:schemas-microsoft-com:datatypes";
 
-static xmlChar const*   datatypes_src = NULL;
-static int              datatypes_len = 0;
-static HGLOBAL          datatypes_handle = NULL;
-static HRSRC            datatypes_rsrc = NULL;
-static xmlSchemaPtr     datatypes_schema = NULL;
+static xmlChar const*   datatypes_src;
+static int              datatypes_len;
+static HGLOBAL          datatypes_handle;
+static HRSRC            datatypes_rsrc;
+static xmlSchemaPtr     datatypes_schema;
+
+static const WCHAR      emptyW[] = {0};
 
 /* Supported Types:
  * msxml3 - XDR only
@@ -381,7 +387,7 @@ static DWORD dt_hash_bstr(OLECHAR const* bstr, int len /* calculated if -1 */)
     return hval;
 }
 
-static const xmlChar const* DT_string_table[DT__N_TYPES] =
+static const xmlChar *const DT_string_table[DT__N_TYPES] =
 {
     DT_bin_base64,
     DT_bin_hex,
@@ -421,7 +427,7 @@ static const xmlChar const* DT_string_table[DT__N_TYPES] =
     DT_uuid
 };
 
-static const WCHAR const* DT_wstring_table[DT__N_TYPES] =
+static const WCHAR *const DT_wstring_table[DT__N_TYPES] =
 {
     wDT_bin_base64,
     wDT_bin_hex,
@@ -658,7 +664,7 @@ static inline xmlSchemaPtr get_node_schema(schema_cache* This, xmlNodePtr node)
     return (!entry)? NULL : entry->schema;
 }
 
-xmlExternalEntityLoader _external_entity_loader = NULL;
+static xmlExternalEntityLoader _external_entity_loader;
 
 static xmlParserInputPtr external_entity_loader(const char *URL, const char *ID,
                                                 xmlParserCtxtPtr ctxt)
@@ -711,7 +717,7 @@ void schemasInit(void)
     datatypes_src = BAD_CAST buf;
     datatypes_len = len + 1;
 
-    if ((void*)xmlGetExternalEntityLoader() != (void*)external_entity_loader)
+    if (xmlGetExternalEntityLoader() != external_entity_loader)
     {
         _external_entity_loader = xmlGetExternalEntityLoader();
         xmlSetExternalEntityLoader(external_entity_loader);
@@ -720,10 +726,7 @@ void schemasInit(void)
 
 void schemasCleanup(void)
 {
-    if (datatypes_handle)
-        FreeResource(datatypes_handle);
-    if (datatypes_schema)
-        xmlSchemaFree(datatypes_schema);
+    xmlSchemaFree(datatypes_schema);
     xmlSetExternalEntityLoader(_external_entity_loader);
 }
 
@@ -945,6 +948,7 @@ static HRESULT WINAPI schema_cache_QueryInterface(IXMLDOMSchemaCollection2* ifac
     else
     {
         FIXME("interface %s not implemented\n", debugstr_guid(riid));
+        *ppvObject = NULL;
         return E_NOINTERFACE;
     }
 
@@ -1057,8 +1061,8 @@ static HRESULT WINAPI schema_cache_Invoke(IXMLDOMSchemaCollection2* iface,
 static HRESULT WINAPI schema_cache_add(IXMLDOMSchemaCollection2* iface, BSTR uri, VARIANT var)
 {
     schema_cache* This = impl_from_IXMLDOMSchemaCollection2(iface);
-    xmlChar* name = xmlChar_from_wchar(uri);
-    TRACE("(%p)->(%s, var(vt %x))\n", This, debugstr_w(uri), V_VT(&var));
+    xmlChar* name = uri ? xmlchar_from_wchar(uri) : xmlchar_from_wchar(emptyW);
+    TRACE("(%p)->(%s %s)\n", This, debugstr_w(uri), debugstr_variant(&var));
 
     switch (V_VT(&var))
     {
@@ -1158,13 +1162,13 @@ static HRESULT WINAPI schema_cache_get(IXMLDOMSchemaCollection2* iface, BSTR uri
     if (!node)
         return E_POINTER;
 
-    name = xmlChar_from_wchar(uri);
+    name = uri ? xmlchar_from_wchar(uri) : xmlchar_from_wchar(emptyW);
     entry = (cache_entry*) xmlHashLookup(This->cache, name);
     heap_free(name);
 
     /* TODO: this should be read-only */
     if (entry)
-        return DOMDocument_create_from_xmldoc(entry->doc, (IXMLDOMDocument3**)node);
+        return get_domdoc_from_xmldoc(entry->doc, (IXMLDOMDocument3**)node);
 
     *node = NULL;
     return S_OK;
@@ -1173,7 +1177,7 @@ static HRESULT WINAPI schema_cache_get(IXMLDOMSchemaCollection2* iface, BSTR uri
 static HRESULT WINAPI schema_cache_remove(IXMLDOMSchemaCollection2* iface, BSTR uri)
 {
     schema_cache* This = impl_from_IXMLDOMSchemaCollection2(iface);
-    xmlChar* name = xmlChar_from_wchar(uri);
+    xmlChar* name = uri ? xmlchar_from_wchar(uri) : xmlchar_from_wchar(emptyW);
     TRACE("(%p)->(%s)\n", This, wine_dbgstr_w(uri));
 
     xmlHashRemoveEntry(This->cache, name, cache_free);

@@ -73,8 +73,8 @@ static HRESULT htmlselect_item(HTMLSelectElement *This, int i, IDispatch **ret)
         if(FAILED(hres))
             return hres;
 
-        IHTMLDOMNode_AddRef(HTMLDOMNODE(node));
-        *ret = (IDispatch*)HTMLDOMNODE(node);
+        IHTMLDOMNode_AddRef(&node->IHTMLDOMNode_iface);
+        *ret = (IDispatch*)&node->IHTMLDOMNode_iface;
     }else {
         *ret = NULL;
     }
@@ -86,28 +86,28 @@ static HRESULT WINAPI HTMLSelectElement_QueryInterface(IHTMLSelectElement *iface
 {
     HTMLSelectElement *This = impl_from_IHTMLSelectElement(iface);
 
-    return IHTMLDOMNode_QueryInterface(HTMLDOMNODE(&This->element.node), riid, ppv);
+    return IHTMLDOMNode_QueryInterface(&This->element.node.IHTMLDOMNode_iface, riid, ppv);
 }
 
 static ULONG WINAPI HTMLSelectElement_AddRef(IHTMLSelectElement *iface)
 {
     HTMLSelectElement *This = impl_from_IHTMLSelectElement(iface);
 
-    return IHTMLDOMNode_AddRef(HTMLDOMNODE(&This->element.node));
+    return IHTMLDOMNode_AddRef(&This->element.node.IHTMLDOMNode_iface);
 }
 
 static ULONG WINAPI HTMLSelectElement_Release(IHTMLSelectElement *iface)
 {
     HTMLSelectElement *This = impl_from_IHTMLSelectElement(iface);
 
-    return IHTMLDOMNode_Release(HTMLDOMNODE(&This->element.node));
+    return IHTMLDOMNode_Release(&This->element.node.IHTMLDOMNode_iface);
 }
 
 static HRESULT WINAPI HTMLSelectElement_GetTypeInfoCount(IHTMLSelectElement *iface, UINT *pctinfo)
 {
     HTMLSelectElement *This = impl_from_IHTMLSelectElement(iface);
 
-    return IDispatchEx_GetTypeInfoCount(DISPATCHEX(&This->element.node.dispex), pctinfo);
+    return IDispatchEx_GetTypeInfoCount(&This->element.node.dispex.IDispatchEx_iface, pctinfo);
 }
 
 static HRESULT WINAPI HTMLSelectElement_GetTypeInfo(IHTMLSelectElement *iface, UINT iTInfo,
@@ -115,7 +115,8 @@ static HRESULT WINAPI HTMLSelectElement_GetTypeInfo(IHTMLSelectElement *iface, U
 {
     HTMLSelectElement *This = impl_from_IHTMLSelectElement(iface);
 
-    return IDispatchEx_GetTypeInfo(DISPATCHEX(&This->element.node.dispex), iTInfo, lcid, ppTInfo);
+    return IDispatchEx_GetTypeInfo(&This->element.node.dispex.IDispatchEx_iface, iTInfo, lcid,
+            ppTInfo);
 }
 
 static HRESULT WINAPI HTMLSelectElement_GetIDsOfNames(IHTMLSelectElement *iface, REFIID riid,
@@ -124,7 +125,8 @@ static HRESULT WINAPI HTMLSelectElement_GetIDsOfNames(IHTMLSelectElement *iface,
 {
     HTMLSelectElement *This = impl_from_IHTMLSelectElement(iface);
 
-    return IDispatchEx_GetIDsOfNames(DISPATCHEX(&This->element.node.dispex), riid, rgszNames, cNames, lcid, rgDispId);
+    return IDispatchEx_GetIDsOfNames(&This->element.node.dispex.IDispatchEx_iface, riid, rgszNames,
+            cNames, lcid, rgDispId);
 }
 
 static HRESULT WINAPI HTMLSelectElement_Invoke(IHTMLSelectElement *iface, DISPID dispIdMember,
@@ -133,8 +135,8 @@ static HRESULT WINAPI HTMLSelectElement_Invoke(IHTMLSelectElement *iface, DISPID
 {
     HTMLSelectElement *This = impl_from_IHTMLSelectElement(iface);
 
-    return IDispatchEx_Invoke(DISPATCHEX(&This->element.node.dispex), dispIdMember, riid, lcid,
-            wFlags, pDispParams, pVarResult, pExcepInfo, puArgErr);
+    return IDispatchEx_Invoke(&This->element.node.dispex.IDispatchEx_iface, dispIdMember, riid,
+            lcid, wFlags, pDispParams, pVarResult, pExcepInfo, puArgErr);
 }
 
 static HRESULT WINAPI HTMLSelectElement_put_size(IHTMLSelectElement *iface, LONG v)
@@ -387,7 +389,7 @@ static HRESULT WINAPI HTMLSelectElement_add(IHTMLSelectElement *iface, IHTMLElem
     if(FAILED(hres))
         return hres;
 
-    hres = IHTMLDOMNode_appendChild(HTMLDOMNODE(&This->element.node), node, &tmp);
+    hres = IHTMLDOMNode_appendChild(&This->element.node.IHTMLDOMNode_iface, node, &tmp);
     IHTMLDOMNode_Release(node);
     if(SUCCEEDED(hres) && tmp)
         IHTMLDOMNode_Release(tmp);
@@ -504,11 +506,14 @@ static const IHTMLSelectElementVtbl HTMLSelectElementVtbl = {
     HTMLSelectElement_tags
 };
 
-#define HTMLSELECT_NODE_THIS(iface) DEFINE_THIS2(HTMLSelectElement, element.node, iface)
+static inline HTMLSelectElement *impl_from_HTMLDOMNode(HTMLDOMNode *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLSelectElement, element.node);
+}
 
 static HRESULT HTMLSelectElement_QI(HTMLDOMNode *iface, REFIID riid, void **ppv)
 {
-    HTMLSelectElement *This = HTMLSELECT_NODE_THIS(iface);
+    HTMLSelectElement *This = impl_from_HTMLDOMNode(iface);
 
     *ppv = NULL;
 
@@ -533,7 +538,7 @@ static HRESULT HTMLSelectElement_QI(HTMLDOMNode *iface, REFIID riid, void **ppv)
 
 static void HTMLSelectElement_destructor(HTMLDOMNode *iface)
 {
-    HTMLSelectElement *This = HTMLSELECT_NODE_THIS(iface);
+    HTMLSelectElement *This = impl_from_HTMLDOMNode(iface);
 
     nsIDOMHTMLSelectElement_Release(This->nsselect);
 
@@ -542,13 +547,13 @@ static void HTMLSelectElement_destructor(HTMLDOMNode *iface)
 
 static HRESULT HTMLSelectElementImpl_put_disabled(HTMLDOMNode *iface, VARIANT_BOOL v)
 {
-    HTMLSelectElement *This = HTMLSELECT_NODE_THIS(iface);
+    HTMLSelectElement *This = impl_from_HTMLDOMNode(iface);
     return IHTMLSelectElement_put_disabled(&This->IHTMLSelectElement_iface, v);
 }
 
 static HRESULT HTMLSelectElementImpl_get_disabled(HTMLDOMNode *iface, VARIANT_BOOL *p)
 {
-    HTMLSelectElement *This = HTMLSELECT_NODE_THIS(iface);
+    HTMLSelectElement *This = impl_from_HTMLDOMNode(iface);
     return IHTMLSelectElement_get_disabled(&This->IHTMLSelectElement_iface, p);
 }
 
@@ -576,7 +581,7 @@ static HRESULT HTMLSelectElement_get_dispid(HTMLDOMNode *iface, BSTR name, DWORD
 static HRESULT HTMLSelectElement_invoke(HTMLDOMNode *iface, DISPID id, LCID lcid, WORD flags, DISPPARAMS *params,
         VARIANT *res, EXCEPINFO *ei, IServiceProvider *caller)
 {
-    HTMLSelectElement *This = HTMLSELECT_NODE_THIS(iface);
+    HTMLSelectElement *This = impl_from_HTMLDOMNode(iface);
 
     TRACE("(%p)->(%x %x %x %p %p %p %p)\n", This, id, lcid, flags, params, res, ei, caller);
 
@@ -605,8 +610,6 @@ static HRESULT HTMLSelectElement_invoke(HTMLDOMNode *iface, DISPID id, LCID lcid
 
     return S_OK;
 }
-
-#undef HTMLSELECT_NODE_THIS
 
 static const NodeImplVtbl HTMLSelectElementImplVtbl = {
     HTMLSelectElement_QI,

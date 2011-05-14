@@ -5,7 +5,7 @@
  *  Proofread 1998 by David Lee Lambert <lamber45@egr.msu.edu>
  *  Copyright 2002 Sylvain Petreolle <spetreolle@yahoo.fr>
  *  Copyright 2007 Bang Jun-Young <junyoung@mogua.com>
- *  Copyright 2009  YunSong Hwang <hys545@dreamwiz.com>
+ *  Copyright 2009,2010  YunSong Hwang <hys545@dreamwiz.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -24,112 +24,33 @@
 
 #include "notepad_res.h"
 
-LANGUAGE LANG_KOREAN, SUBLANG_DEFAULT
+#pragma code_page(65001)
 
-MAIN_MENU MENU
-{
- POPUP "∆ƒ¿œ(&F)" {
-  MENUITEM "ªı∑Œ ∏∏µÈ±‚(&N)\tCtrl+N",   CMD_NEW
-  MENUITEM "ø≠±‚(&O)...\tCtrl+O",       CMD_OPEN
-  MENUITEM "¿˙¿Â(&S)\tCtrl+S",          CMD_SAVE
-  MENUITEM "¥Ÿ∏• ¿Ã∏ß¿∏∑Œ ¿˙¿Â(&A)...", CMD_SAVE_AS
-  MENUITEM SEPARATOR
-  MENUITEM "¿Œº‚(&P)...\tCtrl+P",       CMD_PRINT
-  MENUITEM "∆‰¿Ã¡ˆ º≥¡§(&T)...",        CMD_PAGE_SETUP
-  MENUITEM "«¡∏∞≈Õ º≥¡§(&R)...",        CMD_PRINTER_SETUP
-  MENUITEM SEPARATOR
-  MENUITEM "≥°≥ª±‚(&X)",                CMD_EXIT
- }
-POPUP "∆Ì¡˝(&E)" {
-  MENUITEM "Ω««‡ √Îº“(&U)\tCtrl+Z",     CMD_UNDO
-  MENUITEM SEPARATOR
-  MENUITEM "¿ﬂ∂Û≥ª±‚(&T)\tCtrl+X",      CMD_CUT
-  MENUITEM "∫πªÁ(&C)\tCtrl+C",          CMD_COPY
-  MENUITEM "∫Ÿø©≥÷±‚(&P)\tCtrl+V",      CMD_PASTE
-  MENUITEM "ªË¡¶(&D)\tDel",             CMD_DELETE
-  MENUITEM SEPARATOR
-  MENUITEM "∏µŒ º±≈√(&A)\tCtrl+A",     CMD_SELECT_ALL
-  MENUITEM "Ω√∞£/≥Ø¬•(&T)\tF5",         CMD_TIME_DATE
-  MENUITEM SEPARATOR
-  MENUITEM "¿⁄µø ¡Ÿ πŸ≤ﬁ(&W)",          CMD_WRAP
-  MENUITEM "±€≤√(&F)...",               CMD_FONT
- }
-POPUP "√£±‚(&S)" {
-  MENUITEM "√£±‚(&S)...\tCtrl+F",       CMD_SEARCH
-  MENUITEM "¥Ÿ¿Ω √£±‚(&N)\tF3",         CMD_SEARCH_NEXT
-  MENUITEM "πŸ≤Ÿ±‚(&R)...\tCtrl+H", CMD_REPLACE
- }
-POPUP "µµøÚ∏ª(&H)" {
-  MENUITEM "«◊∏Ò(&C)",                  CMD_HELP_CONTENTS
-  MENUITEM "√£±‚(&S)...",               CMD_HELP_SEARCH
-  MENUITEM "µµøÚ∏ª ªÁøÎπ˝(&H)",         CMD_HELP_ON_HELP
-  MENUITEM SEPARATOR
-  MENUITEM "≥Î∆Æ∆–µÂ ¡§∫∏(&A)", CMD_HELP_ABOUT_NOTEPAD
- }
-}
+LANGUAGE LANG_KOREAN, SUBLANG_DEFAULT
 
 /* Dialog `Page setup' */
 
 DIALOG_PAGESETUP DIALOG 0, 0, 225, 95
 STYLE DS_MODALFRAME | WS_CAPTION | WS_SYSMENU
 FONT 9, "MS Shell Dlg"
-CAPTION "∆‰¿Ã¡ˆ º≥¡§"
+CAPTION "ÌéòÏù¥ÏßÄ ÏÑ§Ï†ï"
 {
-LTEXT    "∏”∏Æ±€(&H):",  0x140,   10, 07, 40, 15
+LTEXT    "Î®∏Î¶¨Í∏Ä(&H):",  0x140,   10, 07, 40, 15
 EDITTEXT IDC_PAGESETUP_HEADERVALUE,   60, 05,110, 12, WS_BORDER | WS_TABSTOP
-LTEXT    "πŸ¥⁄±€(&F):",  0x142,   10, 24, 40, 15
+LTEXT    "Î∞îÎã•Í∏Ä(&F):",  0x142,   10, 24, 40, 15
 EDITTEXT IDC_PAGESETUP_FOOTERVALUE,   60, 22,110, 12, WS_BORDER | WS_TABSTOP
 
-GROUPBOX "ø©πÈ(&M):",      0x144,     10, 43,160, 45
-LTEXT    "øﬁ¬ (&L):",        0x145,   20, 55, 30, 10, WS_CHILD
+GROUPBOX "Ïó¨Î∞±(&M):",      0x144,     10, 43,160, 45
+LTEXT    "ÏôºÏ™Ω(&L):",        0x145,   20, 55, 30, 10, WS_CHILD
 EDITTEXT IDC_PAGESETUP_LEFTVALUE,     50, 55, 35, 11, WS_CHILD | WS_BORDER | WS_TABSTOP
-LTEXT    "¿ß(&T):",         0x148,    20, 73, 30, 10, WS_CHILD
+LTEXT    "ÏúÑ(&T):",         0x148,    20, 73, 30, 10, WS_CHILD
 EDITTEXT IDC_PAGESETUP_TOPVALUE,      50, 73, 35, 11, WS_CHILD | WS_BORDER | WS_TABSTOP
-LTEXT    "ø¿∏•¬ (&R):",       0x14B, 100, 55, 30, 10, WS_CHILD
+LTEXT    "Ïò§Î•∏Ï™Ω(&R):",       0x14B, 100, 55, 30, 10, WS_CHILD
 EDITTEXT IDC_PAGESETUP_RIGHTVALUE,   130, 55, 35, 11, WS_CHILD | WS_BORDER | WS_TABSTOP
-LTEXT    "æ∆∑°(&B):",      0x14E,100, 73, 30, 10, WS_CHILD
+LTEXT    "ÏïÑÎûò(&B):",      0x14E,100, 73, 30, 10, WS_CHILD
 EDITTEXT IDC_PAGESETUP_BOTTOMVALUE,  130, 73, 35, 11, WS_CHILD | WS_BORDER | WS_TABSTOP
 
-DEFPUSHBUTTON "»Æ¿Œ",       IDOK,                   180,  3, 40, 15, WS_TABSTOP
-PUSHBUTTON    "√Îº“",       IDCANCEL,               180, 21, 40, 15, WS_TABSTOP
-PUSHBUTTON    "µµøÚ∏ª(&H)", IDHELP,                 180, 39, 40, 15, WS_TABSTOP
-}
-
-STRINGTABLE
-{
-STRING_PAGESETUP_HEADERVALUE,   "&f"
-STRING_PAGESETUP_FOOTERVALUE,   "&p ∆‰¿Ã¡ˆ"
-
-STRING_NOTEPAD,                                 "∏ﬁ∏¿Â"
-STRING_ERROR,                                   "ø¿∑˘"
-STRING_WARNING,                                 "∞Ê∞Ì"
-STRING_INFO,                                    "¡§∫∏"
-
-STRING_UNTITLED,                                "¡¶∏Ò æ¯¿Ω"
-
-STRING_ALL_FILES,                               "∏µÁ ∆ƒ¿œ (*.*)"
-STRING_TEXT_FILES_TXT,                          "≈ÿΩ∫∆Æ πÆº≠ (*.txt)"
-
-STRING_TOOLARGE,                                "%s ∆ƒ¿œ¿Ã ≥ π´ ƒøº≠ ∏ﬁ∏¿Â¿∏∑Œ¥¬ ø≠ ºˆ æ¯Ω¿¥œ¥Ÿ.\n \
-¥Ÿ∏• ∆Ì¡˝±‚∏¶ ªÁøÎ«œΩ Ω√ø¿."
-STRING_NOTEXT,                                  "¿‘∑¬«— ≥ªøÎ¿Ã æ¯Ω¿¥œ¥Ÿ.\
-\n≥ªøÎ¿ª ¿‘∑¬«— »ƒ ¿ÁΩ√µµ«œΩ Ω√ø¿"
-STRING_DOESNOTEXIST,                            "%s\ ∆ƒ¿œ¿Ã æ¯Ω¿¥œ¥Ÿ.\n\n \
-∆ƒ¿œ¿ª ªı∑Œ ∏∏µÂΩ√∞⁄Ω¿¥œ±Ó?"
-STRING_NOTSAVED,                                "%s\ ∆ƒ¿œ ≥ªøÎ¿Ã ∫Ø∞Êµ«æ˙Ω¿¥œ¥Ÿ.\n\n \
-∫Ø∞Ê ≥ªøÎ¿ª ¿˙¿Â«œΩ√∞⁄Ω¿¥œ±Ó?"
-STRING_NOTFOUND,                                "%s πÆ¿⁄ø≠¿ª √£¿ª ºˆ æ¯Ω¿¥œ¥Ÿ."
-STRING_OUT_OF_MEMORY,                           "¿Ã ¿€æ˜¿ª øœ∑·«œ¥¬ µ• « ø‰«— ∏ﬁ∏∏Æ∞° ∫Œ¡∑«’¥œ¥Ÿ.\
-\nªÁøÎ ∞°¥…«— ∏ﬁ∏∏Æ¿« æÁ¿ª »Æ∫∏«œ±‚ ¿ß«ÿ «œ≥™ ¿ÃªÛ¿« ¿¿øÎ «¡∑Œ±◊∑•¿ª ¥›æ∆ ¡÷Ω Ω√ø¿."
-
-
-STRING_UNICODE_LE,     "¿Ø¥œƒ⁄µÂ (UTF-16)"
-STRING_UNICODE_BE,     "¿Ø¥œƒ⁄µÂ  (UTF-16 ∫Ú-ø£µæ)"
-
-STRING_LOSS_OF_UNICODE_CHARACTERS,         "%s\n\
-¿Ø¥œƒ⁄µÂ πÆ¿⁄∏¶ ∆˜«‘«œ∞Ì ¿÷¥¬ ¿Ã ∆ƒ¿œ¿∫ ∏∏æ‡ ¥ÁΩ≈¿Ã %s ¿Œƒ⁄µ˘¿∏∑Œ\n\
-∆ƒ¿œ¿ª ¿˙¿Â«œ∏È πÆ¿⁄¿« º’Ω«¿Ã ¿÷¿ª ∞Õ¿‘¥œ¥Ÿ.\n\
-¿Ã πÆ¿⁄∏¶ ∫∏¡∏«œ∑¡∏È  √Îº“∏¶ ≈¨∏Ø«œ∞Ì, ¿Œƒ⁄µ˘ µÂ∑”¥ŸøÓ∏Ò∑œ¿« ¿Ø¥œƒ⁄µÂ\n\
-ø…º« ¡ﬂ¿« «œ≥™∏¶  º±≈√«œΩ Ω√ø¿t.\n\
-∞Ëº”«œΩ√∞⁄Ω¿¥œ±Ó?"
+DEFPUSHBUTTON "ÌôïÏù∏",       IDOK,                   180,  3, 40, 15, WS_TABSTOP
+PUSHBUTTON    "Ï∑®ÏÜå",       IDCANCEL,               180, 21, 40, 15, WS_TABSTOP
+PUSHBUTTON    "ÎèÑÏõÄÎßê(&H)", IDHELP,                 180, 39, 40, 15, WS_TABSTOP
 }

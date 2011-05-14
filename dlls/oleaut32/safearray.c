@@ -172,11 +172,15 @@ static ULONG SAFEARRAY_GetCellCount(const SAFEARRAY *psa)
 /* Allocate a descriptor for an array */
 static HRESULT SAFEARRAY_AllocDescriptor(ULONG ulSize, SAFEARRAY **ppsaOut)
 {
-  *ppsaOut = (SAFEARRAY*)((char*)SAFEARRAY_Malloc(ulSize + SAFEARRAY_HIDDEN_SIZE) + SAFEARRAY_HIDDEN_SIZE);
+  char *ptr = SAFEARRAY_Malloc(ulSize + SAFEARRAY_HIDDEN_SIZE);
 
-  if (!*ppsaOut)
-    return E_UNEXPECTED;
+  if (!ptr)
+  {
+      *ppsaOut = NULL;
+      return E_UNEXPECTED;
+  }
 
+  *ppsaOut = (SAFEARRAY*)(ptr + SAFEARRAY_HIDDEN_SIZE);
   return S_OK;
 }
 
@@ -1352,10 +1356,7 @@ HRESULT WINAPI SafeArrayCopy(SAFEARRAY *psa, SAFEARRAY **ppsaOut)
     return S_OK; /* Handles copying of NULL arrays */
 
   if (!psa->cbElements)
-  {
-    ERR("not copying an array of 0 elements\n");
     return E_INVALIDARG;
-  }
 
   if (psa->fFeatures & (FADF_RECORD|FADF_HAVEIID|FADF_HAVEVARTYPE))
   {

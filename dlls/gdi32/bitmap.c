@@ -45,6 +45,54 @@ static const struct gdi_obj_funcs bitmap_funcs =
     BITMAP_DeleteObject   /* pDeleteObject */
 };
 
+
+/***********************************************************************
+ *           null driver fallback implementations
+ */
+
+LONG CDECL nulldrv_GetBitmapBits( HBITMAP bitmap, void *bits, LONG size )
+{
+    BITMAPOBJ *bmp = GDI_GetObjPtr( bitmap, OBJ_BITMAP );
+
+    if (bmp->bitmap.bmBits) memcpy( bits, bmp->bitmap.bmBits, size );
+    else memset( bits, 0, size );
+    GDI_ReleaseObj( bitmap );
+    return size;
+}
+
+LONG CDECL nulldrv_SetBitmapBits( HBITMAP bitmap, const void *bits, LONG size )
+{
+    BITMAPOBJ *bmp = GDI_GetObjPtr( bitmap, OBJ_BITMAP );
+
+    if (!bmp->bitmap.bmBits)
+    {
+        LONG total = bmp->bitmap.bmHeight * bmp->bitmap.bmWidthBytes;  /* alloc enough for entire bitmap */
+        if (!(bmp->bitmap.bmBits = HeapAlloc( GetProcessHeap(), 0, total )))
+        {
+            GDI_ReleaseObj( bitmap );
+            return 0;
+        }
+        if (size < total) memset( (char *)bmp->bitmap.bmBits + size, 0, total - size );
+    }
+    memcpy( bmp->bitmap.bmBits, bits, size );
+    GDI_ReleaseObj( bitmap );
+    return size;
+}
+
+INT CDECL nulldrv_GetDIBits( PHYSDEV dev, HBITMAP bitmap, UINT start, UINT lines, LPVOID bits,
+                             BITMAPINFO *info, UINT coloruse )
+{
+    /* FIXME: transfer bits from bmp->bitmap.bmBits */
+    return 0;
+}
+
+INT CDECL nulldrv_SetDIBits( PHYSDEV dev, HBITMAP bitmap, UINT start, UINT lines,
+                             const void *bits, const BITMAPINFO *info, UINT coloruse )
+{
+    /* FIXME: transfer bits to bmp->bitmap.bmBits */
+    return 0;
+}
+
 /***********************************************************************
  *           BITMAP_GetWidthBytes
  *
@@ -290,7 +338,7 @@ HBITMAP WINAPI CreateBitmapIndirect( const BITMAP *bmp )
     bmpobj->size.cy = 0;
     bmpobj->bitmap = bm;
     bmpobj->bitmap.bmBits = NULL;
-    bmpobj->funcs = NULL;
+    bmpobj->funcs = &null_driver;
     bmpobj->dib = NULL;
     bmpobj->color_table = NULL;
     bmpobj->nb_colors = 0;
@@ -400,22 +448,7 @@ LONG WINAPI GetBitmapBits(
           hbitmap, count, bits, bmp->bitmap.bmWidth, bmp->bitmap.bmHeight,
           1 << bmp->bitmap.bmBitsPixel, height );
 
-    if(bmp->funcs && bmp->funcs->pGetBitmapBits)
-    {
-        TRACE("Calling device specific BitmapBits\n");
-        ret = bmp->funcs->pGetBitmapBits(hbitmap, bits, count);
-    } else {
-
-        if(!bmp->bitmap.bmBits) {
-	    TRACE("Bitmap is empty\n");
-	    memset(bits, 0, count);
-	    ret = count;
-	} else {
-	    memcpy(bits, bmp->bitmap.bmBits, count);
-	    ret = count;
-	}
-
-    }
+    ret = bmp->funcs->pGetBitmapBits( hbitmap, bits, count );
  done:
     GDI_ReleaseObj( hbitmap );
     return ret;
@@ -483,23 +516,7 @@ LONG WINAPI SetBitmapBits(
           hbitmap, count, bits, bmp->bitmap.bmWidth, bmp->bitmap.bmHeight,
           1 << bmp->bitmap.bmBitsPixel, height );
 
-    if(bmp->funcs && bmp->funcs->pSetBitmapBits) {
-
-        TRACE("Calling device specific BitmapBits\n");
-        ret = bmp->funcs->pSetBitmapBits(hbitmap, bits, count);
-    } else {
-
-        if(!bmp->bitmap.bmBits) /* Alloc enough for entire bitmap */
-	    bmp->bitmap.bmBits = HeapAlloc( GetProcessHeap(), 0, count );
-	if(!bmp->bitmap.bmBits) {
-	    WARN("Unable to allocate bit buffer\n");
-	    ret = 0;
-	} else {
-	    memcpy(bmp->bitmap.bmBits, bits, count);
-	    ret = count;
-	}
-    }
-
+    ret = bmp->funcs->pSetBitmapBits( hbitmap, bits, count );
     GDI_ReleaseObj( hbitmap );
     return ret;
 }
@@ -512,15 +529,18 @@ HBITMAP BITMAP_CopyBitmap(HBITMAP hbitmap)
 {
     HBITMAP res;
     DIBSECTION dib;
-    DWORD size;
+    BITMAPOBJ *bmp = GDI_GetObjPtr( hbitmap, OBJ_BITMAP );
 
-    if (!(size = GetObjectW( hbitmap, sizeof(dib), &dib ))) return 0;
-
-    if (size == sizeof(DIBSECTION))
+    if (!bmp) return 0;
+    if (bmp->dib)
     {
         void *bits;
         BITMAPINFO *bi;
-        HDC dc = CreateCompatibleDC( NULL );
+        HDC dc;
+
+        dib = *bmp->dib;
+        GDI_ReleaseObj( hbitmap );
+        dc = CreateCompatibleDC( NULL );
 
         if (!dc) return 0;
         if (!(bi = HeapAlloc(GetProcessHeap(), 0, FIELD_OFFSET( BITMAPINFO, bmiColors[256] ))))
@@ -532,6 +552,7 @@ HBITMAP BITMAP_CopyBitmap(HBITMAP hbitmap)
 
         /* Get the color table or the color masks */
         GetDIBits( dc, hbitmap, 0, 0, NULL, bi, DIB_RGB_COLORS );
+        bi->bmiHeader.biHeight = dib.dsBmih.biHeight;
 
         res = CreateDIBSection( dc, bi, DIB_RGB_COLORS, &bits, NULL, 0 );
         if (res) SetDIBits( dc, res, 0, dib.dsBm.bmHeight, dib.dsBm.bmBits, bi, DIB_RGB_COLORS );
@@ -539,13 +560,16 @@ HBITMAP BITMAP_CopyBitmap(HBITMAP hbitmap)
         DeleteDC( dc );
         return res;
     }
+    dib.dsBm = bmp->bitmap;
+    dib.dsBm.bmBits = NULL;
+    GDI_ReleaseObj( hbitmap );
 
     res = CreateBitmapIndirect( &dib.dsBm );
     if(res) {
         char *buf = HeapAlloc( GetProcessHeap(), 0, dib.dsBm.bmWidthBytes * dib.dsBm.bmHeight );
         GetBitmapBits (hbitmap, dib.dsBm.bmWidthBytes * dib.dsBm.bmHeight, buf);
         SetBitmapBits (res, dib.dsBm.bmWidthBytes * dib.dsBm.bmHeight, buf);
-	HeapFree( GetProcessHeap(), 0, buf );
+        HeapFree( GetProcessHeap(), 0, buf );
     }
     return res;
 }
@@ -558,27 +582,37 @@ HBITMAP BITMAP_CopyBitmap(HBITMAP hbitmap)
  * bitmap is selected into a device to initialize the bitmap function
  * table.
  */
-BOOL BITMAP_SetOwnerDC( HBITMAP hbitmap, DC *dc )
+BOOL BITMAP_SetOwnerDC( HBITMAP hbitmap, PHYSDEV physdev )
 {
     BITMAPOBJ *bitmap;
-    BOOL ret;
+    BOOL ret = TRUE;
 
     /* never set the owner of the stock bitmap since it can be selected in multiple DCs */
     if (hbitmap == GetStockObject(DEFAULT_BITMAP)) return TRUE;
 
     if (!(bitmap = GDI_GetObjPtr( hbitmap, OBJ_BITMAP ))) return FALSE;
 
-    ret = TRUE;
-    if (!bitmap->funcs)  /* not owned by a DC yet */
+    if (!bitmap->dib && bitmap->funcs != physdev->funcs)
     {
-        if (dc->funcs->pCreateBitmap) ret = dc->funcs->pCreateBitmap( dc->physDev, hbitmap,
-                                                                      bitmap->bitmap.bmBits );
-        if (ret) bitmap->funcs = dc->funcs;
-    }
-    else if (bitmap->funcs != dc->funcs)
-    {
-        FIXME( "Trying to select bitmap %p in different DC type\n", hbitmap );
-        ret = FALSE;
+        /* we can only change from the null driver to some other driver */
+        if (bitmap->funcs == &null_driver)
+        {
+            if (physdev->funcs->pCreateBitmap)
+            {
+                ret = physdev->funcs->pCreateBitmap( physdev, hbitmap, bitmap->bitmap.bmBits );
+                if (ret) bitmap->funcs = physdev->funcs;
+            }
+            else
+            {
+                WARN( "Trying to select bitmap %p in DC that doesn't support it\n", hbitmap );
+                ret = FALSE;
+            }
+        }
+        else
+        {
+            FIXME( "Trying to select bitmap %p in different DC type\n", hbitmap );
+            ret = FALSE;
+        }
     }
     GDI_ReleaseObj( hbitmap );
     return ret;
@@ -593,6 +627,7 @@ static HGDIOBJ BITMAP_SelectObject( HGDIOBJ handle, HDC hdc )
     HGDIOBJ ret;
     BITMAPOBJ *bitmap;
     DC *dc;
+    PHYSDEV physdev = NULL, old_physdev = NULL;
 
     if (!(dc = get_dc_ptr( hdc ))) return 0;
 
@@ -618,14 +653,25 @@ static HGDIOBJ BITMAP_SelectObject( HGDIOBJ handle, HDC hdc )
         goto done;
     }
 
-    if (!bitmap->funcs && !BITMAP_SetOwnerDC( handle, dc ))
+    old_physdev = GET_DC_PHYSDEV( dc, pSelectBitmap );
+    if(old_physdev == &dc->dibdrv.dev)
+        pop_dc_driver( dc, old_physdev );
+
+    if(bitmap->dib)
+    {
+        physdev = &dc->dibdrv.dev;
+        push_dc_driver( dc, physdev, physdev->funcs );
+    }
+    else
+        physdev = GET_DC_PHYSDEV( dc, pSelectBitmap );
+
+    if (!BITMAP_SetOwnerDC( handle, physdev ))
     {
         GDI_ReleaseObj( handle );
         ret = 0;
         goto done;
     }
-
-    if (dc->funcs->pSelectBitmap && !dc->funcs->pSelectBitmap( dc->physDev, handle ))
+    if (!physdev->funcs->pSelectBitmap( physdev, handle ))
     {
         GDI_ReleaseObj( handle );
         ret = 0;
@@ -646,6 +692,11 @@ static HGDIOBJ BITMAP_SelectObject( HGDIOBJ handle, HDC hdc )
     }
 
  done:
+    if(!ret)
+    {
+        if(physdev == &dc->dibdrv.dev) pop_dc_driver( dc, physdev );
+        if(old_physdev == &dc->dibdrv.dev) push_dc_driver( dc, old_physdev, old_physdev->funcs );
+    }
     release_dc_ptr( dc );
     return ret;
 }
@@ -663,7 +714,7 @@ static BOOL BITMAP_DeleteObject( HGDIOBJ handle )
     funcs = bmp->funcs;
     GDI_ReleaseObj( handle );
 
-    if (funcs && funcs->pDeleteBitmap) funcs->pDeleteBitmap( handle );
+    funcs->pDeleteBitmap( handle );
 
     if (!(bmp = free_gdi_handle( handle ))) return FALSE;
 

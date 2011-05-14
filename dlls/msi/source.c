@@ -330,7 +330,6 @@ UINT WINAPI MsiSourceListEnumMediaDisksW(LPCWSTR szProductCodeOrPatchCode,
         else
             size = lstrlenW(ptr);
 
-        size = lstrlenW(ptr);
         if (size >= *pcchDiskPrompt)
             r = ERROR_MORE_DATA;
         else if (szDiskPrompt)
@@ -1129,6 +1128,12 @@ UINT WINAPI MsiSourceListAddSourceExW( LPCWSTR szProduct, LPCWSTR szUserSid,
         ERR("unknown media type: %08x\n", dwOptions);
         RegCloseKey(sourcekey);
         return ERROR_FUNCTION_FAILED;
+    }
+    if (rc != ERROR_SUCCESS)
+    {
+        ERR("can't open subkey %u\n", rc);
+        RegCloseKey(sourcekey);
+        return rc;
     }
 
     postfix = (dwOptions & MSISOURCETYPE_NETWORK) ? szBackSlash : szForwardSlash;

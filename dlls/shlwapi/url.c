@@ -42,6 +42,21 @@ HRESULT WINAPI MLBuildResURLW(LPCWSTR,HMODULE,DWORD,LPCWSTR,LPWSTR,DWORD);
 
 WINE_DEFAULT_DEBUG_CHANNEL(shell);
 
+static inline WCHAR *heap_strdupAtoW(const char *str)
+{
+    LPWSTR ret = NULL;
+
+    if(str) {
+        DWORD len;
+
+        len = MultiByteToWideChar(CP_ACP, 0, str, -1, NULL, 0);
+        ret = HeapAlloc(GetProcessHeap(), 0, len*sizeof(WCHAR));
+        MultiByteToWideChar(CP_ACP, 0, str, -1, ret, len);
+    }
+
+    return ret;
+}
+
 /* The following schemes were identified in the native version of
  * SHLWAPI.DLL version 5.50
  */
@@ -234,7 +249,6 @@ HRESULT WINAPI UrlCanonicalizeA(LPCSTR pszUrl, LPSTR pszCanonicalized,
 {
     LPWSTR url, canonical;
     HRESULT ret;
-    DWORD   len;
 
     TRACE("(%s, %p, %p, 0x%08x) *pcchCanonicalized: %d\n", debugstr_a(pszUrl), pszCanonicalized,
         pcchCanonicalized, dwFlags, pcchCanonicalized ? *pcchCanonicalized : -1);
@@ -242,8 +256,7 @@ HRESULT WINAPI UrlCanonicalizeA(LPCSTR pszUrl, LPSTR pszCanonicalized,
     if(!pszUrl || !pszCanonicalized || !pcchCanonicalized || !*pcchCanonicalized)
 	return E_INVALIDARG;
 
-    len = strlen(pszUrl)+1;
-    url = HeapAlloc(GetProcessHeap(), 0, len*sizeof(WCHAR));
+    url = heap_strdupAtoW(pszUrl);
     canonical = HeapAlloc(GetProcessHeap(), 0, *pcchCanonicalized*sizeof(WCHAR));
     if(!url || !canonical) {
         HeapFree(GetProcessHeap(), 0, url);
@@ -251,13 +264,12 @@ HRESULT WINAPI UrlCanonicalizeA(LPCSTR pszUrl, LPSTR pszCanonicalized,
         return E_OUTOFMEMORY;
     }
 
-    MultiByteToWideChar(0, 0, pszUrl, -1, url, len);
-
     ret = UrlCanonicalizeW(url, canonical, pcchCanonicalized, dwFlags);
     if(ret == S_OK)
         WideCharToMultiByte(0, 0, canonical, -1, pszCanonicalized,
                 *pcchCanonicalized+1, 0, 0);
 
+    HeapFree(GetProcessHeap(), 0, url);
     HeapFree(GetProcessHeap(), 0, canonical);
     return ret;
 }
@@ -1060,7 +1072,7 @@ HRESULT WINAPI UrlEscapeW(
     LPCWSTR src;
     DWORD needed = 0, ret;
     BOOL stop_escaping = FALSE;
-    WCHAR next[5], *dst = pszEscaped;
+    WCHAR next[5], *dst = pszEscaped, *dst_ptr = NULL;
     INT len;
     PARSEDURLW parsed_url;
     DWORD int_flags;
@@ -1080,7 +1092,7 @@ HRESULT WINAPI UrlEscapeW(
         FIXME("Unimplemented flags: %08x\n", dwFlags);
 
     if(pszUrl == pszEscaped) {
-        dst = HeapAlloc(GetProcessHeap(), 0, *pcchEscaped*sizeof(WCHAR));
+        dst_ptr = dst = HeapAlloc(GetProcessHeap(), 0, *pcchEscaped*sizeof(WCHAR));
         if(!dst)
             return E_OUTOFMEMORY;
     }
@@ -1212,7 +1224,7 @@ HRESULT WINAPI UrlEscapeW(
     *pcchEscaped = needed;
 
     if(pszUrl == pszEscaped)
-        HeapFree(GetProcessHeap(), 0, dst);
+        HeapFree(GetProcessHeap(), 0, dst_ptr);
     return ret;
 }
 
@@ -2037,7 +2049,8 @@ static LPCWSTR  URL_ScanID(LPCWSTR start, LPDWORD size, WINE_URL_SCAN_TYPE type)
 	    if (isalnumW(*start) ||
                 (*start == '-') ||
                 (*start == '.') ||
-                (*start == ' ') ) {
+                (*start == ' ') ||
+                (*start == '*') ) {
 		start++;
 		(*size)++;
 	    }

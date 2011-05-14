@@ -266,6 +266,8 @@ static void doDebugger(int argc, char** argv)
 
 static void crash_and_debug(HKEY hkey, const char* argv0, const char* dbgtasks)
 {
+    static BOOL skip_crash_and_debug = FALSE;
+    BOOL bRet;
     DWORD ret;
     HANDLE start_event, done_event;
     char* cmd;
@@ -276,6 +278,13 @@ static void crash_and_debug(HKEY hkey, const char* argv0, const char* dbgtasks)
     DWORD exit_code;
     crash_blackbox_t crash_blackbox;
     debugger_blackbox_t dbg_blackbox;
+    DWORD wait_code;
+
+    if (skip_crash_and_debug)
+    {
+        win_skip("Skipping crash_and_debug\n");
+        return;
+    }
 
     ret=RegSetValueExA(hkey, "auto", 0, REG_SZ, (BYTE*)"1", 2);
     ok(ret == ERROR_SUCCESS, "unable to set AeDebug/auto: ret=%d\n", ret);
@@ -303,8 +312,24 @@ static void crash_and_debug(HKEY hkey, const char* argv0, const char* dbgtasks)
 
     /* The process exits... */
     trace("waiting for child exit...\n");
-    ok(WaitForSingleObject(info.hProcess, 60000) == WAIT_OBJECT_0, "Timed out waiting for the child to crash\n");
-    ok(GetExitCodeProcess(info.hProcess, &exit_code), "GetExitCodeProcess failed: err=%d\n", GetLastError());
+    wait_code = WaitForSingleObject(info.hProcess, 30000);
+#if defined(_WIN64) && defined(__MINGW32__)
+    /* Mingw x64 doesn't output proper unwind info */
+    skip_crash_and_debug = broken(wait_code == WAIT_TIMEOUT);
+    if (skip_crash_and_debug)
+    {
+        TerminateProcess(info.hProcess, WAIT_TIMEOUT);
+        WaitForSingleObject(info.hProcess, 5000);
+        CloseHandle(info.hProcess);
+        assert(DeleteFileA(dbglog) != 0);
+        assert(DeleteFileA(childlog) != 0);
+        win_skip("Giving up on child process\n");
+        return;
+    }
+#endif
+    ok(wait_code == WAIT_OBJECT_0, "Timed out waiting for the child to crash\n");
+    bRet = GetExitCodeProcess(info.hProcess, &exit_code);
+    ok(bRet, "GetExitCodeProcess failed: err=%d\n", GetLastError());
     if (strstr(dbgtasks, "code2"))
     {
         /* If, after attaching to the debuggee, the debugger exits without
@@ -328,7 +353,19 @@ static void crash_and_debug(HKEY hkey, const char* argv0, const char* dbgtasks)
         ok(SetEvent(start_event), "SetEvent(start_event) failed\n");
 
     trace("waiting for the debugger...\n");
-    ok(WaitForSingleObject(done_event, 60000) == WAIT_OBJECT_0, "Timed out waiting for the debugger\n");
+    wait_code = WaitForSingleObject(done_event, 5000);
+#if defined(_WIN64) && defined(__MINGW32__)
+    /* Mingw x64 doesn't output proper unwind info */
+    skip_crash_and_debug = broken(wait_code == WAIT_TIMEOUT);
+    if (skip_crash_and_debug)
+    {
+        assert(DeleteFileA(dbglog) != 0);
+        assert(DeleteFileA(childlog) != 0);
+        win_skip("Giving up on debugger\n");
+        return;
+    }
+#endif
+    ok(wait_code == WAIT_OBJECT_0, "Timed out waiting for the debugger\n");
 
     assert(load_blackbox(childlog, &crash_blackbox, sizeof(crash_blackbox)));
     assert(load_blackbox(dbglog, &dbg_blackbox, sizeof(dbg_blackbox)));
@@ -346,6 +383,7 @@ static void crash_and_debug(HKEY hkey, const char* argv0, const char* dbgtasks)
 
 static void crash_and_winedbg(HKEY hkey, const char* argv0)
 {
+    BOOL bRet;
     DWORD ret;
     char* cmd;
     PROCESS_INFORMATION	info;
@@ -369,7 +407,8 @@ static void crash_and_winedbg(HKEY hkey, const char* argv0)
 
     trace("waiting for child exit...\n");
     ok(WaitForSingleObject(info.hProcess, 60000) == WAIT_OBJECT_0, "Timed out waiting for the child to crash\n");
-    ok(GetExitCodeProcess(info.hProcess, &exit_code), "GetExitCodeProcess failed: err=%d\n", GetLastError());
+    bRet = GetExitCodeProcess(info.hProcess, &exit_code);
+    ok(bRet, "GetExitCodeProcess failed: err=%d\n", GetLastError());
     ok(exit_code == STATUS_ACCESS_VIOLATION, "exit code = %08x\n", exit_code);
     CloseHandle(info.hProcess);
 }
@@ -411,6 +450,7 @@ static void test_ExitCode(void)
         ok(0, "could not open the AeDebug key: %d\n", ret);
         return;
     }
+    else debugger_value.data = NULL;
 
     if (debugger_value.data && debugger_value.type == REG_SZ &&
         strstr((char*)debugger_value.data, "winedbg --auto"))

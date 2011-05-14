@@ -28,17 +28,21 @@
 #include "winreg.h"
 #include "winnls.h"
 #include "shlwapi.h"
-#include "wine/debug.h"
 #include "msi.h"
 #include "msidefs.h"
 #include "msiquery.h"
 #include "msipriv.h"
+#include "msiserver.h"
 #include "wincrypt.h"
 #include "winver.h"
 #include "winuser.h"
 #include "shlobj.h"
 #include "shobjidl.h"
 #include "objidl.h"
+#include "wintrust.h"
+#include "softpub.h"
+
+#include "wine/debug.h"
 #include "wine/unicode.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(msi);
@@ -299,13 +303,14 @@ done:
     return r;
 }
 
-static UINT get_patch_product_codes( LPCWSTR szPatchPackage, WCHAR **product_codes )
+
+static UINT get_patch_product_codes( LPCWSTR szPatchPackage, WCHAR ***product_codes )
 {
     MSIHANDLE patch, info = 0;
     UINT r, type;
     DWORD size;
     static WCHAR empty[] = {0};
-    WCHAR *codes;
+    WCHAR *codes = NULL;
 
     r = MsiOpenDatabaseW( szPatchPackage, MSIDBOPEN_READONLY, &patch );
     if (r != ERROR_SUCCESS)
@@ -332,23 +337,22 @@ static UINT get_patch_product_codes( LPCWSTR szPatchPackage, WCHAR **product_cod
     }
 
     r = MsiSummaryInfoGetPropertyW( info, PID_TEMPLATE, &type, NULL, NULL, codes, &size );
-    if (r != ERROR_SUCCESS)
-        msi_free( codes );
-    else
-        *product_codes = codes;
+    if (r == ERROR_SUCCESS)
+        *product_codes = msi_split_string( codes, ';' );
 
 done:
     MsiCloseHandle( info );
     MsiCloseHandle( patch );
+    msi_free( codes );
     return r;
 }
 
 static UINT MSI_ApplyPatchW(LPCWSTR szPatchPackage, LPCWSTR szProductCode, LPCWSTR szCommandLine)
 {
-    UINT r;
+    UINT r, i;
     DWORD size;
     LPCWSTR cmd_ptr = szCommandLine;
-    LPWSTR beg, end, cmd, codes = NULL;
+    LPWSTR cmd, *codes = NULL;
     BOOL succeeded = FALSE;
 
     static const WCHAR fmt[] = {'%','s',' ','P','A','T','C','H','=','"','%','s','"',0};
@@ -376,17 +380,14 @@ static UINT MSI_ApplyPatchW(LPCWSTR szPatchPackage, LPCWSTR szProductCode, LPCWS
         r = MsiConfigureProductExW(szProductCode, INSTALLLEVEL_DEFAULT, INSTALLSTATE_DEFAULT, cmd);
     else
     {
-        beg = codes;
-        while ((end = strchrW(beg, '}')))
+        for (i = 0; codes[i]; i++)
         {
-            *(end + 1) = '\0';
-            r = MsiConfigureProductExW(beg, INSTALLLEVEL_DEFAULT, INSTALLSTATE_DEFAULT, cmd);
+            r = MsiConfigureProductExW(codes[i], INSTALLLEVEL_DEFAULT, INSTALLSTATE_DEFAULT, cmd);
             if (r == ERROR_SUCCESS)
             {
                 TRACE("patch applied\n");
                 succeeded = TRUE;
             }
-            beg = end + 2;
         }
 
         if (succeeded)
@@ -684,7 +685,7 @@ UINT WINAPI MsiConfigureProductExW(LPCWSTR szProduct, int iInstallLevel,
 
     static const WCHAR szInstalled[] = {
         ' ','I','n','s','t','a','l','l','e','d','=','1',0};
-    static const WCHAR szInstallLevel[] = {
+    static const WCHAR szMaxInstallLevel[] = {
         ' ','I','N','S','T','A','L','L','L','E','V','E','L','=','3','2','7','6','7',0};
     static const WCHAR szRemoveAll[] = {
         ' ','R','E','M','O','V','E','=','A','L','L',0};
@@ -718,7 +719,7 @@ UINT WINAPI MsiConfigureProductExW(LPCWSTR szProduct, int iInstallLevel,
         sz += lstrlenW(szCommandLine);
 
     if (eInstallState != INSTALLSTATE_DEFAULT)
-        sz += lstrlenW(szInstallLevel);
+        sz += lstrlenW(szMaxInstallLevel);
 
     if (eInstallState == INSTALLSTATE_ABSENT)
         sz += lstrlenW(szRemoveAll);
@@ -738,7 +739,7 @@ UINT WINAPI MsiConfigureProductExW(LPCWSTR szProduct, int iInstallLevel,
         lstrcpyW(commandline,szCommandLine);
 
     if (eInstallState != INSTALLSTATE_DEFAULT)
-        lstrcatW(commandline, szInstallLevel);
+        lstrcatW(commandline, szMaxInstallLevel);
 
     if (eInstallState == INSTALLSTATE_ABSENT)
         lstrcatW(commandline, szRemoveAll);
@@ -1571,11 +1572,11 @@ UINT WINAPI MsiGetPatchInfoExW(LPCWSTR szPatchCode, LPCWSTR szProductCode,
 
     r = ERROR_UNKNOWN_PATCH;
 
-    res = RegOpenKeyExW(udprod, szPatches, 0, KEY_READ, &patches);
+    res = RegOpenKeyExW(udprod, szPatches, 0, KEY_WOW64_64KEY|KEY_READ, &patches);
     if (res != ERROR_SUCCESS)
         goto done;
 
-    res = RegOpenKeyExW(patches, squished_patch, 0, KEY_READ, &patch);
+    res = RegOpenKeyExW(patches, squished_patch, 0, KEY_WOW64_64KEY|KEY_READ, &patch);
     if (res != ERROR_SUCCESS)
         goto done;
 
@@ -1585,7 +1586,7 @@ UINT WINAPI MsiGetPatchInfoExW(LPCWSTR szPatchCode, LPCWSTR szProductCode,
                                   &prod, FALSE) != ERROR_SUCCESS)
             goto done;
 
-        res = RegOpenKeyExW(prod, szPatches, 0, KEY_ALL_ACCESS, &prodpatches);
+        res = RegOpenKeyExW(prod, szPatches, 0, KEY_WOW64_64KEY|KEY_ALL_ACCESS, &prodpatches);
         if (res != ERROR_SUCCESS)
             goto done;
 
@@ -1794,16 +1795,134 @@ UINT WINAPI MsiEnableLogW(DWORD dwLogMode, LPCWSTR szLogFile, DWORD attributes)
     return ERROR_SUCCESS;
 }
 
-UINT WINAPI MsiEnumComponentCostsW(MSIHANDLE hInstall, LPCWSTR szComponent,
-                                   DWORD dwIndex, INSTALLSTATE iState,
-                                   LPWSTR lpDriveBuf, DWORD *pcchDriveBuf,
-                                   int *piCost, int *pTempCost)
+UINT WINAPI MsiEnumComponentCostsA( MSIHANDLE handle, LPCSTR component, DWORD index,
+                                    INSTALLSTATE state, LPSTR drive, DWORD *buflen,
+                                    int *cost, int *temp )
 {
-    FIXME("(%d, %s, %d, %d, %p, %p, %p %p): stub!\n", hInstall,
-          debugstr_w(szComponent), dwIndex, iState, lpDriveBuf,
-          pcchDriveBuf, piCost, pTempCost);
+    UINT r;
+    DWORD len;
+    WCHAR *driveW, *componentW = NULL;
 
-    return ERROR_NO_MORE_ITEMS;
+    TRACE("%d, %s, %u, %d, %p, %p, %p %p\n", handle, debugstr_a(component), index,
+          state, drive, buflen, cost, temp);
+
+    if (!drive || !buflen) return ERROR_INVALID_PARAMETER;
+    if (component && !(componentW = strdupAtoW( component ))) return ERROR_OUTOFMEMORY;
+
+    len = *buflen;
+    if (!(driveW = msi_alloc( len * sizeof(WCHAR) )))
+    {
+        msi_free( componentW );
+        return ERROR_OUTOFMEMORY;
+    }
+    r = MsiEnumComponentCostsW( handle, componentW, index, state, driveW, buflen, cost, temp );
+    if (!r)
+    {
+        WideCharToMultiByte( CP_ACP, 0, driveW, -1, drive, len, NULL, NULL );
+    }
+    msi_free( componentW );
+    msi_free( driveW );
+    return r;
+}
+
+UINT WINAPI MsiEnumComponentCostsW( MSIHANDLE handle, LPCWSTR component, DWORD index,
+                                    INSTALLSTATE state, LPWSTR drive, DWORD *buflen,
+                                    int *cost, int *temp )
+{
+    UINT r = ERROR_NO_MORE_ITEMS;
+    MSICOMPONENT *comp = NULL;
+    MSIPACKAGE *package;
+    MSIFILE *file;
+    STATSTG stat = {0};
+    WCHAR path[MAX_PATH];
+
+    TRACE("%d, %s, %u, %d, %p, %p, %p %p\n", handle, debugstr_w(component), index,
+          state, drive, buflen, cost, temp);
+
+    if (!drive || !buflen || !cost || !temp) return ERROR_INVALID_PARAMETER;
+    if (!(package = msihandle2msiinfo( handle, MSIHANDLETYPE_PACKAGE )))
+    {
+        HRESULT hr;
+        IWineMsiRemotePackage *remote_package;
+        BSTR bname = NULL;
+
+        if (!(remote_package = (IWineMsiRemotePackage *)msi_get_remote( handle )))
+            return ERROR_INVALID_HANDLE;
+
+        if (component && !(bname = SysAllocString( component )))
+        {
+            IWineMsiRemotePackage_Release( remote_package );
+            return ERROR_OUTOFMEMORY;
+        }
+        hr = IWineMsiRemotePackage_EnumComponentCosts( remote_package, bname, index, state, drive, buflen, cost, temp );
+        IWineMsiRemotePackage_Release( remote_package );
+        SysFreeString( bname );
+        if (FAILED(hr))
+        {
+            if (HRESULT_FACILITY(hr) == FACILITY_WIN32) return HRESULT_CODE(hr);
+            return ERROR_FUNCTION_FAILED;
+        }
+        return ERROR_SUCCESS;
+    }
+
+    if (!msi_get_property_int( package->db, szCostingComplete, 0 ))
+    {
+        msiobj_release( &package->hdr );
+        return ERROR_FUNCTION_NOT_CALLED;
+    }
+    if (component && component[0] && !(comp = msi_get_loaded_component( package, component )))
+    {
+        msiobj_release( &package->hdr );
+        return ERROR_UNKNOWN_COMPONENT;
+    }
+    if (*buflen < 3)
+    {
+        *buflen = 2;
+        msiobj_release( &package->hdr );
+        return ERROR_MORE_DATA;
+    }
+    if (index)
+    {
+        msiobj_release( &package->hdr );
+        return ERROR_NO_MORE_ITEMS;
+    }
+
+    drive[0] = 0;
+    *cost = *temp = 0;
+    GetWindowsDirectoryW( path, MAX_PATH );
+    if (component && component[0])
+    {
+        if (comp->assembly && !comp->assembly->application) *temp = comp->Cost;
+        if (!comp->Enabled || !comp->KeyPath)
+        {
+            *cost = 0;
+            drive[0] = path[0];
+            drive[1] = ':';
+            drive[2] = 0;
+            *buflen = 2;
+            r = ERROR_SUCCESS;
+        }
+        else if ((file = msi_get_loaded_file( package, comp->KeyPath )))
+        {
+            *cost = max( 8, comp->Cost / 512 );
+            drive[0] = file->TargetPath[0];
+            drive[1] = ':';
+            drive[2] = 0;
+            *buflen = 2;
+            r = ERROR_SUCCESS;
+        }
+    }
+    else if (IStorage_Stat( package->db->storage, &stat, STATFLAG_NONAME ) == S_OK)
+    {
+        *temp = max( 8, stat.cbSize.QuadPart / 512 );
+        drive[0] = path[0];
+        drive[1] = ':';
+        drive[2] = 0;
+        *buflen = 2;
+        r = ERROR_SUCCESS;
+    }
+    msiobj_release( &package->hdr );
+    return r;
 }
 
 UINT WINAPI MsiQueryComponentStateA(LPCSTR szProductCode,
@@ -1977,9 +2096,6 @@ INSTALLSTATE WINAPI MsiQueryProductStateW(LPCWSTR szProduct)
     HKEY prodkey = 0, userdata = 0;
     DWORD val;
     UINT r;
-
-    static const WCHAR szWindowsInstaller[] = {
-        'W','i','n','d','o','w','s','I','n','s','t','a','l','l','e','r',0};
 
     TRACE("%s\n", debugstr_w(szProduct));
 
@@ -2264,22 +2380,82 @@ UINT WINAPI MsiProvideComponentFromDescriptorW( LPCWSTR szDescriptor,
     return ERROR_CALL_NOT_IMPLEMENTED;
 }
 
-HRESULT WINAPI MsiGetFileSignatureInformationA( LPCSTR szSignedObjectPath,
-                DWORD dwFlags, PCCERT_CONTEXT* ppcCertContext, LPBYTE pbHashData,
-                LPDWORD pcbHashData)
+HRESULT WINAPI MsiGetFileSignatureInformationA( LPCSTR path, DWORD flags, PCCERT_CONTEXT *cert,
+                                                LPBYTE hash, LPDWORD hashlen )
 {
-    FIXME("%s %08x %p %p %p\n", debugstr_a(szSignedObjectPath), dwFlags,
-          ppcCertContext, pbHashData, pcbHashData);
-    return ERROR_CALL_NOT_IMPLEMENTED;
+    UINT r;
+    WCHAR *pathW = NULL;
+
+    TRACE("%s %08x %p %p %p\n", debugstr_a(path), flags, cert, hash, hashlen);
+
+    if (path && !(pathW = strdupAtoW( path ))) return ERROR_OUTOFMEMORY;
+    r = MsiGetFileSignatureInformationW( pathW, flags, cert, hash, hashlen );
+    msi_free( pathW );
+    return r;
 }
 
-HRESULT WINAPI MsiGetFileSignatureInformationW( LPCWSTR szSignedObjectPath,
-                DWORD dwFlags, PCCERT_CONTEXT* ppcCertContext, LPBYTE pbHashData,
-                LPDWORD pcbHashData)
+HRESULT WINAPI MsiGetFileSignatureInformationW( LPCWSTR path, DWORD flags, PCCERT_CONTEXT *cert,
+                                                LPBYTE hash, LPDWORD hashlen )
 {
-    FIXME("%s %08x %p %p %p\n", debugstr_w(szSignedObjectPath), dwFlags,
-          ppcCertContext, pbHashData, pcbHashData);
-    return ERROR_CALL_NOT_IMPLEMENTED;
+    static GUID generic_verify_v2 = WINTRUST_ACTION_GENERIC_VERIFY_V2;
+    HRESULT hr;
+    WINTRUST_DATA data;
+    WINTRUST_FILE_INFO info;
+    CRYPT_PROVIDER_SGNR *signer;
+    CRYPT_PROVIDER_CERT *provider;
+
+    TRACE("%s %08x %p %p %p\n", debugstr_w(path), flags, cert, hash, hashlen);
+
+    if (!path || !cert) return E_INVALIDARG;
+
+    info.cbStruct       = sizeof(info);
+    info.pcwszFilePath  = path;
+    info.hFile          = NULL;
+    info.pgKnownSubject = NULL;
+
+    data.cbStruct            = sizeof(data);
+    data.pPolicyCallbackData = NULL;
+    data.pSIPClientData      = NULL;
+    data.dwUIChoice          = WTD_UI_NONE;
+    data.fdwRevocationChecks = WTD_REVOKE_WHOLECHAIN;
+    data.dwUnionChoice       = WTD_CHOICE_FILE;
+    data.u.pFile             = &info;
+    data.dwStateAction       = WTD_STATEACTION_VERIFY;
+    data.hWVTStateData       = NULL;
+    data.pwszURLReference    = NULL;
+    data.dwProvFlags         = 0;
+    data.dwUIContext         = WTD_UICONTEXT_INSTALL;
+    hr = WinVerifyTrustEx( INVALID_HANDLE_VALUE, &generic_verify_v2, &data );
+    if (FAILED(hr)) goto done;
+
+    if (!(signer = WTHelperGetProvSignerFromChain( data.hWVTStateData, 0, FALSE, 0 )))
+    {
+        hr = TRUST_E_NOSIGNATURE;
+        goto done;
+    }
+    if (hash)
+    {
+        DWORD len = signer->psSigner->EncryptedHash.cbData;
+        if (*hashlen < len)
+        {
+            *hashlen = len;
+            hr = HRESULT_FROM_WIN32(ERROR_MORE_DATA);
+            goto done;
+        }
+        memcpy( hash, signer->psSigner->EncryptedHash.pbData, len );
+        *hashlen = len;
+    }
+    if (!(provider = WTHelperGetProvCertFromChain( signer, 0 )))
+    {
+        hr = TRUST_E_PROVIDER_UNKNOWN;
+        goto done;
+    }
+    *cert = CertDuplicateCertificateContext( provider->pCert );
+
+done:
+    data.dwStateAction = WTD_STATEACTION_CLOSE;
+    WinVerifyTrustEx( INVALID_HANDLE_VALUE, &generic_verify_v2, &data );
+    return hr;
 }
 
 /******************************************************************
@@ -3374,7 +3550,6 @@ end:
  */
 UINT WINAPI MsiConfigureFeatureW(LPCWSTR szProduct, LPCWSTR szFeature, INSTALLSTATE eInstallState)
 {
-    static const WCHAR szCostInit[] = { 'C','o','s','t','I','n','i','t','i','a','l','i','z','e',0 };
     MSIPACKAGE *package = NULL;
     UINT r;
     WCHAR sourcepath[MAX_PATH], filename[MAX_PATH];
@@ -3416,7 +3591,7 @@ UINT WINAPI MsiConfigureFeatureW(LPCWSTR szProduct, LPCWSTR szFeature, INSTALLST
 
     MsiSetInternalUI( INSTALLUILEVEL_BASIC, NULL );
 
-    r = ACTION_PerformUIAction( package, szCostInit, -1 );
+    r = ACTION_PerformUIAction( package, szCostInitialize, -1 );
     if (r != ERROR_SUCCESS)
         goto end;
 

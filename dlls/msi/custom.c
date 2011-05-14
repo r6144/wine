@@ -41,8 +41,6 @@
 WINE_DEFAULT_DEBUG_CHANNEL(msi);
 
 #define CUSTOM_ACTION_TYPE_MASK 0x3F
-static const WCHAR c_collen[] = {'C',':','\\',0};
-static const WCHAR cszTempFolder[]= {'T','e','m','p','F','o','l','d','e','r',0};
 
 typedef struct tagMSIRUNNINGACTION
 {
@@ -91,6 +89,62 @@ static CRITICAL_SECTION msi_custom_action_cs = { &msi_custom_action_cs_debug, -1
 
 static struct list msi_pending_custom_actions = LIST_INIT( msi_pending_custom_actions );
 
+static UINT schedule_action( MSIPACKAGE *package, UINT script, const WCHAR *action )
+{
+    UINT count;
+    WCHAR **newbuf = NULL;
+
+    if (script >= TOTAL_SCRIPTS)
+    {
+        FIXME("Unknown script requested %u\n", script);
+        return ERROR_FUNCTION_FAILED;
+    }
+    TRACE("Scheduling action %s in script %u\n", debugstr_w(action), script);
+
+    count = package->script->ActionCount[script];
+    package->script->ActionCount[script]++;
+    if (count != 0) newbuf = msi_realloc( package->script->Actions[script],
+                                          package->script->ActionCount[script] * sizeof(WCHAR *) );
+    else newbuf = msi_alloc( sizeof(WCHAR *) );
+
+    newbuf[count] = strdupW( action );
+    package->script->Actions[script] = newbuf;
+    return ERROR_SUCCESS;
+}
+
+UINT msi_register_unique_action( MSIPACKAGE *package, const WCHAR *action )
+{
+    UINT count;
+    WCHAR **newbuf = NULL;
+
+    if (!package->script) return FALSE;
+
+    TRACE("Registering %s as unique action\n", debugstr_w(action));
+
+    count = package->script->UniqueActionsCount;
+    package->script->UniqueActionsCount++;
+    if (count != 0) newbuf = msi_realloc( package->script->UniqueActions,
+                                          package->script->UniqueActionsCount * sizeof(WCHAR *) );
+    else newbuf = msi_alloc( sizeof(WCHAR *) );
+
+    newbuf[count] = strdupW( action );
+    package->script->UniqueActions = newbuf;
+    return ERROR_SUCCESS;
+}
+
+BOOL msi_action_is_unique( const MSIPACKAGE *package, const WCHAR *action )
+{
+    UINT i;
+
+    if (!package->script) return FALSE;
+
+    for (i = 0; i < package->script->UniqueActionsCount; i++)
+    {
+        if (!strcmpW( package->script->UniqueActions[i], action )) return TRUE;
+    }
+    return FALSE;
+}
+
 static BOOL check_execution_scheduling_options(MSIPACKAGE *package, LPCWSTR action, UINT options)
 {
     if (!package->script)
@@ -117,13 +171,13 @@ static BOOL check_execution_scheduling_options(MSIPACKAGE *package, LPCWSTR acti
     }
     else if (options & msidbCustomActionTypeOncePerProcess)
     {
-        if (check_unique_action(package,action))
+        if (msi_action_is_unique(package, action))
         {
             TRACE("Skipping action due to msidbCustomActionTypeOncePerProcess option.\n");
             return FALSE;
         }
         else
-            register_unique_action(package,action);
+            msi_register_unique_action(package, action);
     }
 
     return TRUE;
@@ -236,7 +290,7 @@ UINT ACTION_CustomAction(MSIPACKAGE *package, LPCWSTR action, UINT script, BOOL 
             }
             else if (type & msidbCustomActionTypeRollback)
             {
-                FIXME("Deferring rollback only action... rollbacks not supported yet\n");
+                FIXME("Deferring rollback only action\n");
                 schedule_action(package, ROLLBACK_SCRIPT, deferred);
             }
             else
@@ -273,6 +327,12 @@ UINT ACTION_CustomAction(MSIPACKAGE *package, LPCWSTR action, UINT script, BOOL 
                 msi_set_property(package->db, szCustomActionData, szEmpty);
 
             msi_free(actiondata);
+        }
+        if (type & msidbCustomActionTypeRollback)
+        {
+            FIXME("Rollbacks not supported yet\n");
+            rc = ERROR_SUCCESS;
+            goto end;
         }
     }
     else if (!check_execution_scheduling_options(package,action,type))
@@ -320,7 +380,7 @@ UINT ACTION_CustomAction(MSIPACKAGE *package, LPCWSTR action, UINT script, BOOL 
 
             deformat_string(package,target,&deformated);
             rc = msi_set_property( package->db, source, deformated );
-            if (rc == ERROR_SUCCESS && !strcmpW( source, cszSourceDir ))
+            if (rc == ERROR_SUCCESS && !strcmpW( source, szSourceDir ))
                 msi_reset_folders( package, TRUE );
             msi_free(deformated);
             break;
@@ -369,7 +429,7 @@ static MSIBINARY *create_temp_binary( MSIPACKAGE *package, LPCWSTR source, BOOL 
     DWORD sz = MAX_PATH, write;
     UINT r;
 
-    if (msi_get_property(package->db, cszTempFolder, fmt, &sz) != ERROR_SUCCESS)
+    if (msi_get_property(package->db, szTempFolder, fmt, &sz) != ERROR_SUCCESS)
         GetTempPathW(MAX_PATH, fmt);
 
     if (!GetTempFileNameW( fmt, szMsi, 0, tmpfile ))
@@ -418,10 +478,7 @@ static MSIBINARY *create_temp_binary( MSIPACKAGE *package, LPCWSTR source, BOOL 
     /* keep a reference to prevent the dll from being unloaded */
     if (dll && !(binary->module = LoadLibraryW( tmpfile )))
     {
-        ERR("failed to load dll %s (%u)\n", debugstr_w( binary->tmpfile ), GetLastError() );
-        DeleteFileW( tmpfile );
-        msi_free( binary );
-        return NULL;
+        WARN( "failed to load dll %s (%u)\n", debugstr_w( tmpfile ), GetLastError() );
     }
     binary->source = strdupW( source );
     binary->tmpfile = strdupW( tmpfile );
@@ -714,8 +771,8 @@ static DWORD ACTION_CallDllFunction( const GUID *guid )
     hModule = LoadLibraryW( dll );
     if (!hModule)
     {
-        ERR("failed to load dll %s (%u)\n", debugstr_w( dll ), GetLastError() );
-        return r;
+        WARN( "failed to load dll %s (%u)\n", debugstr_w( dll ), GetLastError() );
+        return ERROR_SUCCESS;
     }
 
     proc = strdupWtoA( function );
@@ -889,7 +946,7 @@ static UINT HANDLE_CustomType23(MSIPACKAGE *package, LPCWSTR source,
     UINT r;
 
     size = MAX_PATH;
-    msi_get_property(package->db, cszSourceDir, package_path, &size);
+    msi_get_property(package->db, szSourceDir, package_path, &size);
     lstrcatW(package_path, szBackSlash);
     lstrcatW(package_path, source);
 
@@ -957,8 +1014,7 @@ static UINT HANDLE_CustomType2(MSIPACKAGE *package, LPCWSTR source,
 
     TRACE("executing exe %s\n", debugstr_w(cmd));
 
-    rc = CreateProcessW(NULL, cmd, NULL, NULL, FALSE, 0, NULL,
-                  c_collen, &si, &info);
+    rc = CreateProcessW(NULL, cmd, NULL, NULL, FALSE, 0, NULL, szCRoot, &si, &info);
     msi_free(cmd);
 
     if ( !rc )
@@ -982,7 +1038,7 @@ static UINT HANDLE_CustomType17(MSIPACKAGE *package, LPCWSTR source,
 
     TRACE("%s %s\n", debugstr_w(source), debugstr_w(target));
 
-    file = get_loaded_file( package, source );
+    file = msi_get_loaded_file( package, source );
     if (!file)
     {
         ERR("invalid file key %s\n", debugstr_w( source ));
@@ -1010,7 +1066,7 @@ static UINT HANDLE_CustomType18(MSIPACKAGE *package, LPCWSTR source,
 
     memset(&si,0,sizeof(STARTUPINFOW));
 
-    file = get_loaded_file(package,source);
+    file = msi_get_loaded_file(package, source);
     if( !file )
         return ERROR_FUNCTION_FAILED;
 
@@ -1034,8 +1090,7 @@ static UINT HANDLE_CustomType18(MSIPACKAGE *package, LPCWSTR source,
 
     TRACE("executing exe %s\n", debugstr_w(cmd));
 
-    rc = CreateProcessW(NULL, cmd, NULL, NULL, FALSE, 0, NULL,
-                  c_collen, &si, &info);
+    rc = CreateProcessW(NULL, cmd, NULL, NULL, FALSE, 0, NULL, szCRoot, &si, &info);
 
     if ( !rc )
     {
@@ -1118,8 +1173,7 @@ static UINT HANDLE_CustomType50(MSIPACKAGE *package, LPCWSTR source,
 
     TRACE("executing exe %s\n", debugstr_w(cmd));
 
-    rc = CreateProcessW(NULL, cmd, NULL, NULL, FALSE, 0, NULL,
-                  c_collen, &si, &info);
+    rc = CreateProcessW(NULL, cmd, NULL, NULL, FALSE, 0, NULL, szCRoot, &si, &info);
 
     if ( !rc )
     {
@@ -1137,25 +1191,19 @@ static UINT HANDLE_CustomType50(MSIPACKAGE *package, LPCWSTR source,
 static UINT HANDLE_CustomType34(MSIPACKAGE *package, LPCWSTR source,
                                 LPCWSTR target, const INT type, LPCWSTR action)
 {
-    LPWSTR workingdir, filename;
+    LPWSTR filename;
+    const WCHAR *workingdir;
     STARTUPINFOW si;
     PROCESS_INFORMATION info;
     BOOL rc;
 
     memset(&si, 0, sizeof(STARTUPINFOW));
 
-    workingdir = resolve_folder(package, source, FALSE, FALSE, TRUE, NULL);
-
-    if (!workingdir)
-        return ERROR_FUNCTION_FAILED;
+    workingdir = msi_get_target_folder( package, source );
+    if (!workingdir) return ERROR_FUNCTION_FAILED;
 
     deformat_string(package, target, &filename);
-
-    if (!filename)
-    {
-        msi_free(workingdir);
-        return ERROR_FUNCTION_FAILED;
-    }
+    if (!filename) return ERROR_FUNCTION_FAILED;
 
     TRACE("executing exe %s with working directory %s\n",
           debugstr_w(filename), debugstr_w(workingdir));
@@ -1168,13 +1216,9 @@ static UINT HANDLE_CustomType34(MSIPACKAGE *package, LPCWSTR source,
         ERR("Unable to execute command %s with working directory %s\n",
             debugstr_w(filename), debugstr_w(workingdir));
         msi_free(filename);
-        msi_free(workingdir);
         return ERROR_SUCCESS;
     }
-
     msi_free(filename);
-    msi_free(workingdir);
-
     CloseHandle( info.hThread );
 
     return wait_process_handle(package, type, info.hProcess, action);
@@ -1184,13 +1228,13 @@ static DWORD ACTION_CallScript( const GUID *guid )
 {
     msi_custom_action_info *info;
     MSIHANDLE hPackage;
-    UINT r = ERROR_FUNCTION_FAILED;
+    UINT r;
 
     info = find_action_by_guid( guid );
     if (!info)
     {
         ERR("failed to find action %s\n", debugstr_guid( guid) );
-        return r;
+        return ERROR_FUNCTION_FAILED;
     }
 
     TRACE("function %s, script %s\n", debugstr_w( info->target ), debugstr_w( info->source ) );
@@ -1199,13 +1243,13 @@ static DWORD ACTION_CallScript( const GUID *guid )
     if (hPackage)
     {
         r = call_script( hPackage, info->type, info->source, info->target, info->action );
+        TRACE("script returned %u\n", r);
         MsiCloseHandle( hPackage );
     }
     else
         ERR("failed to create handle for %p\n", info->package );
 
     release_custom_action_data( info );
-
     return S_OK;
 }
 
@@ -1337,7 +1381,7 @@ static UINT HANDLE_CustomType21_22(MSIPACKAGE *package, LPCWSTR source,
 
     TRACE("%s %s\n", debugstr_w(source), debugstr_w(target));
 
-    file = get_loaded_file(package,source);
+    file = msi_get_loaded_file(package, source);
     if (!file)
     {
 	ERR("invalid file key %s\n", debugstr_w(source));

@@ -3,6 +3,7 @@
  * Copyright 2007 Jeff Latimer
  * Copyright 2007 Andrey Turkin
  * Copyright 2008 Jeff Zaroyko
+ * Copyright 2011 Dmitry Timoshkov
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -456,6 +457,7 @@ static void read_file_test(void)
     char buffer[128];
     LARGE_INTEGER offset;
     HANDLE event = CreateEventA( NULL, TRUE, FALSE, NULL );
+    BOOL ret;
 
     buffer[0] = 1;
 
@@ -599,8 +601,8 @@ static void read_file_test(void)
     CloseHandle( read );
 
     if (!create_pipe( &read, &write, FILE_FLAG_OVERLAPPED, 4096 )) return;
-    ok(DuplicateHandle(GetCurrentProcess(), read, GetCurrentProcess(), &handle, 0, TRUE, DUPLICATE_SAME_ACCESS),
-        "Failed to duplicate handle: %d\n", GetLastError());
+    ret = DuplicateHandle(GetCurrentProcess(), read, GetCurrentProcess(), &handle, 0, TRUE, DUPLICATE_SAME_ACCESS);
+    ok(ret, "Failed to duplicate handle: %d\n", GetLastError());
 
     apc_count = 0;
     U(iosb).Status = 0xdeadbabe;
@@ -813,6 +815,46 @@ static void read_file_test(void)
     CloseHandle( handle );
 
     CloseHandle( event );
+}
+
+static void append_file_test(void)
+{
+    const char text[] = "foobar";
+    HANDLE handle;
+    NTSTATUS status;
+    IO_STATUS_BLOCK iosb;
+    DWORD written;
+    char buffer[128];
+
+    GetTempFileNameA( ".", "foo", 0, buffer );
+    /* It is possible to open a file with only FILE_APPEND_DATA access flags.
+       It matches the O_WRONLY|O_APPEND open() posix behavior */
+    handle = CreateFileA(buffer, FILE_APPEND_DATA, 0, NULL, CREATE_ALWAYS,
+                         FILE_FLAG_DELETE_ON_CLOSE, 0);
+    ok( handle != INVALID_HANDLE_VALUE, "Failed to create a temp file in FILE_APPEND_DATA mode.\n" );
+    if(handle == INVALID_HANDLE_VALUE)
+    {
+        skip("Couldn't create a temporary file, skipping FILE_APPEND_DATA test\n");
+        return;
+    }
+
+    U(iosb).Status = STATUS_PENDING;
+    iosb.Information = 0;
+
+    status = pNtWriteFile(handle, NULL, NULL, NULL, &iosb,
+                          text, sizeof(text), NULL, NULL);
+
+    if (status == STATUS_PENDING)
+    {
+        WaitForSingleObject( handle, INFINITE );
+        status = U(iosb).Status;
+    }
+    written = iosb.Information;
+
+    todo_wine
+    ok(status == STATUS_SUCCESS && written == sizeof(text), "FILE_APPEND_DATA NtWriteFile failed\n");
+
+    CloseHandle(handle);
 }
 
 static void nt_mailslot_test(void)
@@ -1506,12 +1548,97 @@ todo_wine
     ok(ffvi->VolumeSerialNumber != 0, "Missing VolumeSerialNumber\n");
     ok(ffvi->SupportsObjects == 1,"expected 1, got %d\n", ffvi->SupportsObjects);
 }
-    ok(ffvi->VolumeLabelLength == lstrlenW(ffvi->VolumeLabel) * sizeof(WCHAR), "expected %d, got %d\n",
-    lstrlenW(ffvi->VolumeLabel) * sizeof(WCHAR), ffvi->VolumeLabelLength);
+    ok(ffvi->VolumeLabelLength == lstrlenW(ffvi->VolumeLabel) * sizeof(WCHAR), "got %d\n", ffvi->VolumeLabelLength);
 
     trace("VolumeSerialNumber: %x VolumeLabelName: %s\n", ffvi->VolumeSerialNumber, wine_dbgstr_w(ffvi->VolumeLabel));
 
     CloseHandle( dir );
+}
+
+static void test_NtCreateFile(void)
+{
+    static const struct test_data
+    {
+        DWORD disposition, attrib_in, status, result, attrib_out, needs_cleanup;
+    } td[] =
+    {
+    /* 0*/{ FILE_CREATE, FILE_ATTRIBUTE_READONLY, 0, FILE_CREATED, FILE_ATTRIBUTE_ARCHIVE|FILE_ATTRIBUTE_READONLY, FALSE },
+    /* 1*/{ FILE_CREATE, 0, STATUS_OBJECT_NAME_COLLISION, 0, 0, TRUE },
+    /* 2*/{ FILE_CREATE, 0, 0, FILE_CREATED, FILE_ATTRIBUTE_ARCHIVE, FALSE },
+    /* 3*/{ FILE_OPEN, FILE_ATTRIBUTE_READONLY, 0, FILE_OPENED, FILE_ATTRIBUTE_ARCHIVE, TRUE },
+    /* 4*/{ FILE_OPEN, FILE_ATTRIBUTE_READONLY, STATUS_OBJECT_NAME_NOT_FOUND, 0, 0, FALSE },
+    /* 5*/{ FILE_OPEN_IF, 0, 0, FILE_CREATED, FILE_ATTRIBUTE_ARCHIVE, FALSE },
+    /* 6*/{ FILE_OPEN_IF, FILE_ATTRIBUTE_READONLY, 0, FILE_OPENED, FILE_ATTRIBUTE_ARCHIVE, TRUE },
+    /* 7*/{ FILE_OPEN_IF, FILE_ATTRIBUTE_READONLY, 0, FILE_CREATED, FILE_ATTRIBUTE_ARCHIVE|FILE_ATTRIBUTE_READONLY, FALSE },
+    /* 8*/{ FILE_OPEN_IF, 0, 0, FILE_OPENED, FILE_ATTRIBUTE_ARCHIVE|FILE_ATTRIBUTE_READONLY, FALSE },
+    /* 9*/{ FILE_OVERWRITE, 0, STATUS_ACCESS_DENIED, 0, 0, TRUE },
+    /*10*/{ FILE_OVERWRITE, 0, STATUS_OBJECT_NAME_NOT_FOUND, 0, 0, FALSE },
+    /*11*/{ FILE_CREATE, 0, 0, FILE_CREATED, FILE_ATTRIBUTE_ARCHIVE, FALSE },
+    /*12*/{ FILE_OVERWRITE, FILE_ATTRIBUTE_READONLY, 0, FILE_OVERWRITTEN, FILE_ATTRIBUTE_ARCHIVE|FILE_ATTRIBUTE_READONLY, FALSE },
+    /*13*/{ FILE_OVERWRITE_IF, 0, STATUS_ACCESS_DENIED, 0, 0, TRUE },
+    /*14*/{ FILE_OVERWRITE_IF, 0, 0, FILE_CREATED, FILE_ATTRIBUTE_ARCHIVE, FALSE },
+    /*15*/{ FILE_OVERWRITE_IF, FILE_ATTRIBUTE_READONLY, 0, FILE_OVERWRITTEN, FILE_ATTRIBUTE_ARCHIVE|FILE_ATTRIBUTE_READONLY, FALSE },
+    /*16*/{ FILE_SUPERSEDE, 0, 0, FILE_SUPERSEDED, FILE_ATTRIBUTE_ARCHIVE, FALSE },
+    /*17*/{ FILE_SUPERSEDE, FILE_ATTRIBUTE_READONLY, 0, FILE_SUPERSEDED, FILE_ATTRIBUTE_ARCHIVE|FILE_ATTRIBUTE_READONLY, TRUE },
+    /*18*/{ FILE_SUPERSEDE, 0, 0, FILE_CREATED, FILE_ATTRIBUTE_ARCHIVE, TRUE }
+    };
+    static const WCHAR fooW[] = {'f','o','o',0};
+    static const WCHAR dotW[] = {'.',0};
+    NTSTATUS status;
+    HANDLE handle;
+    WCHAR path[MAX_PATH];
+    OBJECT_ATTRIBUTES attr;
+    IO_STATUS_BLOCK io;
+    UNICODE_STRING nameW;
+    DWORD ret, i;
+
+    GetTempFileNameW(dotW, fooW, 0, path);
+    DeleteFileW(path);
+    pRtlDosPathNameToNtPathName_U(path, &nameW, NULL, NULL);
+
+    attr.Length = sizeof(attr);
+    attr.RootDirectory = NULL;
+    attr.ObjectName = &nameW;
+    attr.Attributes = OBJ_CASE_INSENSITIVE;
+    attr.SecurityDescriptor = NULL;
+    attr.SecurityQualityOfService = NULL;
+
+    for (i = 0; i < sizeof(td)/sizeof(td[0]); i++)
+    {
+        status = pNtCreateFile(&handle, GENERIC_READ, &attr, &io, NULL,
+                               td[i].attrib_in, FILE_SHARE_READ|FILE_SHARE_WRITE,
+                               td[i].disposition, 0, NULL, 0);
+
+        ok(status == td[i].status, "%d: expected %#x got %#x\n", i, td[i].status, status);
+
+        if (!status)
+        {
+            ok(io.Information == td[i].result,"%d: expected %#x got %#lx\n", i, td[i].result, io.Information);
+
+            ret = GetFileAttributesW(path);
+            ret &= ~FILE_ATTRIBUTE_NOT_CONTENT_INDEXED;
+            /* FIXME: leave only 'else' case below once Wine is fixed */
+            if (ret != td[i].attrib_out)
+            {
+            todo_wine
+                ok(ret == td[i].attrib_out, "%d: expected %#x got %#x\n", i, td[i].attrib_out, ret);
+                SetFileAttributesW(path, td[i].attrib_out);
+            }
+            else
+                ok(ret == td[i].attrib_out, "%d: expected %#x got %#x\n", i, td[i].attrib_out, ret);
+
+            CloseHandle(handle);
+        }
+
+        if (td[i].needs_cleanup)
+        {
+            SetFileAttributesW(path, FILE_ATTRIBUTE_ARCHIVE);
+            DeleteFileW(path);
+        }
+    }
+
+    SetFileAttributesW(path, FILE_ATTRIBUTE_ARCHIVE);
+    DeleteFileW( path );
 }
 
 START_TEST(file)
@@ -1550,10 +1677,12 @@ START_TEST(file)
     pNtQueryDirectoryFile   = (void *)GetProcAddress(hntdll, "NtQueryDirectoryFile");
     pNtQueryVolumeInformationFile = (void *)GetProcAddress(hntdll, "NtQueryVolumeInformationFile");
 
+    test_NtCreateFile();
     create_file_test();
     open_file_test();
     delete_file_test();
     read_file_test();
+    append_file_test();
     nt_mailslot_test();
     test_iocompletion();
     test_file_basic_information();

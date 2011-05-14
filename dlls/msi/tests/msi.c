@@ -484,9 +484,7 @@ static void test_MsiGetFileHash(void)
         ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
 
         ret = memcmp(&hash, &hash_data[i].hash, HASHSIZE);
-        ok(ret == 0 ||
-           broken(ret != 0), /* win95 */
-           "Hash incorrect\n");
+        ok(!ret, "Hash incorrect\n");
 
         DeleteFile(name);
     }
@@ -544,23 +542,23 @@ static void create_test_guid(LPSTR prodcode, LPSTR squashed)
     WideCharToMultiByte(CP_ACP, 0, squashedW, -1, squashed, MAX_PATH, NULL, NULL);
 }
 
-static void get_user_sid(LPSTR *usersid)
+static char *get_user_sid(void)
 {
     HANDLE token;
-    DWORD size;
-    PTOKEN_USER user;
+    DWORD size = 0;
+    TOKEN_USER *user;
+    char *usersid = NULL;
 
     OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token);
-
-    size = 0;
     GetTokenInformation(token, TokenUser, NULL, size, &size);
+
     user = HeapAlloc(GetProcessHeap(), 0, size);
-
     GetTokenInformation(token, TokenUser, user, size, &size);
-    pConvertSidToStringSidA(user->User.Sid, usersid);
-
+    pConvertSidToStringSidA(user->User.Sid, &usersid);
     HeapFree(GetProcessHeap(), 0, user);
+
     CloseHandle(token);
+    return usersid;
 }
 
 static void test_MsiQueryProductState(void)
@@ -577,7 +575,7 @@ static void test_MsiQueryProductState(void)
     REGSAM access = KEY_ALL_ACCESS;
 
     create_test_guid(prodcode, prod_squashed);
-    get_user_sid(&usersid);
+    usersid = get_user_sid();
 
     if (is_wow64)
         access |= KEY_WOW64_64KEY;
@@ -920,7 +918,7 @@ static void test_MsiQueryFeatureState(void)
     create_test_guid(prodcode, prod_squashed);
     compose_base85_guid(component, comp_base85, comp_squashed);
     compose_base85_guid(component, comp_base85 + 20, comp_squashed2);
-    get_user_sid(&usersid);
+    usersid = get_user_sid();
 
     if (is_wow64)
         access |= KEY_WOW64_64KEY;
@@ -1430,7 +1428,7 @@ static void test_MsiQueryComponentState(void)
 
     create_test_guid(prodcode, prod_squashed);
     compose_base85_guid(component, comp_base85, comp_squashed);
-    get_user_sid(&usersid);
+    usersid = get_user_sid();
 
     if (is_wow64)
         access |= KEY_WOW64_64KEY;
@@ -1806,7 +1804,7 @@ static void test_MsiGetComponentPath(void)
 
     create_test_guid(prodcode, prod_squashed);
     compose_base85_guid(component, comp_base85, comp_squashed);
-    get_user_sid(&usersid);
+    usersid = get_user_sid();
 
     if (is_wow64)
         access |= KEY_WOW64_64KEY;
@@ -2335,7 +2333,7 @@ static void test_MsiGetProductCode(void)
     create_test_guid(prodcode, prod_squashed);
     create_test_guid(prodcode2, prod2_squashed);
     compose_base85_guid(component, comp_base85, comp_squashed);
-    get_user_sid(&usersid);
+    usersid = get_user_sid();
 
     if (is_wow64)
         access |= KEY_WOW64_64KEY;
@@ -2602,7 +2600,7 @@ static void test_MsiEnumClients(void)
     create_test_guid(prodcode, prod_squashed);
     create_test_guid(prodcode2, prod2_squashed);
     compose_base85_guid(component, comp_base85, comp_squashed);
-    get_user_sid(&usersid);
+    usersid = get_user_sid();
 
     if (is_wow64)
         access |= KEY_WOW64_64KEY;
@@ -3051,7 +3049,7 @@ static void test_MsiGetProductInfo(void)
 
     create_test_guid(prodcode, prod_squashed);
     create_test_guid(packcode, pack_squashed);
-    get_user_sid(&usersid);
+    usersid = get_user_sid();
 
     if (is_wow64)
         access |= KEY_WOW64_64KEY;
@@ -4343,7 +4341,7 @@ static void test_MsiGetProductInfoEx(void)
 
     create_test_guid(prodcode, prod_squashed);
     create_test_guid(packcode, pack_squashed);
-    get_user_sid(&usersid);
+    usersid = get_user_sid();
 
     if (is_wow64)
         access |= KEY_WOW64_64KEY;
@@ -5000,7 +4998,14 @@ static void test_MsiGetProductInfoEx(void)
     r = pMsiGetProductInfoExA(prodcode, usersid,
                               MSIINSTALLCONTEXT_USERUNMANAGED,
                               INSTALLPROPERTY_PRODUCTSTATE, buf, &sz);
-    ok(r == ERROR_SUCCESS, "Expected ERROR_SUCCESS, got %d\n", r);
+    ok(r == ERROR_SUCCESS || broken(r == ERROR_UNKNOWN_PRODUCT), "Expected ERROR_SUCCESS, got %d\n", r);
+    if (r == ERROR_UNKNOWN_PRODUCT)
+    {
+        win_skip("skipping remaining tests for MsiGetProductInfoEx\n");
+        delete_key(prodkey, "", access);
+        RegCloseKey(prodkey);
+        return;
+    }
     ok(!lstrcmpA(buf, "1"), "Expected \"1\", got \"%s\"\n", buf);
     ok(sz == 1, "Expected 1, got %d\n", sz);
 
@@ -7089,7 +7094,7 @@ static void test_MsiGetUserInfo(void)
     REGSAM access = KEY_ALL_ACCESS;
 
     create_test_guid(prodcode, prod_squashed);
-    get_user_sid(&usersid);
+    usersid = get_user_sid();
 
     if (is_wow64)
         access |= KEY_WOW64_64KEY;
@@ -7676,7 +7681,7 @@ static void test_MsiOpenProduct(void)
     lstrcatA(path, "\\");
 
     create_test_guid(prodcode, prod_squashed);
-    get_user_sid(&usersid);
+    usersid = get_user_sid();
 
     if (is_wow64)
         access |= KEY_WOW64_64KEY;
@@ -9510,7 +9515,7 @@ static void test_MsiEnumPatchesEx(void)
     }
 
     create_test_guid(prodcode, prod_squashed);
-    get_user_sid(&usersid);
+    usersid = get_user_sid();
 
     /* empty szProductCode */
     lstrcpyA(patchcode, "apple");
@@ -9771,7 +9776,7 @@ static void test_MsiEnumPatches(void)
 
     create_test_guid(prodcode, prod_squashed);
     create_test_guid(patchcode, patch_squashed);
-    get_user_sid(&usersid);
+    usersid = get_user_sid();
 
     if (is_wow64)
         access |= KEY_WOW64_64KEY;
@@ -10477,7 +10482,7 @@ static void test_MsiGetPatchInfoEx(void)
 
     create_test_guid(prodcode, prod_squashed);
     create_test_guid(patchcode, patch_squashed);
-    get_user_sid(&usersid);
+    usersid = get_user_sid();
 
     if (is_wow64)
         access |= KEY_WOW64_64KEY;
@@ -11680,7 +11685,7 @@ static void test_MsiEnumProducts(void)
     create_test_guid(product1, product_squashed1);
     create_test_guid(product2, product_squashed2);
     create_test_guid(product3, product_squashed3);
-    get_user_sid(&usersid);
+    usersid = get_user_sid();
 
     if (is_wow64)
         access |= KEY_WOW64_64KEY;
@@ -11748,6 +11753,47 @@ static void test_MsiEnumProducts(void)
     LocalFree(usersid);
 }
 
+static void test_MsiGetFileSignatureInformation(void)
+{
+    HRESULT hr;
+    const CERT_CONTEXT *cert;
+    DWORD len;
+
+    hr = MsiGetFileSignatureInformationA( NULL, 0, NULL, NULL, NULL );
+    ok(hr == E_INVALIDARG, "expected E_INVALIDARG got 0x%08x\n", hr);
+
+    hr = MsiGetFileSignatureInformationA( NULL, 0, NULL, NULL, &len );
+    ok(hr == E_INVALIDARG, "expected E_INVALIDARG got 0x%08x\n", hr);
+
+    hr = MsiGetFileSignatureInformationA( NULL, 0, &cert, NULL, &len );
+    ok(hr == E_INVALIDARG, "expected E_INVALIDARG got 0x%08x\n", hr);
+
+    hr = MsiGetFileSignatureInformationA( "", 0, NULL, NULL, NULL );
+    ok(hr == E_INVALIDARG, "expected E_INVALIDARG got 0x%08x\n", hr);
+
+    hr = MsiGetFileSignatureInformationA( "signature.bin", 0, NULL, NULL, NULL );
+    ok(hr == E_INVALIDARG, "expected E_INVALIDARG got 0x%08x\n", hr);
+
+    hr = MsiGetFileSignatureInformationA( "signature.bin", 0, NULL, NULL, &len );
+    ok(hr == E_INVALIDARG, "expected E_INVALIDARG got 0x%08x\n", hr);
+
+    hr = MsiGetFileSignatureInformationA( "signature.bin", 0, &cert, NULL, &len );
+    todo_wine ok(hr == CRYPT_E_FILE_ERROR, "expected CRYPT_E_FILE_ERROR got 0x%08x\n", hr);
+
+    create_file( "signature.bin", "signature", sizeof("signature") );
+
+    hr = MsiGetFileSignatureInformationA( "signature.bin", 0, NULL, NULL, NULL );
+    ok(hr == E_INVALIDARG, "expected E_INVALIDARG got 0x%08x\n", hr);
+
+    hr = MsiGetFileSignatureInformationA( "signature.bin", 0, NULL, NULL, &len );
+    ok(hr == E_INVALIDARG, "expected E_INVALIDARG got 0x%08x\n", hr);
+
+    hr = MsiGetFileSignatureInformationA( "signature.bin", 0, &cert, NULL, &len );
+    todo_wine ok(hr == HRESULT_FROM_WIN32(ERROR_FUNCTION_FAILED), "got 0x%08x\n", hr);
+
+    DeleteFileA( "signature.bin" );
+}
+
 START_TEST(msi)
 {
     init_functionpointers();
@@ -11781,6 +11827,6 @@ START_TEST(msi)
         test_MsiGetPatchInfo();
         test_MsiEnumProducts();
     }
-
     test_MsiGetFileVersion();
+    test_MsiGetFileSignatureInformation();
 }

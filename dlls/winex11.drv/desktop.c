@@ -143,7 +143,7 @@ Window CDECL X11DRV_create_desktop( UINT width, UINT height )
 
     /* Create window */
     win_attr.event_mask = ExposureMask | KeyPressMask | KeyReleaseMask | EnterWindowMask |
-                          PointerMotionMask | ButtonPressMask | ButtonReleaseMask;
+                          PointerMotionMask | ButtonPressMask | ButtonReleaseMask | FocusChangeMask;
     win_attr.cursor = XCreateFontCursor( display, XC_top_left_arrow );
 
     if (visual != DefaultVisual( display, DefaultScreen(display) ))
@@ -200,6 +200,7 @@ static BOOL CALLBACK update_windows_on_desktop_resize( HWND hwnd, LPARAM lparam 
                               DefaultScreen(display), mask, &changes );
         wine_tsx11_unlock();
     }
+    if (hwnd == GetForegroundWindow()) clip_fullscreen_window( hwnd, TRUE );
     return TRUE;
 }
 
@@ -258,6 +259,7 @@ void X11DRV_resize_desktop( unsigned int width, unsigned int height )
                       virtual_screen_rect.right - virtual_screen_rect.left,
                       virtual_screen_rect.bottom - virtual_screen_rect.top,
                       SWP_NOZORDER | SWP_NOACTIVATE | SWP_DEFERERASE );
+        ungrab_clipping_window();
         SendMessageTimeoutW( HWND_BROADCAST, WM_DISPLAYCHANGE, screen_bpp,
                              MAKELPARAM( width, height ), SMTO_ABORTIFHUNG, 2000, NULL );
     }

@@ -38,10 +38,12 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(palette);
 
+typedef BOOL (CDECL *unrealize_function)(HPALETTE);
+
 typedef struct tagPALETTEOBJ
 {
     GDIOBJHDR           header;
-    const DC_FUNCTIONS *funcs;      /* DC function table */
+    unrealize_function  unrealize;
     WORD                version;    /* palette version */
     WORD                count;      /* count of palette entries */
     PALETTEENTRY       *entries;
@@ -152,7 +154,7 @@ HPALETTE WINAPI CreatePalette(
     size = sizeof(LOGPALETTE) + (palette->palNumEntries - 1) * sizeof(PALETTEENTRY);
 
     if (!(palettePtr = HeapAlloc( GetProcessHeap(), 0, sizeof(*palettePtr) ))) return 0;
-    palettePtr->funcs   = NULL;
+    palettePtr->unrealize = NULL;
     palettePtr->version = palette->palVersion;
     palettePtr->count   = palette->palNumEntries;
     size = palettePtr->count * sizeof(*palettePtr->entries);
@@ -410,7 +412,6 @@ BOOL WINAPI AnimatePalette(
         PALETTEOBJ * palPtr;
         UINT pal_entries;
         const PALETTEENTRY *pptr = PaletteColors;
-        const DC_FUNCTIONS *funcs;
 
         palPtr = GDI_GetObjPtr( hPal, OBJ_PAL );
         if (!palPtr) return 0;
@@ -436,9 +437,8 @@ BOOL WINAPI AnimatePalette(
             TRACE("Not animating entry %d -- not PC_RESERVED\n", StartIndex);
           }
         }
-        funcs = palPtr->funcs;
         GDI_ReleaseObj( hPal );
-        if (funcs && funcs->pRealizePalette) funcs->pRealizePalette( NULL, hPal, hPal == hPrimaryPalette );
+        /* FIXME: check for palette selected in active window */
     }
     return TRUE;
 }
@@ -513,8 +513,8 @@ UINT WINAPI GetSystemPaletteEntries(
 
     if ((dc = get_dc_ptr( hdc )))
     {
-        if (dc->funcs->pGetSystemPaletteEntries)
-            ret = dc->funcs->pGetSystemPaletteEntries( dc->physDev, start, count, entries );
+        PHYSDEV physdev = GET_DC_PHYSDEV( dc, pGetSystemPaletteEntries );
+        ret = physdev->funcs->pGetSystemPaletteEntries( physdev, start, count, entries );
         release_dc_ptr( dc );
     }
     return ret;
@@ -563,6 +563,38 @@ UINT WINAPI GetNearestPaletteIndex(
 }
 
 
+/* null driver fallback implementation for GetNearestColor */
+COLORREF CDECL nulldrv_GetNearestColor( PHYSDEV dev, COLORREF color )
+{
+    unsigned char spec_type;
+
+    if (!(GetDeviceCaps( dev->hdc, RASTERCAPS ) & RC_PALETTE)) return color;
+
+    spec_type = color >> 24;
+    if (spec_type == 1 || spec_type == 2)
+    {
+        /* we need logical palette for PALETTERGB and PALETTEINDEX colorrefs */
+        UINT index;
+        PALETTEENTRY entry;
+        HPALETTE hpal = GetCurrentObject( dev->hdc, OBJ_PAL );
+
+        if (!hpal) hpal = GetStockObject( DEFAULT_PALETTE );
+        if (spec_type == 2) /* PALETTERGB */
+            index = GetNearestPaletteIndex( hpal, color );
+        else  /* PALETTEINDEX */
+            index = LOWORD(color);
+
+        if (!GetPaletteEntries( hpal, index, 1, &entry ))
+        {
+            WARN("RGB(%x) : idx %d is out of bounds, assuming NULL\n", color, index );
+            if (!GetPaletteEntries( hpal, 0, 1, &entry )) return CLR_INVALID;
+        }
+        color = RGB( entry.peRed, entry.peGreen, entry.peBlue );
+    }
+    return color & 0x00ffffff;
+}
+
+
 /***********************************************************************
  * GetNearestColor [GDI32.@]
  *
@@ -576,54 +608,15 @@ COLORREF WINAPI GetNearestColor(
     HDC hdc,      /* [in] Handle of device context */
     COLORREF color) /* [in] Color to be matched */
 {
-    unsigned char spec_type;
-    COLORREF nearest;
-    DC 		*dc;
+    COLORREF nearest = CLR_INVALID;
+    DC *dc;
 
-    if (!(dc = get_dc_ptr( hdc ))) return CLR_INVALID;
-
-    if (dc->funcs->pGetNearestColor)
+    if ((dc = get_dc_ptr( hdc )))
     {
-        nearest = dc->funcs->pGetNearestColor( dc->physDev, color );
+        PHYSDEV physdev = GET_DC_PHYSDEV( dc, pGetNearestColor );
+        nearest = physdev->funcs->pGetNearestColor( physdev, color );
         release_dc_ptr( dc );
-        return nearest;
     }
-
-    if (!(GetDeviceCaps(hdc, RASTERCAPS) & RC_PALETTE))
-    {
-        release_dc_ptr( dc );
-        return color;
-    }
-
-    spec_type = color >> 24;
-    if (spec_type == 1 || spec_type == 2)
-    {
-        /* we need logical palette for PALETTERGB and PALETTEINDEX colorrefs */
-
-        UINT index;
-        PALETTEENTRY entry;
-        HPALETTE hpal = dc->hPalette ? dc->hPalette : GetStockObject( DEFAULT_PALETTE );
-
-        if (spec_type == 2) /* PALETTERGB */
-            index = GetNearestPaletteIndex( hpal, color );
-        else  /* PALETTEINDEX */
-            index = LOWORD(color);
-
-        if (!GetPaletteEntries( hpal, index, 1, &entry ))
-        {
-            WARN("RGB(%x) : idx %d is out of bounds, assuming NULL\n", color, index );
-            if (!GetPaletteEntries( hpal, 0, 1, &entry ))
-            {
-                release_dc_ptr( dc );
-                return CLR_INVALID;
-            }
-        }
-        color = RGB( entry.peRed, entry.peGreen, entry.peBlue );
-    }
-    nearest = color & 0x00ffffff;
-    release_dc_ptr( dc );
-
-    TRACE("(%06x): returning %06x\n", color, nearest );
     return nearest;
 }
 
@@ -657,10 +650,10 @@ static BOOL PALETTE_UnrealizeObject( HGDIOBJ handle )
 
     if (palette)
     {
-        const DC_FUNCTIONS *funcs = palette->funcs;
-        palette->funcs = NULL;
+        unrealize_function unrealize = palette->unrealize;
+        palette->unrealize = NULL;
         GDI_ReleaseObj( handle );
-        if (funcs && funcs->pUnrealizePalette) funcs->pUnrealizePalette( handle );
+        if (unrealize) unrealize( handle );
     }
 
     if (InterlockedCompareExchangePointer( (void **)&hLastRealizedPalette, 0, handle ) == handle)
@@ -689,7 +682,7 @@ static BOOL PALETTE_DeleteObject( HGDIOBJ handle )
  */
 HPALETTE WINAPI GDISelectPalette( HDC hdc, HPALETTE hpal, WORD wBkg)
 {
-    HPALETTE ret;
+    HPALETTE ret = 0;
     DC *dc;
 
     TRACE("%p %p\n", hdc, hpal );
@@ -699,16 +692,18 @@ HPALETTE WINAPI GDISelectPalette( HDC hdc, HPALETTE hpal, WORD wBkg)
       WARN("invalid selected palette %p\n",hpal);
       return 0;
     }
-    if (!(dc = get_dc_ptr( hdc ))) return 0;
-    ret = dc->hPalette;
-    if (dc->funcs->pSelectPalette) hpal = dc->funcs->pSelectPalette( dc->physDev, hpal, FALSE );
-    if (hpal)
+    if ((dc = get_dc_ptr( hdc )))
     {
-        dc->hPalette = hpal;
-        if (!wBkg) hPrimaryPalette = hpal;
+        PHYSDEV physdev = GET_DC_PHYSDEV( dc, pSelectPalette );
+        ret = dc->hPalette;
+        if (physdev->funcs->pSelectPalette( physdev, hpal, FALSE ))
+        {
+            dc->hPalette = hpal;
+            if (!wBkg) hPrimaryPalette = hpal;
+        }
+        else ret = 0;
+        release_dc_ptr( dc );
     }
-    else ret = 0;
-    release_dc_ptr( dc );
     return ret;
 }
 
@@ -727,21 +722,19 @@ UINT WINAPI GDIRealizePalette( HDC hdc )
 
     if( dc->hPalette == GetStockObject( DEFAULT_PALETTE ))
     {
-        if (dc->funcs->pRealizeDefaultPalette)
-            realized = dc->funcs->pRealizeDefaultPalette( dc->physDev );
+        PHYSDEV physdev = GET_DC_PHYSDEV( dc, pRealizeDefaultPalette );
+        realized = physdev->funcs->pRealizeDefaultPalette( physdev );
     }
     else if (InterlockedExchangePointer( (void **)&hLastRealizedPalette, dc->hPalette ) != dc->hPalette)
     {
-        if (dc->funcs->pRealizePalette)
+        PHYSDEV physdev = GET_DC_PHYSDEV( dc, pRealizePalette );
+        PALETTEOBJ *palPtr = GDI_GetObjPtr( dc->hPalette, OBJ_PAL );
+        if (palPtr)
         {
-            PALETTEOBJ *palPtr = GDI_GetObjPtr( dc->hPalette, OBJ_PAL );
-            if (palPtr)
-            {
-                realized = dc->funcs->pRealizePalette( dc->physDev, dc->hPalette,
-                                                       (dc->hPalette == hPrimaryPalette) );
-                palPtr->funcs = dc->funcs;
-                GDI_ReleaseObj( dc->hPalette );
-            }
+            realized = physdev->funcs->pRealizePalette( physdev, dc->hPalette,
+                                                        (dc->hPalette == hPrimaryPalette) );
+            palPtr->unrealize = physdev->funcs->pUnrealizePalette;
+            GDI_ReleaseObj( dc->hPalette );
         }
     }
     else TRACE("  skipping (hLastRealizedPalette = %p)\n", hLastRealizedPalette);

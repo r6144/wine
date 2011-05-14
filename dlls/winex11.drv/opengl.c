@@ -150,6 +150,7 @@ static Wine_GLContext *context_list;
 static struct WineGLInfo WineGLInfo = { 0 };
 static int use_render_texture_emulation = 1;
 static int use_render_texture_ati = 0;
+static BOOL has_swap_control;
 static int swap_interval = 1;
 
 #define MAX_EXTENSIONS 16
@@ -311,6 +312,7 @@ static BOOL X11DRV_WineGL_InitOpenglInfo(void)
 
     attr.override_redirect = True;
     attr.colormap = None;
+    attr.border_pixel = 0;
 
     wine_tsx11_lock();
 
@@ -337,13 +339,16 @@ static BOOL X11DRV_WineGL_InitOpenglInfo(void)
     if (vis->visual != DefaultVisual( gdi_display, vis->screen ))
         attr.colormap = XCreateColormap( gdi_display, root, vis->visual, AllocNone );
     if ((win = XCreateWindow( gdi_display, root, -1, -1, 1, 1, 0, vis->depth, InputOutput,
-                              vis->visual, CWOverrideRedirect | CWColormap, &attr )))
+                              vis->visual, CWBorderPixel | CWOverrideRedirect | CWColormap, &attr )))
         XMapWindow( gdi_display, win );
     else
         win = root;
 
-    pglXMakeCurrent(gdi_display, win, ctx);
-
+    if(pglXMakeCurrent(gdi_display, win, ctx) == 0)
+    {
+        ERR_(winediag)( "Unable to activate OpenGL context, most likely your OpenGL drivers haven't been installed correctly\n" );
+        goto done;
+    }
     WineGLInfo.glVersion = (const char *) pglGetString(GL_VERSION);
     str = (const char *) pglGetString(GL_EXTENSIONS);
     WineGLInfo.glExtensions = HeapAlloc(GetProcessHeap(), 0, strlen(str)+1);
@@ -505,9 +510,11 @@ static BOOL has_opengl(void)
 /* It doesn't matter if these fail. They'll only be used if the driver reports
    the associated extension is available (and if a driver reports the extension
    is available but fails to provide the functions, it's quite broken) */
-#define LOAD_FUNCPTR(f) p##f = (void*)pglXGetProcAddressARB((const unsigned char*)#f)
+#define LOAD_FUNCPTR(f) p##f = pglXGetProcAddressARB((const GLubyte *)#f)
     /* ARB GLX Extension */
     LOAD_FUNCPTR(glXCreateContextAttribsARB);
+    /* SGI GLX Extension */
+    LOAD_FUNCPTR(glXSwapIntervalSGI);
     /* NV GLX Extension */
     LOAD_FUNCPTR(glXAllocateMemoryNV);
     LOAD_FUNCPTR(glXFreeMemoryNV);
@@ -1889,6 +1896,12 @@ BOOL CDECL X11DRV_wglMakeCurrent(X11DRV_PDEVICE *physDev, HGLRC hglrc) {
         ret = pglXMakeCurrent(gdi_display, None, NULL);
         NtCurrentTeb()->glContext = NULL;
     }
+    else if (!physDev->current_pf)
+    {
+        WARN("Trying to use an invalid drawable\n");
+        SetLastError(ERROR_INVALID_HANDLE);
+        ret = FALSE;
+    }
     else if (ctx->fmt->iPixelFormat != physDev->current_pf)
     {
         WARN( "mismatched pixel format hdc %p %u ctx %p %u\n",
@@ -1900,7 +1913,6 @@ BOOL CDECL X11DRV_wglMakeCurrent(X11DRV_PDEVICE *physDev, HGLRC hglrc) {
     {
         Drawable drawable = get_glxdrawable(physDev);
         Wine_GLContext *prev_ctx = NtCurrentTeb()->glContext;
-        if (prev_ctx) prev_ctx->tid = 0;
 
         /* The describe lines below are for debugging purposes only */
         if (TRACE_ON(wgl)) {
@@ -1910,10 +1922,12 @@ BOOL CDECL X11DRV_wglMakeCurrent(X11DRV_PDEVICE *physDev, HGLRC hglrc) {
 
         TRACE(" make current for dis %p, drawable %p, ctx %p\n", gdi_display, (void*) drawable, ctx->ctx);
         ret = pglXMakeCurrent(gdi_display, drawable, ctx->ctx);
-        NtCurrentTeb()->glContext = ctx;
 
-        if(ret)
+        if (ret)
         {
+            if (prev_ctx) prev_ctx->tid = 0;
+            NtCurrentTeb()->glContext = ctx;
+
             ctx->has_been_current = TRUE;
             ctx->tid = GetCurrentThreadId();
             ctx->hdc = hdc;
@@ -1928,6 +1942,8 @@ BOOL CDECL X11DRV_wglMakeCurrent(X11DRV_PDEVICE *physDev, HGLRC hglrc) {
                 pglDrawBuffer(GL_FRONT_LEFT);
             }
         }
+        else
+            SetLastError(ERROR_INVALID_HANDLE);
     }
     wine_tsx11_unlock();
     TRACE(" returning %s\n", (ret ? "True" : "False"));
@@ -1956,27 +1972,38 @@ BOOL CDECL X11DRV_wglMakeContextCurrentARB(X11DRV_PDEVICE* pDrawDev, X11DRV_PDEV
         ret = pglXMakeCurrent(gdi_display, None, NULL);
         NtCurrentTeb()->glContext = NULL;
     }
+    else if (!pDrawDev->current_pf)
+    {
+        WARN("Trying to use an invalid drawable\n");
+        SetLastError(ERROR_INVALID_HANDLE);
+        ret = FALSE;
+    }
     else
     {
         if (NULL == pglXMakeContextCurrent) {
             ret = FALSE;
         } else {
-            Wine_GLContext *prev_ctx = NtCurrentTeb()->glContext;
             Wine_GLContext *ctx = (Wine_GLContext *) hglrc;
             Drawable d_draw = get_glxdrawable(pDrawDev);
             Drawable d_read = get_glxdrawable(pReadDev);
 
-            if (prev_ctx) prev_ctx->tid = 0;
-
-            ctx->has_been_current = TRUE;
-            ctx->tid = GetCurrentThreadId();
-            ctx->hdc = pDrawDev->hdc;
-            ctx->read_hdc = pReadDev->hdc;
-            ctx->drawables[0] = d_draw;
-            ctx->drawables[1] = d_read;
-            ctx->refresh_drawables = FALSE;
             ret = pglXMakeContextCurrent(gdi_display, d_draw, d_read, ctx->ctx);
-            NtCurrentTeb()->glContext = ctx;
+            if (ret)
+            {
+                Wine_GLContext *prev_ctx = NtCurrentTeb()->glContext;
+                if (prev_ctx) prev_ctx->tid = 0;
+
+                ctx->has_been_current = TRUE;
+                ctx->tid = GetCurrentThreadId();
+                ctx->hdc = pDrawDev->hdc;
+                ctx->read_hdc = pReadDev->hdc;
+                ctx->drawables[0] = d_draw;
+                ctx->drawables[1] = d_read;
+                ctx->refresh_drawables = FALSE;
+                NtCurrentTeb()->glContext = ctx;
+            }
+            else
+                SetLastError(ERROR_INVALID_HANDLE);
         }
     }
     wine_tsx11_unlock();
@@ -2244,7 +2271,7 @@ void flush_gl_drawable(X11DRV_PDEVICE *physDev)
 {
     int w, h;
 
-    if (!physDev->gl_copy)
+    if (!physDev->gl_copy || !physDev->current_pf)
         return;
 
     w = physDev->dc_rect.right - physDev->dc_rect.left;
@@ -3400,7 +3427,9 @@ static const char * WINAPI X11DRV_wglGetExtensionsStringEXT(void) {
  * WGL_EXT_swap_control: wglGetSwapIntervalEXT
  */
 static int WINAPI X11DRV_wglGetSwapIntervalEXT(VOID) {
-    FIXME("(),stub!\n");
+    /* GLX_SGI_swap_control doesn't have any provisions for getting the swap
+     * interval, so the swap interval has to be tracked. */
+    TRACE("()\n");
     return swap_interval;
 }
 
@@ -3413,13 +3442,37 @@ static BOOL WINAPI X11DRV_wglSwapIntervalEXT(int interval) {
     BOOL ret = TRUE;
 
     TRACE("(%d)\n", interval);
-    swap_interval = interval;
-    if (NULL != pglXSwapIntervalSGI) {
-        wine_tsx11_lock();
-        ret = !pglXSwapIntervalSGI(interval);
-        wine_tsx11_unlock();
+
+    if (interval < 0)
+    {
+        SetLastError(ERROR_INVALID_DATA);
+        return FALSE;
     }
-    else WARN("(): GLX_SGI_swap_control extension seems not supported\n");
+    else if (!has_swap_control && interval == 0)
+    {
+        /* wglSwapIntervalEXT considers an interval value of zero to mean that
+         * vsync should be disabled, but glXSwapIntervalSGI considers such a
+         * value to be an error. Just silently ignore the request for now. */
+        WARN("Request to disable vertical sync is not handled\n");
+        swap_interval = 0;
+    }
+    else
+    {
+        if (pglXSwapIntervalSGI)
+        {
+            wine_tsx11_lock();
+            ret = !pglXSwapIntervalSGI(interval);
+            wine_tsx11_unlock();
+        }
+        else
+            WARN("GLX_SGI_swap_control extension is not available\n");
+
+        if (ret)
+            swap_interval = interval;
+        else
+            SetLastError(ERROR_DC_NOT_FOUND);
+    }
+
     return ret;
 }
 
@@ -3709,6 +3762,9 @@ static void X11DRV_WineGL_LoadExtensions(void)
     if(glxRequireExtension("GLX_EXT_fbconfig_packed_float"))
         register_extension_string("WGL_EXT_pixel_format_packed_float");
 
+    if (glxRequireExtension("GLX_EXT_swap_control"))
+        has_swap_control = TRUE;
+
     /* The OpenGL extension GL_NV_vertex_array_range adds wgl/glX functions which aren't exported as 'real' wgl/glX extensions. */
     if(strstr(WineGLInfo.glExtensions, "GL_NV_vertex_array_range") != NULL)
         register_extension(&WGL_NV_vertex_array_range);
@@ -3761,6 +3817,20 @@ BOOL CDECL X11DRV_SwapBuffers(X11DRV_PDEVICE *physDev)
   if (!has_opengl()) return FALSE;
 
   TRACE("(%p)\n", physDev);
+
+  if (!ctx)
+  {
+      WARN("Using a NULL context, skipping\n");
+      SetLastError(ERROR_INVALID_HANDLE);
+      return FALSE;
+  }
+
+  if (!physDev->current_pf)
+  {
+      WARN("Using an invalid drawable, skipping\n");
+      SetLastError(ERROR_INVALID_HANDLE);
+      return FALSE;
+  }
 
   drawable = get_glxdrawable(physDev);
 

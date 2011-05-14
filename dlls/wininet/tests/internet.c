@@ -164,7 +164,7 @@ static void test_InternetCanonicalizeUrlA(void)
 static void test_InternetQueryOptionA(void)
 {
   HINTERNET hinet,hurl;
-  DWORD len;
+  DWORD len, val;
   DWORD err;
   static const char useragent[] = {"Wininet Test"};
   char *buffer;
@@ -248,6 +248,19 @@ static void test_InternetQueryOptionA(void)
   ok(err == ERROR_INSUFFICIENT_BUFFER, "Got wrong error code%d\n",err);
 
   InternetCloseHandle(hinet);
+
+  len = sizeof(val);
+  retval = InternetQueryOptionA(NULL, INTERNET_OPTION_MAX_CONNS_PER_SERVER, &val, &len);
+  ok(retval == TRUE,"Got wrong return value %d\n", retval);
+  ok(len == sizeof(val), "got %d\n", len);
+  ok(val == 2, "got %d\n", val);
+
+  len = sizeof(val);
+  retval = InternetQueryOptionA(NULL, INTERNET_OPTION_MAX_CONNS_PER_1_0_SERVER, &val, &len);
+  ok(retval == TRUE,"Got wrong return value %d\n", retval);
+  ok(len == sizeof(val), "got %d\n", len);
+  ok(val == 4, "got %d\n", val);
+
 }
 
 static void test_get_cookie(void)
@@ -291,6 +304,7 @@ static void test_complicated_cookie(void)
 
   len = 1024;
   ret = InternetGetCookie("http://testing.example.com", NULL, buffer, &len);
+  ok(ret == TRUE,"InternetGetCookie failed\n");
   ok(strstr(buffer,"A=B")!=NULL,"A=B missing\n");
   ok(strstr(buffer,"C=D")!=NULL,"C=D missing\n");
   ok(strstr(buffer,"E=F")!=NULL,"E=F missing\n");
@@ -302,6 +316,7 @@ static void test_complicated_cookie(void)
 
   len = 1024;
   ret = InternetGetCookie("http://testing.example.com/foobar", NULL, buffer, &len);
+  ok(ret == TRUE,"InternetGetCookie failed\n");
   ok(strstr(buffer,"A=B")!=NULL,"A=B missing\n");
   ok(strstr(buffer,"C=D")!=NULL,"C=D missing\n");
   ok(strstr(buffer,"E=F")!=NULL,"E=F missing\n");
@@ -313,6 +328,7 @@ static void test_complicated_cookie(void)
 
   len = 1024;
   ret = InternetGetCookie("http://testing.example.com/foobar/", NULL, buffer, &len);
+  ok(ret == TRUE,"InternetGetCookie failed\n");
   ok(strstr(buffer,"A=B")!=NULL,"A=B missing\n");
   ok(strstr(buffer,"C=D")!=NULL,"C=D missing\n");
   ok(strstr(buffer,"E=F")!=NULL,"E=F missing\n");
@@ -324,6 +340,7 @@ static void test_complicated_cookie(void)
 
   len = 1024;
   ret = InternetGetCookie("http://testing.example.com/foo/bar", NULL, buffer, &len);
+  ok(ret == TRUE,"InternetGetCookie failed\n");
   ok(strstr(buffer,"A=B")!=NULL,"A=B missing\n");
   ok(strstr(buffer,"C=D")!=NULL,"C=D missing\n");
   ok(strstr(buffer,"E=F")!=NULL,"E=F missing\n");
@@ -335,6 +352,7 @@ static void test_complicated_cookie(void)
 
   len = 1024;
   ret = InternetGetCookie("http://testing.example.com/barfoo", NULL, buffer, &len);
+  ok(ret == TRUE,"InternetGetCookie failed\n");
   ok(strstr(buffer,"A=B")!=NULL,"A=B missing\n");
   ok(strstr(buffer,"C=D")!=NULL,"C=D missing\n");
   ok(strstr(buffer,"E=F")!=NULL,"E=F missing\n");
@@ -346,6 +364,7 @@ static void test_complicated_cookie(void)
 
   len = 1024;
   ret = InternetGetCookie("http://testing.example.com/barfoo/", NULL, buffer, &len);
+  ok(ret == TRUE,"InternetGetCookie failed\n");
   ok(strstr(buffer,"A=B")!=NULL,"A=B missing\n");
   ok(strstr(buffer,"C=D")!=NULL,"C=D missing\n");
   ok(strstr(buffer,"E=F")!=NULL,"E=F missing\n");
@@ -357,6 +376,7 @@ static void test_complicated_cookie(void)
 
   len = 1024;
   ret = InternetGetCookie("http://testing.example.com/bar/foo", NULL, buffer, &len);
+  ok(ret == TRUE,"InternetGetCookie failed\n");
   ok(strstr(buffer,"A=B")!=NULL,"A=B missing\n");
   ok(strstr(buffer,"C=D")!=NULL,"C=D missing\n");
   ok(strstr(buffer,"E=F")!=NULL,"E=F missing\n");
@@ -1128,7 +1148,7 @@ static void test_Option_PerConnectionOptionA(void)
 #define FLAG_NEEDREQ  0x2
 #define FLAG_UNIMPL   0x4
 
-void test_InternetErrorDlg(void)
+static void test_InternetErrorDlg(void)
 {
     HINTERNET ses, con, req;
     DWORD res, flags;

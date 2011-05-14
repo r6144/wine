@@ -312,11 +312,17 @@ static void put_string(res_t *res, const string_t *str, enum str_e type, int ist
         if (str->type == str_char)
         {
             if (!check_unicode_conversion( str, newstr, codepage ))
+            {
+                print_location( &str->loc );
                 error( "String %s does not convert identically to Unicode and back in codepage %d. "
                        "Try using a Unicode string instead\n", str->str.cstr, codepage );
+            }
             if (check_valid_utf8( str, codepage ))
+            {
+                print_location( &str->loc );
                 warning( "string \"%s\" seems to be UTF-8 but codepage %u is in use.\n",
                          str->str.cstr, codepage );
+            }
         }
         if (!isterm) put_word(res, newstr->size);
         for(cnt = 0; cnt < newstr->size; cnt++)
@@ -1741,23 +1747,8 @@ char *prep_nid_for_label(const name_id_t *nid)
 */
 char *make_c_name(const char *base, const name_id_t *nid, const language_t *lan)
 {
-	int nlen;
-	char *buf;
-	char *ret;
-	char lanbuf[6];
-
-	sprintf(lanbuf, "%d", lan ? MAKELANGID(lan->id, lan->sub) : 0);
-	buf = prep_nid_for_label(nid);
-	nlen = strlen(buf) + strlen(lanbuf);
-	nlen += strlen(base) + 4; /* three time '_' and '\0' */
-	ret = xmalloc(nlen);
-	strcpy(ret, "_");
-	strcat(ret, base);
-	strcat(ret, "_");
-	strcat(ret, buf);
-	strcat(ret, "_");
-	strcat(ret, lanbuf);
-	return ret;
+	char *buf = prep_nid_for_label(nid);
+	return strmake( "_%s_%s_%d", base, buf, lan ? MAKELANGID(lan->id, lan->sub) : 0);
 }
 
 /*

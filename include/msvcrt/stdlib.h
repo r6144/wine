@@ -73,6 +73,9 @@ typedef struct _ldiv_t {
 #define _OUT_TO_MSGBOX       2
 #define _REPORT_ERRMODE      3
 
+/* _set_abort_behavior codes */
+#define _WRITE_ABORT_MSG     1
+#define _CALL_REPORTFAULT    2
 
 #ifdef __cplusplus
 extern "C" {
@@ -138,6 +141,7 @@ typedef int (__cdecl *_onexit_t)(void);
 
 int           __cdecl _atodbl(_CRT_DOUBLE*,char*);
 int           __cdecl _atoflt(_CRT_FLOAT*,char*);
+int           __cdecl _atoflt_l(_CRT_FLOAT*,char*,_locale_t);
 __int64       __cdecl _atoi64(const char*);
 long double   __cdecl _atold(const char*);
 int           __cdecl _atoldbl(_LDOUBLE*,char*);

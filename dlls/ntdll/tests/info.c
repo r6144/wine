@@ -208,6 +208,7 @@ static void test_query_timeofday(void)
 
         sti.uCurrentTimeZoneId = 0xdeadbeef;
         status = pNtQuerySystemInformation(SystemTimeOfDayInformation, &sti, 28, &ReturnLength);
+        ok(status == STATUS_SUCCESS || broken(status == STATUS_INFO_LENGTH_MISMATCH /* NT4 */), "Expected STATUS_SUCCESS, got %08x\n", status);
         ok( 0xdeadbeef == sti.uCurrentTimeZoneId, "This part of the buffer should not have been filled\n");
 
         status = pNtQuerySystemInformation(SystemTimeOfDayInformation, &sti, 32, &ReturnLength);
@@ -366,6 +367,7 @@ static void test_query_procperf(void)
 
     /* Find out the number of processors */
     status = pNtQuerySystemInformation(SystemBasicInformation, &sbi, sizeof(sbi), &ReturnLength);
+    ok(status == STATUS_SUCCESS, "Expected STATUS_SUCCESS, got %08x\n", status);
     NeededLength = sbi.NumberOfProcessors * sizeof(SYSTEM_PROCESSOR_PERFORMANCE_INFORMATION);
 
     sppi = HeapAlloc(GetProcessHeap(), 0, NeededLength);
@@ -515,6 +517,7 @@ static void test_query_interrupt(void)
 
     /* Find out the number of processors */
     status = pNtQuerySystemInformation(SystemBasicInformation, &sbi, sizeof(sbi), &ReturnLength);
+    ok(status == STATUS_SUCCESS, "Expected STATUS_SUCCESS, got %08x\n", status);
     NeededLength = sbi.NumberOfProcessors * sizeof(SYSTEM_INTERRUPT_INFORMATION);
 
     sii = HeapAlloc(GetProcessHeap(), 0, NeededLength);
@@ -1025,6 +1028,78 @@ static void test_query_process_debug_object_handle(int argc, char **argv)
     ok(ret, "CloseHandle failed with last error %u\n", GetLastError());
 }
 
+static void test_query_process_debug_flags(int argc, char **argv)
+{
+    DWORD debug_flags = 0xdeadbeef;
+    char cmdline[MAX_PATH];
+    PROCESS_INFORMATION pi;
+    STARTUPINFO si = { 0 };
+    NTSTATUS status;
+    BOOL ret;
+
+    sprintf(cmdline, "%s %s %s", argv[0], argv[1], "debuggee");
+
+    si.cb = sizeof(si);
+    ret = CreateProcess(NULL, cmdline, NULL, NULL, FALSE, DEBUG_PROCESS | DEBUG_ONLY_THIS_PROCESS, NULL, NULL, &si, &pi);
+    ok(ret, "CreateProcess failed, last error %#x.\n", GetLastError());
+    if (!ret) return;
+
+    status = pNtQueryInformationProcess(NULL, ProcessDebugFlags,
+            NULL, 0, NULL);
+    ok(status == STATUS_INFO_LENGTH_MISMATCH || broken(status == STATUS_INVALID_INFO_CLASS) /* NT4 */, "Expected STATUS_INFO_LENGTH_MISMATCH, got %#x.\n", status);
+
+    status = pNtQueryInformationProcess(NULL, ProcessDebugFlags,
+            NULL, sizeof(debug_flags), NULL);
+    ok(status == STATUS_INVALID_HANDLE || status == STATUS_ACCESS_VIOLATION || broken(status == STATUS_INVALID_INFO_CLASS) /* W7PROX64 (32-bit) */,
+            "Expected STATUS_INVALID_HANDLE, got %#x.\n", status);
+
+    status = pNtQueryInformationProcess(GetCurrentProcess(), ProcessDebugFlags,
+            NULL, sizeof(debug_flags), NULL);
+    ok(status == STATUS_ACCESS_VIOLATION, "Expected STATUS_ACCESS_VIOLATION, got %#x.\n", status);
+
+    status = pNtQueryInformationProcess(NULL, ProcessDebugFlags,
+            &debug_flags, sizeof(debug_flags), NULL);
+    ok(status == STATUS_INVALID_HANDLE || broken(status == STATUS_INVALID_INFO_CLASS) /* NT4 */, "Expected STATUS_ACCESS_VIOLATION, got %#x.\n", status);
+
+    status = pNtQueryInformationProcess(GetCurrentProcess(), ProcessDebugFlags,
+            &debug_flags, sizeof(debug_flags) - 1, NULL);
+    ok(status == STATUS_INFO_LENGTH_MISMATCH || broken(status == STATUS_INVALID_INFO_CLASS) /* NT4 */, "Expected STATUS_INFO_LENGTH_MISMATCH, got %#x.\n", status);
+
+    status = pNtQueryInformationProcess(GetCurrentProcess(), ProcessDebugFlags,
+            &debug_flags, sizeof(debug_flags) + 1, NULL);
+    ok(status == STATUS_INFO_LENGTH_MISMATCH || broken(status == STATUS_INVALID_INFO_CLASS) /* NT4 */, "Expected STATUS_INFO_LENGTH_MISMATCH, got %#x.\n", status);
+
+    status = pNtQueryInformationProcess(GetCurrentProcess(), ProcessDebugFlags,
+            &debug_flags, sizeof(debug_flags), NULL);
+    ok(!status || broken(status == STATUS_INVALID_INFO_CLASS) /* NT4 */, "NtQueryInformationProcess failed, status %#x.\n", status);
+    ok(debug_flags == TRUE|| broken(status == STATUS_INVALID_INFO_CLASS) /* NT4 */, "Expected flag TRUE, got %x.\n", debug_flags);
+
+    status = pNtQueryInformationProcess(pi.hProcess, ProcessDebugFlags,
+            &debug_flags, sizeof(debug_flags), NULL);
+    ok(!status || broken(status == STATUS_INVALID_INFO_CLASS) /* NT4 */, "NtQueryInformationProcess failed, status %#x.\n", status);
+    ok(debug_flags == FALSE || broken(status == STATUS_INVALID_INFO_CLASS) /* NT4 */, "Expected flag FALSE, got %x.\n", debug_flags);
+
+    for (;;)
+    {
+        DEBUG_EVENT ev;
+
+        ret = WaitForDebugEvent(&ev, INFINITE);
+        ok(ret, "WaitForDebugEvent failed, last error %#x.\n", GetLastError());
+        if (!ret) break;
+
+        if (ev.dwDebugEventCode == EXIT_PROCESS_DEBUG_EVENT) break;
+
+        ret = ContinueDebugEvent(ev.dwProcessId, ev.dwThreadId, DBG_CONTINUE);
+        ok(ret, "ContinueDebugEvent failed, last error %#x.\n", GetLastError());
+        if (!ret) break;
+    }
+
+    ret = CloseHandle(pi.hThread);
+    ok(ret, "CloseHandle failed, last error %#x.\n", GetLastError());
+    ret = CloseHandle(pi.hProcess);
+    ok(ret, "CloseHandle failed, last error %#x.\n", GetLastError());
+}
+
 static void test_readvirtualmemory(void)
 {
     HANDLE process;
@@ -1260,6 +1335,7 @@ static void test_affinity(void)
     status = pNtSetInformationThread( GetCurrentThread(), ThreadAffinityMask, &thread_affinity, sizeof(thread_affinity) );
     ok( status == STATUS_SUCCESS, "Expected STATUS_SUCCESS, got %08x\n", status);
     status = pNtQueryInformationThread( GetCurrentThread(), ThreadBasicInformation, &tbi, sizeof(tbi), NULL );
+    ok(status == STATUS_SUCCESS, "Expected STATUS_SUCCESS, got %08x\n", status);
     ok( tbi.AffinityMask == 1, "Unexpected thread affinity\n" );
 
     /* NOTE: Pre-Vista does not recognize the "all processors" flag (all bits set) */
@@ -1278,6 +1354,7 @@ static void test_affinity(void)
     if (status == STATUS_SUCCESS)
     {
         status = pNtQueryInformationThread( GetCurrentThread(), ThreadBasicInformation, &tbi, sizeof(tbi), NULL );
+        ok(status == STATUS_SUCCESS, "Expected STATUS_SUCCESS, got %08x\n", status);
         ok( broken(tbi.AffinityMask == 1) || tbi.AffinityMask == (1 << si.dwNumberOfProcessors) - 1,
             "Unexpected thread affinity\n" );
     }
@@ -1405,6 +1482,10 @@ START_TEST(info)
     /* 0x1E ProcessDebugObjectHandle */
     trace("Starting test_query_process_debug_object_handle()\n");
     test_query_process_debug_object_handle(argc, argv);
+
+    /* 0x1F ProcessDebugFlags */
+    trace("Starting test_process_debug_flags()\n");
+    test_query_process_debug_flags(argc, argv);
 
     /* belongs into it's own file */
     trace("Starting test_readvirtualmemory()\n");

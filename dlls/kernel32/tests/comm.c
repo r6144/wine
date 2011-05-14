@@ -927,7 +927,7 @@ static void test_LoopbackRead(HANDLE hcom)
     i=0;
     do 
     {
-	res = ReadFile(hcom, rbuf+read, sizeof(rbuf-read), &read1, NULL);
+	res = ReadFile(hcom, rbuf+read, sizeof(rbuf)-read, &read1, NULL);
 	ok(res, "Readfile failed\n");
 	read += read1;
 	i++;
@@ -1627,8 +1627,10 @@ static void  test_WaitBreak(HANDLE hcom)
     trace("overlapped WriteCommEvent returned.\n");
 
     if (!success && (err == ERROR_IO_PENDING))
-	ok(WaitForSingleObjectEx(hComPortEvent, TIMEOUT, TRUE) == 0,
-           "wait hComPortEvent res %d\n", GetLastError());
+    {
+        success = WaitForSingleObjectEx(hComPortEvent, TIMEOUT, TRUE);
+        ok(!success, "wait hComPortEvent res %d\n", GetLastError());
+    }
     success = GetOverlappedResult(hcom, &overlapped, &written, FALSE);
     err = GetLastError();
     after1 = GetTickCount();

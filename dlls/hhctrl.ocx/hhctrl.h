@@ -47,6 +47,7 @@
 #define WB_SEARCH     3
 #define WB_REFRESH    4
 #define WB_STOP       5
+#define WB_PRINT      6
 
 typedef struct {
     LPWSTR chm_file;
@@ -168,6 +169,7 @@ void DoPageAction(HHInfo*,DWORD);
 
 void InitContent(HHInfo*);
 void ReleaseContent(HHInfo*);
+void ActivateContentTopic(HWND,LPCWSTR,ContentItem *);
 
 void InitIndex(HHInfo*);
 void ReleaseIndex(HHInfo*);

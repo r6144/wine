@@ -51,7 +51,7 @@ static BOOL check_load_safety(PluginHost *host)
     cs.pUnk = host->plugin_unk;
     cs.dwFlags = CONFIRMSAFETYACTION_LOADOBJECT;
 
-    hres = IInternetHostSecurityManager_QueryCustomPolicy(HOSTSECMGR(host->doc),
+    hres = IInternetHostSecurityManager_QueryCustomPolicy(&host->doc->IInternetHostSecurityManager_iface,
             &GUID_CUSTOM_CONFIRMOBJECTSAFETY, &ppolicy, &policy_size, (BYTE*)&cs, sizeof(cs), 0);
     if(FAILED(hres))
         return FALSE;
@@ -75,7 +75,7 @@ static BOOL check_script_safety(PluginHost *host)
     cs.pUnk = host->plugin_unk;
     cs.dwFlags = 0;
 
-    hres = IInternetHostSecurityManager_QueryCustomPolicy(HOSTSECMGR(host->doc),
+    hres = IInternetHostSecurityManager_QueryCustomPolicy(&host->doc->IInternetHostSecurityManager_iface,
             &GUID_CUSTOM_CONFIRMOBJECTSAFETY, &ppolicy, &policy_size, (BYTE*)&cs, sizeof(cs), 0);
     if(FAILED(hres))
         return FALSE;
@@ -125,7 +125,7 @@ static void update_readystate(PluginHost *host)
 }
 
 /* FIXME: We shouldn't need this function and we should embed plugin directly in the main document */
-void get_pos_rect(PluginHost *host, RECT *ret)
+static void get_pos_rect(PluginHost *host, RECT *ret)
 {
     ret->top = 0;
     ret->left = 0;
@@ -1180,7 +1180,8 @@ static HRESULT WINAPI PHServiceProvider_QueryService(IServiceProvider *iface, RE
         return E_NOINTERFACE;
     }
 
-    return IServiceProvider_QueryService(SERVPROV(This->doc->basedoc.window), guidService, riid, ppv);
+    return IServiceProvider_QueryService(&This->doc->basedoc.window->IServiceProvider_iface,
+            guidService, riid, ppv);
 }
 
 static const IServiceProviderVtbl ServiceProviderVtbl = {
@@ -1200,7 +1201,8 @@ static HRESULT assoc_element(PluginHost *host, HTMLDocumentNode *doc, nsIDOMElem
     if(FAILED(hres))
         return hres;
 
-    hres = IHTMLDOMNode_QueryInterface(HTMLDOMNODE(node), &IID_HTMLPluginContainer, (void**)&container_elem);
+    hres = IHTMLDOMNode_QueryInterface(&node->IHTMLDOMNode_iface, &IID_HTMLPluginContainer,
+            (void**)&container_elem);
     if(FAILED(hres)) {
         ERR("Not an object element\n");
         return hres;

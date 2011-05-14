@@ -51,6 +51,11 @@
 #include "winuser.h"
 #include "winnls.h"
 #include "mmddk.h"
+#include "mmreg.h"
+#include "dsound.h"
+#include "dsdriver.h"
+#include "ks.h"
+#include "ksmedia.h"
 
 #include "alsa.h"
 
@@ -60,8 +65,6 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(wave);
 
-#ifdef HAVE_ALSA
-
 WINE_WAVEDEV	*WOutDev;
 DWORD            ALSA_WodNumMallocedDevs;
 DWORD            ALSA_WodNumDevs;
@@ -69,7 +72,7 @@ DWORD            ALSA_WodNumDevs;
 /**************************************************************************
  * 			wodNotifyClient			[internal]
  */
-static DWORD wodNotifyClient(WINE_WAVEDEV* wwo, WORD wMsg, DWORD_PTR dwParam1, DWORD_PTR dwParam2)
+static void wodNotifyClient(WINE_WAVEDEV* wwo, WORD wMsg, DWORD_PTR dwParam1, DWORD_PTR dwParam2)
 {
     TRACE("wMsg = 0x%04x dwParm1 = %lx dwParam2 = %lx\n", wMsg, dwParam1, dwParam2);
 
@@ -77,18 +80,12 @@ static DWORD wodNotifyClient(WINE_WAVEDEV* wwo, WORD wMsg, DWORD_PTR dwParam1, D
     case WOM_OPEN:
     case WOM_CLOSE:
     case WOM_DONE:
-	if (wwo->wFlags != DCB_NULL &&
-	    !DriverCallback(wwo->waveDesc.dwCallback, wwo->wFlags, (HDRVR)wwo->waveDesc.hWave,
-			    wMsg, wwo->waveDesc.dwInstance, dwParam1, dwParam2)) {
-	    WARN("can't notify client !\n");
-	    return MMSYSERR_ERROR;
-	}
+        DriverCallback(wwo->waveDesc.dwCallback, wwo->wFlags, (HDRVR)wwo->waveDesc.hWave,
+                       wMsg, wwo->waveDesc.dwInstance, dwParam1, dwParam2);
 	break;
     default:
 	FIXME("Unknown callback message %u\n", wMsg);
-        return MMSYSERR_INVALPARAM;
     }
-    return MMSYSERR_NOERROR;
 }
 
 /**************************************************************************
@@ -364,7 +361,7 @@ static	void	wodPlayer_Reset(WINE_WAVEDEV* wwo, BOOL reset)
             ((LPWAVEHDR)param)->dwFlags &= ~WHDR_INQUEUE;
             ((LPWAVEHDR)param)->dwFlags |= WHDR_DONE;
 
-                wodNotifyClient(wwo, WOM_DONE, param, 0);
+            wodNotifyClient(wwo, WOM_DONE, param, 0);
         }
         ALSA_ResetRingMessage(&wwo->msgRing);
         LeaveCriticalSection(&wwo->msgRing.msg_crst);
@@ -579,7 +576,7 @@ static DWORD wodOpen(WORD wDevID, LPWAVEOPENDESC lpDesc, DWORD dwFlags)
     WINE_WAVEDEV*	        wwo;
     snd_pcm_t *                 pcm = NULL;
     snd_hctl_t *                hctl = NULL;
-    snd_pcm_hw_params_t *       hw_params = NULL;
+    snd_pcm_hw_params_t *       hw_params;
     snd_pcm_sw_params_t *       sw_params;
     snd_pcm_access_t            access;
     snd_pcm_format_t            format = -1;
@@ -683,8 +680,8 @@ static DWORD wodOpen(WORD wDevID, LPWAVEOPENDESC lpDesc, DWORD dwFlags)
 } while(0)
 
     sw_params = HeapAlloc( GetProcessHeap(), HEAP_ZERO_MEMORY, snd_pcm_sw_params_sizeof() );
-    snd_pcm_hw_params_malloc(&hw_params);
-    if (! hw_params)
+    hw_params = HeapAlloc( GetProcessHeap(), HEAP_ZERO_MEMORY, snd_pcm_hw_params_sizeof() );
+    if (!hw_params || !sw_params)
     {
         retcode = MMSYSERR_NOMEM;
         goto errexit;
@@ -782,18 +779,16 @@ static DWORD wodOpen(WORD wDevID, LPWAVEOPENDESC lpDesc, DWORD dwFlags)
 
     wwo->hStartUpEvent = CreateEventW(NULL, FALSE, FALSE, NULL);
     wwo->hThread = CreateThread(NULL, 0, wodPlayer, (LPVOID)(DWORD_PTR)wDevID, 0, &(wwo->dwThreadID));
-    if (wwo->hThread)
-        SetThreadPriority(wwo->hThread, THREAD_PRIORITY_TIME_CRITICAL);
-    else
-    {
+    if (!wwo->hThread) {
         ERR("Thread creation for the wodPlayer failed!\n");
         CloseHandle(wwo->hStartUpEvent);
         retcode = MMSYSERR_NOMEM;
         goto errexit;
     }
+    SetThreadPriority(wwo->hThread, THREAD_PRIORITY_TIME_CRITICAL);
     WaitForSingleObject(wwo->hStartUpEvent, INFINITE);
     CloseHandle(wwo->hStartUpEvent);
-    wwo->hStartUpEvent = INVALID_HANDLE_VALUE;
+    wwo->hStartUpEvent = NULL;
 
     TRACE("handle=%p\n", pcm);
     TRACE("wBitsPerSample=%u, nAvgBytesPerSec=%u, nSamplesPerSec=%u, nChannels=%u nBlockAlign=%u!\n",
@@ -802,13 +797,12 @@ static DWORD wodOpen(WORD wDevID, LPWAVEOPENDESC lpDesc, DWORD dwFlags)
 	  wwo->format.Format.nBlockAlign);
 
     HeapFree( GetProcessHeap(), 0, sw_params );
-    wwo->pcm = pcm;
-    wwo->hctl = hctl;
-    if ( wwo->hw_params )
-	snd_pcm_hw_params_free(wwo->hw_params);
     wwo->hw_params = hw_params;
+    wwo->hctl = hctl;
+    wwo->pcm = pcm;
 
-    return wodNotifyClient(wwo, WOM_OPEN, 0L, 0L);
+    wodNotifyClient(wwo, WOM_OPEN, 0L, 0L);
+    return MMSYSERR_NOERROR;
 
 errexit:
     if (pcm)
@@ -820,9 +814,7 @@ errexit:
         snd_hctl_close(hctl);
     }
 
-    if ( hw_params )
-	snd_pcm_hw_params_free(hw_params);
-
+    HeapFree( GetProcessHeap(), 0, hw_params );
     HeapFree( GetProcessHeap(), 0, sw_params );
     if (wwo->msgRing.ring_buffer_size > 0)
         ALSA_DestroyRingMessage(&wwo->msgRing);
@@ -836,7 +828,6 @@ errexit:
  */
 static DWORD wodClose(WORD wDevID)
 {
-    DWORD		ret = MMSYSERR_NOERROR;
     WINE_WAVEDEV*	wwo;
 
     TRACE("(%u);\n", wDevID);
@@ -846,40 +837,38 @@ static DWORD wodClose(WORD wDevID)
 	return MMSYSERR_BADDEVICEID;
     }
 
-    if (WOutDev[wDevID].pcm == NULL) {
+    wwo = &WOutDev[wDevID];
+    if (wwo->pcm == NULL) {
 	WARN("Requested to close already closed device %d!\n", wDevID);
 	return MMSYSERR_BADDEVICEID;
     }
 
-    wwo = &WOutDev[wDevID];
     if (wwo->lpQueuePtr) {
 	WARN("buffers still playing !\n");
-	ret = WAVERR_STILLPLAYING;
+	return WAVERR_STILLPLAYING;
     } else {
-	if (wwo->hThread != INVALID_HANDLE_VALUE) {
+	if (wwo->hThread) {
 	    ALSA_AddRingMessage(&wwo->msgRing, WINE_WM_CLOSING, 0, TRUE);
 	}
         ALSA_DestroyRingMessage(&wwo->msgRing);
 
-        if (wwo->hw_params)
-	    snd_pcm_hw_params_free(wwo->hw_params);
+	HeapFree( GetProcessHeap(), 0, wwo->hw_params );
 	wwo->hw_params = NULL;
-
-        if (wwo->pcm)
-            snd_pcm_close(wwo->pcm);
-	wwo->pcm = NULL;
 
         if (wwo->hctl)
         {
             snd_hctl_free(wwo->hctl);
             snd_hctl_close(wwo->hctl);
+            wwo->hctl = NULL;
         }
-	wwo->hctl = NULL;
 
-	ret = wodNotifyClient(wwo, WOM_CLOSE, 0L, 0L);
+	snd_pcm_close(wwo->pcm);
+	wwo->pcm = NULL;
+
+	wodNotifyClient(wwo, WOM_CLOSE, 0L, 0L);
     }
 
-    return ret;
+    return MMSYSERR_NOERROR;
 }
 
 
@@ -1191,17 +1180,3 @@ DWORD WINAPI ALSA_wodMessage(UINT wDevID, UINT wMsg, DWORD_PTR dwUser,
     }
     return MMSYSERR_NOTSUPPORTED;
 }
-
-#else /* HAVE_ALSA */
-
-/**************************************************************************
- * 				wodMessage (WINEALSA.@)
- */
-DWORD WINAPI ALSA_wodMessage(WORD wDevID, WORD wMsg, DWORD dwUser,
-                             DWORD dwParam1, DWORD dwParam2)
-{
-    FIXME("(%u, %04X, %08X, %08X, %08X):stub\n", wDevID, wMsg, dwUser, dwParam1, dwParam2);
-    return MMSYSERR_NOTENABLED;
-}
-
-#endif /* HAVE_ALSA */

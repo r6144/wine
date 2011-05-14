@@ -18,6 +18,12 @@
 
 var tmp, i;
 
+ok(ScriptEngine() === "JScript", "ScriptEngine() = " + ScriptEngine());
+ok(ScriptEngine(3) === "JScript", "ScriptEngine(3) = " + ScriptEngine(3));
+ok(ScriptEngineMajorVersion() === ScriptEngineMajorVersion(2), "ScriptEngineMajorVersion() !== ScriptEngineMajorVersion(2)");
+ok(ScriptEngineMinorVersion() === ScriptEngineMinorVersion(2), "ScriptEngineMinorVersion() !== ScriptEngineMinorVersion(2)");
+ok(ScriptEngineBuildVersion() === ScriptEngineBuildVersion(2), "ScriptEngineBuildVersion() !== ScriptEngineBuildVersion(2)");
+
 i = parseInt("0");
 ok(i === 0, "parseInt('0') = " + i);
 i = parseInt("123");
@@ -36,6 +42,48 @@ i = parseInt("123", 10, "test");
 ok(i === 123, "parseInt('123', 10, 'test') = " + i);
 i = parseInt("11", "8");
 ok(i === 9, "parseInt('11', '8') = " + i);
+i = parseInt("010");
+ok(i === 8, "parseInt('010') = " + i);
+i = parseInt("");
+ok(isNaN(i), "parseInt('') = " + i);
+i = parseInt("0x");
+ok(isNaN(i), "parseInt('0x') = " + i);
+i = parseInt("+");
+ok(isNaN(i), "parseInt('+') = " + i);
+i = parseInt("-");
+ok(isNaN(i), "parseInt('-') = " + i);
+i = parseInt("0x10", 11);
+ok(i === 0, "parseInt('0x10', 11) = " + i);
+i = parseInt("010", 7);
+ok(i === 7, "parseInt('010', 7) = " + i);
+i = parseInt("123abc");
+ok(i === 123, "parseInt('123abc') = " + i);
+i = parseInt("   \t123abc");
+ok(i === 123, "parseInt('   \\t123abc') = " + i);
+i = parseInt("abc");
+ok(isNaN(i), "parseInt('123abc') = " + i);
+i = parseInt("-12", 11);
+ok(i === -13, "parseInt('-12') = " + i);
+i = parseInt("-0x10");
+ok(i === -16, "parseInt('-0x10') = " + i);
+i = parseInt("-010");
+ok(i === -8, "parseInt('-010') = " + i);
+i = parseInt("123", 0);
+ok(i === 123, "parseInt('123', 0) = " + i);
+i = parseInt("0x10", 0);
+ok(i === 16, "parseInt('123', 0) = " + i);
+i = parseInt("0x10", 10);
+ok(i === 0, "parseInt('0x10', 10) = " + i);
+i = parseInt("0xz");
+ok(isNaN(i), "parseInt('0xz') = " + i);
+i = parseInt("1", 1);
+ok(isNaN(i), "parseInt('1', 1) = " + i);
+i = parseInt("1", -1);
+ok(isNaN(i), "parseInt('1', -1) = " + i);
+i = parseInt("1", 37);
+ok(isNaN(i), "parseInt('1', 37) = " + i);
+i = parseInt("1", 36);
+ok(i === 1, "parseInt('1', 36) = " + i);
 
 tmp = encodeURI("abc");
 ok(tmp === "abc", "encodeURI('abc') = " + tmp);
@@ -1893,6 +1941,7 @@ var exception_array = {
     E_RBRACKET:          { type: "SyntaxError",  number: -2146827282 },
     E_SEMICOLON:         { type: "SyntaxError",  number: -2146827284 },
     E_UNTERMINATED_STR:  { type: "SyntaxError",  number: -2146827273 },
+    E_DISABLED_CC:       { type: "SyntaxError",  number: -2146827258 },
 
     E_ILLEGAL_ASSIGN:  { type: "ReferenceError", number: -2146823280 },
 
@@ -1948,9 +1997,21 @@ testException(function() {new VBArray(new VBArray(createArray()));}, "E_NOT_VBAR
 testException(function() {VBArray.prototype.lbound.call(new Object());}, "E_NOT_VBARRAY");
 
 // SyntaxError tests
-function testSyntaxError(code, e) {
-    testException(function() { eval(code); }, e);
+function testSyntaxError(code, id) {
+    var ex = exception_array[id];
+    var ret = "", num = "";
+
+    try {
+        eval(code);
+    } catch(e) {
+        ret = e.name;
+        num = e.number;
+    }
+
+    ok(ret === ex.type, "Syntax exception test, ret = " + ret + ", expected " + ex.type +". Executed code: " + code);
+    ok(num === ex.number, "Syntax exception test, num = " + num + ", expected " + ex.number + ". Executed code: " + code);
 }
+
 testSyntaxError("for(i=0;) {}", "E_SYNTAX_ERROR");
 testSyntaxError("function {};", "E_LBRACKET");
 testSyntaxError("if", "E_LBRACKET");
@@ -1967,6 +2028,10 @@ testSyntaxError("for(i=0;i<10", "E_SEMICOLON");
 testSyntaxError("while(", "E_SYNTAX_ERROR");
 testSyntaxError("if(", "E_SYNTAX_ERROR");
 testSyntaxError("'unterminated", "E_UNTERMINATED_STR");
+testSyntaxError("*", "E_SYNTAX_ERROR");
+testSyntaxError("@_jscript_version", "E_DISABLED_CC");
+testSyntaxError("@a", "E_DISABLED_CC");
+testSyntaxError("/* @cc_on @*/ @_jscript_version", "E_DISABLED_CC");
 
 // ReferenceError tests
 testException(function() {test = function() {}}, "E_ILLEGAL_ASSIGN");

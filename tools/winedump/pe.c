@@ -756,20 +756,10 @@ static void dump_image_thunk_data32(const IMAGE_THUNK_DATA32 *il, int offset)
 
 static	void	dump_dir_imported_functions(void)
 {
-    const IMAGE_IMPORT_DESCRIPTOR	*importDesc = get_dir(IMAGE_FILE_IMPORT_DIRECTORY);
-    DWORD directorySize;
+    unsigned directorySize;
+    const IMAGE_IMPORT_DESCRIPTOR* importDesc = get_dir_and_size(IMAGE_FILE_IMPORT_DIRECTORY, &directorySize);
 
     if (!importDesc)	return;
-    if(PE_nt_headers->OptionalHeader.Magic == IMAGE_NT_OPTIONAL_HDR64_MAGIC)
-    {
-        const IMAGE_OPTIONAL_HEADER64 *opt = (const IMAGE_OPTIONAL_HEADER64*)&PE_nt_headers->OptionalHeader;
-        directorySize = opt->DataDirectory[IMAGE_FILE_IMPORT_DIRECTORY].Size;
-    }
-    else
-    {
-        const IMAGE_OPTIONAL_HEADER32 *opt = (const IMAGE_OPTIONAL_HEADER32*)&PE_nt_headers->OptionalHeader;
-        directorySize = opt->DataDirectory[IMAGE_FILE_IMPORT_DIRECTORY].Size;
-    }
 
     printf("Import Table size: %08x\n", directorySize);/* FIXME */
 
@@ -809,6 +799,7 @@ static	void	dump_dir_imported_functions(void)
 
 static void dump_dir_delay_imported_functions(void)
 {
+    unsigned  directorySize;
     const struct ImgDelayDescr
     {
         DWORD grAttrs;
@@ -819,20 +810,9 @@ static void dump_dir_delay_imported_functions(void)
         DWORD pBoundIAT;
         DWORD pUnloadIAT;
         DWORD dwTimeStamp;
-    } *importDesc = get_dir(IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT);
-    DWORD directorySize;
+    } *importDesc = get_dir_and_size(IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT, &directorySize);
 
     if (!importDesc) return;
-    if (PE_nt_headers->OptionalHeader.Magic == IMAGE_NT_OPTIONAL_HDR64_MAGIC)
-    {
-        const IMAGE_OPTIONAL_HEADER64 *opt = (const IMAGE_OPTIONAL_HEADER64 *)&PE_nt_headers->OptionalHeader;
-        directorySize = opt->DataDirectory[IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT].Size;
-    }
-    else
-    {
-        const IMAGE_OPTIONAL_HEADER32 *opt = (const IMAGE_OPTIONAL_HEADER32 *)&PE_nt_headers->OptionalHeader;
-        directorySize = opt->DataDirectory[IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT].Size;
-    }
 
     printf("Delay Import Table size: %08x\n", directorySize); /* FIXME */
 
@@ -902,8 +882,8 @@ static	void	dump_dir_debug_dir(const IMAGE_DEBUG_DIRECTORY* idd, int idx)
     case IMAGE_DEBUG_TYPE_UNKNOWN:
 	break;
     case IMAGE_DEBUG_TYPE_COFF:
-	dump_coff(idd->PointerToRawData, idd->SizeOfData, 
-                  (const char*)PE_nt_headers + sizeof(DWORD) + sizeof(IMAGE_FILE_HEADER) + PE_nt_headers->FileHeader.SizeOfOptionalHeader);
+	dump_coff(idd->PointerToRawData, idd->SizeOfData,
+                  IMAGE_FIRST_SECTION(PE_nt_headers));
 	break;
     case IMAGE_DEBUG_TYPE_CODEVIEW:
 	dump_codeview(idd->PointerToRawData, idd->SizeOfData);
@@ -941,13 +921,11 @@ static	void	dump_dir_debug_dir(const IMAGE_DEBUG_DIRECTORY* idd, int idx)
 
 static void	dump_dir_debug(void)
 {
-    const IMAGE_DEBUG_DIRECTORY*debugDir = get_dir(IMAGE_FILE_DEBUG_DIRECTORY);
     unsigned			nb_dbg, i;
+    const IMAGE_DEBUG_DIRECTORY*debugDir = get_dir_and_size(IMAGE_FILE_DEBUG_DIRECTORY, &nb_dbg);
 
-    if (!debugDir) return;
-    nb_dbg = PE_nt_headers->OptionalHeader.DataDirectory[IMAGE_FILE_DEBUG_DIRECTORY].Size /
-	sizeof(*debugDir);
-    if (!nb_dbg) return;
+    nb_dbg /= sizeof(*debugDir);
+    if (!debugDir || !nb_dbg) return;
 
     printf("Debug Table (%u directories)\n", nb_dbg);
 
@@ -959,7 +937,7 @@ static void	dump_dir_debug(void)
     printf("\n");
 }
 
-static inline void print_clrflags(const char *title, WORD value)
+static inline void print_clrflags(const char *title, DWORD value)
 {
     printf("  %-34s 0x%X\n", title, value);
 #define X(f,s) if (value & f) printf("    %s\n", s)
@@ -1405,9 +1383,7 @@ static void dump_debug(void)
     unsigned    i;
     const IMAGE_SECTION_HEADER*	sectHead;
 
-    sectHead = (const IMAGE_SECTION_HEADER*)
-        ((const char*)PE_nt_headers + sizeof(DWORD) +
-         sizeof(IMAGE_FILE_HEADER) + PE_nt_headers->FileHeader.SizeOfOptionalHeader);
+    sectHead = IMAGE_FIRST_SECTION(PE_nt_headers);
 
     for (i = 0; i < PE_nt_headers->FileHeader.NumberOfSections; i++, sectHead++)
     {
@@ -1461,10 +1437,10 @@ enum FileSig get_kind_exec(void)
             if (*pdw == IMAGE_NT_SIGNATURE)                     return SIG_PE;
             if (*(const WORD *)pdw == IMAGE_OS2_SIGNATURE)      return SIG_NE;
             if (*(const WORD *)pdw == IMAGE_VXD_SIGNATURE)      return SIG_LE;
-            return SIG_DOS;
         }
+        return SIG_DOS;
     }
-    return 0;
+    return SIG_UNKNOWN;
 }
 
 void pe_dump(void)
@@ -1478,8 +1454,7 @@ void pe_dump(void)
     {
 	dump_pe_header();
 	/* FIXME: should check ptr */
-	dump_sections(PRD(0, 1), (const char*)PE_nt_headers + sizeof(DWORD) +
-		      sizeof(IMAGE_FILE_HEADER) + PE_nt_headers->FileHeader.SizeOfOptionalHeader,
+	dump_sections(PRD(0, 1), IMAGE_FIRST_SECTION(PE_nt_headers),
 		      PE_nt_headers->FileHeader.NumberOfSections);
     }
     else if (!globals.dumpsect)

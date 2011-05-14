@@ -201,6 +201,7 @@
 # @ stub ElfReportEventA
 @ stub ElfReportEventW
 @ stdcall EnableTrace(long long long ptr int64)
+@ stdcall EnableTraceEx(ptr ptr int64 long long int64 int64 long ptr)
 @ stdcall EncryptFileA(str)
 @ stdcall EncryptFileW(wstr)
 # @ stub EncryptedFileKeyInfo
@@ -440,13 +441,13 @@
 @ stdcall OpenServiceA(long str long)
 @ stdcall OpenServiceW(long wstr long)
 @ stdcall OpenThreadToken(long long long ptr)
-# @ stub OpenTraceA
-# @ stub OpenTraceW
+@ stdcall -ret64 OpenTraceA(ptr)
+@ stdcall -ret64 OpenTraceW(ptr)
 @ stdcall PrivilegeCheck(ptr ptr ptr)
 @ stdcall PrivilegedServiceAuditAlarmA(str str long ptr long)
 @ stdcall PrivilegedServiceAuditAlarmW(wstr wstr long ptr long)
 # @ stub ProcessIdleTasks
-# @ stub ProcessTrace
+@ stdcall ProcessTrace(ptr long ptr ptr)
 @ stdcall QueryAllTracesA(ptr long ptr)
 @ stdcall QueryAllTracesW(ptr long ptr)
 # @ stub QueryRecoveryAgentsOnEncryptedFile
@@ -549,7 +550,7 @@
 @ stdcall SaferGetPolicyInformation(long long long ptr ptr ptr)
 # @ stub SaferIdentifyLevel
 # @ stub SaferRecordEventLogEntry
-# @ stub SaferSetLevelInformation
+@ stdcall SaferSetLevelInformation(ptr long ptr long)
 # @ stub SaferSetPolicyInformation
 # @ stub SaferiChangeRegistryScope
 # @ stub SaferiCompareTokenLevels

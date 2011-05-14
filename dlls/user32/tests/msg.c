@@ -3367,7 +3367,7 @@ static void test_mdi_messages(void)
     RECT rc;
     HMENU hMenu = CreateMenu();
 
-    assert(mdi_RegisterWindowClasses());
+    if (!mdi_RegisterWindowClasses()) assert(0);
 
     flush_sequence();
 
@@ -10026,6 +10026,50 @@ done:
     flush_events();
 }
 
+static INT_PTR CALLBACK wm_quit_dlg_proc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp)
+{
+    struct recvd_message msg;
+
+    if (ignore_message( message )) return 0;
+
+    msg.hwnd = hwnd;
+    msg.message = message;
+    msg.flags = sent|wparam|lparam;
+    msg.wParam = wp;
+    msg.lParam = lp;
+    msg.descr = "dialog";
+    add_message(&msg);
+
+    switch (message)
+    {
+    case WM_INITDIALOG:
+        PostMessage(hwnd, WM_QUIT, 0x1234, 0x5678);
+        PostMessage(hwnd, WM_USER, 0xdead, 0xbeef);
+        return 0;
+
+    case WM_GETDLGCODE:
+        return 0;
+
+    case WM_USER:
+        EndDialog(hwnd, 0);
+        break;
+    }
+
+    return 1;
+}
+
+static const struct message WmQuitDialogSeq[] = {
+    { HCBT_CREATEWND, hook },
+    { WM_SETFONT, sent },
+    { WM_INITDIALOG, sent },
+    { WM_CHANGEUISTATE, sent|optional },
+    { HCBT_DESTROYWND, hook },
+    { 0x0090, sent|optional }, /* Vista */
+    { WM_DESTROY, sent },
+    { WM_NCDESTROY, sent },
+    { 0 }
+};
+
 static void test_quit_message(void)
 {
     MSG msg;
@@ -10076,6 +10120,18 @@ static void test_quit_message(void)
     ret = GetMessage(&msg, NULL, 0, 0);
     ok(ret > 0, "GetMessage failed with error %d\n", GetLastError());
     ok(msg.message == WM_USER, "Received message 0x%04x instead of WM_USER\n", msg.message);
+
+    flush_events();
+    flush_sequence();
+    ret = DialogBoxParam(GetModuleHandle(0), "TEST_EMPTY_DIALOG", 0, wm_quit_dlg_proc, 0);
+    ok(ret == 1, "expected 1, got %d\n", ret);
+    ok_sequence(WmQuitDialogSeq, "WmQuitDialogSeq", FALSE);
+    memset(&msg, 0xab, sizeof(msg));
+    ret = PeekMessage(&msg, NULL, 0, 0, PM_REMOVE);
+    ok(ret, "PeekMessage failed\n");
+    ok(msg.message == WM_QUIT, "Received message 0x%04x instead of WM_QUIT\n", msg.message);
+    ok(msg.wParam == 0x1234, "wParam was 0x%lx instead of 0x1234\n", msg.wParam);
+    ok(msg.lParam == 0, "lParam was 0x%lx instead of 0\n", msg.lParam);
 }
 
 static const struct message WmMouseHoverSeq[] = {
@@ -11909,6 +11965,33 @@ static const struct message wm_popup_menu_3[] =
     { 0 }
 };
 
+static const struct message wm_single_menu_item[] =
+{
+    { HCBT_KEYSKIPPED, hook|wparam|lparam|optional, VK_MENU, 0x20000001 },
+    { WM_SYSKEYDOWN, sent|wparam|lparam, VK_MENU, 0x20000001 },
+    { HCBT_KEYSKIPPED, hook|wparam|lparam|optional, 'Q', 0x20000001 },
+    { WM_SYSKEYDOWN, sent|wparam|lparam, 'Q', 0x20000001 },
+    { WM_SYSCHAR, sent|wparam|lparam, 'q', 0x20000001 },
+    { HCBT_SYSCOMMAND, hook|wparam|lparam, SC_KEYMENU, 'q' },
+    { WM_ENTERMENULOOP, sent|wparam|lparam, 0, 0 },
+    { WM_INITMENU, sent|lparam, 0, 0 },
+    { WM_MENUSELECT, sent|wparam|optional, MAKEWPARAM(300,MF_HILITE) },
+    { WM_MENUSELECT, sent|wparam|lparam, MAKEWPARAM(0,0xffff), 0 },
+    { WM_EXITMENULOOP, sent|wparam|lparam, 0, 0 },
+    { WM_MENUCOMMAND, sent },
+    { HCBT_KEYSKIPPED, hook|wparam|lparam|optional, 'Q', 0xe0000001 },
+    { WM_SYSKEYUP, sent|wparam|lparam, 'Q', 0xe0000001 },
+    { HCBT_KEYSKIPPED, hook|wparam|lparam|optional, VK_MENU, 0xc0000001 },
+    { WM_KEYUP, sent|wparam|lparam, VK_MENU, 0xc0000001 },
+
+    { HCBT_KEYSKIPPED, hook|wparam|lparam|optional, VK_ESCAPE, 1 },
+    { WM_KEYDOWN, sent|wparam|lparam, VK_ESCAPE, 1 },
+    { WM_CHAR,  sent|wparam|lparam, VK_ESCAPE, 0x00000001 },
+    { HCBT_KEYSKIPPED, hook|wparam|lparam|optional, VK_ESCAPE, 0xc0000001 },
+    { WM_KEYUP, sent|wparam|lparam, VK_ESCAPE, 0xc0000001 },
+    { 0 }
+};
+
 static LRESULT WINAPI parent_menu_proc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp)
 {
     if (message == WM_ENTERIDLE ||
@@ -12066,6 +12149,21 @@ static void test_menu_messages(void)
         DispatchMessage(&msg);
     }
     ok_sequence(wm_popup_menu_2, "submenu of a popup menu command", FALSE);
+
+    trace("testing single menu item command\n");
+    flush_sequence();
+    keybd_event(VK_MENU, 0, 0, 0);
+    keybd_event('Q', 0, 0, 0);
+    keybd_event('Q', 0, KEYEVENTF_KEYUP, 0);
+    keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, 0);
+    keybd_event(VK_ESCAPE, 0, 0, 0);
+    keybd_event(VK_ESCAPE, 0, KEYEVENTF_KEYUP, 0);
+    while (PeekMessage(&msg, 0, 0, 0, PM_REMOVE))
+    {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+    }
+    ok_sequence(wm_single_menu_item, "single menu item command", FALSE);
 
     set_menu_style(hmenu, 0);
     style = get_menu_style(hmenu);
@@ -12664,6 +12762,127 @@ static void test_WaitForInputIdle( char *argv0 )
     CloseHandle( thread );
 }
 
+static const struct message WmSetParentSeq_1[] = {
+    { WM_SHOWWINDOW, sent|wparam, 0 },
+    { EVENT_OBJECT_PARENTCHANGE, winevent_hook|wparam|lparam, 0, 0 },
+    { WM_WINDOWPOSCHANGING, sent|wparam, SWP_NOSIZE },
+    { WM_CHILDACTIVATE, sent },
+    { WM_WINDOWPOSCHANGED, sent|wparam, SWP_NOSIZE|SWP_NOREDRAW|SWP_NOCLIENTSIZE },
+    { WM_MOVE, sent|defwinproc|wparam, 0 },
+    { EVENT_OBJECT_LOCATIONCHANGE, winevent_hook|wparam|lparam, 0, 0 },
+    { WM_SHOWWINDOW, sent|wparam, 1 },
+    { 0 }
+};
+
+static const struct message WmSetParentSeq_2[] = {
+    { WM_SHOWWINDOW, sent|wparam, 0 },
+    { WM_WINDOWPOSCHANGING, sent|wparam, SWP_HIDEWINDOW|SWP_NOSIZE|SWP_NOMOVE },
+    { EVENT_OBJECT_HIDE, winevent_hook|wparam|lparam, 0, 0 },
+    { WM_WINDOWPOSCHANGED, sent|wparam, SWP_HIDEWINDOW|SWP_NOSIZE|SWP_NOMOVE|SWP_NOCLIENTSIZE|SWP_NOCLIENTMOVE },
+    { HCBT_SETFOCUS, hook|optional },
+    { WM_NCACTIVATE, sent|wparam, 0 },
+    { WM_ACTIVATE, sent|wparam, 0 },
+    { WM_ACTIVATEAPP, sent|wparam, 0 },
+    { WM_KILLFOCUS, sent|wparam, 0 },
+    { EVENT_OBJECT_PARENTCHANGE, winevent_hook|wparam|lparam, 0, 0 },
+    { WM_WINDOWPOSCHANGING, sent|wparam, SWP_NOSIZE },
+    { HCBT_ACTIVATE, hook },
+    { EVENT_SYSTEM_FOREGROUND, winevent_hook|wparam|lparam, 0, 0 },
+    { WM_WINDOWPOSCHANGING, sent|wparam, SWP_NOSIZE|SWP_NOMOVE },
+    { WM_NCACTIVATE, sent|wparam, 1 },
+    { WM_ACTIVATE, sent|wparam, 1 },
+    { HCBT_SETFOCUS, hook },
+    { EVENT_OBJECT_FOCUS, winevent_hook|wparam|lparam, OBJID_CLIENT, 0 },
+    { WM_SETFOCUS, sent|defwinproc },
+    { WM_WINDOWPOSCHANGED, sent|wparam, SWP_NOREDRAW|SWP_NOSIZE|SWP_NOCLIENTSIZE },
+    { WM_MOVE, sent|defwinproc|wparam, 0 },
+    { EVENT_OBJECT_LOCATIONCHANGE, winevent_hook|wparam|lparam, 0, 0 },
+    { WM_SHOWWINDOW, sent|wparam, 1 },
+    { WM_WINDOWPOSCHANGING, sent|wparam, SWP_SHOWWINDOW|SWP_NOSIZE|SWP_NOMOVE },
+    { EVENT_OBJECT_SHOW, winevent_hook|wparam|lparam, 0, 0 },
+    { WM_WINDOWPOSCHANGED, sent|wparam, SWP_SHOWWINDOW|SWP_NOSIZE|SWP_NOMOVE|SWP_NOCLIENTSIZE|SWP_NOCLIENTMOVE },
+    { 0 }
+};
+
+
+static void test_SetParent(void)
+{
+    HWND parent1, parent2, child, popup;
+    RECT rc, rc_old;
+
+    parent1 = CreateWindowEx(0, "TestParentClass", NULL, WS_OVERLAPPEDWINDOW,
+                            100, 100, 200, 200, 0, 0, 0, NULL);
+    ok(parent1 != 0, "Failed to create parent1 window\n");
+
+    parent2 = CreateWindowEx(0, "TestParentClass", NULL, WS_OVERLAPPEDWINDOW,
+                            400, 100, 200, 200, 0, 0, 0, NULL);
+    ok(parent2 != 0, "Failed to create parent2 window\n");
+
+    /* WS_CHILD window */
+    child = CreateWindowEx(0, "TestWindowClass", NULL, WS_CHILD | WS_VISIBLE,
+                           10, 10, 150, 150, parent1, 0, 0, NULL);
+    ok(child != 0, "Failed to create child window\n");
+
+    GetWindowRect(parent1, &rc);
+    trace("parent1 (%d,%d)-(%d,%d)\n", rc.left, rc.top, rc.right, rc.bottom);
+    GetWindowRect(child, &rc_old);
+    MapWindowPoints(0, parent1, (POINT *)&rc_old, 2);
+    trace("child (%d,%d)-(%d,%d)\n", rc_old.left, rc_old.top, rc_old.right, rc_old.bottom);
+
+    flush_sequence();
+
+    SetParent(child, parent2);
+    flush_events();
+    ok_sequence(WmSetParentSeq_1, "SetParent() visible WS_CHILD", TRUE);
+
+    ok(GetWindowLongA(child, GWL_STYLE) & WS_VISIBLE, "WS_VISIBLE should be set\n");
+    ok(!IsWindowVisible(child), "IsWindowVisible() should return FALSE\n");
+
+    GetWindowRect(parent2, &rc);
+    trace("parent2 (%d,%d)-(%d,%d)\n", rc.left, rc.top, rc.right, rc.bottom);
+    GetWindowRect(child, &rc);
+    MapWindowPoints(0, parent2, (POINT *)&rc, 2);
+    trace("child (%d,%d)-(%d,%d)\n", rc.left, rc.top, rc.right, rc.bottom);
+
+    ok(EqualRect(&rc_old, &rc), "rects do not match (%d,%d-%d,%d) / (%d,%d-%d,%d)\n",
+       rc_old.left, rc_old.top, rc_old.right, rc_old.bottom,
+       rc.left, rc.top, rc.right, rc.bottom );
+
+    /* WS_POPUP window */
+    popup = CreateWindowEx(0, "TestWindowClass", NULL, WS_POPUP | WS_VISIBLE,
+                           20, 20, 100, 100, 0, 0, 0, NULL);
+    ok(popup != 0, "Failed to create popup window\n");
+
+    GetWindowRect(popup, &rc_old);
+    trace("popup (%d,%d)-(%d,%d)\n", rc_old.left, rc_old.top, rc_old.right, rc_old.bottom);
+
+    flush_sequence();
+
+    SetParent(popup, child);
+    flush_events();
+    ok_sequence(WmSetParentSeq_2, "SetParent() visible WS_POPUP", TRUE);
+
+    ok(GetWindowLongA(popup, GWL_STYLE) & WS_VISIBLE, "WS_VISIBLE should be set\n");
+    ok(!IsWindowVisible(popup), "IsWindowVisible() should return FALSE\n");
+
+    GetWindowRect(child, &rc);
+    trace("parent2 (%d,%d)-(%d,%d)\n", rc.left, rc.top, rc.right, rc.bottom);
+    GetWindowRect(popup, &rc);
+    MapWindowPoints(0, child, (POINT *)&rc, 2);
+    trace("popup (%d,%d)-(%d,%d)\n", rc.left, rc.top, rc.right, rc.bottom);
+
+    ok(EqualRect(&rc_old, &rc), "rects do not match (%d,%d-%d,%d) / (%d,%d-%d,%d)\n",
+       rc_old.left, rc_old.top, rc_old.right, rc_old.bottom,
+       rc.left, rc.top, rc.right, rc.bottom );
+
+    DestroyWindow(popup);
+    DestroyWindow(child);
+    DestroyWindow(parent1);
+    DestroyWindow(parent2);
+
+    flush_sequence();
+}
+
 START_TEST(msg)
 {
     char **test_argv;
@@ -12727,6 +12946,7 @@ START_TEST(msg)
     hEvent_hook = 0;
 #endif
 
+    test_SetParent();
     test_PostMessage();
     test_ShowWindow();
     test_PeekMessage();

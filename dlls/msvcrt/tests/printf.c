@@ -26,6 +26,7 @@
 #define _CRT_NON_CONFORMING_SWPRINTFS
  
 #include <stdio.h>
+#include <errno.h>
 
 #include "windef.h"
 #include "winbase.h"
@@ -42,6 +43,8 @@ static int (__cdecl *p__ecvt_s)(char *buffer, size_t length, double number,
                                 int ndigits, int *decpt, int *sign);
 static int (__cdecl *p__fcvt_s)(char *buffer, size_t length, double number,
                                 int ndigits, int *decpt, int *sign);
+static unsigned int (__cdecl *p__get_output_format)(void);
+static int (__cdecl *p__vsprintf_p)(char*, size_t, const char*, __ms_va_list);
 
 static void init( void )
 {
@@ -52,6 +55,8 @@ static void init( void )
     p__vsnwprintf_s = (void *)GetProcAddress(hmod, "_vsnwprintf_s");
     p__ecvt_s = (void *)GetProcAddress(hmod, "_ecvt_s");
     p__fcvt_s = (void *)GetProcAddress(hmod, "_fcvt_s");
+    p__get_output_format = (void *)GetProcAddress(hmod, "_get_output_format");
+    p__vsprintf_p = (void*)GetProcAddress(hmod, "_vsprintf_p");
 }
 
 static void test_sprintf( void )
@@ -622,6 +627,41 @@ static void test_snprintf (void)
     };
 }
 
+static void test_fprintf(void)
+{
+    static char file_name[] = "fprintf.tst";
+    FILE *fp = fopen(file_name, "wb");
+    char buf[1024];
+    int ret;
+
+    ret = fprintf(fp, "simple test\n");
+    ok(ret == 12, "ret = %d\n", ret);
+    ret = ftell(fp);
+    ok(ret == 12, "ftell returned %d\n", ret);
+
+    ret = fprintf(fp, "contains%cnull\n", '\0');
+    ok(ret == 14, "ret = %d\n", ret);
+    ret = ftell(fp);
+    ok(ret == 26, "ftell returned %d\n", ret);
+
+    fclose(fp);
+
+    fp = fopen(file_name, "rb");
+    ret = fscanf(fp, "%[^\n] ", buf);
+    ok(ret == 1, "ret = %d\n", ret);
+    ret = ftell(fp);
+    ok(ret == 12, "ftell returned %d\n", ret);
+    ok(!strcmp(buf, "simple test"), "buf = %s\n", buf);
+
+    fgets(buf, sizeof(buf), fp);
+    ret = ftell(fp);
+    ok(ret == 26, "ret = %d\n", ret);
+    ok(!memcmp(buf, "contains\0null\n", 14), "buf = %s\n", buf);
+
+    fclose(fp);
+    unlink(file_name);
+}
+
 static void test_fcvt(void)
 {
     char *str;
@@ -760,7 +800,7 @@ static struct {
     {           0.4,   0,          "",               "",          0,      0,     0 },
     {          0.49,   0,          "",               "",          0,      0,     0 },
     {          0.51,   0,          "",              "1",          1,      1,     0 },
-    /* ask ridiculous amunt of precision, ruin formatting this table */
+    /* ask for ridiculous precision, ruin formatting this table */
     {           1.0,  30, "100000000000000000000000000000",
                       "1000000000000000000000000000000",          1,      1,      0},
     {           123456789012345678901.0,  30, "123456789012345680000000000000",
@@ -773,6 +813,7 @@ static void test_xcvt(void)
 {
     char *str;
     int i, decpt, sign, err;
+
     for( i = 0; strcmp( test_cvt_testcases[i].expstr_e, "END"); i++){
         decpt = sign = 100;
         str = _ecvt( test_cvt_testcases[i].value,
@@ -830,17 +871,40 @@ static void test_xcvt(void)
 
     if (p__fcvt_s)
     {
+        int i;
+
         str = malloc(1024);
+
+        /* invalid arguments */
+        err = p__fcvt_s(NULL, 0, 0.0, 0, &i, &i);
+        ok(err == EINVAL, "got %d, expected EINVAL\n", err);
+
+        err = p__fcvt_s(str, 0, 0.0, 0, &i, &i);
+        ok(err == EINVAL, "got %d, expected EINVAL\n", err);
+
+        str[0] = ' ';
+        str[1] = 0;
+        err = p__fcvt_s(str, -1, 0.0, 0, &i, &i);
+        ok(err == 0, "got %d, expected 0\n", err);
+        ok(str[0] == 0, "got %c, expected 0\n", str[0]);
+        ok(str[1] == 0, "got %c, expected 0\n", str[1]);
+
+        err = p__fcvt_s(str, 1, 0.0, 0, NULL, &i);
+        ok(err == EINVAL, "got %d, expected EINVAL\n", err);
+
+        err = p__fcvt_s(str, 1, 0.0, 0, &i, NULL);
+        ok(err == EINVAL, "got %d, expected EINVAL\n", err);
+
         for( i = 0; strcmp( test_cvt_testcases[i].expstr_e, "END"); i++){
             decpt = sign = 100;
             err = p__fcvt_s(str, 1024, test_cvt_testcases[i].value, test_cvt_testcases[i].nrdigits, &decpt, &sign);
-            ok(err == 0, "_fcvt_s() failed with error code %d", err);
+            ok(err == 0, "_fcvt_s() failed with error code %d\n", err);
             ok( 0 == strncmp( str, test_cvt_testcases[i].expstr_f, 15),
-                   "_fcvt_s() bad return, got \n'%s' expected \n'%s'\n", str,
-                  test_cvt_testcases[i].expstr_e);
+                   "_fcvt_s() bad return, got '%s' expected '%s'. test %d\n", str,
+                  test_cvt_testcases[i].expstr_f, i);
             ok( decpt == test_cvt_testcases[i].expdecpt_f,
                     "_fcvt_s() decimal point wrong, got %d expected %d\n", decpt,
-                    test_cvt_testcases[i].expdecpt_e);
+                    test_cvt_testcases[i].expdecpt_f);
             ok( sign == test_cvt_testcases[i].expsign,
                     "_fcvt_s() sign wrong, got %d expected %d\n", sign,
                     test_cvt_testcases[i].expsign);
@@ -848,7 +912,7 @@ static void test_xcvt(void)
         free(str);
     }
     else
-        todo_wine win_skip("_fcvt_s not available\n");
+        win_skip("_fcvt_s not available\n");
 }
 
 static int __cdecl _vsnwprintf_wrapper(wchar_t *str, size_t len, const wchar_t *format, ...)
@@ -988,6 +1052,61 @@ static void test_vsnwprintf_s(void)
     ok( !wcscmp(out1, buffer), "buffer wrong, got=%s\n", wine_dbgstr_w(buffer));
 }
 
+static int __cdecl _vsprintf_p_wrapper(char *str, size_t sizeOfBuffer,
+                                 const char *format, ...)
+{
+    int ret;
+    __ms_va_list valist;
+    __ms_va_start(valist, format);
+    ret = p__vsprintf_p(str, sizeOfBuffer, format, valist);
+    __ms_va_end(valist);
+    return ret;
+}
+
+static void test_vsprintf_p(void)
+{
+    char buf[1024];
+    int ret;
+
+    if(!p__vsprintf_p) {
+        win_skip("vsprintf_p not available\n");
+        return;
+    }
+
+    ret = _vsprintf_p_wrapper(buf, sizeof(buf), "%s %d", "test", 1234);
+    ok(ret == 9, "ret = %d\n", ret);
+    ok(!memcmp(buf, "test 1234", 10), "buf = %s\n", buf);
+
+    ret = _vsprintf_p_wrapper(buf, sizeof(buf), "%1$d", 1234, "additional param");
+    ok(ret == 4, "ret = %d\n", ret);
+    ok(!memcmp(buf, "1234", 5), "buf = %s\n", buf);
+
+    ret = _vsprintf_p_wrapper(buf, sizeof(buf), "%2$s %1$d", 1234, "test");
+    ok(ret == 9, "ret = %d\n", ret);
+    ok(!memcmp(buf, "test 1234", 10), "buf = %s\n", buf);
+
+    ret = _vsprintf_p_wrapper(buf, sizeof(buf), "%2$*3$s %2$.*1$s", 2, "test", 3);
+    ok(ret == 7, "ret = %d\n", ret);
+    ok(!memcmp(buf, "test te", 8), "buf = %s\n", buf);
+
+    /* Following test invokes invalid parameter handler */
+    /* ret = _vsprintf_p_wrapper(buf, sizeof(buf), "%d %1$d", 1234); */
+}
+
+static void test__get_output_format(void)
+{
+    unsigned int ret;
+
+    if (!p__get_output_format)
+    {
+        win_skip("_get_output_format not available\n");
+        return;
+    }
+
+    ret = p__get_output_format();
+    ok(ret == 0, "got %d\n", ret);
+}
+
 START_TEST(printf)
 {
     init();
@@ -995,10 +1114,13 @@ START_TEST(printf)
     test_sprintf();
     test_swprintf();
     test_snprintf();
+    test_fprintf();
     test_fcvt();
     test_xcvt();
     test_vsnwprintf();
     test_vscprintf();
     test_vscwprintf();
     test_vsnwprintf_s();
+    test_vsprintf_p();
+    test__get_output_format();
 }

@@ -87,7 +87,7 @@ struct d3d10_texture2d
     LONG refcount;
 
     IUnknown *dxgi_surface;
-    IWineD3DSurface *wined3d_surface;
+    struct wined3d_surface *wined3d_surface;
     D3D10_TEXTURE2D_DESC desc;
 };
 
@@ -100,7 +100,7 @@ struct d3d10_texture3d
     const struct ID3D10Texture3DVtbl *vtbl;
     LONG refcount;
 
-    IWineD3DVolumeTexture *wined3d_texture;
+    struct wined3d_texture *wined3d_texture;
     D3D10_TEXTURE3D_DESC desc;
 };
 
@@ -113,7 +113,7 @@ struct d3d10_buffer
     const struct ID3D10BufferVtbl *vtbl;
     LONG refcount;
 
-    IWineD3DBuffer *wined3d_buffer;
+    struct wined3d_buffer *wined3d_buffer;
 };
 
 HRESULT d3d10_buffer_init(struct d3d10_buffer *buffer, struct d3d10_device *device,
@@ -134,11 +134,11 @@ struct d3d10_rendertarget_view
     const struct ID3D10RenderTargetViewVtbl *vtbl;
     LONG refcount;
 
-    IWineD3DRendertargetView *wined3d_view;
+    struct wined3d_rendertarget_view *wined3d_view;
     D3D10_RENDER_TARGET_VIEW_DESC desc;
 };
 
-HRESULT d3d10_rendertarget_view_init(struct d3d10_rendertarget_view *view, struct d3d10_device *device,
+HRESULT d3d10_rendertarget_view_init(struct d3d10_rendertarget_view *view,
         ID3D10Resource *resource, const D3D10_RENDER_TARGET_VIEW_DESC *desc) DECLSPEC_HIDDEN;
 
 /* ID3D10ShaderResourceView */
@@ -156,7 +156,7 @@ struct d3d10_input_layout
     const struct ID3D10InputLayoutVtbl *vtbl;
     LONG refcount;
 
-    IWineD3DVertexDeclaration *wined3d_decl;
+    struct wined3d_vertex_declaration *wined3d_decl;
 };
 
 HRESULT d3d10_input_layout_init(struct d3d10_input_layout *layout, struct d3d10_device *device,
@@ -169,7 +169,7 @@ struct d3d10_vertex_shader
     const struct ID3D10VertexShaderVtbl *vtbl;
     LONG refcount;
 
-    IWineD3DVertexShader *wined3d_shader;
+    struct wined3d_shader *wined3d_shader;
     struct wined3d_shader_signature output_signature;
 };
 
@@ -182,7 +182,7 @@ struct d3d10_geometry_shader
     const struct ID3D10GeometryShaderVtbl *vtbl;
     LONG refcount;
 
-    IWineD3DGeometryShader *wined3d_shader;
+    struct wined3d_shader *wined3d_shader;
     struct wined3d_shader_signature output_signature;
 };
 
@@ -195,7 +195,7 @@ struct d3d10_pixel_shader
     const struct ID3D10PixelShaderVtbl *vtbl;
     LONG refcount;
 
-    IWineD3DPixelShader *wined3d_shader;
+    struct wined3d_shader *wined3d_shader;
     struct wined3d_shader_signature output_signature;
 };
 

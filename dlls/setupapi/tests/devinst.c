@@ -132,7 +132,7 @@ static BOOL remove_device(void)
 {
     HDEVINFO set;
     SP_DEVINFO_DATA devInfo = { sizeof(devInfo), { 0 } };
-    BOOL ret;
+    BOOL ret, retval;
 
     SetLastError(0xdeadbeef);
     set = pSetupDiGetClassDevsA(&guid, NULL, 0, 0);
@@ -140,23 +140,23 @@ static BOOL remove_device(void)
      GetLastError());
 
     SetLastError(0xdeadbeef);
-    ok(pSetupDiEnumDeviceInfo(set, 0, &devInfo),
-     "SetupDiEnumDeviceInfo failed: %08x\n", GetLastError());
+    ret = pSetupDiEnumDeviceInfo(set, 0, &devInfo);
+    ok(ret, "SetupDiEnumDeviceInfo failed: %08x\n", GetLastError());
 
     SetLastError(0xdeadbeef);
-    ret = pSetupDiCallClassInstaller(DIF_REMOVE, set, &devInfo);
+    retval = pSetupDiCallClassInstaller(DIF_REMOVE, set, &devInfo);
     if(is_wow64)
-        todo_wine ok(!ret && GetLastError() == ERROR_IN_WOW64,
+        todo_wine ok(!retval && GetLastError() == ERROR_IN_WOW64,
                      "SetupDiCallClassInstaller(DIF_REMOVE...) succeeded: %08x\n", GetLastError());
     else
-        todo_wine ok(ret,
+        todo_wine ok(retval,
                      "SetupDiCallClassInstaller(DIF_REMOVE...) failed: %08x\n", GetLastError());
 
     SetLastError(0xdeadbeef);
-    ok(pSetupDiDestroyDeviceInfoList(set),
-     "SetupDiDestroyDeviceInfoList failed: %08x\n", GetLastError());
+    ret = pSetupDiDestroyDeviceInfoList(set);
+    ok(ret, "SetupDiDestroyDeviceInfoList failed: %08x\n", GetLastError());
 
-    return ret;
+    return retval;
 }
 
 /* RegDeleteTreeW from dlls/advapi32/registry.c */
@@ -1530,21 +1530,7 @@ static void testSetupDiGetINFClassA(void)
 
 START_TEST(devinst)
 {
-    HDEVINFO set;
-
-     init_function_pointers();
-
-    /* Win9x/WinMe does things totally different so we skip all the tests
-     *
-     * We don't want to exclude NT4 so hence this check.
-     */
-    SetLastError(0xdeadbeef);
-    set = pSetupDiGetClassDevsW(NULL, NULL, 0, 0);
-    if (set == INVALID_HANDLE_VALUE && GetLastError() == ERROR_CALL_NOT_IMPLEMENTED)
-    {
-        win_skip("Win9x/WinMe has totally different behavior\n");
-        return;
-    }
+    init_function_pointers();
 
     if (pIsWow64Process)
         pIsWow64Process(GetCurrentProcess(), &is_wow64);

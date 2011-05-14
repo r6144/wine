@@ -75,7 +75,6 @@ unsigned int screen_bpp;
 unsigned int screen_depth;
 RECT virtual_screen_rect;
 Window root_window;
-int dxgrab = 0;
 int usexvidmode = 1;
 int usexrandr = 1;
 int usexcomposite = 1;
@@ -84,6 +83,8 @@ int use_take_focus = 1;
 int use_primary_selection = 0;
 int use_system_cursors = 1;
 int show_systray = 1;
+int grab_pointer = 1;
+int grab_fullscreen = 0;
 int managed_mode = 1;
 int decorated_mode = 1;
 int private_color_map = 0;
@@ -179,7 +180,27 @@ static const char * const atom_names[NB_XATOMS - FIRST_XATOM] =
     "XdndTarget",
     "XdndTypeList",
     "HTML Format",
+    "WCF_BITMAP",
     "WCF_DIB",
+    "WCF_DIBV5",
+    "WCF_DIF",
+    "WCF_DSPBITMAP",
+    "WCF_DSPENHMETAFILE",
+    "WCF_DSPMETAFILEPICT",
+    "WCF_DSPTEXT",
+    "WCF_ENHMETAFILE",
+    "WCF_HDROP",
+    "WCF_LOCALE",
+    "WCF_METAFILEPICT",
+    "WCF_OEMTEXT",
+    "WCF_OWNERDISPLAY",
+    "WCF_PALETTE",
+    "WCF_PENDATA",
+    "WCF_RIFF",
+    "WCF_SYLK",
+    "WCF_TIFF",
+    "WCF_WAVE",
+    "image/bmp",
     "image/gif",
     "image/jpeg",
     "image/png",
@@ -385,9 +406,6 @@ static void setup_options(void)
     if (!get_config_key( hkey, appkey, "Decorated", buffer, sizeof(buffer) ))
         decorated_mode = IS_OPTION_TRUE( buffer[0] );
 
-    if (!get_config_key( hkey, appkey, "DXGrab", buffer, sizeof(buffer) ))
-        dxgrab = IS_OPTION_TRUE( buffer[0] );
-
     if (!get_config_key( hkey, appkey, "UseXVidMode", buffer, sizeof(buffer) ))
         usexvidmode = IS_OPTION_TRUE( buffer[0] );
 
@@ -405,6 +423,12 @@ static void setup_options(void)
 
     if (!get_config_key( hkey, appkey, "ShowSystray", buffer, sizeof(buffer) ))
         show_systray = IS_OPTION_TRUE( buffer[0] );
+
+    if (!get_config_key( hkey, appkey, "GrabPointer", buffer, sizeof(buffer) ))
+        grab_pointer = IS_OPTION_TRUE( buffer[0] );
+
+    if (!get_config_key( hkey, appkey, "GrabFullscreen", buffer, sizeof(buffer) ))
+        grab_fullscreen = IS_OPTION_TRUE( buffer[0] );
 
     screen_depth = 0;
     if (!get_config_key( hkey, appkey, "ScreenDepth", buffer, sizeof(buffer) ))
@@ -509,7 +533,20 @@ sym_not_found:
  */
 static BOOL process_attach(void)
 {
+    char error[1024];
     Display *display;
+    void *libx11 = wine_dlopen( SONAME_LIBX11, RTLD_NOW|RTLD_GLOBAL, error, sizeof(error) );
+
+    if (!libx11)
+    {
+        ERR( "failed to load %s: %s\n", SONAME_LIBX11, error );
+        return FALSE;
+    }
+    pXGetEventData = wine_dlsym( libx11, "XGetEventData", NULL, 0 );
+    pXFreeEventData = wine_dlsym( libx11, "XFreeEventData", NULL, 0 );
+#ifdef SONAME_LIBXEXT
+    wine_dlopen( SONAME_LIBXEXT, RTLD_NOW|RTLD_GLOBAL, NULL, 0 );
+#endif
 
     setup_options();
 
@@ -562,6 +599,7 @@ static BOOL process_attach(void)
 #ifdef SONAME_LIBXCOMPOSITE
     X11DRV_XComposite_Init();
 #endif
+    X11DRV_XInput2_Init();
 
 #ifdef HAVE_XKB
     if (use_xkb) use_xkb = XkbUseExtension( gdi_display, NULL, NULL );

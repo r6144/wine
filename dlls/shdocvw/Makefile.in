@@ -18,6 +18,7 @@ C_SRCS = \
 	oleobject.c \
 	persist.c \
 	shdocvw_main.c \
+	shellbrowser.c \
 	shlinstobj.c \
 	taskbarlist.c \
 	urlhist.c \
@@ -31,21 +32,26 @@ RC_SRCS = \
 	Fr.rc \
 	He.rc \
 	It.rc \
+	Ja.rc \
 	Ko.rc \
 	Lt.rc \
 	Nl.rc \
 	Pl.rc \
 	Pt.rc \
 	Ro.rc \
+	Ru.rc \
 	Si.rc \
 	Sr.rc \
 	Sv.rc \
 	Uk.rc \
 	shdocvw.rc
 
+PO_SRCS = shdocvw.rc
+
 SVG_SRCS = \
 	ietoolbar.svg
 
 IDL_TLB_SRCS = shdocvw_v1.idl
+IDL_R_SRCS   = shdocvw_v1.idl
 
 @MAKE_DLL_RULES@

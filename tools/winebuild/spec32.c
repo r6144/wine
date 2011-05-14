@@ -34,10 +34,11 @@
 
 #define IMAGE_FILE_MACHINE_UNKNOWN 0
 #define IMAGE_FILE_MACHINE_I386    0x014c
-#define IMAGE_FILE_MACHINE_ALPHA   0x0184
 #define IMAGE_FILE_MACHINE_POWERPC 0x01f0
 #define IMAGE_FILE_MACHINE_AMD64   0x8664
 #define IMAGE_FILE_MACHINE_ARM     0x01C0
+/* Wine extension */
+#define IMAGE_FILE_MACHINE_SPARC   0x2000
 
 #define IMAGE_SIZEOF_NT_OPTIONAL32_HEADER 224
 #define IMAGE_SIZEOF_NT_OPTIONAL64_HEADER 240
@@ -52,13 +53,26 @@ static inline int needs_relay( const ORDDEF *odp )
     /* skip nonexistent entry points */
     if (!odp) return 0;
     /* skip non-functions */
-    if (odp->type != TYPE_STDCALL && odp->type != TYPE_CDECL && odp->type != TYPE_THISCALL) return 0;
+    switch (odp->type)
+    {
+    case TYPE_STDCALL:
+    case TYPE_CDECL:
+    case TYPE_THISCALL:
+        break;
+    case TYPE_STUB:
+        if (odp->u.func.nb_args != -1) break;
+        /* fall through */
+    default:
+        return 0;
+    }
     /* skip norelay and forward entry points */
     if (odp->flags & (FLAG_NORELAY|FLAG_FORWARD)) return 0;
+    /* skip register entry points on x86_64 */
+    if (target_cpu == CPU_x86_64 && (odp->flags & FLAG_REGISTER)) return 0;
     return 1;
 }
 
-static int is_float_arg( const ORDDEF *odp, unsigned int arg )
+static int is_float_arg( const ORDDEF *odp, int arg )
 {
     if (arg >= odp->u.func.nb_args) return 0;
     return (odp->u.func.args[arg] == ARG_FLOAT || odp->u.func.args[arg] == ARG_DOUBLE);
@@ -86,8 +100,8 @@ int has_relays( DLLSPEC *spec )
  */
 static void output_relay_debug( DLLSPEC *spec )
 {
-    int i;
-    unsigned int j, pos, args, flags;
+    int i, j;
+    unsigned int pos, args, flags;
 
     /* first the table of entry point offsets */
 
@@ -198,15 +212,19 @@ static void output_relay_debug( DLLSPEC *spec )
             switch (args)
             {
             default: output( "\tmovq %%%s,72(%%rsp)\n", is_float_arg( odp, 3 ) ? "xmm3" : "r9" );
+            /* fall through */
             case 3:  output( "\tmovq %%%s,64(%%rsp)\n", is_float_arg( odp, 2 ) ? "xmm2" : "r8" );
+            /* fall through */
             case 2:  output( "\tmovq %%%s,56(%%rsp)\n", is_float_arg( odp, 1 ) ? "xmm1" : "rdx" );
+            /* fall through */
             case 1:  output( "\tmovq %%%s,48(%%rsp)\n", is_float_arg( odp, 0 ) ? "xmm0" : "rcx" );
+            /* fall through */
             case 0:  break;
             }
             output( "\tleaq 40(%%rsp),%%r8\n" );
             output( "\tmovq $%u,%%rdx\n", (flags << 24) | (args << 16) | (i - spec->base) );
             output( "\tleaq .L__wine_spec_relay_descr(%%rip),%%rcx\n" );
-            output( "\tcallq *%u(%%rcx)\n", (odp->flags & FLAG_REGISTER) ? 16 : 8 );
+            output( "\tcallq *8(%%rcx)\n" );
             output( "\taddq $40,%%rsp\n" );
             output( "\t.cfi_adjust_cfa_offset -40\n" );
             output( "\tret\n" );
@@ -392,9 +410,6 @@ static void output_asm_constructor( const char *constructor )
             output( "\tcall %s\n", asm_name(constructor) );
             output( "\tnop\n" );
             break;
-        case CPU_ALPHA:
-            output( "\tjsr $26,%s\n", asm_name(constructor) );
-            break;
         case CPU_ARM:
         case CPU_POWERPC:
             output( "\tbl %s\n", asm_name(constructor) );
@@ -435,7 +450,6 @@ void output_module( DLLSPEC *spec )
         {
         case CPU_x86:
         case CPU_x86_64:
-        case CPU_ALPHA:
         case CPU_SPARC:
             output( "\tjmp 1f\n" );
             break;
@@ -464,8 +478,7 @@ void output_module( DLLSPEC *spec )
     case CPU_x86_64:  machine = IMAGE_FILE_MACHINE_AMD64; break;
     case CPU_ARM:     machine = IMAGE_FILE_MACHINE_ARM; break;
     case CPU_POWERPC: machine = IMAGE_FILE_MACHINE_POWERPC; break;
-    case CPU_ALPHA:   machine = IMAGE_FILE_MACHINE_ALPHA; break;
-    case CPU_SPARC:   machine = IMAGE_FILE_MACHINE_UNKNOWN; break;
+    case CPU_SPARC:   machine = IMAGE_FILE_MACHINE_SPARC; break;
     }
     output( "\t%s 0x%04x\n",              /* Machine */
              get_asm_short_keyword(), machine );
@@ -651,8 +664,7 @@ void output_fake_module( DLLSPEC *spec )
     case CPU_x86:     put_word( IMAGE_FILE_MACHINE_I386 ); break;
     case CPU_x86_64:  put_word( IMAGE_FILE_MACHINE_AMD64 ); break;
     case CPU_POWERPC: put_word( IMAGE_FILE_MACHINE_POWERPC ); break;
-    case CPU_ALPHA:   put_word( IMAGE_FILE_MACHINE_ALPHA ); break;
-    case CPU_SPARC:   put_word( IMAGE_FILE_MACHINE_UNKNOWN ); break;
+    case CPU_SPARC:   put_word( IMAGE_FILE_MACHINE_SPARC ); break;
     case CPU_ARM:     put_word( IMAGE_FILE_MACHINE_ARM ); break;
     }
     put_word( nb_sections );                         /* NumberOfSections */

@@ -47,6 +47,7 @@ enum wine_internal_message
     WM_WINE_SETACTIVEWINDOW,
     WM_WINE_KEYBOARD_LL_HOOK,
     WM_WINE_MOUSE_LL_HOOK,
+    WM_WINE_CLIPCURSOR,
     WM_WINE_FIRST_DRIVER_MSG = 0x80001000,  /* range of messages reserved for the USER driver */
     WM_WINE_LAST_DRIVER_MSG = 0x80001fff
 };
@@ -61,7 +62,6 @@ typedef struct tagUSER_DRIVER {
     BOOL   (CDECL *pGetKeyboardLayoutName)(LPWSTR);
     HKL    (CDECL *pLoadKeyboardLayout)(LPCWSTR, UINT);
     UINT   (CDECL *pMapVirtualKeyEx)(UINT, UINT, HKL);
-    UINT   (CDECL *pSendInput)(UINT, LPINPUT, int);
     INT    (CDECL *pToUnicodeEx)(UINT, UINT, const BYTE *, LPWSTR, int, UINT, HKL);
     BOOL   (CDECL *pUnloadKeyboardLayout)(HKL);
     SHORT  (CDECL *pVkKeyScanEx)(WCHAR, HKL);
@@ -82,9 +82,7 @@ typedef struct tagUSER_DRIVER {
     void   (CDECL *pEndClipboardUpdate)(void);                   /* End clipboard update */
     UINT   (CDECL *pEnumClipboardFormats)(UINT);                 /* Enumerate clipboard formats */
     HANDLE (CDECL *pGetClipboardData)(UINT);                     /* Get specified selection data */
-    INT    (CDECL *pGetClipboardFormatName)(UINT, LPWSTR, UINT); /* Get a clipboard format name */
     BOOL   (CDECL *pIsClipboardFormatAvailable)(UINT);           /* Check if specified format is available */
-    UINT   (CDECL *pRegisterClipboardFormat)(LPCWSTR);           /* Register a clipboard format */
     BOOL   (CDECL *pSetClipboardData)(UINT, HANDLE, BOOL);       /* Set specified selection data */
     /* display modes */
     LONG   (CDECL *pChangeDisplaySettingsEx)(LPCWSTR,LPDEVMODEW,HWND,DWORD,LPVOID);
@@ -206,13 +204,14 @@ struct dce;
 
 extern BOOL CLIPBOARD_ReleaseOwner(void) DECLSPEC_HIDDEN;
 extern BOOL FOCUS_MouseActivate( HWND hwnd ) DECLSPEC_HIDDEN;
-extern BOOL set_capture_window( HWND hwnd, UINT gui_flags, HWND *prev_ret );
+extern BOOL set_capture_window( HWND hwnd, UINT gui_flags, HWND *prev_ret ) DECLSPEC_HIDDEN;
 extern void free_dce( struct dce *dce, HWND hwnd ) DECLSPEC_HIDDEN;
 extern void invalidate_dce( HWND hwnd, const RECT *rect ) DECLSPEC_HIDDEN;
 extern void erase_now( HWND hwnd, UINT rdw_flags ) DECLSPEC_HIDDEN;
-extern void *get_hook_proc( void *proc, const WCHAR *module );
+extern void *get_hook_proc( void *proc, const WCHAR *module ) DECLSPEC_HIDDEN;
 extern LRESULT call_current_hook( HHOOK hhook, INT code, WPARAM wparam, LPARAM lparam ) DECLSPEC_HIDDEN;
 extern BOOL map_wparam_AtoW( UINT message, WPARAM *wparam, enum wm_char_mapping mapping ) DECLSPEC_HIDDEN;
+extern NTSTATUS send_hardware_message( HWND hwnd, const INPUT *input, UINT flags ) DECLSPEC_HIDDEN;
 extern LRESULT MSG_SendInternalMessageTimeout( DWORD dest_pid, DWORD dest_tid,
                                                UINT msg, WPARAM wparam, LPARAM lparam,
                                                UINT flags, UINT timeout, PDWORD_PTR res_ptr ) DECLSPEC_HIDDEN;

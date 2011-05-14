@@ -111,7 +111,12 @@ static ULONG CALLBACK IRecordInfoImpl_AddRef(IRecordInfo *iface)
 static ULONG CALLBACK IRecordInfoImpl_Release(IRecordInfo *iface)
 {
   IRecordInfoImpl* This = impl_from_IRecordInfo(iface);
-  return InterlockedDecrement(&This->ref);
+  ULONG ref = InterlockedDecrement(&This->ref);
+
+  if (!ref)
+      HeapFree(GetProcessHeap(), 0, This);
+
+  return ref;
 }
 
 static BOOL fail_GetSize; /* Whether to fail the GetSize call */
@@ -127,9 +132,11 @@ static HRESULT CALLBACK IRecordInfoImpl_GetSize(IRecordInfo *iface, ULONG* size)
 {
   IRecordInfoImpl* This = impl_from_IRecordInfo(iface);
   This->sizeCalled++;
-  *size = 17;
   if (fail_GetSize)
+  {
+    *size = RECORD_SIZE_FAIL;
     return E_UNEXPECTED;
+  }
   *size = RECORD_SIZE;
   return S_OK;
 }
@@ -217,9 +224,11 @@ static void check_for_VT_INT_PTR(void)
     bound.lLbound	= 0;
     a = SafeArrayCreate(VT_INT_PTR, 1, &bound);
     if (a) {
+        HRESULT hres;
         trace("VT_INT_PTR is supported\n");
         HAVE_OLEAUT32_INT_PTR = TRUE;
-        SafeArrayDestroy(a);
+        hres = SafeArrayDestroy(a);
+        ok(hres == S_OK, "got 0x%08x\n", hres);
     }
     else {
         trace("VT_INT_PTR is not supported\n");
@@ -586,9 +595,10 @@ static void test_safearray(void)
         ok(hres == E_INVALIDARG,"SafeArraySetIID of non IID capable safearray did not return E_INVALIDARG, but %x\n",hres);
 
         hres = SafeArrayAllocDescriptor(1,&a);
+        ok(hres == S_OK,"SafeArrayAllocDescriptor should return S_OK, but got %x\n",hres);
         ok((a->fFeatures & FADF_HAVEIID) == 0,"newly allocated descriptor with SAAD should not have FADF_HAVEIID\n");
         hres = pSafeArraySetIID(a,&iid);
-        ok(hres == E_INVALIDARG,"SafeArraySetIID of newly allocated descriptor with SAAD should return E_INVALIDARG, but %x\n",hres);
+        ok(hres == E_INVALIDARG,"SafeArraySetIID of newly allocated descriptor with SAAD should return E_INVALIDARG, but got %x\n",hres);
 
         hres = SafeArrayDestroyDescriptor(a);
         ok(hres == S_OK,"SADD failed with hres %x\n",hres);
@@ -600,6 +610,7 @@ static void test_safearray(void)
 	for (i=0;i<sizeof(vttypes)/sizeof(vttypes[0]);i++) {
         a = NULL;
 		hres = pSafeArrayAllocDescriptorEx(vttypes[i].vt,1,&a);
+		ok(hres == S_OK, "SafeArrayAllocDescriptorEx gave hres 0x%x\n", hres);
 		ok(a->fFeatures == vttypes[i].expflags,"SAADE(%d) resulted with flags %x, expected %x\n", vttypes[i].vt, a->fFeatures, vttypes[i].expflags);
 		if (a->fFeatures & FADF_HAVEIID) {
 			hres = pSafeArrayGetIID(a, &iid);
@@ -846,7 +857,10 @@ static void test_VectorCreateLockDestroy(void)
   int element;
 
   if (!pSafeArrayCreateVector)
+  {
+    win_skip("SafeArrayCreateVector not supported\n");
     return;
+  }
   sa = pSafeArrayCreateVector(VT_UI1, 0, 0);
   ok(sa != NULL, "SACV with 0 elements failed.\n");
 
@@ -939,7 +953,8 @@ test_LockUnlock_Vector:
           bVector ? "vector " : "\n", count, hres);
     }
 
-    SafeArrayDestroy(sa);
+    hres = SafeArrayDestroy(sa);
+    ok(hres == S_OK, "got 0x%08x\n", hres);
   }
 
   if (bVector == FALSE && pSafeArrayCreateVector)
@@ -1074,7 +1089,8 @@ static void test_SafeArrayGetPutElement(void)
       }
     }
   }
-  SafeArrayDestroy(sa);
+  hres = SafeArrayDestroy(sa);
+  ok(hres == S_OK, "got 0x%08x\n", hres);
 }
 
 static void test_SafeArrayGetPutElement_BSTR(void)
@@ -1108,21 +1124,33 @@ static void test_SafeArrayGetPutElement_BSTR(void)
   ok(hres == S_OK, "Failed to get bstr element at hres 0x%x\n", hres);
   if (hres == S_OK)
     ok(SysStringLen(value) == SysStringLen(gotvalue), "Got len %d instead of %d\n", SysStringLen(gotvalue), SysStringLen(value));
-  SafeArrayDestroy(sa);
+  hres = SafeArrayDestroy(sa);
+  ok(hres == S_OK, "got 0x%08x\n", hres);
   SysFreeString(value);
   SysFreeString(gotvalue);
 }
 
-static int tunk_xref = 0;
-static HRESULT WINAPI tunk_QueryInterface(LPUNKNOWN punk,REFIID riid, LPVOID *x) {
-	return E_FAIL;
-}
-static ULONG WINAPI tunk_AddRef(LPUNKNOWN punk) {
-	return ++tunk_xref;
+struct xtunk_impl {
+  IUnknown IUnknown_iface;
+  LONG ref;
+};
+static const IUnknownVtbl xtunk_vtbl;
+
+static struct xtunk_impl xtunk = {{&xtunk_vtbl}, 0};
+
+static HRESULT WINAPI tunk_QueryInterface(IUnknown *punk, REFIID riid, void **x)
+{
+  return E_FAIL;
 }
 
-static ULONG WINAPI tunk_Release(LPUNKNOWN punk) {
-	return --tunk_xref;
+static ULONG WINAPI tunk_AddRef(IUnknown *punk)
+{
+  return ++xtunk.ref;
+}
+
+static ULONG WINAPI tunk_Release(IUnknown *punk)
+{
+  return --xtunk.ref;
 }
 
 static const IUnknownVtbl xtunk_vtbl = {
@@ -1131,18 +1159,13 @@ static const IUnknownVtbl xtunk_vtbl = {
 	tunk_Release
 };
 
-static struct xtunk_iface {
-	const IUnknownVtbl *lpvtbl;
-} xtunk_iface;
-
-
 static void test_SafeArrayGetPutElement_IUnknown(void)
 {
   SAFEARRAYBOUND sab;
   LONG indices[1];
   SAFEARRAY *sa;
   HRESULT hres;
-  LPUNKNOWN value = 0, gotvalue;
+  IUnknown *gotvalue;
 
   sab.lLbound = 1;
   sab.cElements = 1;
@@ -1156,21 +1179,19 @@ static void test_SafeArrayGetPutElement_IUnknown(void)
     return;
 
   indices[0] = sab.lLbound;
-  xtunk_iface.lpvtbl = &xtunk_vtbl;
-  value = (LPUNKNOWN)&xtunk_iface;
-  tunk_xref = 1;
-  ok (value != NULL, "Expected non-NULL\n");
-  hres = SafeArrayPutElement(sa, indices, value);
+  xtunk.ref = 1;
+  hres = SafeArrayPutElement(sa, indices, &xtunk.IUnknown_iface);
   ok(hres == S_OK, "Failed to put bstr element hres 0x%x\n", hres);
-  ok(tunk_xref == 2,"Failed to increment refcount of iface.\n");
+  ok(xtunk.ref == 2,"Failed to increment refcount of iface.\n");
   gotvalue = NULL;
   hres = SafeArrayGetElement(sa, indices, &gotvalue);
-  ok(tunk_xref == 3,"Failed to increment refcount of iface.\n");
+  ok(xtunk.ref == 3,"Failed to increment refcount of iface.\n");
   ok(hres == S_OK, "Failed to get bstr element at hres 0x%x\n", hres);
   if (hres == S_OK)
-    ok(value == gotvalue, "Got %p instead of %p\n", gotvalue, value);
-  SafeArrayDestroy(sa);
-  ok(tunk_xref == 2,"Failed to decrement refcount of iface.\n");
+    ok(gotvalue == &xtunk.IUnknown_iface, "Got %p instead of %p\n", gotvalue, &xtunk.IUnknown_iface);
+  hres = SafeArrayDestroy(sa);
+  ok(hres == S_OK, "got 0x%08x\n", hres);
+  ok(xtunk.ref == 2,"Failed to decrement refcount of iface.\n");
 }
 
 static void test_SafeArrayRedim_IUnknown(void)
@@ -1179,7 +1200,6 @@ static void test_SafeArrayRedim_IUnknown(void)
   LONG indices[1];
   SAFEARRAY *sa;
   HRESULT hres;
-  LPUNKNOWN value;
 
   sab.lLbound = 1;
   sab.cElements = 2;
@@ -1193,17 +1213,16 @@ static void test_SafeArrayRedim_IUnknown(void)
     return;
 
   indices[0] = 2;
-  xtunk_iface.lpvtbl = &xtunk_vtbl;
-  value = (LPUNKNOWN)&xtunk_iface;
-  tunk_xref = 1;
-  hres = SafeArrayPutElement(sa, indices, value);
+  xtunk.ref = 1;
+  hres = SafeArrayPutElement(sa, indices, &xtunk.IUnknown_iface);
   ok(hres == S_OK, "Failed to put IUnknown element hres 0x%x\n", hres);
-  ok(tunk_xref == 2,"Failed to increment refcount of iface.\n");
+  ok(xtunk.ref == 2,"Failed to increment refcount of iface.\n");
   sab.cElements = 1;
   hres = SafeArrayRedim(sa, &sab);
   ok(hres == S_OK, "Failed to shrink array hres 0x%x\n", hres);
-  ok(tunk_xref == 1, "Failed to decrement refcount\n");
-  SafeArrayDestroy(sa);
+  ok(xtunk.ref == 1, "Failed to decrement refcount\n");
+  hres = SafeArrayDestroy(sa);
+  ok(hres == S_OK, "got 0x%08x\n", hres);
 }
 
 static void test_SafeArrayGetPutElement_VARIANT(void)
@@ -1243,7 +1262,8 @@ static void test_SafeArrayGetPutElement_VARIANT(void)
     if (V_VT(&value) == V_VT(&gotvalue))
         ok(V_I4(&value) == V_I4(&gotvalue), "Got %d instead of %d\n", V_I4(&value), V_VT(&gotvalue));
   }
-  SafeArrayDestroy(sa);
+  hres = SafeArrayDestroy(sa);
+  ok(hres == S_OK, "got 0x%08x\n", hres);
 }
 
 
@@ -1256,7 +1276,10 @@ static void test_SafeArrayCopyData(void)
   int dimension,size=1;
 
   if (!pSafeArrayCopyData)
+  {
+    win_skip("SafeArrayCopyData not supported\n");
     return;
+  }
 
   for (dimension = 0; dimension < NUM_DIMENSIONS; dimension++)
   {
@@ -1315,7 +1338,8 @@ static void test_SafeArrayCopyData(void)
   ok(hres == E_INVALIDARG, "Smaller copy last dimension hres 0x%x\n", hres);
   sacopy->rgsabound[3].cElements += 1;
 
-  SafeArrayDestroy(sacopy);
+  hres = SafeArrayDestroy(sacopy);
+  ok(hres == S_OK, "got 0x%08x\n", hres);
   sacopy = NULL;
   hres = pSafeArrayCopyData(sa, sacopy);
   ok(hres == E_INVALIDARG, "->Null copy hres 0x%x\n", hres);
@@ -1327,10 +1351,12 @@ static void test_SafeArrayCopyData(void)
     ok(SafeArrayGetElemsize(sa) == SafeArrayGetElemsize(sacopy),"elemsize wrong\n");
     ok(SafeArrayGetDim(sa) == SafeArrayGetDim(sacopy),"dimensions wrong\n");
     ok(!memcmp(sa->pvData, sacopy->pvData, size * sizeof(int)), "compared different\n");
-    SafeArrayDestroy(sacopy);
+    hres = SafeArrayDestroy(sacopy);
+    ok(hres == S_OK, "got 0x%08x\n", hres);
   }
 
-  SafeArrayDestroy(sa);
+  hres = SafeArrayDestroy(sa);
+  ok(hres == S_OK, "got 0x%08x\n", hres);
 }
 
 static void test_SafeArrayCreateEx(void)
@@ -1342,7 +1368,10 @@ static void test_SafeArrayCreateEx(void)
   int dimension;
 
   if (!pSafeArrayCreateEx)
+  {
+    win_skip("SafeArrayCreateEx not supported\n");
     return;
+  }
 
   for (dimension = 0; dimension < NUM_DIMENSIONS; dimension++)
   {
@@ -1380,7 +1409,8 @@ static void test_SafeArrayCreateEx(void)
         ok(hres == S_OK && IsEqualGUID(&guid, &IID_IUnknown), "Set bad IID\n");
       }
     }
-    SafeArrayDestroy(sa);
+    hres = SafeArrayDestroy(sa);
+    ok(hres == S_OK, "got 0x%08x\n", hres);
   }
 
   sa = pSafeArrayCreateEx(VT_DISPATCH, 1, sab, NULL);
@@ -1398,7 +1428,8 @@ static void test_SafeArrayCreateEx(void)
         ok(IsEqualGUID(&guid, &IID_IDispatch), "CreateEx (NULL) bad IID\n");
       }
     }
-    SafeArrayDestroy(sa);
+    hres = SafeArrayDestroy(sa);
+    ok(hres == S_OK, "got 0x%08x\n", hres);
   }
 
   sa = pSafeArrayCreateEx(VT_UNKNOWN, 1, sab, NULL);
@@ -1416,7 +1447,8 @@ static void test_SafeArrayCreateEx(void)
         ok(IsEqualGUID(&guid, &IID_IUnknown), "CreateEx (NULL-Unk) bad IID\n");
       }
     }
-    SafeArrayDestroy(sa);
+    hres = SafeArrayDestroy(sa);
+    ok(hres == S_OK, "got 0x%08x\n", hres);
   }
 
   /* VT_RECORD failure case */
@@ -1435,8 +1467,10 @@ static void test_SafeArrayCreateEx(void)
   if (sa)
   {
     ok(sa->cbElements == RECORD_SIZE_FAIL, "Altered size to %d\n", sa->cbElements);
-    SafeArrayDestroy(sa);
+    hres = SafeArrayDestroy(sa);
+    ok(hres == S_OK, "got 0x%08x\n", hres);
     ok(iRec->clearCalled == sab[0].cElements, "Destroy->Clear called %d times\n", iRec->clearCalled);
+    ok(iRec->ref == START_REF_COUNT, "got %d, expected %d\n", iRec->ref, START_REF_COUNT);
   }
 
   /* Test VT_RECORD array */
@@ -1462,11 +1496,19 @@ static void test_SafeArrayCreateEx(void)
 
     ok(sa->cbElements == RECORD_SIZE,"Elemsize is %d\n", sa->cbElements);
 
-    SafeArrayDestroy(sa);
+    hres = SafeArrayDestroy(sa);
+    ok(hres == S_OK, "got 0x%08x\n", hres);
     ok(iRec->sizeCalled == 1, "Destroy->GetSize called %d times\n", iRec->sizeCalled);
     ok(iRec->clearCalled == sab[0].cElements, "Destroy->Clear called %d times\n", iRec->clearCalled);
     ok(iRec->ref == START_REF_COUNT, "Wrong iRec refcount %d\n", iRec->ref);
   }
+  else
+  {
+    hres = SafeArrayDestroy(sa);
+    ok(hres == S_OK, "got 0x%08x\n", hres);
+  }
+
+  IRecordInfo_Release(&iRec->IRecordInfo_iface);
 }
 
 static void test_SafeArrayClear(void)
@@ -1505,7 +1547,8 @@ static void test_SafeArrayClear(void)
   hres = VariantClear(&v);
   ok(hres == DISP_E_BADVARTYPE, "VariantClear: hres 0x%x\n", hres);
 
-  SafeArrayDestroy(sa);
+  hres = SafeArrayDestroy(sa);
+  ok(hres == S_OK, "got 0x%08x\n", hres);
 }
 
 static void test_SafeArrayCopy(void)
@@ -1541,22 +1584,43 @@ static void test_SafeArrayCopy(void)
      "VariantCopy: hres 0x%x, Type %d\n", hres, V_VT(&vDst));
   ok(V_ARRAY(&vDst) != sa, "VariantClear: Performed shallow copy\n");
 
-  SafeArrayDestroy(V_ARRAY(&vSrc));
-  SafeArrayDestroy(V_ARRAY(&vDst));
+  hres = SafeArrayDestroy(V_ARRAY(&vSrc));
+  ok(hres == S_OK, "got 0x%08x\n", hres);
+  hres = SafeArrayDestroy(V_ARRAY(&vDst));
+  ok(hres == S_OK, "got 0x%08x\n", hres);
 
   hres = SafeArrayAllocDescriptor(1, &sa);
   ok(hres == S_OK, "SafeArrayAllocDescriptor failed with error 0x%08x\n", hres);
 
+  sa->cbElements = 16;
+  hres = SafeArrayCopy(sa, &sa2);
+  ok(hres == S_OK, "SafeArrayCopy failed with error 0x%08x\n", hres);
+  ok(sa != sa2, "SafeArrayCopy performed shallow copy\n");
+
+  hres = SafeArrayDestroy(sa2);
+  ok(hres == S_OK, "got 0x%08x\n", hres);
+  hres = SafeArrayDestroy(sa);
+  ok(hres == S_OK, "got 0x%08x\n", hres);
+
+  sa2 = (void*)0xdeadbeef;
+  hres = SafeArrayCopy(NULL, &sa2);
+  ok(hres == S_OK, "SafeArrayCopy failed with error 0x%08x\n", hres);
+  ok(!sa2, "SafeArrayCopy didn't return NULL for output array\n");
+
+  hres = SafeArrayAllocDescriptor(1, &sa);
+  ok(hres == S_OK, "SafeArrayAllocDescriptor failed with error 0x%08x\n", hres);
+
+  sa2 = (void*)0xdeadbeef;
   hres = SafeArrayCopy(sa, &sa2);
   ok(hres == E_INVALIDARG,
     "SafeArrayCopy with empty array should have failed with error E_INVALIDARG instead of 0x%08x\n",
     hres);
-  sa->cbElements = 16;
-  hres = SafeArrayCopy(sa, &sa2);
-  ok(hres == S_OK, "SafeArrayCopy failed with error 0x%08x\n", hres);
+  ok(!sa2, "SafeArrayCopy didn't return NULL for output array\n");
 
-  SafeArrayDestroy(sa2);
-  SafeArrayDestroy(sa);
+  hres = SafeArrayDestroy(sa2);
+  ok(hres == S_OK, "got 0x%08x\n", hres);
+  hres = SafeArrayDestroy(sa);
+  ok(hres == S_OK, "got 0x%08x\n", hres);
 }
 
 #define MKARRAY(low,num,typ) sab.lLbound = low; sab.cElements = num; \
@@ -1592,7 +1656,8 @@ static void test_SafeArrayChangeTypeEx(void)
   }
 
   /* VT_VECTOR|VT_UI1 -> VT_BSTR */
-  SafeArrayDestroy(sa);
+  hres = SafeArrayDestroy(sa);
+  ok(hres == S_OK, "got 0x%08x\n", hres);
   if (pSafeArrayCreateVector)
   {
     sa = pSafeArrayCreateVector(VT_UI1, 0, strlen(szHello)+1);
@@ -1622,16 +1687,33 @@ static void test_SafeArrayChangeTypeEx(void)
   }
 
   /* To/from BSTR only works with arrays of VT_UI1 */
-  for (vt = 0; vt <= VT_CLSID; vt++)
+  for (vt = VT_EMPTY; vt <= VT_CLSID; vt++)
   {
     if (vt == VT_UI1)
       continue;
 
-    MKARRAYCONT(0,1,vt);
+    sab.lLbound = 0;
+    sab.cElements = 1;
+    sa = SafeArrayCreate(vt, 1, &sab);
+    if (!sa) continue;
+
+    V_VT(&v) = VT_ARRAY|vt;
+    V_ARRAY(&v) = sa;
+    VariantInit(&v2);
+
     hres = VariantChangeTypeEx(&v2, &v, 0, 0, VT_BSTR);
-    ok(hres != S_OK, "CTE VT_ARRAY|VT %d->BSTR succeeded\n", vt);
+    if (vt == VT_INT_PTR || vt == VT_UINT_PTR)
+    {
+        ok(hres == DISP_E_BADVARTYPE, "expected DISP_E_BADVARTYPE, got 0x%08x\n", hres);
+        SafeArrayDestroy(sa);
+    }
+    else
+    {
+        ok(hres == DISP_E_TYPEMISMATCH, "got 0x%08x for vt=%d, instead of DISP_E_TYPEMISMATCH\n", hres, vt);
+        hres = VariantClear(&v);
+        ok(hres == S_OK, "expected S_OK, got 0x%08x\n", hres);
+    }
     VariantClear(&v2);
-    VariantClear(&v);
   }
 
   /* Can't change an array of one type into array of another type , even
@@ -1650,7 +1732,8 @@ static void test_SafeArrayChangeTypeEx(void)
     ok(hres == DISP_E_TYPEMISMATCH, "CTE VT_ARRAY|VT_UI1->VT_ARRAY|VT_I1 returned %x\n", hres);
 
     /* But can change to the same array type */
-    SafeArrayDestroy(sa);
+    hres = SafeArrayDestroy(sa);
+    ok(hres == S_OK, "got 0x%08x\n", hres);
     sa = pSafeArrayCreateVector(VT_UI1, 0, 1);
     ok(sa != NULL, "CreateVector() failed.\n");
     if (!sa)
@@ -1659,7 +1742,8 @@ static void test_SafeArrayChangeTypeEx(void)
     V_ARRAY(&v) = sa;
     hres = VariantChangeTypeEx(&v2, &v, 0, 0, VT_ARRAY|VT_UI1);
     ok(hres == S_OK, "CTE VT_ARRAY|VT_UI1->VT_ARRAY|VT_UI1 returned %x\n", hres);
-    SafeArrayDestroy(sa);
+    hres = SafeArrayDestroy(sa);
+    ok(hres == S_OK, "got 0x%08x\n", hres);
     VariantClear(&v2);
   }
 
@@ -1672,7 +1756,6 @@ static void test_SafeArrayChangeTypeEx(void)
   hres = VariantChangeTypeEx(&v2, &v, 0, 0, VT_EMPTY);
   ok(hres == DISP_E_TYPEMISMATCH, "CTE VT_ARRAY|VT_UI1 returned %x\n", hres);
   VariantClear(&v);
-
 }
 
 static void test_SafeArrayDestroyData (void)
@@ -1724,6 +1807,7 @@ START_TEST(safearray)
     GETPTR(SafeArrayGetVartype);
     GETPTR(SafeArrayCreateEx);
     GETPTR(SafeArrayCreateVector);
+    GETPTR(SafeArrayGetRecordInfo);
 
     check_for_VT_INT_PTR();
     test_safearray();

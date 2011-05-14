@@ -259,6 +259,7 @@ static HRESULT activate_window(HTMLDocumentObj *This)
         return FAILED(hres) ? hres : E_FAIL;
     }
 
+    frameinfo.cb = sizeof(OLEINPLACEFRAMEINFO);
     hres = IOleInPlaceSite_GetWindowContext(This->ipsite, &pIPFrame, &This->ip_window,
             &posrect, &cliprect, &frameinfo);
     if(FAILED(hres)) {
@@ -658,8 +659,8 @@ static HRESULT WINAPI OleDocumentView_UIActivate(IOleDocumentView *iface, BOOL f
         if(This->doc_obj->hostui) {
             hres = IDocHostUIHandler_ShowUI(This->doc_obj->hostui,
                     This->doc_obj->usermode == EDITMODE ? DOCHOSTUITYPE_AUTHOR : DOCHOSTUITYPE_BROWSE,
-                    &This->IOleInPlaceActiveObject_iface, CMDTARGET(This), This->doc_obj->frame,
-                    This->doc_obj->ip_window);
+                    &This->IOleInPlaceActiveObject_iface, &This->IOleCommandTarget_iface,
+                    This->doc_obj->frame, This->doc_obj->ip_window);
             if(FAILED(hres))
                 IDocHostUIHandler_HideUI(This->doc_obj->hostui);
         }

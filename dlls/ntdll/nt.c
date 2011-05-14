@@ -929,8 +929,6 @@ void fill_cpu_info(void)
     cached_sci.Architecture     = PROCESSOR_ARCHITECTURE_PPC;
 #elif defined(__arm__)
     cached_sci.Architecture     = PROCESSOR_ARCHITECTURE_ARM;
-#elif defined(__ALPHA__)
-    cached_sci.Architecture     = PROCESSOR_ARCHITECTURE_ALPHA;
 #elif defined(__sparc__)
     cached_sci.Architecture     = PROCESSOR_ARCHITECTURE_SPARC;
 #else
@@ -1173,7 +1171,7 @@ void fill_cpu_info(void)
             fclose(f);
         }
     }
-#elif defined(__FreeBSD__)
+#elif defined(__FreeBSD__) || defined (__FreeBSD_kernel__)
     {
         int ret, num;
         size_t len;
@@ -1586,59 +1584,36 @@ NTSTATUS WINAPI NtQuerySystemInformation(
                 FILE *cpuinfo = fopen("/proc/stat", "r");
                 if (cpuinfo)
                 {
-                    unsigned usr,nice,sys;
-                    unsigned long idle;
-                    int count;
-                    char name[10];
+                    unsigned long clk_tck = sysconf(_SC_CLK_TCK);
+                    unsigned long usr,nice,sys,idle,remainder[8];
+                    int i, count;
+                    char name[32];
                     char line[255];
 
                     /* first line is combined usage */
-                    if (fgets(line,255,cpuinfo))
-                        count = sscanf(line, "%s %u %u %u %lu", name, &usr, &nice,
-                                       &sys, &idle);
-                    else
-                        count = 0;
-                    /* we set this up in the for older non-smp enabled kernels */
-                    if (count == 5 && strcmp(name, "cpu") == 0)
+                    while (fgets(line,255,cpuinfo))
                     {
-                        sppi = RtlAllocateHeap(GetProcessHeap(), 0,
-                                               sizeof(SYSTEM_PROCESSOR_PERFORMANCE_INFORMATION));
-                        sppi->IdleTime.QuadPart = idle;
-                        sppi->KernelTime.QuadPart = sys;
-                        sppi->UserTime.QuadPart = usr;
-                        cpus = 1;
-                        len = sizeof(SYSTEM_PROCESSOR_PERFORMANCE_INFORMATION);
-                    }
+                        count = sscanf(line, "%s %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu",
+                                       name, &usr, &nice, &sys, &idle,
+                                       &remainder[0], &remainder[1], &remainder[2], &remainder[3],
+                                       &remainder[4], &remainder[5], &remainder[6], &remainder[7]);
 
-                    do
-                    {
-                        if (fgets(line, 255, cpuinfo))
-                            count = sscanf(line, "%s %u %u %u %lu", name, &usr,
-                                           &nice, &sys, &idle);
+                        if (count < 5 || strncmp( name, "cpu", 3 )) break;
+                        for (i = 0; i + 5 < count; ++i) sys += remainder[i];
+                        sys += idle;
+                        usr += nice;
+                        cpus = atoi( name + 3 ) + 1;
+                        if (cpus > out_cpus) break;
+                        len = sizeof(SYSTEM_PROCESSOR_PERFORMANCE_INFORMATION) * cpus;
+                        if (sppi)
+                            sppi = RtlReAllocateHeap( GetProcessHeap(), HEAP_ZERO_MEMORY, sppi, len );
                         else
-                            count = 0;
-                        if (count == 5 && strncmp(name, "cpu", 3)==0)
-                        {
-                            out_cpus --;
-                            if (name[3]=='0') /* first cpu */
-                            {
-                                sppi->IdleTime.QuadPart = idle;
-                                sppi->KernelTime.QuadPart = sys;
-                                sppi->UserTime.QuadPart = usr;
-                            }
-                            else /* new cpu */
-                            {
-                                len = sizeof(SYSTEM_PROCESSOR_PERFORMANCE_INFORMATION) * (cpus+1);
-                                sppi = RtlReAllocateHeap(GetProcessHeap(), 0, sppi, len);
-                                sppi[cpus].IdleTime.QuadPart = idle;
-                                sppi[cpus].KernelTime.QuadPart = sys;
-                                sppi[cpus].UserTime.QuadPart = usr;
-                                cpus++;
-                            }
-                        }
-                        else
-                            break;
-                    } while (out_cpus > 0);
+                            sppi = RtlAllocateHeap( GetProcessHeap(), HEAP_ZERO_MEMORY, len );
+
+                        sppi[cpus-1].IdleTime.QuadPart   = (ULONGLONG)idle * 10000000 / clk_tck;
+                        sppi[cpus-1].KernelTime.QuadPart = (ULONGLONG)sys * 10000000 / clk_tck;
+                        sppi[cpus-1].UserTime.QuadPart   = (ULONGLONG)usr * 10000000 / clk_tck;
+                    }
                     fclose(cpuinfo);
                 }
             }
@@ -1647,17 +1622,18 @@ NTSTATUS WINAPI NtQuerySystemInformation(
             if (cpus == 0)
             {
                 static int i = 1;
-
-                sppi = RtlAllocateHeap(GetProcessHeap(),0,sizeof(SYSTEM_PROCESSOR_PERFORMANCE_INFORMATION));
-
-                memset(sppi, 0 , sizeof(SYSTEM_PROCESSOR_PERFORMANCE_INFORMATION));
+                int n;
+                cpus = min(NtCurrentTeb()->Peb->NumberOfProcessors, out_cpus);
+                len = sizeof(SYSTEM_PROCESSOR_PERFORMANCE_INFORMATION) * cpus;
+                sppi = RtlAllocateHeap(GetProcessHeap(), 0, len);
                 FIXME("stub info_class SYSTEM_PROCESSOR_PERFORMANCE_INFORMATION\n");
-
                 /* many programs expect these values to change so fake change */
-                len = sizeof(SYSTEM_PROCESSOR_PERFORMANCE_INFORMATION);
-                sppi->KernelTime.QuadPart = 1 * i;
-                sppi->UserTime.QuadPart = 2 * i;
-                sppi->IdleTime.QuadPart = 3 * i;
+                for (n = 0; n < cpus; n++)
+                {
+                    sppi[n].KernelTime.QuadPart = 1 * i;
+                    sppi[n].UserTime.QuadPart   = 2 * i;
+                    sppi[n].IdleTime.QuadPart   = 3 * i;
+                }
                 i++;
             }
 

@@ -124,58 +124,83 @@ typedef struct _scriptData
 {
     SCRIPT_ANALYSIS a;
     SCRIPT_PROPERTIES props;
+    OPENTYPE_TAG scriptTag;
 } scriptData;
 
 /* the must be in order so that the index matches the Script value */
 static const scriptData scriptInformation[] = {
     {{SCRIPT_UNDEFINED, 0, 0, 0, 0, 0, 0, { 0,0,0,0,0,0,0,0,0,0,0}},
-     {LANG_NEUTRAL, 0, 0, 0, 0, ANSI_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0}},
+     {LANG_NEUTRAL, 0, 0, 0, 0, ANSI_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+     0x00000000},
     {{Script_Latin, 0, 0, 0, 0, 0, 0, { 0,0,0,0,0,0,0,0,0,0,0}},
-     {LANG_ENGLISH, 0, 0, 0, 0, ANSI_CHARSET, 0, 0, 0, 0, 0, 0, 1, 0, 0}},
+     {LANG_ENGLISH, 0, 0, 0, 0, ANSI_CHARSET, 0, 0, 0, 0, 0, 0, 1, 0, 0},
+     MS_MAKE_TAG('l','a','t','n')},
     {{Script_CR, 0, 0, 0, 0, 0, 0, { 0,0,0,0,0,0,0,0,0,0,0}},
-     {LANG_NEUTRAL, 0, 0, 0, 0, ANSI_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0}},
+     {LANG_NEUTRAL, 0, 0, 0, 0, ANSI_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+     0x00000000},
     {{Script_Numeric, 0, 0, 0, 0, 0, 0, { 0,0,0,0,0,0,0,0,0,0,0}},
-     {LANG_ENGLISH, 1, 0, 0, 0, ANSI_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0}},
+     {LANG_ENGLISH, 1, 0, 0, 0, ANSI_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+     0x00000000},
     {{Script_Control, 0, 0, 0, 0, 0, 0, { 0,0,0,0,0,0,0,0,0,0,0}},
-     {LANG_ENGLISH, 0, 1, 0, 0, ANSI_CHARSET, 1, 0, 0, 0, 0, 0, 1, 0, 0}},
+     {LANG_ENGLISH, 0, 1, 0, 0, ANSI_CHARSET, 1, 0, 0, 0, 0, 0, 1, 0, 0},
+     0x00000000},
     {{Script_Punctuation, 0, 0, 0, 0, 0, 0, { 0,0,0,0,0,0,0,0,0,0,0}},
-     {LANG_NEUTRAL, 0, 0, 0, 0, ANSI_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0}},
+     {LANG_NEUTRAL, 0, 0, 0, 0, ANSI_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+     0x00000000},
     {{Script_Arabic, 1, 1, 0, 0, 0, 0, { 1,0,0,0,0,0,0,0,0,0,0}},
-     {LANG_ARABIC, 0, 1, 0, 0, ARABIC_CHARSET, 0, 0, 0, 0, 0, 0, 1, 1, 0}},
+     {LANG_ARABIC, 0, 1, 0, 0, ARABIC_CHARSET, 0, 0, 0, 0, 0, 0, 1, 1, 0},
+     MS_MAKE_TAG('a','r','a','b')},
     {{Script_Arabic_Numeric, 1, 1, 0, 0, 0, 0, { 1,0,0,0,0,0,0,0,0,0,0}},
-     {LANG_ARABIC, 1, 1, 0, 0, ARABIC_CHARSET, 0, 0, 0, 0, 0, 0, 1, 0, 0}},
+     {LANG_ARABIC, 1, 1, 0, 0, ARABIC_CHARSET, 0, 0, 0, 0, 0, 0, 1, 0, 0},
+     MS_MAKE_TAG('a','r','a','b')},
     {{Script_Hebrew, 1, 1, 0, 0, 0, 0, { 1,0,0,0,0,0,0,0,0,0,0}},
-     {LANG_HEBREW, 0, 1, 0, 1, HEBREW_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0}},
+     {LANG_HEBREW, 0, 1, 0, 1, HEBREW_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+     MS_MAKE_TAG('h','e','b','r')},
     {{Script_Syriac, 1, 1, 0, 0, 0, 0, { 1,0,0,0,0,0,0,0,0,0,0}},
-     {LANG_SYRIAC, 0, 1, 0, 0, DEFAULT_CHARSET, 0, 0, 0, 0, 1, 0, 0, 1, 0}},
+     {LANG_SYRIAC, 0, 1, 0, 0, DEFAULT_CHARSET, 0, 0, 0, 0, 1, 0, 0, 1, 0},
+     MS_MAKE_TAG('s','y','r','c')},
     {{Script_Persian, 1, 1, 0, 0, 0, 0, { 1,0,0,0,0,0,0,0,0,0,0}},
-     {LANG_PERSIAN, 1, 1, 0, 0, ARABIC_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0}},
+     {LANG_PERSIAN, 1, 1, 0, 0, ARABIC_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+     MS_MAKE_TAG('s','y','r','c')},
     {{Script_Thaana, 1, 1, 0, 0, 0, 0, { 1,0,0,0,0,0,0,0,0,0,0}},
-     {LANG_DIVEHI, 0, 1, 0, 1, DEFAULT_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0}},
+     {LANG_DIVEHI, 0, 1, 0, 1, DEFAULT_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+     MS_MAKE_TAG('t','h','a','a')},
     {{Script_Greek, 0, 0, 0, 0, 0, 0, { 0,0,0,0,0,0,0,0,0,0,0}},
-     {LANG_GREEK, 0, 0, 0, 0, GREEK_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0}},
+     {LANG_GREEK, 0, 0, 0, 0, GREEK_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+     MS_MAKE_TAG('g','r','e','k')},
     {{Script_Cyrillic, 0, 0, 0, 0, 0, 0, { 0,0,0,0,0,0,0,0,0,0,0}},
-     {LANG_RUSSIAN, 0, 0, 0, 0, RUSSIAN_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0}},
+     {LANG_RUSSIAN, 0, 0, 0, 0, RUSSIAN_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+     MS_MAKE_TAG('c','y','r','l')},
     {{Script_Armenian, 0, 0, 0, 0, 0, 0, { 0,0,0,0,0,0,0,0,0,0,0}},
-     {LANG_ARMENIAN, 0, 0, 0, 0, ANSI_CHARSET, 0, 0, 0, 0, 0, 0, 1, 0, 0}},
+     {LANG_ARMENIAN, 0, 0, 0, 0, ANSI_CHARSET, 0, 0, 0, 0, 0, 0, 1, 0, 0},
+     MS_MAKE_TAG('a','r','m','n')},
     {{Script_Georgian, 0, 0, 0, 0, 0, 0, { 0,0,0,0,0,0,0,0,0,0,0}},
-     {LANG_GEORGIAN, 0, 0, 0, 0, ANSI_CHARSET, 0, 0, 0, 0, 0, 0, 1, 0, 0}},
+     {LANG_GEORGIAN, 0, 0, 0, 0, ANSI_CHARSET, 0, 0, 0, 0, 0, 0, 1, 0, 0},
+     MS_MAKE_TAG('g','e','o','r')},
     {{Script_Sinhala, 0, 0, 0, 0, 0, 0, { 0,0,0,0,0,0,0,0,0,0,0}},
-     {LANG_SINHALESE, 0, 1, 0, 1, DEFAULT_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0}},
+     {LANG_SINHALESE, 0, 1, 0, 1, DEFAULT_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+     MS_MAKE_TAG('s','i','n','h')},
     {{Script_Tibetan, 0, 0, 0, 0, 0, 0, { 0,0,0,0,0,0,0,0,0,0,0}},
-     {LANG_TIBETAN, 0, 1, 1, 1, DEFAULT_CHARSET, 0, 0, 1, 0, 1, 0, 0, 0, 0}},
+     {LANG_TIBETAN, 0, 1, 1, 1, DEFAULT_CHARSET, 0, 0, 1, 0, 1, 0, 0, 0, 0},
+     MS_MAKE_TAG('t','i','b','t')},
     {{Script_Tibetan_Numeric, 0, 0, 0, 0, 0, 0, { 0,0,0,0,0,0,0,0,0,0,0}},
-     {LANG_TIBETAN, 1, 1, 0, 0, DEFAULT_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0}},
+     {LANG_TIBETAN, 1, 1, 0, 0, DEFAULT_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+     MS_MAKE_TAG('t','i','b','t')},
     {{Script_Phags_pa, 0, 0, 0, 0, 0, 0, { 0,0,0,0,0,0,0,0,0,0,0}},
-     {LANG_MONGOLIAN, 0, 1, 0, 0, DEFAULT_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0}},
+     {LANG_MONGOLIAN, 0, 1, 0, 0, DEFAULT_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+     MS_MAKE_TAG('p','h','a','g')},
     {{Script_Thai, 0, 0, 0, 0, 0, 0, { 0,0,0,0,0,0,0,0,0,0,0}},
-     {LANG_THAI, 0, 1, 1, 1, THAI_CHARSET, 0, 0, 1, 0, 1, 0, 0, 0, 1}},
+     {LANG_THAI, 0, 1, 1, 1, THAI_CHARSET, 0, 0, 1, 0, 1, 0, 0, 0, 1},
+     MS_MAKE_TAG('t','h','a','i')},
     {{Script_Thai_Numeric, 0, 0, 0, 0, 0, 0, { 0,0,0,0,0,0,0,0,0,0,0}},
-     {LANG_THAI, 1, 1, 0, 0, THAI_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0}},
+     {LANG_THAI, 1, 1, 0, 0, THAI_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+     MS_MAKE_TAG('t','h','a','i')},
     {{Script_Lao, 0, 0, 0, 0, 0, 0, { 0,0,0,0,0,0,0,0,0,0,0}},
-     {LANG_LAO, 0, 1, 1, 1, DEFAULT_CHARSET, 0, 0, 1, 0, 1, 0, 0, 0, 0}},
+     {LANG_LAO, 0, 1, 1, 1, DEFAULT_CHARSET, 0, 0, 1, 0, 1, 0, 0, 0, 0},
+     MS_MAKE_TAG('l','a','o',' ')},
     {{Script_Lao_Numeric, 0, 0, 0, 0, 0, 0, { 0,0,0,0,0,0,0,0,0,0,0}},
-     {LANG_LAO, 1, 1, 0, 0, DEFAULT_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0}},
+     {LANG_LAO, 1, 1, 0, 0, DEFAULT_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+     MS_MAKE_TAG('l','a','o',' ')},
 };
 
 static const SCRIPT_PROPERTIES *script_props[] =
@@ -202,6 +227,7 @@ typedef struct {
     SCRIPT_VISATTR* psva;
     GOFFSET* pGoffset;
     ABC* abc;
+    int iMaxPosX;
 } StringGlyphs;
 
 typedef struct {
@@ -575,26 +601,27 @@ HRESULT WINAPI ScriptApplyDigitSubstitution(const SCRIPT_DIGITSUBSTITUTE *sds,
 }
 
 /***********************************************************************
- *      ScriptItemize (USP10.@)
+ *      ScriptItemizeOpenType (USP10.@)
  *
  * Split a Unicode string into shapeable parts.
  *
  * PARAMS
- *  pwcInChars [I] String to split.
- *  cInChars   [I] Number of characters in pwcInChars.
- *  cMaxItems  [I] Maximum number of items to return.
- *  psControl  [I] Pointer to a SCRIPT_CONTROL structure.
- *  psState    [I] Pointer to a SCRIPT_STATE structure.
- *  pItems     [O] Buffer to receive SCRIPT_ITEM structures.
- *  pcItems    [O] Number of script items returned.
+ *  pwcInChars  [I] String to split.
+ *  cInChars    [I] Number of characters in pwcInChars.
+ *  cMaxItems   [I] Maximum number of items to return.
+ *  psControl   [I] Pointer to a SCRIPT_CONTROL structure.
+ *  psState     [I] Pointer to a SCRIPT_STATE structure.
+ *  pItems      [O] Buffer to receive SCRIPT_ITEM structures.
+ *  pScriptTags [O] Buffer to receive OPENTYPE_TAGs.
+ *  pcItems     [O] Number of script items returned.
  *
  * RETURNS
  *  Success: S_OK
  *  Failure: Non-zero HRESULT value.
  */
-HRESULT WINAPI ScriptItemize(const WCHAR *pwcInChars, int cInChars, int cMaxItems,
+HRESULT WINAPI ScriptItemizeOpenType(const WCHAR *pwcInChars, int cInChars, int cMaxItems,
                              const SCRIPT_CONTROL *psControl, const SCRIPT_STATE *psState,
-                             SCRIPT_ITEM *pItems, int *pcItems)
+                             SCRIPT_ITEM *pItems, OPENTYPE_TAG *pScriptTags, int *pcItems)
 {
 
 #define Numeric_space 0x0020
@@ -649,6 +676,7 @@ HRESULT WINAPI ScriptItemize(const WCHAR *pwcInChars, int cInChars, int cMaxItem
 
     pItems[index].iCharPos = 0;
     pItems[index].a = scriptInformation[get_char_script(pwcInChars[cnt])].a;
+    pScriptTags[index] = scriptInformation[get_char_script(pwcInChars[cnt])].scriptTag;
 
     if (strength)
         str = strength[cnt];
@@ -701,6 +729,7 @@ HRESULT WINAPI ScriptItemize(const WCHAR *pwcInChars, int cInChars, int cMaxItem
             memset(&pItems[index].a, 0, sizeof(SCRIPT_ANALYSIS));
 
             pItems[index].a = scriptInformation[New_Script].a;
+            pScriptTags[index] = scriptInformation[New_Script].scriptTag;
             if (levels)
             {
                 pItems[index].a.fRTL = odd(levels[cnt]);
@@ -735,6 +764,39 @@ HRESULT WINAPI ScriptItemize(const WCHAR *pwcInChars, int cInChars, int cMaxItem
     heap_free(levels);
     heap_free(strength);
     return S_OK;
+}
+
+/***********************************************************************
+ *      ScriptItemize (USP10.@)
+ *
+ * Split a Unicode string into shapeable parts.
+ *
+ * PARAMS
+ *  pwcInChars [I] String to split.
+ *  cInChars   [I] Number of characters in pwcInChars.
+ *  cMaxItems  [I] Maximum number of items to return.
+ *  psControl  [I] Pointer to a SCRIPT_CONTROL structure.
+ *  psState    [I] Pointer to a SCRIPT_STATE structure.
+ *  pItems     [O] Buffer to receive SCRIPT_ITEM structures.
+ *  pcItems    [O] Number of script items returned.
+ *
+ * RETURNS
+ *  Success: S_OK
+ *  Failure: Non-zero HRESULT value.
+ */
+HRESULT WINAPI ScriptItemize(const WCHAR *pwcInChars, int cInChars, int cMaxItems,
+                             const SCRIPT_CONTROL *psControl, const SCRIPT_STATE *psState,
+                             SCRIPT_ITEM *pItems, int *pcItems)
+{
+    OPENTYPE_TAG *discarded_tags;
+    HRESULT res;
+
+    discarded_tags = heap_alloc(cMaxItems * sizeof(OPENTYPE_TAG));
+    if (!discarded_tags)
+        return E_OUTOFMEMORY;
+    res = ScriptItemizeOpenType(pwcInChars, cInChars, cMaxItems, psControl, psState, pItems, discarded_tags, pcItems);
+    heap_free(discarded_tags);
+    return res;
 }
 
 /***********************************************************************
@@ -824,6 +886,7 @@ HRESULT WINAPI ScriptStringAnalyse(HDC hdc, const void *pString, int cString,
         analysis->glyphs[i].psva = psva;
         analysis->glyphs[i].pGoffset = pGoffset;
         analysis->glyphs[i].abc = abc;
+        analysis->glyphs[i].iMaxPosX= -1;
     }
 
     *pssa = analysis;
@@ -932,11 +995,9 @@ HRESULT WINAPI ScriptStringOut(SCRIPT_STRING_ANALYSIS ssa,
  */
 HRESULT WINAPI ScriptStringCPtoX(SCRIPT_STRING_ANALYSIS ssa, int icp, BOOL fTrailing, int* pX)
 {
-    int i, j;
+    int i;
     int runningX = 0;
-    int runningCp = 0;
     StringAnalysis* analysis = ssa;
-    BOOL itemTrailing;
 
     TRACE("(%p), %d, %d, (%p)\n", ssa, icp, fTrailing, pX);
 
@@ -951,25 +1012,35 @@ HRESULT WINAPI ScriptStringCPtoX(SCRIPT_STRING_ANALYSIS ssa, int icp, BOOL fTrai
 
     for(i=0; i<analysis->numItems; i++)
     {
-        if (analysis->pItem[i].a.fRTL)
-            itemTrailing = !fTrailing;
-        else
-            itemTrailing = fTrailing;
-        for(j=0; j<analysis->glyphs[i].numGlyphs; j++)
+        int CP = analysis->pItem[i+1].iCharPos - analysis->pItem[i].iCharPos;
+        int offset;
+        /* initialize max extents for uninitialized runs */
+        if (analysis->glyphs[i].iMaxPosX == -1)
         {
-            if(runningCp == icp && itemTrailing == FALSE)
-            {
-                *pX = runningX;
-                return S_OK;
-            }
-            runningX += analysis->glyphs[i].piAdvance[j];
-            if(runningCp == icp && itemTrailing == TRUE)
-            {
-                *pX = runningX;
-                return S_OK;
-            }
-            runningCp++;
+            if (analysis->pItem[i].a.fRTL)
+                ScriptCPtoX(0, FALSE, CP, analysis->glyphs[i].numGlyphs, analysis->glyphs[i].pwLogClust,
+                            analysis->glyphs[i].psva, analysis->glyphs[i].piAdvance,
+                            &analysis->pItem[i].a, &analysis->glyphs[i].iMaxPosX);
+            else
+                ScriptCPtoX(CP, TRUE, CP, analysis->glyphs[i].numGlyphs, analysis->glyphs[i].pwLogClust,
+                            analysis->glyphs[i].psva, analysis->glyphs[i].piAdvance,
+                            &analysis->pItem[i].a, &analysis->glyphs[i].iMaxPosX);
         }
+
+        if (icp >= CP)
+        {
+            runningX += analysis->glyphs[i].iMaxPosX;
+            icp -= CP;
+            continue;
+        }
+
+        ScriptCPtoX(icp, fTrailing, CP, analysis->glyphs[i].numGlyphs, analysis->glyphs[i].pwLogClust,
+                    analysis->glyphs[i].psva, analysis->glyphs[i].piAdvance,
+                    &analysis->pItem[i].a, &offset);
+        runningX += offset;
+
+        *pX = runningX;
+        return S_OK;
     }
 
     /* icp out of range */
@@ -981,14 +1052,11 @@ HRESULT WINAPI ScriptStringCPtoX(SCRIPT_STRING_ANALYSIS ssa, int icp, BOOL fTrai
  *      ScriptStringXtoCP (USP10.@)
  *
  */
-HRESULT WINAPI ScriptStringXtoCP(SCRIPT_STRING_ANALYSIS ssa, int iX, int* piCh, int* piTrailing) 
+HRESULT WINAPI ScriptStringXtoCP(SCRIPT_STRING_ANALYSIS ssa, int iX, int* piCh, int* piTrailing)
 {
     StringAnalysis* analysis = ssa;
     int i;
-    int j;
-    int runningX = 0;
     int runningCp = 0;
-    int width;
 
     TRACE("(%p), %d, (%p), (%p)\n", ssa, iX, piCh, piTrailing);
 
@@ -1012,24 +1080,33 @@ HRESULT WINAPI ScriptStringXtoCP(SCRIPT_STRING_ANALYSIS ssa, int iX, int* piCh, 
 
     for(i=0; i<analysis->numItems; i++)
     {
-        for(j=0; j<analysis->glyphs[i].numGlyphs; j++)
+        int CP = analysis->pItem[i+1].iCharPos - analysis->pItem[i].iCharPos;
+        /* initialize max extents for uninitialized runs */
+        if (analysis->glyphs[i].iMaxPosX == -1)
         {
-            width = analysis->glyphs[i].piAdvance[j];
-            if(iX < (runningX + width))
-            {
-                *piCh = runningCp;
-                if((iX - runningX) > width/2)
-                    *piTrailing = TRUE;
-                else
-                    *piTrailing = FALSE;
-
-                if (analysis->pItem[i].a.fRTL)
-                    *piTrailing = !*piTrailing;
-                return S_OK;
-            }
-            runningX += width;
-            runningCp++;
+            if (analysis->pItem[i].a.fRTL)
+                ScriptCPtoX(0, FALSE, CP, analysis->glyphs[i].numGlyphs, analysis->glyphs[i].pwLogClust,
+                            analysis->glyphs[i].psva, analysis->glyphs[i].piAdvance,
+                            &analysis->pItem[i].a, &analysis->glyphs[i].iMaxPosX);
+            else
+                ScriptCPtoX(CP, TRUE, CP, analysis->glyphs[i].numGlyphs, analysis->glyphs[i].pwLogClust,
+                            analysis->glyphs[i].psva, analysis->glyphs[i].piAdvance,
+                            &analysis->pItem[i].a, &analysis->glyphs[i].iMaxPosX);
         }
+
+        if (iX > analysis->glyphs[i].iMaxPosX)
+        {
+            iX -= analysis->glyphs[i].iMaxPosX;
+            runningCp += CP;
+            continue;
+        }
+
+        ScriptXtoCP(iX, CP, analysis->glyphs[i].numGlyphs, analysis->glyphs[i].pwLogClust,
+                    analysis->glyphs[i].psva, analysis->glyphs[i].piAdvance,
+                    &analysis->pItem[i].a, piCh, piTrailing);
+        *piCh += runningCp;
+
+        return S_OK;
     }
 
     /* out of range */
@@ -1100,19 +1177,88 @@ HRESULT WINAPI ScriptCPtoX(int iCP,
                            const SCRIPT_ANALYSIS *psa,
                            int *piX)
 {
-    int  item;
-    int  iPosX;
-    float  fMaxPosX = 0;
+    int item;
+    float iPosX;
+    int iSpecial = -1;
+    int iCluster = -1;
+    int clust_size = 1;
+    float special_size = 0.0;
+    int iMaxPos = 0;
+    BOOL rtl = FALSE;
+
     TRACE("(%d,%d,%d,%d,%p,%p,%p,%p,%p)\n",
           iCP, fTrailing, cChars, cGlyphs, pwLogClust, psva, piAdvance,
           psa, piX);
-    for (item=0; item < cGlyphs; item++)            /* total piAdvance           */
-        fMaxPosX += piAdvance[item];
-    iPosX = (fMaxPosX/cGlyphs)*(iCP+fTrailing);
-    if  (iPosX > fMaxPosX)
-        iPosX = fMaxPosX;
-    *piX = iPosX;                                    /* Return something in range */
 
+    if (psa->fRTL && ! psa->fLogicalOrder)
+        rtl = TRUE;
+
+    if (fTrailing)
+        iCP++;
+
+    if (rtl)
+    {
+        int max_clust = pwLogClust[0];
+
+        for (item=0; item < cGlyphs; item++)
+            if (pwLogClust[item] > max_clust)
+            {
+                ERR("We do not handle non reversed clusters properly\n");
+                break;
+            }
+
+        iMaxPos = 0;
+        for (item = max_clust; item >=0; item --)
+            iMaxPos += piAdvance[item];
+    }
+
+    iPosX = 0.0;
+    for (item=0; item < iCP && item < cGlyphs; item++)
+    {
+        if (iSpecial == -1 && (iCluster == -1 || (iCluster != -1 && iCluster+clust_size <= item)))
+        {
+            int check;
+            int clust = pwLogClust[item];
+
+            clust_size = 1;
+            iCluster = -1;
+
+            for (check = item+1; check < cGlyphs; check++)
+            {
+                if (pwLogClust[check] == clust)
+                {
+                    clust_size ++;
+                    if (iCluster == -1)
+                        iCluster = item;
+                }
+                else break;
+            }
+
+            if (check >= cGlyphs && !iMaxPos)
+            {
+                for (check = clust; check < cGlyphs; check++)
+                    special_size += piAdvance[check];
+                iSpecial = item;
+                special_size /= (cChars - item);
+                iPosX += special_size;
+            }
+            else
+                iPosX += piAdvance[clust] / (float)clust_size;
+        }
+        else if (iSpecial != -1)
+            iPosX += special_size;
+        else /* (iCluster != -1) */
+            iPosX += piAdvance[pwLogClust[iCluster]] / (float)clust_size;
+    }
+
+    if (iMaxPos > 0)
+    {
+        iPosX = iMaxPos - iPosX;
+        if (iPosX < 0)
+            iPosX = 0;
+    }
+
+    *piX = iPosX;
     TRACE("*piX=%d\n", *piX);
     return S_OK;
 }
@@ -1132,40 +1278,126 @@ HRESULT WINAPI ScriptXtoCP(int iX,
                            int *piTrailing)
 {
     int item;
-    int iPosX;
-    float fMaxPosX = 1;
-    float fAvePosX;
+    float iPosX;
+    float iLastPosX;
+    int iSpecial = -1;
+    int iCluster = -1;
+    int clust_size = 1;
+    float special_size = 0.0;
+    int direction = 1;
+
     TRACE("(%d,%d,%d,%p,%p,%p,%p,%p,%p)\n",
           iX, cChars, cGlyphs, pwLogClust, psva, piAdvance,
           psa, piCP, piTrailing);
-    if  (iX < 0)                                    /* iX is before start of run */
+
+    if (psa->fRTL && ! psa->fLogicalOrder)
+        direction = -1;
+
+    if (direction<0)
+    {
+        int max_clust = pwLogClust[0];
+
+        if (iX < 0)
+        {
+            *piCP = cGlyphs;
+            *piTrailing = 0;
+            return S_OK;
+        }
+
+        for (item=0; item < cGlyphs; item++)
+            if (pwLogClust[item] > max_clust)
+            {
+                ERR("We do not handle non reversed clusters properly\n");
+                break;
+            }
+    }
+
+    if (iX < 0)
     {
         *piCP = -1;
-        *piTrailing = TRUE;
+        *piTrailing = 1;
         return S_OK;
     }
 
-    for (item=0; item < cGlyphs; item++)            /* total piAdvance           */
-        fMaxPosX += piAdvance[item];
-
-    if  (iX >= fMaxPosX)                            /* iX too large              */
-    {
-        *piCP = cChars;
-        *piTrailing = FALSE;
-        return S_OK;
-    }
-
-    fAvePosX = fMaxPosX / cGlyphs;
-    iPosX = fAvePosX;
-    for (item = 1; item < cGlyphs  && iPosX < iX; item++)
-        iPosX += fAvePosX;
-    if  (iPosX - iX > fAvePosX/2)
-        *piTrailing = 0;
+    iPosX = iLastPosX = 0;
+    if (direction > 0)
+        item = 0;
     else
-        *piTrailing = 1;                            /* yep we are over halfway */
+        item = cGlyphs - 1;
+    for (; iPosX <= iX && item < cGlyphs && item >= 0; item+=direction)
+    {
+        iLastPosX = iPosX;
+        if (iSpecial == -1 &&
+             (iCluster == -1 ||
+              (iCluster != -1 &&
+                 ((direction > 0 && iCluster+clust_size <= item) ||
+                  (direction < 0 && iCluster-clust_size >= item))
+              )
+             )
+            )
+        {
+            int check;
+            int clust = pwLogClust[item];
 
-    *piCP = item -1;                                /* Return character position */
-    TRACE("*piCP=%d iPposX=%d\n", *piCP, iPosX);
+            clust_size = 1;
+            iCluster = -1;
+
+            for (check = item+direction; check < cGlyphs && check >= 0; check+=direction)
+            {
+                if (pwLogClust[check] == clust)
+                {
+                    clust_size ++;
+                    if (iCluster == -1)
+                        iCluster = item;
+                }
+                else break;
+            }
+
+            if (check >= cGlyphs && direction > 0)
+            {
+                for (check = clust; check < cGlyphs; check++)
+                    special_size += piAdvance[check];
+                iSpecial = item;
+                special_size /= (cChars - item);
+                iPosX += special_size;
+            }
+            else
+                iPosX += piAdvance[clust] / (float)clust_size;
+        }
+        else if (iSpecial != -1)
+            iPosX += special_size;
+        else /* (iCluster != -1) */
+            iPosX += piAdvance[pwLogClust[iCluster]] / (float)clust_size;
+    }
+
+    if (direction > 0)
+    {
+        if (iPosX > iX)
+            item--;
+        if (item < cGlyphs && ((iPosX - iLastPosX) / 2.0) + iX > iPosX)
+            *piTrailing = 1;
+        else
+            *piTrailing = 0;
+    }
+    else
+    {
+        if (iX == iLastPosX)
+            item++;
+        if (iX >= iLastPosX && iX <= iPosX)
+            item++;
+
+        if (iLastPosX == iX)
+            *piTrailing = 0;
+        else if (item < 0 || ((iLastPosX - iPosX) / 2.0) + iX <= iLastPosX)
+            *piTrailing = 1;
+        else
+            *piTrailing = 0;
+    }
+
+    *piCP = item;
+
+    TRACE("*piCP=%d\n", *piCP);
+    TRACE("*piTrailing=%d\n", *piTrailing);
     return S_OK;
 }
 
@@ -1245,48 +1477,68 @@ HRESULT WINAPI ScriptIsComplex(const WCHAR *chars, int len, DWORD flag)
 }
 
 /***********************************************************************
- *      ScriptShape (USP10.@)
+ *      ScriptShapeOpenType (USP10.@)
  *
  * Produce glyphs and visual attributes for a run.
  *
  * PARAMS
  *  hdc         [I]   Device context.
  *  psc         [I/O] Opaque pointer to a script cache.
+ *  psa         [I/O] Script analysis.
+ *  tagScript   [I]   The OpenType tag for the Script
+ *  tagLangSys  [I]   The OpenType tag for the Language
+ *  rcRangeChars[I]   Array of Character counts in each range
+ *  rpRangeProperties [I] Array of TEXTRANGE_PROPERTIES structures
+ *  cRanges     [I]   Count of ranges
  *  pwcChars    [I]   Array of characters specifying the run.
  *  cChars      [I]   Number of characters in pwcChars.
  *  cMaxGlyphs  [I]   Length of pwOutGlyphs.
- *  psa         [I/O] Script analysis.
- *  pwOutGlyphs [O]   Array of glyphs.
  *  pwLogClust  [O]   Array of logical cluster info.
- *  psva        [O]   Array of visual attributes.
+ *  pCharProps  [O]   Array of character property values
+ *  pwOutGlyphs [O]   Array of glyphs.
+ *  pOutGlyphProps [O]  Array of attributes for the retrieved glyphs
  *  pcGlyphs    [O]   Number of glyphs returned.
  *
  * RETURNS
  *  Success: S_OK
  *  Failure: Non-zero HRESULT value.
  */
-HRESULT WINAPI ScriptShape(HDC hdc, SCRIPT_CACHE *psc, const WCHAR *pwcChars, 
-                           int cChars, int cMaxGlyphs,
-                           SCRIPT_ANALYSIS *psa, WORD *pwOutGlyphs, WORD *pwLogClust,
-                           SCRIPT_VISATTR *psva, int *pcGlyphs)
+HRESULT WINAPI ScriptShapeOpenType( HDC hdc, SCRIPT_CACHE *psc,
+                                    SCRIPT_ANALYSIS *psa, OPENTYPE_TAG tagScript,
+                                    OPENTYPE_TAG tagLangSys, int *rcRangeChars,
+                                    TEXTRANGE_PROPERTIES **rpRangeProperties,
+                                    int cRanges, const WCHAR *pwcChars, int cChars,
+                                    int cMaxGlyphs, WORD *pwLogClust,
+                                    SCRIPT_CHARPROP *pCharProps, WORD *pwOutGlyphs,
+                                    SCRIPT_GLYPHPROP *pOutGlyphProps, int *pcGlyphs)
 {
     HRESULT hr;
     unsigned int i;
     BOOL rtl;
 
-    TRACE("(%p, %p, %s, %d, %d, %p, %p, %p, %p, %p)\n", hdc, psc, debugstr_wn(pwcChars, cChars),
-          cChars, cMaxGlyphs, psa, pwOutGlyphs, pwLogClust, psva, pcGlyphs);
+    TRACE("(%p, %p, %p, %s, %s, %p, %p, %d, %s, %d, %d, %p, %p, %p, %p, %p )\n",
+     hdc, psc, psa,
+     debugstr_an((char*)&tagScript,4), debugstr_an((char*)&tagLangSys,4),
+     rcRangeChars, rpRangeProperties, cRanges, debugstr_wn(pwcChars, cChars),
+     cChars, cMaxGlyphs, pwLogClust, pCharProps, pwOutGlyphs, pOutGlyphProps, pcGlyphs);
 
     if (psa) TRACE("psa values: %d, %d, %d, %d, %d, %d, %d\n", psa->eScript, psa->fRTL, psa->fLayoutRTL,
                    psa->fLinkBefore, psa->fLinkAfter, psa->fLogicalOrder, psa->fNoGlyphIndex);
 
-    if (!psva || !pcGlyphs) return E_INVALIDARG;
+    if (!pOutGlyphProps || !pcGlyphs || !pCharProps) return E_INVALIDARG;
     if (cChars > cMaxGlyphs) return E_OUTOFMEMORY;
+
+    if (cRanges)
+        FIXME("Ranges not supported yet\n");
+
     rtl = (!psa->fLogicalOrder && psa->fRTL);
 
     *pcGlyphs = cChars;
     if ((hr = init_script_cache(hdc, psc)) != S_OK) return hr;
     if (!pwLogClust) return E_FAIL;
+
+    ((ScriptCache *)*psc)->userScript = tagScript;
+    ((ScriptCache *)*psc)->userLang = tagLangSys;
 
     /* Initialize a SCRIPT_VISATTR and LogClust for each char in this run */
     for (i = 0; i < cChars; i++)
@@ -1294,12 +1546,15 @@ HRESULT WINAPI ScriptShape(HDC hdc, SCRIPT_CACHE *psc, const WCHAR *pwcChars,
         int idx = i;
         if (rtl) idx = cChars - 1 - i;
         /* FIXME: set to better values */
-        psva[i].uJustification = (pwcChars[idx] == ' ') ? SCRIPT_JUSTIFY_BLANK : SCRIPT_JUSTIFY_CHARACTER;
-        psva[i].fClusterStart  = 1;
-        psva[i].fDiacritic     = 0;
-        psva[i].fZeroWidth     = 0;
-        psva[i].fReserved      = 0;
-        psva[i].fShapeReserved = 0;
+        pOutGlyphProps[i].sva.uJustification = (pwcChars[idx] == ' ') ? SCRIPT_JUSTIFY_BLANK : SCRIPT_JUSTIFY_CHARACTER;
+        pOutGlyphProps[i].sva.fClusterStart  = 1;
+        pOutGlyphProps[i].sva.fDiacritic     = 0;
+        pOutGlyphProps[i].sva.fZeroWidth     = 0;
+        pOutGlyphProps[i].sva.fReserved      = 0;
+        pOutGlyphProps[i].sva.fShapeReserved = 0;
+
+        /* FIXME: have the shaping engine set this */
+        pCharProps[i].fCanGlyphAlone = 1;
 
         pwLogClust[i] = idx;
     }
@@ -1352,18 +1607,81 @@ HRESULT WINAPI ScriptShape(HDC hdc, SCRIPT_CACHE *psc, const WCHAR *pwcChars,
     return S_OK;
 }
 
+
 /***********************************************************************
- *      ScriptPlace (USP10.@)
+ *      ScriptShape (USP10.@)
+ *
+ * Produce glyphs and visual attributes for a run.
+ *
+ * PARAMS
+ *  hdc         [I]   Device context.
+ *  psc         [I/O] Opaque pointer to a script cache.
+ *  pwcChars    [I]   Array of characters specifying the run.
+ *  cChars      [I]   Number of characters in pwcChars.
+ *  cMaxGlyphs  [I]   Length of pwOutGlyphs.
+ *  psa         [I/O] Script analysis.
+ *  pwOutGlyphs [O]   Array of glyphs.
+ *  pwLogClust  [O]   Array of logical cluster info.
+ *  psva        [O]   Array of visual attributes.
+ *  pcGlyphs    [O]   Number of glyphs returned.
+ *
+ * RETURNS
+ *  Success: S_OK
+ *  Failure: Non-zero HRESULT value.
+ */
+HRESULT WINAPI ScriptShape(HDC hdc, SCRIPT_CACHE *psc, const WCHAR *pwcChars,
+                           int cChars, int cMaxGlyphs,
+                           SCRIPT_ANALYSIS *psa, WORD *pwOutGlyphs, WORD *pwLogClust,
+                           SCRIPT_VISATTR *psva, int *pcGlyphs)
+{
+    HRESULT hr;
+    int i;
+    SCRIPT_CHARPROP *charProps;
+    SCRIPT_GLYPHPROP *glyphProps;
+
+    if (!psva || !pcGlyphs) return E_INVALIDARG;
+    if (cChars > cMaxGlyphs) return E_OUTOFMEMORY;
+
+    charProps = heap_alloc_zero(sizeof(SCRIPT_CHARPROP)*cChars);
+    if (!charProps) return E_OUTOFMEMORY;
+    glyphProps = heap_alloc_zero(sizeof(SCRIPT_GLYPHPROP)*cMaxGlyphs);
+    if (!glyphProps) return E_OUTOFMEMORY;
+
+    hr = ScriptShapeOpenType(hdc, psc, psa, scriptInformation[psa->eScript].scriptTag, 0, NULL, NULL, 0, pwcChars, cChars, cMaxGlyphs, pwLogClust, charProps, pwOutGlyphs, glyphProps, pcGlyphs);
+
+    if (SUCCEEDED(hr))
+    {
+        for (i = 0; i < *pcGlyphs; i++)
+            psva[i] = glyphProps[i].sva;
+    }
+
+    heap_free(charProps);
+    heap_free(glyphProps);
+
+    return hr;
+}
+
+/***********************************************************************
+ *      ScriptPlaceOpenType (USP10.@)
  *
  * Produce advance widths for a run.
  *
  * PARAMS
  *  hdc       [I]   Device context.
  *  psc       [I/O] Opaque pointer to a script cache.
- *  pwGlyphs  [I]   Array of glyphs.
- *  cGlyphs   [I]   Number of glyphs in pwGlyphs.
- *  psva      [I]   Array of visual attributes.
  *  psa       [I/O] String analysis.
+ *  tagScript   [I]   The OpenType tag for the Script
+ *  tagLangSys  [I]   The OpenType tag for the Language
+ *  rcRangeChars[I]   Array of Character counts in each range
+ *  rpRangeProperties [I] Array of TEXTRANGE_PROPERTIES structures
+ *  cRanges     [I]   Count of ranges
+ *  pwcChars    [I]   Array of characters specifying the run.
+ *  pwLogClust  [I]   Array of logical cluster info
+ *  pCharProps  [I]   Array of character property values
+ *  cChars      [I]   Number of characters in pwcChars.
+ *  pwGlyphs  [I]   Array of glyphs.
+ *  pGlyphProps [I]  Array of attributes for the retrieved glyphs
+ *  cGlyphs [I] Count of Glyphs
  *  piAdvance [O]   Array of advance widths.
  *  pGoffset  [O]   Glyph offsets.
  *  pABC      [O]   Combined ABC width.
@@ -1372,19 +1690,36 @@ HRESULT WINAPI ScriptShape(HDC hdc, SCRIPT_CACHE *psc, const WCHAR *pwcChars,
  *  Success: S_OK
  *  Failure: Non-zero HRESULT value.
  */
-HRESULT WINAPI ScriptPlace(HDC hdc, SCRIPT_CACHE *psc, const WORD *pwGlyphs, 
-                           int cGlyphs, const SCRIPT_VISATTR *psva,
-                           SCRIPT_ANALYSIS *psa, int *piAdvance, GOFFSET *pGoffset, ABC *pABC )
+
+HRESULT WINAPI ScriptPlaceOpenType( HDC hdc, SCRIPT_CACHE *psc, SCRIPT_ANALYSIS *psa,
+                                    OPENTYPE_TAG tagScript, OPENTYPE_TAG tagLangSys,
+                                    int *rcRangeChars, TEXTRANGE_PROPERTIES **rpRangeProperties,
+                                    int cRanges, const WCHAR *pwcChars, WORD *pwLogClust,
+                                    SCRIPT_CHARPROP *pCharProps, int cChars,
+                                    const WORD *pwGlyphs, const SCRIPT_GLYPHPROP *pGlyphProps,
+                                    int cGlyphs, int *piAdvance,
+                                    GOFFSET *pGoffset, ABC *pABC
+)
 {
     HRESULT hr;
     int i;
 
-    TRACE("(%p, %p, %p, %d, %p, %p, %p, %p, %p)\n",  hdc, psc, pwGlyphs, cGlyphs, psva, psa,
-          piAdvance, pGoffset, pABC);
+    TRACE("(%p, %p, %p, %s, %s, %p, %p, %d, %s, %p, %p, %d, %p, %p, %d, %p %p %p)\n",
+     hdc, psc, psa,
+     debugstr_an((char*)&tagScript,4), debugstr_an((char*)&tagLangSys,4),
+     rcRangeChars, rpRangeProperties, cRanges, debugstr_wn(pwcChars, cChars),
+     pwLogClust, pCharProps, cChars, pwGlyphs, pGlyphProps, cGlyphs, piAdvance,
+     pGoffset, pABC);
 
-    if (!psva) return E_INVALIDARG;
+    if (!pGlyphProps) return E_INVALIDARG;
     if ((hr = init_script_cache(hdc, psc)) != S_OK) return hr;
     if (!pGoffset) return E_FAIL;
+
+    if (cRanges)
+        FIXME("Ranges not supported yet\n");
+
+    ((ScriptCache *)*psc)->userScript = tagScript;
+    ((ScriptCache *)*psc)->userLang = tagLangSys;
 
     if (pABC) memset(pABC, 0, sizeof(ABC));
     for (i = 0; i < cGlyphs; i++)
@@ -1419,6 +1754,53 @@ HRESULT WINAPI ScriptPlace(HDC hdc, SCRIPT_CACHE *psc, const WORD *pwGlyphs,
 
     if (pABC) TRACE("Total for run: abcA=%d, abcB=%d, abcC=%d\n", pABC->abcA, pABC->abcB, pABC->abcC);
     return S_OK;
+}
+
+/***********************************************************************
+ *      ScriptPlace (USP10.@)
+ *
+ * Produce advance widths for a run.
+ *
+ * PARAMS
+ *  hdc       [I]   Device context.
+ *  psc       [I/O] Opaque pointer to a script cache.
+ *  pwGlyphs  [I]   Array of glyphs.
+ *  cGlyphs   [I]   Number of glyphs in pwGlyphs.
+ *  psva      [I]   Array of visual attributes.
+ *  psa       [I/O] String analysis.
+ *  piAdvance [O]   Array of advance widths.
+ *  pGoffset  [O]   Glyph offsets.
+ *  pABC      [O]   Combined ABC width.
+ *
+ * RETURNS
+ *  Success: S_OK
+ *  Failure: Non-zero HRESULT value.
+ */
+HRESULT WINAPI ScriptPlace(HDC hdc, SCRIPT_CACHE *psc, const WORD *pwGlyphs,
+                           int cGlyphs, const SCRIPT_VISATTR *psva,
+                           SCRIPT_ANALYSIS *psa, int *piAdvance, GOFFSET *pGoffset, ABC *pABC )
+{
+    HRESULT hr;
+    SCRIPT_GLYPHPROP *glyphProps;
+    int i;
+
+    TRACE("(%p, %p, %p, %d, %p, %p, %p, %p, %p)\n",  hdc, psc, pwGlyphs, cGlyphs, psva, psa,
+          piAdvance, pGoffset, pABC);
+
+    if (!psva) return E_INVALIDARG;
+    if (!pGoffset) return E_FAIL;
+
+    glyphProps = heap_alloc(sizeof(SCRIPT_GLYPHPROP)*cGlyphs);
+    if (!glyphProps) return E_OUTOFMEMORY;
+
+    for (i = 0; i < cGlyphs; i++)
+        glyphProps[i].sva = psva[i];
+
+    hr = ScriptPlaceOpenType(hdc, psc, psa, scriptInformation[psa->eScript].scriptTag, 0, NULL, NULL, 0, NULL, NULL, NULL, 0, pwGlyphs, glyphProps, cGlyphs, piAdvance, pGoffset, pABC);
+
+    heap_free(glyphProps);
+
+    return hr;
 }
 
 /***********************************************************************

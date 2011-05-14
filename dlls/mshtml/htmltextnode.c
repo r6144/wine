@@ -34,93 +34,93 @@ WINE_DEFAULT_DEBUG_CHANNEL(mshtml);
 
 struct HTMLDOMTextNode {
     HTMLDOMNode node;
-    const IHTMLDOMTextNodeVtbl   *lpIHTMLDOMTextNodeVtbl;
+    IHTMLDOMTextNode IHTMLDOMTextNode_iface;
 
     nsIDOMText *nstext;
 };
 
-#define HTMLTEXT(x)  (&(x)->lpIHTMLDOMTextNodeVtbl)
-
-#define HTMLTEXT_THIS(iface) DEFINE_THIS(HTMLDOMTextNode, IHTMLDOMTextNode, iface)
-
-#define HTMLTEXT_NODE_THIS(iface) DEFINE_THIS2(HTMLDOMTextNode, node, iface)
+static inline HTMLDOMTextNode *impl_from_IHTMLDOMTextNode(IHTMLDOMTextNode *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLDOMTextNode, IHTMLDOMTextNode_iface);
+}
 
 static HRESULT WINAPI HTMLDOMTextNode_QueryInterface(IHTMLDOMTextNode *iface,
                                                  REFIID riid, void **ppv)
 {
-    HTMLDOMTextNode *This = HTMLTEXT_THIS(iface);
+    HTMLDOMTextNode *This = impl_from_IHTMLDOMTextNode(iface);
 
-    return IHTMLDOMNode_QueryInterface(HTMLDOMNODE(&This->node), riid, ppv);
+    return IHTMLDOMNode_QueryInterface(&This->node.IHTMLDOMNode_iface, riid, ppv);
 }
 
 static ULONG WINAPI HTMLDOMTextNode_AddRef(IHTMLDOMTextNode *iface)
 {
-    HTMLDOMTextNode *This = HTMLTEXT_THIS(iface);
+    HTMLDOMTextNode *This = impl_from_IHTMLDOMTextNode(iface);
 
-    return IHTMLDOMNode_AddRef(HTMLDOMNODE(&This->node));
+    return IHTMLDOMNode_AddRef(&This->node.IHTMLDOMNode_iface);
 }
 
 static ULONG WINAPI HTMLDOMTextNode_Release(IHTMLDOMTextNode *iface)
 {
-    HTMLDOMTextNode *This = HTMLTEXT_THIS(iface);
+    HTMLDOMTextNode *This = impl_from_IHTMLDOMTextNode(iface);
 
-    return IHTMLDOMNode_Release(HTMLDOMNODE(&This->node));
+    return IHTMLDOMNode_Release(&This->node.IHTMLDOMNode_iface);
 }
 
 static HRESULT WINAPI HTMLDOMTextNode_GetTypeInfoCount(IHTMLDOMTextNode *iface, UINT *pctinfo)
 {
-    HTMLDOMTextNode *This = HTMLTEXT_THIS(iface);
-    return IDispatchEx_GetTypeInfoCount(DISPATCHEX(&This->node.dispex), pctinfo);
+    HTMLDOMTextNode *This = impl_from_IHTMLDOMTextNode(iface);
+    return IDispatchEx_GetTypeInfoCount(&This->node.dispex.IDispatchEx_iface, pctinfo);
 }
 
 static HRESULT WINAPI HTMLDOMTextNode_GetTypeInfo(IHTMLDOMTextNode *iface, UINT iTInfo,
                                               LCID lcid, ITypeInfo **ppTInfo)
 {
-    HTMLDOMTextNode *This = HTMLTEXT_THIS(iface);
-    return IDispatchEx_GetTypeInfo(DISPATCHEX(&This->node.dispex), iTInfo, lcid, ppTInfo);
+    HTMLDOMTextNode *This = impl_from_IHTMLDOMTextNode(iface);
+    return IDispatchEx_GetTypeInfo(&This->node.dispex.IDispatchEx_iface, iTInfo, lcid, ppTInfo);
 }
 
 static HRESULT WINAPI HTMLDOMTextNode_GetIDsOfNames(IHTMLDOMTextNode *iface, REFIID riid,
                                                 LPOLESTR *rgszNames, UINT cNames,
                                                 LCID lcid, DISPID *rgDispId)
 {
-    HTMLDOMTextNode *This = HTMLTEXT_THIS(iface);
-    return IDispatchEx_GetIDsOfNames(DISPATCHEX(&This->node.dispex), riid, rgszNames, cNames, lcid, rgDispId);
+    HTMLDOMTextNode *This = impl_from_IHTMLDOMTextNode(iface);
+    return IDispatchEx_GetIDsOfNames(&This->node.dispex.IDispatchEx_iface, riid, rgszNames, cNames,
+            lcid, rgDispId);
 }
 
 static HRESULT WINAPI HTMLDOMTextNode_Invoke(IHTMLDOMTextNode *iface, DISPID dispIdMember,
                             REFIID riid, LCID lcid, WORD wFlags, DISPPARAMS *pDispParams,
                             VARIANT *pVarResult, EXCEPINFO *pExcepInfo, UINT *puArgErr)
 {
-    HTMLDOMTextNode *This = HTMLTEXT_THIS(iface);
-    return IDispatchEx_Invoke(DISPATCHEX(&This->node.dispex), dispIdMember, riid, lcid, wFlags, pDispParams,
-            pVarResult, pExcepInfo, puArgErr);
+    HTMLDOMTextNode *This = impl_from_IHTMLDOMTextNode(iface);
+    return IDispatchEx_Invoke(&This->node.dispex.IDispatchEx_iface, dispIdMember, riid, lcid,
+            wFlags, pDispParams, pVarResult, pExcepInfo, puArgErr);
 }
 
 static HRESULT WINAPI HTMLDOMTextNode_put_data(IHTMLDOMTextNode *iface, BSTR v)
 {
-    HTMLDOMTextNode *This = HTMLTEXT_THIS(iface);
+    HTMLDOMTextNode *This = impl_from_IHTMLDOMTextNode(iface);
     FIXME("(%p)->(%s)\n", This, debugstr_w(v));
     return E_NOTIMPL;
 }
 
 static HRESULT WINAPI HTMLDOMTextNode_get_data(IHTMLDOMTextNode *iface, BSTR *p)
 {
-    HTMLDOMTextNode *This = HTMLTEXT_THIS(iface);
+    HTMLDOMTextNode *This = impl_from_IHTMLDOMTextNode(iface);
     FIXME("(%p)->(%p)\n", This, p);
     return E_NOTIMPL;
 }
 
 static HRESULT WINAPI HTMLDOMTextNode_toString(IHTMLDOMTextNode *iface, BSTR *String)
 {
-    HTMLDOMTextNode *This = HTMLTEXT_THIS(iface);
+    HTMLDOMTextNode *This = impl_from_IHTMLDOMTextNode(iface);
     FIXME("(%p)->(%p)\n", This, String);
     return E_NOTIMPL;
 }
 
 static HRESULT WINAPI HTMLDOMTextNode_get_length(IHTMLDOMTextNode *iface, LONG *p)
 {
-    HTMLDOMTextNode *This = HTMLTEXT_THIS(iface);
+    HTMLDOMTextNode *This = impl_from_IHTMLDOMTextNode(iface);
     PRUint32 length = 0;
     nsresult nsres;
 
@@ -136,12 +136,10 @@ static HRESULT WINAPI HTMLDOMTextNode_get_length(IHTMLDOMTextNode *iface, LONG *
 
 static HRESULT WINAPI HTMLDOMTextNode_splitText(IHTMLDOMTextNode *iface, LONG offset, IHTMLDOMNode **pRetNode)
 {
-    HTMLDOMTextNode *This = HTMLTEXT_THIS(iface);
+    HTMLDOMTextNode *This = impl_from_IHTMLDOMTextNode(iface);
     FIXME("(%p)->(%d %p)\n", This, offset, pRetNode);
     return E_NOTIMPL;
 }
-
-#undef HTMLTEXT_THIS
 
 static const IHTMLDOMTextNodeVtbl HTMLDOMTextNodeVtbl = {
     HTMLDOMTextNode_QueryInterface,
@@ -158,17 +156,20 @@ static const IHTMLDOMTextNodeVtbl HTMLDOMTextNodeVtbl = {
     HTMLDOMTextNode_splitText
 };
 
-#define HTMLTEXT_NODE_THIS(iface) DEFINE_THIS2(HTMLDOMTextNode, node, iface)
+static inline HTMLDOMTextNode *impl_from_HTMLDOMNode(HTMLDOMNode *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLDOMTextNode, node);
+}
 
 static HRESULT HTMLDOMTextNode_QI(HTMLDOMNode *iface, REFIID riid, void **ppv)
 {
-    HTMLDOMTextNode *This = HTMLTEXT_NODE_THIS(iface);
+    HTMLDOMTextNode *This = impl_from_HTMLDOMNode(iface);
 
     *ppv =  NULL;
 
     if(IsEqualGUID(&IID_IHTMLDOMTextNode, riid)) {
         TRACE("(%p)->(IID_IHTMLDOMTextNode %p)\n", This, ppv);
-        *ppv = HTMLTEXT(This);
+        *ppv = &This->IHTMLDOMTextNode_iface;
     }else {
         return HTMLDOMNode_QI(&This->node, riid, ppv);
     }
@@ -179,7 +180,7 @@ static HRESULT HTMLDOMTextNode_QI(HTMLDOMNode *iface, REFIID riid, void **ppv)
 
 static void HTMLDOMTextNode_destructor(HTMLDOMNode *iface)
 {
-    HTMLDOMTextNode *This = HTMLTEXT_NODE_THIS(iface);
+    HTMLDOMTextNode *This = impl_from_HTMLDOMNode(iface);
 
     if(This->nstext)
         IHTMLDOMTextNode_Release(This->nstext);
@@ -189,18 +190,16 @@ static void HTMLDOMTextNode_destructor(HTMLDOMNode *iface)
 
 static HRESULT HTMLDOMTextNode_clone(HTMLDOMNode *iface, nsIDOMNode *nsnode, HTMLDOMNode **ret)
 {
-    HTMLDOMTextNode *This = HTMLTEXT_NODE_THIS(iface);
+    HTMLDOMTextNode *This = impl_from_HTMLDOMNode(iface);
     HRESULT hres;
 
     hres = HTMLDOMTextNode_Create(This->node.doc, nsnode, ret);
     if(FAILED(hres))
         return hres;
 
-    IHTMLDOMNode_AddRef(HTMLDOMNODE(*ret));
+    IHTMLDOMNode_AddRef(&(*ret)->IHTMLDOMNode_iface);
     return S_OK;
 }
-
-#undef HTMLTEXT_NODE_THIS
 
 static const NodeImplVtbl HTMLDOMTextNodeImplVtbl = {
     HTMLDOMTextNode_QI,
@@ -231,7 +230,7 @@ HRESULT HTMLDOMTextNode_Create(HTMLDocumentNode *doc, nsIDOMNode *nsnode, HTMLDO
         return E_OUTOFMEMORY;
 
     ret->node.vtbl = &HTMLDOMTextNodeImplVtbl;
-    ret->lpIHTMLDOMTextNodeVtbl = &HTMLDOMTextNodeVtbl;
+    ret->IHTMLDOMTextNode_iface.lpVtbl = &HTMLDOMTextNodeVtbl;
 
     nsres = nsIDOMNode_QueryInterface(nsnode, &IID_nsIDOMText, (void**)&ret->nstext);
     if(NS_FAILED(nsres)) {
@@ -240,7 +239,8 @@ HRESULT HTMLDOMTextNode_Create(HTMLDocumentNode *doc, nsIDOMNode *nsnode, HTMLDO
         return E_FAIL;
     }
 
-    init_dispex(&ret->node.dispex, (IUnknown*)HTMLTEXT(ret), &HTMLDOMTextNode_dispex);
+    init_dispex(&ret->node.dispex, (IUnknown*)&ret->IHTMLDOMTextNode_iface,
+            &HTMLDOMTextNode_dispex);
     HTMLDOMNode_Init(doc, &ret->node, nsnode);
 
     *node = &ret->node;

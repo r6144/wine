@@ -331,7 +331,9 @@ static unsigned int key_map_access( struct object *obj, unsigned int access )
     if (access & GENERIC_WRITE)   access |= KEY_WRITE;
     if (access & GENERIC_EXECUTE) access |= KEY_EXECUTE;
     if (access & GENERIC_ALL)     access |= KEY_ALL_ACCESS;
-    return access & ~(GENERIC_READ | GENERIC_WRITE | GENERIC_EXECUTE | GENERIC_ALL);
+    /* filter the WOW64 masks, as they aren't real access bits */
+    return access & ~(GENERIC_READ | GENERIC_WRITE | GENERIC_EXECUTE | GENERIC_ALL |
+                      KEY_WOW64_64KEY | KEY_WOW64_32KEY);
 }
 
 /* close the notification associated with a handle */
@@ -1716,7 +1718,7 @@ void init_registry(void)
     /* load user.reg into HKEY_CURRENT_USER */
 
     /* FIXME: match default user in token.c. should get from process token instead */
-    current_user_path = format_user_registry_path( security_interactive_sid, &current_user_str );
+    current_user_path = format_user_registry_path( security_local_user_sid, &current_user_str );
     if (!current_user_path ||
         !(hkcu = create_key_recursive( root_key, &current_user_str, current_time )))
         fatal_error( "could not create HKEY_CURRENT_USER registry key\n" );

@@ -68,6 +68,9 @@ WINE_DEFAULT_DEBUG_CHANNEL(x11drv);
 
 #define SWP_AGG_NOPOSCHANGE (SWP_NOSIZE | SWP_NOMOVE | SWP_NOCLIENTSIZE | SWP_NOCLIENTMOVE | SWP_NOZORDER)
 
+/* is cursor clipping active? */
+int clipping_cursor = 0;
+
 /* X context to associate a hwnd to an X window */
 XContext winContext = 0;
 
@@ -82,6 +85,7 @@ static const char foreign_window_prop[] = "__wine_x11_foreign_window";
 static const char whole_window_prop[] = "__wine_x11_whole_window";
 static const char client_window_prop[]= "__wine_x11_client_window";
 static const char icon_window_prop[]  = "__wine_x11_icon_window";
+static const char clip_window_prop[]  = "__wine_x11_clip_window";
 static const char fbconfig_id_prop[]  = "__wine_x11_fbconfig_id";
 static const char gl_drawable_prop[]  = "__wine_x11_gl_drawable";
 static const char pixmap_prop[]       = "__wine_x11_pixmap";
@@ -221,24 +225,6 @@ static BOOL is_window_managed( HWND hwnd, UINT swp_flags, const RECT *window_rec
 
 
 /***********************************************************************
- *		is_window_rect_mapped
- *
- * Check if the X whole window should be mapped based on its rectangle
- */
-static BOOL is_window_rect_mapped( const RECT *rect )
-{
-    /* don't map if rect is off-screen */
-    if (rect->left >= virtual_screen_rect.right ||
-        rect->top >= virtual_screen_rect.bottom ||
-        rect->right <= virtual_screen_rect.left ||
-        rect->bottom <= virtual_screen_rect.top)
-        return FALSE;
-
-    return TRUE;
-}
-
-
-/***********************************************************************
  *		is_window_resizable
  *
  * Check if window should be made resizable by the window manager
@@ -247,8 +233,7 @@ static inline BOOL is_window_resizable( struct x11drv_win_data *data, DWORD styl
 {
     if (style & WS_THICKFRAME) return TRUE;
     /* Metacity needs the window to be resizable to make it fullscreen */
-    return (data->whole_rect.left <= 0 && data->whole_rect.right >= screen_width &&
-            data->whole_rect.top <= 0 && data->whole_rect.bottom >= screen_height);
+    return is_window_rect_fullscreen( &data->whole_rect );
 }
 
 
@@ -412,29 +397,6 @@ static void sync_window_style( Display *display, struct x11drv_win_data *data )
         XChangeWindowAttributes( display, data->whole_window, mask, &attr );
         wine_tsx11_unlock();
     }
-}
-
-
-/***********************************************************************
- *              sync_window_cursor
- */
-static void sync_window_cursor( struct x11drv_win_data *data )
-{
-    HCURSOR cursor;
-
-    SERVER_START_REQ( set_cursor )
-    {
-        req->flags = 0;
-        wine_server_call( req );
-        cursor = reply->prev_count >= 0 ? wine_server_ptr_handle( reply->prev_handle ) : 0;
-    }
-    SERVER_END_REQ;
-
-    set_window_cursor( data->hwnd, cursor );
-
-    /* setting the cursor can fail if the window isn't created yet */
-    /* so make sure that we try again once we receive a mouse event */
-    data->cursor = (HANDLE)~0u;
 }
 
 
@@ -1020,6 +982,7 @@ static void set_size_hints( Display *display, struct x11drv_win_data *data, DWOR
             size_hints->y = data->whole_rect.top;
             size_hints->flags |= PPosition;
         }
+        else size_hints->win_gravity = NorthWestGravity;
 
         if (!is_window_resizable( data, style ))
         {
@@ -1192,16 +1155,11 @@ static void set_wm_hints( Display *display, struct x11drv_win_data *data )
     /* size hints */
     set_size_hints( display, data, style );
 
-    /* set the WM_WINDOW_TYPE */
-    if (style & WS_THICKFRAME) window_type = x11drv_atom(_NET_WM_WINDOW_TYPE_NORMAL);
-    else if (ex_style & WS_EX_APPWINDOW) window_type = x11drv_atom(_NET_WM_WINDOW_TYPE_NORMAL);
-    else if (style & WS_MINIMIZEBOX) window_type = x11drv_atom(_NET_WM_WINDOW_TYPE_NORMAL);
-    else if (style & WS_DLGFRAME) window_type = x11drv_atom(_NET_WM_WINDOW_TYPE_DIALOG);
-    else if (ex_style & WS_EX_DLGMODALFRAME) window_type = x11drv_atom(_NET_WM_WINDOW_TYPE_DIALOG);
-    else if ((style & WS_POPUP) && owner) window_type = x11drv_atom(_NET_WM_WINDOW_TYPE_DIALOG);
-#if 0  /* many window managers don't handle utility windows very well */
-    else if (ex_style & WS_EX_TOOLWINDOW) window_type = x11drv_atom(_NET_WM_WINDOW_TYPE_UTILITY);
-#endif
+    /* Only use dialog type for owned popups. Metacity allows making fullscreen
+     * only normal windows, and doesn't handle correctly TRANSIENT_FOR hint for
+     * dialogs owned by fullscreen windows.
+     */
+    if ((style & WS_POPUP) && owner) window_type = x11drv_atom(_NET_WM_WINDOW_TYPE_DIALOG);
     else window_type = x11drv_atom(_NET_WM_WINDOW_TYPE_NORMAL);
 
     XChangeProperty(display, data->whole_window, x11drv_atom(_NET_WM_WINDOW_TYPE),
@@ -1233,6 +1191,24 @@ static void set_wm_hints( Display *display, struct x11drv_win_data *data )
     }
 
     wine_tsx11_unlock();
+}
+
+
+/***********************************************************************
+ *     init_clip_window
+ */
+Window init_clip_window(void)
+{
+    struct x11drv_thread_data *data = x11drv_init_thread_data();
+
+    if (!data->clip_window &&
+        (data->clip_window = (Window)GetPropA( GetDesktopWindow(), clip_window_prop )))
+    {
+        wine_tsx11_lock();
+        XSelectInput( data->display, data->clip_window, StructureNotifyMask );
+        wine_tsx11_unlock();
+    }
+    return data->clip_window;
 }
 
 
@@ -1277,8 +1253,7 @@ void update_net_wm_states( Display *display, struct x11drv_win_data *data )
     if (data->whole_window == root_window) return;
 
     style = GetWindowLongW( data->hwnd, GWL_STYLE );
-    if (data->whole_rect.left <= 0 && data->whole_rect.right >= screen_width &&
-        data->whole_rect.top <= 0 && data->whole_rect.bottom >= screen_height)
+    if (is_window_rect_fullscreen( &data->whole_rect ))
     {
         if ((style & WS_MAXIMIZE) && (style & WS_CAPTION) == WS_CAPTION)
             new_state |= (1 << NET_WM_STATE_MAXIMIZED);
@@ -1606,7 +1581,7 @@ static void move_window_bits( struct x11drv_win_data *data, const RECT *old_rect
     RECT dst_rect = *new_rect;
     HDC hdc_src, hdc_dst;
     INT code;
-    HRGN rgn = 0;
+    HRGN rgn;
     HWND parent = 0;
 
     if (!data->whole_window)
@@ -1625,6 +1600,9 @@ static void move_window_bits( struct x11drv_win_data *data, const RECT *old_rect
         hdc_src = hdc_dst = GetDCEx( data->hwnd, 0, DCX_CACHE );
     }
 
+    rgn = CreateRectRgnIndirect( &dst_rect );
+    SelectClipRgn( hdc_dst, rgn );
+    DeleteObject( rgn );
     ExcludeUpdateRgn( hdc_dst, data->hwnd );
 
     code = X11DRV_START_EXPOSURES;
@@ -1637,6 +1615,7 @@ static void move_window_bits( struct x11drv_win_data *data, const RECT *old_rect
             dst_rect.right - dst_rect.left, dst_rect.bottom - dst_rect.top,
             hdc_src, src_rect.left, src_rect.top, SRCCOPY );
 
+    rgn = 0;
     code = X11DRV_END_EXPOSURES;
     ExtEscape( hdc_dst, X11DRV_ESCAPE, sizeof(code), (LPSTR)&code, sizeof(rgn), (LPSTR)&rgn );
 
@@ -1736,11 +1715,14 @@ static Window create_whole_window( Display *display, struct x11drv_win_data *dat
     if (!GetLayeredWindowAttributes( data->hwnd, &key, &alpha, &layered_flags )) layered_flags = 0;
     sync_window_opacity( display, data->whole_window, key, alpha, layered_flags );
 
+    init_clip_window();  /* make sure the clip window is initialized in this thread */
+
     wine_tsx11_lock();
     XFlush( display );  /* make sure the window exists before we start painting to it */
     wine_tsx11_unlock();
 
-    sync_window_cursor( data );
+    sync_window_cursor( data->whole_window );
+
 done:
     if (win_rgn) DeleteObject( win_rgn );
     return data->whole_window;
@@ -1988,12 +1970,25 @@ BOOL CDECL X11DRV_CreateDesktopWindow( HWND hwnd )
  */
 BOOL CDECL X11DRV_CreateWindow( HWND hwnd )
 {
-    if (hwnd == GetDesktopWindow() && root_window != DefaultRootWindow( gdi_display ))
+    if (hwnd == GetDesktopWindow())
     {
-        Display *display = thread_init_display();
+        struct x11drv_thread_data *data = x11drv_init_thread_data();
+        XSetWindowAttributes attr;
 
-        /* the desktop win data can't be created lazily */
-        if (!create_desktop_win_data( display, hwnd )) return FALSE;
+        if (root_window != DefaultRootWindow( gdi_display ))
+        {
+            /* the desktop win data can't be created lazily */
+            if (!create_desktop_win_data( data->display, hwnd )) return FALSE;
+        }
+
+        /* create the cursor clipping window */
+        attr.override_redirect = TRUE;
+        attr.event_mask = StructureNotifyMask | FocusChangeMask;
+        wine_tsx11_lock();
+        data->clip_window = XCreateWindow( data->display, root_window, 0, 0, 1, 1, 0, 0,
+                                           InputOnly, visual, CWOverrideRedirect | CWEventMask, &attr );
+        wine_tsx11_unlock();
+        SetPropA( hwnd, clip_window_prop, (HANDLE)data->clip_window );
     }
     return TRUE;
 }
@@ -2266,6 +2261,9 @@ void CDECL X11DRV_GetDC( HDC hdc, HWND hwnd, HWND top, const RECT *win_rect,
             escape.drawable = data ? data->whole_window : X11DRV_get_whole_window( hwnd );
         else
             escape.drawable = escape.gl_drawable;
+
+        /* special case: when repainting the root window, clip out top-level windows */
+        if (data && data->whole_window == root_window) escape.mode = ClipByChildren;
     }
     else
     {
@@ -2517,7 +2515,7 @@ void CDECL X11DRV_WindowPosChanged( HWND hwnd, HWND insert_after, UINT swp_flags
     if (data->mapped && event_type != ReparentNotify)
     {
         if (((swp_flags & SWP_HIDEWINDOW) && !(new_style & WS_VISIBLE)) ||
-            (event_type != ConfigureNotify &&
+            (!event_type &&
              !is_window_rect_mapped( rectWindow ) && is_window_rect_mapped( &old_window_rect )))
             unmap_window( display, data );
     }
@@ -2700,8 +2698,11 @@ LRESULT CDECL X11DRV_WindowMessage( HWND hwnd, UINT msg, WPARAM wp, LPARAM lp )
         X11DRV_resize_desktop( LOWORD(lp), HIWORD(lp) );
         return 0;
     case WM_X11DRV_SET_CURSOR:
-        set_window_cursor( hwnd, (HCURSOR)lp );
+        if ((data = X11DRV_get_win_data( hwnd )) && data->whole_window)
+            set_window_cursor( data->whole_window, (HCURSOR)lp );
         return 0;
+    case WM_X11DRV_CLIP_CURSOR:
+        return clip_cursor_notify( hwnd, (HWND)lp );
     default:
         FIXME( "got window msg %x hwnd %p wp %lx lp %lx\n", msg, hwnd, wp, lp );
         return 0;

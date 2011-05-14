@@ -22,12 +22,48 @@
 #define CONST_VTABLE
 
 #include <stdio.h>
+#include <assert.h>
+
 #include "windows.h"
 #include "ole2.h"
 #include "msxml2.h"
 #include "ocidl.h"
 
 #include "wine/test.h"
+
+#define EXPECT_REF(obj,ref) _expect_ref((IUnknown*)obj, ref, __LINE__)
+static void _expect_ref(IUnknown* obj, ULONG ref, int line)
+{
+    ULONG rc = IUnknown_AddRef(obj);
+    IUnknown_Release(obj);
+    ok_(__FILE__,line)(rc-1 == ref, "expected refcount %d, got %d\n", ref, rc-1);
+}
+
+static BSTR alloc_str_from_narrow(const char *str)
+{
+    int len = MultiByteToWideChar(CP_ACP, 0, str, -1, NULL, 0);
+    BSTR ret = SysAllocStringLen(NULL, len - 1);  /* NUL character added automatically */
+    MultiByteToWideChar(CP_ACP, 0, str, -1, ret, len);
+    return ret;
+}
+
+static BSTR alloced_bstrs[256];
+static int alloced_bstrs_count;
+
+static BSTR _bstr_(const char *str)
+{
+    assert(alloced_bstrs_count < sizeof(alloced_bstrs)/sizeof(alloced_bstrs[0]));
+    alloced_bstrs[alloced_bstrs_count] = alloc_str_from_narrow(str);
+    return alloced_bstrs[alloced_bstrs_count++];
+}
+
+static void free_bstrs(void)
+{
+    int i;
+    for (i = 0; i < alloced_bstrs_count; i++)
+        SysFreeString(alloced_bstrs[i]);
+    alloced_bstrs_count = 0;
+}
 
 typedef enum _CH {
     CH_ENDTEST,
@@ -455,6 +491,211 @@ static const ISAXErrorHandlerVtbl errorHandlerVtbl =
 
 static ISAXErrorHandler errorHandler = { &errorHandlerVtbl };
 
+static HRESULT WINAPI isaxattributes_QueryInterface(
+        ISAXAttributes* iface,
+        REFIID riid,
+        void **ppvObject)
+{
+    *ppvObject = NULL;
+
+    if(IsEqualGUID(riid, &IID_IUnknown) || IsEqualGUID(riid, &IID_ISAXAttributes))
+    {
+        *ppvObject = iface;
+    }
+    else
+    {
+        return E_NOINTERFACE;
+    }
+
+    return S_OK;
+}
+
+static ULONG WINAPI isaxattributes_AddRef(ISAXAttributes* iface)
+{
+    return 2;
+}
+
+static ULONG WINAPI isaxattributes_Release(ISAXAttributes* iface)
+{
+    return 1;
+}
+
+static HRESULT WINAPI isaxattributes_getLength(ISAXAttributes* iface, int *length)
+{
+    *length = 2;
+    return S_OK;
+}
+
+static HRESULT WINAPI isaxattributes_getURI(
+    ISAXAttributes* iface,
+    int nIndex,
+    const WCHAR **pUrl,
+    int *pUriSize)
+{
+    ok(0, "unexpected call\n");
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI isaxattributes_getLocalName(
+    ISAXAttributes* iface,
+    int nIndex,
+    const WCHAR **pLocalName,
+    int *pLocalNameLength)
+{
+    ok(0, "unexpected call\n");
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI isaxattributes_getQName(
+    ISAXAttributes* iface,
+    int nIndex,
+    const WCHAR **pQName,
+    int *pQNameLength)
+{
+    static const WCHAR attr1W[] = {'a',':','a','t','t','r','1',0};
+    static const WCHAR attr2W[] = {'a','t','t','r','2',0};
+
+    ok(nIndex == 0 || nIndex == 1, "invalid index received %d\n", nIndex);
+
+    *pQName = (nIndex == 0) ? attr1W : attr2W;
+    *pQNameLength = lstrlenW(*pQName);
+
+    return S_OK;
+}
+
+static HRESULT WINAPI isaxattributes_getName(
+    ISAXAttributes* iface,
+    int nIndex,
+    const WCHAR **pUri,
+    int * pUriLength,
+    const WCHAR ** pLocalName,
+    int * pLocalNameSize,
+    const WCHAR ** pQName,
+    int * pQNameLength)
+{
+    ok(0, "unexpected call\n");
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI isaxattributes_getIndexFromName(
+    ISAXAttributes* iface,
+    const WCHAR * pUri,
+    int cUriLength,
+    const WCHAR * pLocalName,
+    int cocalNameLength,
+    int * index)
+{
+    ok(0, "unexpected call\n");
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI isaxattributes_getIndexFromQName(
+    ISAXAttributes* iface,
+    const WCHAR * pQName,
+    int nQNameLength,
+    int * index)
+{
+    ok(0, "unexpected call\n");
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI isaxattributes_getType(
+    ISAXAttributes* iface,
+    int nIndex,
+    const WCHAR ** pType,
+    int * pTypeLength)
+{
+    ok(0, "unexpected call\n");
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI isaxattributes_getTypeFromName(
+    ISAXAttributes* iface,
+    const WCHAR * pUri,
+    int nUri,
+    const WCHAR * pLocalName,
+    int nLocalName,
+    const WCHAR ** pType,
+    int * nType)
+{
+    ok(0, "unexpected call\n");
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI isaxattributes_getTypeFromQName(
+    ISAXAttributes* iface,
+    const WCHAR * pQName,
+    int nQName,
+    const WCHAR ** pType,
+    int * nType)
+{
+    ok(0, "unexpected call\n");
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI isaxattributes_getValue(
+    ISAXAttributes* iface,
+    int nIndex,
+    const WCHAR ** pValue,
+    int * nValue)
+{
+    static const WCHAR attrval1W[] = {'a','1',0};
+    static const WCHAR attrval2W[] = {'a','2',0};
+
+    ok(nIndex == 0 || nIndex == 1, "invalid index received %d\n", nIndex);
+
+    *pValue = (nIndex == 0) ? attrval1W : attrval2W;
+    *nValue = lstrlenW(*pValue);
+
+    return S_OK;
+}
+
+static HRESULT WINAPI isaxattributes_getValueFromName(
+    ISAXAttributes* iface,
+    const WCHAR * pUri,
+    int nUri,
+    const WCHAR * pLocalName,
+    int nLocalName,
+    const WCHAR ** pValue,
+    int * nValue)
+{
+    ok(0, "unexpected call\n");
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI isaxattributes_getValueFromQName(
+    ISAXAttributes* iface,
+    const WCHAR * pQName,
+    int nQName,
+    const WCHAR ** pValue,
+    int * nValue)
+{
+    ok(0, "unexpected call\n");
+    return E_NOTIMPL;
+}
+
+static const ISAXAttributesVtbl SAXAttributesVtbl =
+{
+    isaxattributes_QueryInterface,
+    isaxattributes_AddRef,
+    isaxattributes_Release,
+    isaxattributes_getLength,
+    isaxattributes_getURI,
+    isaxattributes_getLocalName,
+    isaxattributes_getQName,
+    isaxattributes_getName,
+    isaxattributes_getIndexFromName,
+    isaxattributes_getIndexFromQName,
+    isaxattributes_getType,
+    isaxattributes_getTypeFromName,
+    isaxattributes_getTypeFromQName,
+    isaxattributes_getValue,
+    isaxattributes_getValueFromName,
+    isaxattributes_getValueFromQName
+};
+
+static ISAXAttributes saxattributes = { &SAXAttributesVtbl };
+
 static void test_saxreader(void)
 {
     HRESULT hr;
@@ -653,9 +894,463 @@ static void test_encoding(void)
     }
 }
 
+static void test_mxwriter_contenthandler(void)
+{
+    ISAXContentHandler *handler;
+    IMXWriter *writer, *writer2;
+    HRESULT hr;
+
+    hr = CoCreateInstance(&CLSID_MXXMLWriter, NULL, CLSCTX_INPROC_SERVER,
+            &IID_IMXWriter, (void**)&writer);
+    ok(hr == S_OK, "Expected S_OK, got %08x\n", hr);
+
+    EXPECT_REF(writer, 1);
+
+    hr = IMXWriter_QueryInterface(writer, &IID_ISAXContentHandler, (void**)&handler);
+    ok(hr == S_OK, "Expected S_OK, got %08x\n", hr);
+    EXPECT_REF(writer, 2);
+    EXPECT_REF(handler, 2);
+
+    hr = ISAXContentHandler_QueryInterface(handler, &IID_IMXWriter, (void**)&writer2);
+    ok(hr == S_OK, "Expected S_OK, got %08x\n", hr);
+    ok(writer2 == writer, "got %p, expected %p\n", writer2, writer);
+    EXPECT_REF(writer, 3);
+    EXPECT_REF(writer2, 3);
+    IMXWriter_Release(writer2);
+
+    ISAXContentHandler_Release(handler);
+    IMXWriter_Release(writer);
+}
+
+static void test_mxwriter_properties(void)
+{
+    static const WCHAR utf16W[] = {'U','T','F','-','1','6',0};
+    static const WCHAR emptyW[] = {0};
+    static const WCHAR testW[] = {'t','e','s','t',0};
+    IMXWriter *writer;
+    VARIANT_BOOL b;
+    HRESULT hr;
+    BSTR str, str2;
+
+    hr = CoCreateInstance(&CLSID_MXXMLWriter, NULL, CLSCTX_INPROC_SERVER,
+            &IID_IMXWriter, (void**)&writer);
+    ok(hr == S_OK, "Expected S_OK, got %08x\n", hr);
+
+    hr = IMXWriter_get_disableOutputEscaping(writer, NULL);
+    ok(hr == E_POINTER, "got %08x\n", hr);
+
+    b = VARIANT_TRUE;
+    hr = IMXWriter_get_disableOutputEscaping(writer, &b);
+    ok(hr == S_OK, "got %08x\n", hr);
+    ok(b == VARIANT_FALSE, "got %d\n", b);
+
+    hr = IMXWriter_get_byteOrderMark(writer, NULL);
+    ok(hr == E_POINTER, "got %08x\n", hr);
+
+    b = VARIANT_FALSE;
+    hr = IMXWriter_get_byteOrderMark(writer, &b);
+    ok(hr == S_OK, "got %08x\n", hr);
+    ok(b == VARIANT_TRUE, "got %d\n", b);
+
+    hr = IMXWriter_get_indent(writer, NULL);
+    ok(hr == E_POINTER, "got %08x\n", hr);
+
+    b = VARIANT_TRUE;
+    hr = IMXWriter_get_indent(writer, &b);
+    ok(hr == S_OK, "got %08x\n", hr);
+    ok(b == VARIANT_FALSE, "got %d\n", b);
+
+    hr = IMXWriter_get_omitXMLDeclaration(writer, NULL);
+    ok(hr == E_POINTER, "got %08x\n", hr);
+
+    b = VARIANT_TRUE;
+    hr = IMXWriter_get_omitXMLDeclaration(writer, &b);
+    ok(hr == S_OK, "got %08x\n", hr);
+    ok(b == VARIANT_FALSE, "got %d\n", b);
+
+    hr = IMXWriter_get_standalone(writer, NULL);
+    ok(hr == E_POINTER, "got %08x\n", hr);
+
+    b = VARIANT_TRUE;
+    hr = IMXWriter_get_standalone(writer, &b);
+    ok(hr == S_OK, "got %08x\n", hr);
+    ok(b == VARIANT_FALSE, "got %d\n", b);
+
+    /* set and check */
+    hr = IMXWriter_put_standalone(writer, VARIANT_TRUE);
+    ok(hr == S_OK, "got %08x\n", hr);
+
+    b = VARIANT_FALSE;
+    hr = IMXWriter_get_standalone(writer, &b);
+    ok(hr == S_OK, "got %08x\n", hr);
+    ok(b == VARIANT_TRUE, "got %d\n", b);
+
+    hr = IMXWriter_get_encoding(writer, NULL);
+    ok(hr == E_POINTER, "got %08x\n", hr);
+
+    /* UTF-16 is a default setting apparently */
+    str = (void*)0xdeadbeef;
+    hr = IMXWriter_get_encoding(writer, &str);
+    ok(hr == S_OK, "got %08x\n", hr);
+    ok(lstrcmpW(str, utf16W) == 0, "expected empty string, got %s\n", wine_dbgstr_w(str));
+
+    str2 = (void*)0xdeadbeef;
+    hr = IMXWriter_get_encoding(writer, &str2);
+    ok(hr == S_OK, "got %08x\n", hr);
+    ok(str != str2, "expected newly allocated, got same %p\n", str);
+
+    SysFreeString(str2);
+    SysFreeString(str);
+
+    /* put empty string */
+    str = SysAllocString(emptyW);
+    hr = IMXWriter_put_encoding(writer, str);
+    ok(hr == E_INVALIDARG, "got %08x\n", hr);
+    SysFreeString(str);
+
+    str = (void*)0xdeadbeef;
+    hr = IMXWriter_get_encoding(writer, &str);
+    ok(hr == S_OK, "got %08x\n", hr);
+    ok(lstrcmpW(str, utf16W) == 0, "expected empty string, got %s\n", wine_dbgstr_w(str));
+
+    /* invalid encoding name */
+    str = SysAllocString(testW);
+    hr = IMXWriter_put_encoding(writer, str);
+    ok(hr == E_INVALIDARG, "got %08x\n", hr);
+    SysFreeString(str);
+
+    hr = IMXWriter_get_version(writer, NULL);
+    ok(hr == E_POINTER, "got %08x\n", hr);
+    /* default version is 'surprisingly' 1.0 */
+    hr = IMXWriter_get_version(writer, &str);
+    ok(hr == S_OK, "got %08x\n", hr);
+    ok(!lstrcmpW(str, _bstr_("1.0")), "got %s\n", wine_dbgstr_w(str));
+
+    IMXWriter_Release(writer);
+    free_bstrs();
+}
+
+static void test_mxwriter_flush(void)
+{
+    ISAXContentHandler *content;
+    IMXWriter *writer;
+    LARGE_INTEGER pos;
+    ULARGE_INTEGER pos2;
+    IStream *stream;
+    VARIANT dest;
+    HRESULT hr;
+
+    hr = CoCreateInstance(&CLSID_MXXMLWriter, NULL, CLSCTX_INPROC_SERVER,
+            &IID_IMXWriter, (void**)&writer);
+    ok(hr == S_OK, "Expected S_OK, got %08x\n", hr);
+
+    hr = CreateStreamOnHGlobal(NULL, TRUE, &stream);
+    ok(hr == S_OK, "Expected S_OK, got %08x\n", hr);
+    EXPECT_REF(stream, 1);
+
+    /* detach whe nothing was attached */
+    V_VT(&dest) = VT_EMPTY;
+    hr = IMXWriter_put_output(writer, dest);
+    ok(hr == S_OK, "Expected S_OK, got %08x\n", hr);
+
+    /* attach stream */
+    V_VT(&dest) = VT_UNKNOWN;
+    V_UNKNOWN(&dest) = (IUnknown*)stream;
+    hr = IMXWriter_put_output(writer, dest);
+    ok(hr == S_OK, "Expected S_OK, got %08x\n", hr);
+    todo_wine EXPECT_REF(stream, 3);
+
+    /* detach setting VT_EMPTY destination */
+    V_VT(&dest) = VT_EMPTY;
+    hr = IMXWriter_put_output(writer, dest);
+    ok(hr == S_OK, "Expected S_OK, got %08x\n", hr);
+    EXPECT_REF(stream, 1);
+
+    V_VT(&dest) = VT_UNKNOWN;
+    V_UNKNOWN(&dest) = (IUnknown*)stream;
+    hr = IMXWriter_put_output(writer, dest);
+    ok(hr == S_OK, "Expected S_OK, got %08x\n", hr);
+
+    /* flush() doesn't detach a stream */
+    hr = IMXWriter_flush(writer);
+todo_wine {
+    ok(hr == S_OK, "Expected S_OK, got %08x\n", hr);
+    EXPECT_REF(stream, 3);
+}
+
+    pos.QuadPart = 0;
+    hr = IStream_Seek(stream, pos, STREAM_SEEK_CUR, &pos2);
+    ok(hr == S_OK, "Expected S_OK, got %08x\n", hr);
+    ok(pos2.QuadPart == 0, "expected stream beginning\n");
+
+    hr = IMXWriter_QueryInterface(writer, &IID_ISAXContentHandler, (void**)&content);
+    ok(hr == S_OK, "got %08x\n", hr);
+
+    hr = ISAXContentHandler_startDocument(content);
+    ok(hr == S_OK, "got %08x\n", hr);
+
+    pos.QuadPart = 0;
+    hr = IStream_Seek(stream, pos, STREAM_SEEK_CUR, &pos2);
+    ok(hr == S_OK, "Expected S_OK, got %08x\n", hr);
+    todo_wine ok(pos2.QuadPart != 0, "expected stream beginning\n");
+
+    /* already started */
+    hr = ISAXContentHandler_startDocument(content);
+    ok(hr == S_OK, "got %08x\n", hr);
+
+    hr = ISAXContentHandler_endDocument(content);
+    todo_wine ok(hr == S_OK, "got %08x\n", hr);
+
+    /* flushed on endDocument() */
+    pos.QuadPart = 0;
+    hr = IStream_Seek(stream, pos, STREAM_SEEK_CUR, &pos2);
+    ok(hr == S_OK, "Expected S_OK, got %08x\n", hr);
+    todo_wine ok(pos2.QuadPart != 0, "expected stream position moved\n");
+
+    ISAXContentHandler_Release(content);
+    IStream_Release(stream);
+    IMXWriter_Release(writer);
+}
+
+static void test_mxwriter_startenddocument(void)
+{
+    ISAXContentHandler *content;
+    IMXWriter *writer;
+    VARIANT dest;
+    HRESULT hr;
+
+    hr = CoCreateInstance(&CLSID_MXXMLWriter, NULL, CLSCTX_INPROC_SERVER,
+            &IID_IMXWriter, (void**)&writer);
+    ok(hr == S_OK, "Expected S_OK, got %08x\n", hr);
+
+    hr = IMXWriter_QueryInterface(writer, &IID_ISAXContentHandler, (void**)&content);
+    ok(hr == S_OK, "got %08x\n", hr);
+
+    hr = ISAXContentHandler_startDocument(content);
+    ok(hr == S_OK, "got %08x\n", hr);
+
+    hr = ISAXContentHandler_endDocument(content);
+    todo_wine ok(hr == S_OK, "got %08x\n", hr);
+
+    V_VT(&dest) = VT_EMPTY;
+    hr = IMXWriter_get_output(writer, &dest);
+    ok(hr == S_OK, "got %08x\n", hr);
+    ok(V_VT(&dest) == VT_BSTR, "got %d\n", V_VT(&dest));
+    ok(!lstrcmpW(_bstr_("<?xml version=\"1.0\" encoding=\"UTF-16\" standalone=\"no\"?>\r\n"), V_BSTR(&dest)),
+        "got wrong content %s\n", wine_dbgstr_w(V_BSTR(&dest)));
+    VariantClear(&dest);
+
+    /* now try another startDocument */
+    hr = ISAXContentHandler_startDocument(content);
+    ok(hr == S_OK, "got %08x\n", hr);
+    /* and get duplcated prolog */
+    V_VT(&dest) = VT_EMPTY;
+    hr = IMXWriter_get_output(writer, &dest);
+    ok(hr == S_OK, "got %08x\n", hr);
+    ok(V_VT(&dest) == VT_BSTR, "got %d\n", V_VT(&dest));
+    ok(!lstrcmpW(_bstr_("<?xml version=\"1.0\" encoding=\"UTF-16\" standalone=\"no\"?>\r\n"
+                        "<?xml version=\"1.0\" encoding=\"UTF-16\" standalone=\"no\"?>\r\n"), V_BSTR(&dest)),
+        "got wrong content %s\n", wine_dbgstr_w(V_BSTR(&dest)));
+    VariantClear(&dest);
+
+    ISAXContentHandler_Release(content);
+    IMXWriter_Release(writer);
+
+    /* now with omitted declaration */
+    hr = CoCreateInstance(&CLSID_MXXMLWriter, NULL, CLSCTX_INPROC_SERVER,
+            &IID_IMXWriter, (void**)&writer);
+    ok(hr == S_OK, "Expected S_OK, got %08x\n", hr);
+
+    hr = IMXWriter_QueryInterface(writer, &IID_ISAXContentHandler, (void**)&content);
+    ok(hr == S_OK, "got %08x\n", hr);
+
+    hr = IMXWriter_put_omitXMLDeclaration(writer, VARIANT_TRUE);
+    ok(hr == S_OK, "got %08x\n", hr);
+
+    hr = ISAXContentHandler_startDocument(content);
+    ok(hr == S_OK, "got %08x\n", hr);
+
+    hr = ISAXContentHandler_endDocument(content);
+    todo_wine ok(hr == S_OK, "got %08x\n", hr);
+
+    V_VT(&dest) = VT_EMPTY;
+    hr = IMXWriter_get_output(writer, &dest);
+    ok(hr == S_OK, "got %08x\n", hr);
+    ok(V_VT(&dest) == VT_BSTR, "got %d\n", V_VT(&dest));
+    ok(!lstrcmpW(_bstr_(""), V_BSTR(&dest)), "got wrong content %s\n", wine_dbgstr_w(V_BSTR(&dest)));
+    VariantClear(&dest);
+
+    ISAXContentHandler_Release(content);
+    IMXWriter_Release(writer);
+
+    free_bstrs();
+}
+
+static void test_mxwriter_startendelement(void)
+{
+    static const char winehqA[] = "http://winehq.org";
+    ISAXContentHandler *content;
+    IMXWriter *writer;
+    VARIANT dest;
+    HRESULT hr;
+
+    hr = CoCreateInstance(&CLSID_MXXMLWriter, NULL, CLSCTX_INPROC_SERVER,
+            &IID_IMXWriter, (void**)&writer);
+    ok(hr == S_OK, "Expected S_OK, got %08x\n", hr);
+
+    hr = IMXWriter_QueryInterface(writer, &IID_ISAXContentHandler, (void**)&content);
+    ok(hr == S_OK, "got %08x\n", hr);
+
+    hr = IMXWriter_put_omitXMLDeclaration(writer, VARIANT_TRUE);
+    ok(hr == S_OK, "got %08x\n", hr);
+
+    hr = ISAXContentHandler_startDocument(content);
+    ok(hr == S_OK, "got %08x\n", hr);
+
+    /* qualified name without defined namespace */
+    hr = ISAXContentHandler_startElement(content, NULL, 0, NULL, 0, _bstr_("a:b"), 3, NULL);
+    ok(hr == E_INVALIDARG, "got %08x\n", hr);
+
+    hr = ISAXContentHandler_startElement(content, NULL, 0, _bstr_("b"), 1, _bstr_("a:b"), 3, NULL);
+    ok(hr == E_INVALIDARG, "got %08x\n", hr);
+
+    /* only local name is an error too */
+    hr = ISAXContentHandler_startElement(content, NULL, 0, _bstr_("b"), 1, NULL, 0, NULL);
+    ok(hr == E_INVALIDARG, "got %08x\n", hr);
+
+    /* only local name is an error too */
+    hr = ISAXContentHandler_startElement(content, _bstr_(""), 0, _bstr_("b"), 1, NULL, 0, NULL);
+    ok(hr == E_INVALIDARG, "got %08x\n", hr);
+
+    /* all string pointers should be not null */
+    hr = ISAXContentHandler_startElement(content, _bstr_(""), 0, _bstr_("b"), 1, _bstr_(""), 0, NULL);
+    ok(hr == S_OK, "got %08x\n", hr);
+
+    V_VT(&dest) = VT_EMPTY;
+    hr = IMXWriter_get_output(writer, &dest);
+    ok(hr == S_OK, "got %08x\n", hr);
+    ok(V_VT(&dest) == VT_BSTR, "got %d\n", V_VT(&dest));
+    ok(!lstrcmpW(_bstr_("<>"), V_BSTR(&dest)), "got wrong content %s\n", wine_dbgstr_w(V_BSTR(&dest)));
+    VariantClear(&dest);
+
+    hr = ISAXContentHandler_startElement(content, _bstr_(""), 0, _bstr_(""), 0, _bstr_("b"), 1, NULL);
+    ok(hr == S_OK, "got %08x\n", hr);
+
+    V_VT(&dest) = VT_EMPTY;
+    hr = IMXWriter_get_output(writer, &dest);
+    ok(hr == S_OK, "got %08x\n", hr);
+    ok(V_VT(&dest) == VT_BSTR, "got %d\n", V_VT(&dest));
+    ok(!lstrcmpW(_bstr_("<><b>"), V_BSTR(&dest)), "got wrong content %s\n", wine_dbgstr_w(V_BSTR(&dest)));
+    VariantClear(&dest);
+
+    hr = ISAXContentHandler_endElement(content, NULL, 0, NULL, 0, _bstr_("a:b"), 3);
+    ok(hr == E_INVALIDARG, "got %08x\n", hr);
+
+    hr = ISAXContentHandler_endElement(content, NULL, 0, _bstr_("b"), 1, _bstr_("a:b"), 3);
+    ok(hr == E_INVALIDARG, "got %08x\n", hr);
+
+    /* only local name is an error too */
+    hr = ISAXContentHandler_endElement(content, NULL, 0, _bstr_("b"), 1, NULL, 0);
+    ok(hr == E_INVALIDARG, "got %08x\n", hr);
+
+    hr = ISAXContentHandler_endElement(content, _bstr_(""), 0, _bstr_(""), 0, _bstr_("b"), 1);
+    ok(hr == S_OK, "got %08x\n", hr);
+
+    V_VT(&dest) = VT_EMPTY;
+    hr = IMXWriter_get_output(writer, &dest);
+    ok(hr == S_OK, "got %08x\n", hr);
+    ok(V_VT(&dest) == VT_BSTR, "got %d\n", V_VT(&dest));
+    ok(!lstrcmpW(_bstr_("<><b></b>"), V_BSTR(&dest)), "got wrong content %s\n", wine_dbgstr_w(V_BSTR(&dest)));
+    VariantClear(&dest);
+
+    /* some with namespace URI */
+    hr = ISAXContentHandler_startElement(content, _bstr_(winehqA), sizeof(winehqA), _bstr_(""), 0, _bstr_("nspace:c"), 8, NULL);
+    ok(hr == S_OK, "got %08x\n", hr);
+
+    hr = ISAXContentHandler_endElement(content, _bstr_(winehqA), sizeof(winehqA), _bstr_(""), 0, _bstr_("nspace:c"), 8);
+    ok(hr == S_OK, "got %08x\n", hr);
+
+    V_VT(&dest) = VT_EMPTY;
+    hr = IMXWriter_get_output(writer, &dest);
+    ok(hr == S_OK, "got %08x\n", hr);
+    ok(V_VT(&dest) == VT_BSTR, "got %d\n", V_VT(&dest));
+    todo_wine ok(!lstrcmpW(_bstr_("<><b></b><nspace:c/>"), V_BSTR(&dest)), "got wrong content %s\n", wine_dbgstr_w(V_BSTR(&dest)));
+    VariantClear(&dest);
+
+    /* try to end element that wasn't open */
+    hr = ISAXContentHandler_endElement(content, _bstr_(""), 0, _bstr_(""), 0, _bstr_("a"), 1);
+    ok(hr == S_OK, "got %08x\n", hr);
+
+    V_VT(&dest) = VT_EMPTY;
+    hr = IMXWriter_get_output(writer, &dest);
+    ok(hr == S_OK, "got %08x\n", hr);
+    ok(V_VT(&dest) == VT_BSTR, "got %d\n", V_VT(&dest));
+    todo_wine ok(!lstrcmpW(_bstr_("<><b></b><nspace:c/></a>"), V_BSTR(&dest)), "got wrong content %s\n", wine_dbgstr_w(V_BSTR(&dest)));
+    VariantClear(&dest);
+
+    /* try with attributes */
+    hr = ISAXContentHandler_startElement(content, _bstr_(""), 0, _bstr_(""), 0, _bstr_("b"), 1, &saxattributes);
+    ok(hr == S_OK, "got %08x\n", hr);
+
+    hr = ISAXContentHandler_endDocument(content);
+    todo_wine ok(hr == S_OK, "got %08x\n", hr);
+
+    ISAXContentHandler_Release(content);
+    IMXWriter_Release(writer);
+
+    free_bstrs();
+}
+
+static void test_mxwriter_characters(void)
+{
+    static const WCHAR chardataW[] = {'T','E','S','T','C','H','A','R','D','A','T','A',' ','.',0};
+    ISAXContentHandler *content;
+    IMXWriter *writer;
+    VARIANT dest;
+    HRESULT hr;
+
+    hr = CoCreateInstance(&CLSID_MXXMLWriter, NULL, CLSCTX_INPROC_SERVER,
+            &IID_IMXWriter, (void**)&writer);
+    ok(hr == S_OK, "Expected S_OK, got %08x\n", hr);
+
+    hr = IMXWriter_QueryInterface(writer, &IID_ISAXContentHandler, (void**)&content);
+    ok(hr == S_OK, "got %08x\n", hr);
+
+    hr = IMXWriter_put_omitXMLDeclaration(writer, VARIANT_TRUE);
+    ok(hr == S_OK, "got %08x\n", hr);
+
+    hr = ISAXContentHandler_startDocument(content);
+    ok(hr == S_OK, "got %08x\n", hr);
+
+    hr = ISAXContentHandler_characters(content, NULL, 0);
+    ok(hr == E_INVALIDARG, "got %08x\n", hr);
+
+    hr = ISAXContentHandler_characters(content, chardataW, 0);
+    ok(hr == S_OK, "got %08x\n", hr);
+
+    hr = ISAXContentHandler_characters(content, chardataW, sizeof(chardataW)/sizeof(WCHAR) - 1);
+    ok(hr == S_OK, "got %08x\n", hr);
+
+    V_VT(&dest) = VT_EMPTY;
+    hr = IMXWriter_get_output(writer, &dest);
+    ok(hr == S_OK, "got %08x\n", hr);
+    ok(V_VT(&dest) == VT_BSTR, "got %d\n", V_VT(&dest));
+    ok(!lstrcmpW(_bstr_("TESTCHARDATA ."), V_BSTR(&dest)), "got wrong content %s\n", wine_dbgstr_w(V_BSTR(&dest)));
+    VariantClear(&dest);
+
+    hr = ISAXContentHandler_endDocument(content);
+    todo_wine ok(hr == S_OK, "got %08x\n", hr);
+
+    ISAXContentHandler_Release(content);
+    IMXWriter_Release(writer);
+
+    free_bstrs();
+}
+
 START_TEST(saxreader)
 {
     ISAXXMLReader *reader;
+    IMXWriter *writer;
     HRESULT hr;
 
     hr = CoInitialize(NULL);
@@ -674,6 +1369,22 @@ START_TEST(saxreader)
 
     test_saxreader();
     test_encoding();
+
+    hr = CoCreateInstance(&CLSID_MXXMLWriter, NULL, CLSCTX_INPROC_SERVER,
+            &IID_IMXWriter, (void**)&writer);
+    if (hr == S_OK)
+    {
+        IMXWriter_Release(writer);
+
+        test_mxwriter_contenthandler();
+        test_mxwriter_startenddocument();
+        test_mxwriter_startendelement();
+        test_mxwriter_characters();
+        test_mxwriter_properties();
+        test_mxwriter_flush();
+    }
+    else
+        win_skip("MXXMLWriter not supported\n");
 
     CoUninitialize();
 }

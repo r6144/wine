@@ -25,7 +25,7 @@ import "dxgi.idl";
 ]
 interface IWineDXGIFactory : IDXGIFactory
 {
-    struct IWineD3D *get_wined3d();
+    struct wined3d *get_wined3d();
 }
 
 [
@@ -55,6 +55,6 @@ interface IWineDXGIDevice : IDXGIDevice
     );
     HRESULT create_swapchain(
         [in] struct _WINED3DPRESENT_PARAMETERS *present_parameters,
-        [out] struct IWineD3DSwapChain **wined3d_swapchain
+        [out] struct wined3d_swapchain **wined3d_swapchain
     );
 }

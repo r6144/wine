@@ -54,11 +54,13 @@ struct pdb_reader
         {
             const struct PDB_JG_HEADER* header;
             const struct PDB_JG_TOC*    toc;
+            const struct PDB_JG_ROOT*   root;
         } jg;
         struct
         {
             const struct PDB_DS_HEADER* header;
             const struct PDB_DS_TOC*    toc;
+            const struct PDB_DS_ROOT*   root;
         } ds;
     } u;
     void*       (*read_file)(struct pdb_reader*, DWORD);
@@ -150,12 +152,77 @@ static void pdb_exit(struct pdb_reader* reader)
     }
 #endif
     if (reader->read_file == pdb_jg_read_file)
+    {
+        free((char*)reader->u.jg.root);
         free((char*)reader->u.jg.toc);
+    }
     else
+    {
+        free((char*)reader->u.ds.root);
         free((char*)reader->u.ds.toc);
+    }
 }
 
-static void pdb_dump_symbols(struct pdb_reader* reader)
+static unsigned get_stream_by_name(struct pdb_reader* reader, const char* name)
+{
+    DWORD*      pdw;
+    DWORD*      ok_bits;
+    DWORD       cbstr, count;
+    DWORD       string_idx, stream_idx;
+    unsigned    i;
+    const char* str;
+
+    if (reader->read_file == pdb_jg_read_file)
+    {
+        str = &reader->u.jg.root->names[0];
+        cbstr = reader->u.jg.root->cbNames;
+    }
+    else
+    {
+        str = &reader->u.ds.root->names[0];
+        cbstr = reader->u.ds.root->cbNames;
+    }
+
+    pdw = (DWORD*)(str + cbstr);
+    pdw++; /* number of ok entries */
+    count = *pdw++;
+
+    /* bitfield: first dword is len (in dword), then data */
+    ok_bits = pdw;
+    pdw += *ok_bits++ + 1;
+    if (*pdw++ != 0)
+    {
+        printf("unexpected value\n");
+        return -1;
+    }
+
+    for (i = 0; i < count; i++)
+    {
+        if (ok_bits[i / 32] & (1 << (i % 32)))
+        {
+            string_idx = *pdw++;
+            stream_idx = *pdw++;
+            if (!strcmp(name, &str[string_idx])) return stream_idx;
+        }
+    }
+    return -1;
+}
+
+static void *read_string_table(struct pdb_reader* reader)
+{
+    unsigned    stream_idx;
+    void*       ret;
+
+    stream_idx = get_stream_by_name(reader, "/names");
+    if (stream_idx == -1) return NULL;
+    ret = reader->read_file(reader, stream_idx);
+    if (ret && *(const DWORD*)ret == 0xeffeeffe) return ret;
+    printf("wrong header %x expecting 0xeffeeffe\n", *(const DWORD*)ret);
+    free( ret );
+    return NULL;
+}
+
+static void pdb_dump_symbols(struct pdb_reader* reader, PDB_STREAM_INDEXES* sidx)
 {
     PDB_SYMBOLS*    symbols;
     unsigned char*  modimage;
@@ -163,8 +230,10 @@ static void pdb_dump_symbols(struct pdb_reader* reader)
     char*           filesimage;
     DWORD           filessize = 0;
 
-    symbols = reader->read_file(reader, 3);
+    sidx->FPO = sidx->unk0 = sidx->unk1 = sidx->unk2 = sidx->unk3 = sidx->segments =
+        sidx->unk4 = sidx->unk5 = sidx->unk6 = sidx->FPO_EXT = sidx->unk7 = -1;
 
+    symbols = reader->read_file(reader, 3);
     if (!symbols) return;
 
     switch (symbols->version)
@@ -178,23 +247,24 @@ static void pdb_dump_symbols(struct pdb_reader* reader)
         printf("-Unknown symbol info version %d\n", symbols->version);
     }
     printf("Symbols:\n"
-           "\tsignature:      %08x\n"
-           "\tversion:        %u\n"
-           "\tunknown:        %08x\n"
-           "\thash1_file:     %08x\n"
-           "\thash2_file:     %08x\n"
-           "\tgsym_file:      %04x\n"
-           "\tunknown1:       %04x\n"
-           "\tmodule_size:    %08x\n"
-           "\toffset_size:    %08x\n"
-           "\thash_size:      %08x\n"
-           "\tsrc_module_size %08x\n"
-           "\tpdbimport_size  %08x\n"
-           "\tresvd[0]        %08x\n"
-           "\tresvd[1]        %08x\n"
-           "\tresvd[2]        %08x\n"
-           "\tresvd[3]        %08x\n"
-           "\tresvd[4]        %08x\n",
+           "\tsignature:       %08x\n"
+           "\tversion:         %u\n"
+           "\tunknown:         %08x\n"
+           "\thash1_file:      %08x\n"
+           "\thash2_file:      %08x\n"
+           "\tgsym_file:       %04x\n"
+           "\tunknown1:        %04x\n"
+           "\tmodule_size:     %08x\n"
+           "\toffset_size:     %08x\n"
+           "\thash_size:       %08x\n"
+           "\tsrc_module_size: %08x\n"
+           "\tpdbimport_size:  %08x\n"
+           "\tresvd0:          %08x\n"
+           "\tstream_idx_size: %08x\n"
+           "\tunknown2_size:   %08x\n"
+           "\tresvd3:          %04x\n"
+           "\tmachine:         %s\n"
+           "\tresvd[4]         %08x\n",
            symbols->signature,
            symbols->version,
            symbols->unknown,
@@ -207,11 +277,12 @@ static void pdb_dump_symbols(struct pdb_reader* reader)
            symbols->hash_size,
            symbols->srcmodule_size,
            symbols->pdbimport_size,
-           symbols->resvd[0],
-           symbols->resvd[1],
-           symbols->resvd[2],
-           symbols->resvd[3],
-           symbols->resvd[4]);
+           symbols->resvd0,
+           symbols->stream_index_size,
+           symbols->unknown2_size,
+           symbols->resvd3,
+           get_machine_str( symbols->machine ),
+           symbols->resvd4);
 
     if (symbols->offset_size)
     {
@@ -222,20 +293,8 @@ static void pdb_dump_symbols(struct pdb_reader* reader)
         dump_data(src, symbols->offset_size, "    ");
     }
 
-    filesimage = reader->read_file(reader, 12);   /* FIXME: really fixed ??? */
-    if (filesimage)
-    {
-        if (*(const DWORD*)filesimage == 0xeffeeffe)
-        {
-            filessize = *(const DWORD*)(filesimage + 8);
-        }
-        else
-        {
-            printf("wrong header %x expecting 0xeffeeffe\n", *(const DWORD*)filesimage);
-            free(filesimage);
-            filesimage = NULL;
-        }
-    }
+    if (!(filesimage = read_string_table(reader))) printf("string table not found\n");
+    else filessize = *(const DWORD*)(filesimage + 8);
 
     if (symbols->srcmodule_size)
     {
@@ -273,13 +332,13 @@ static void pdb_dump_symbols(struct pdb_reader* reader)
         for (i = cfile = 0; i < src->nModules; i++)
         {
             printf("\t\tModule[%2d]:\n", i);
-            for (j = 0; j < indx[i]; j++, cfile++)
+            cfile = src->table[i];
+            for (j = cfile; j < src->nSrcFiles && j < cfile + indx[i]; j++)
             {
                 /* FIXME: in some cases, it's a p_string but WHEN ? */
-                if (src->table[cfile] < src->nSrcFiles &&
-                    cstr + offset[src->table[cfile]] >= (const char*)start_cstr /* wrap around */ &&
-                    cstr + offset[src->table[cfile]] < (const char*)src + symbols->srcmodule_size)
-                    printf("\t\t\tSource file: %s\n", cstr + offset[src->table[cfile]]);
+                if (cstr + offset[j] >= (const char*)start_cstr /* wrap around */ &&
+                    cstr + offset[j] < (const char*)src + symbols->srcmodule_size)
+                    printf("\t\t\tSource file: %s\n", cstr + offset[j]);
                 else
                     printf("\t\t\tSource file: <<out of bounds>>\n");
             }
@@ -316,6 +375,55 @@ static void pdb_dump_symbols(struct pdb_reader* reader)
                    imp->filename,
                    ptr);
             imp = (const PDB_SYMBOL_IMPORT*)(first + ((ptr - first + strlen(ptr) + 1 + 3) & ~3));
+        }
+    }
+    if (symbols->stream_index_size)
+    {
+        printf("\t------------stream indexes--------------\n");
+        switch (symbols->stream_index_size)
+        {
+        case sizeof(PDB_STREAM_INDEXES_OLD):
+            /* PDB_STREAM_INDEXES is a superset of PDB_STREAM_INDEX_OLD
+             * FIXME: to be confirmed when all fields are fully understood
+             */
+            memcpy(sidx,
+                   (const char*)symbols + sizeof(PDB_SYMBOLS) + symbols->module_size +
+                   symbols->offset_size + symbols->hash_size + symbols->srcmodule_size +
+                   symbols->pdbimport_size + symbols->unknown2_size,
+                   sizeof(PDB_STREAM_INDEXES_OLD));
+            printf("\tFPO:                  %04x\n"
+                   "\t?:                    %04x\n"
+                   "\t?:                    %04x\n"
+                   "\t?:                    %04x\n"
+                   "\t?:                    %04x\n"
+                   "\tSegments:             %04x\n",
+                   sidx->FPO, sidx->unk0, sidx->unk1, sidx->unk2, sidx->unk3,
+                   sidx->segments);
+            break;
+        case sizeof(PDB_STREAM_INDEXES):
+            memcpy(sidx,
+                   (const char*)symbols + sizeof(PDB_SYMBOLS) + symbols->module_size +
+                   symbols->offset_size + symbols->hash_size + symbols->srcmodule_size +
+                   symbols->pdbimport_size + symbols->unknown2_size,
+                   sizeof(*sidx));
+            printf("\tFPO:                  %04x\n"
+                   "\t?:                    %04x\n"
+                   "\t?:                    %04x\n"
+                   "\t?:                    %04x\n"
+                   "\t?:                    %04x\n"
+                   "\tSegments:             %04x\n"
+                   "\t?:                    %04x\n"
+                   "\t?:                    %04x\n"
+                   "\t?:                    %04x\n"
+                   "\tFPO-ext:              %04x\n"
+                   "\t?:                    %04x\n",
+                   sidx->FPO, sidx->unk0, sidx->unk1, sidx->unk2, sidx->unk3,
+                   sidx->segments, sidx->unk4, sidx->unk5, sidx->unk6, sidx->FPO_EXT,
+                   sidx->unk7);
+            break;
+        default:
+            printf("unexpected size for stream index %d\n", symbols->stream_index_size);
+            break;
         }
     }
 
@@ -440,7 +548,7 @@ static void pdb_dump_symbols(struct pdb_reader* reader)
              */
             codeview_dump_linetab2((const char*)modimage + symbol_size + lineno_size,
                                    total_size - (symbol_size + lineno_size),
-                                   filesimage + 12, filessize, "        ");
+                                   filesimage ? filesimage + 12 : NULL, filessize, "        ");
             /* what's that part ??? */
             if (0)
                 dump_data(modimage + symbol_size + lineno_size, total_size - (symbol_size + lineno_size), "    ");
@@ -508,12 +616,94 @@ static void pdb_dump_types(struct pdb_reader* reader)
     free(types);
 }
 
+static void pdb_dump_fpo(struct pdb_reader* reader, unsigned stream_idx)
+{
+    FPO_DATA*           fpo;
+    unsigned            i, size;
+    const char*         frame_type[4] = {"Fpo", "Trap", "Tss", "NonFpo"};
+
+    if (stream_idx == (WORD)-1) return;
+    fpo = reader->read_file(reader, stream_idx);
+    size = pdb_get_file_size(reader, stream_idx);
+    if (fpo && (size % sizeof(*fpo)) == 0)
+    {
+        size /= sizeof(*fpo);
+        printf("FPO data:\n\t   Start   Length #loc #pmt #prolog #reg frame  SEH /BP\n");
+        for (i = 0; i < size; i++)
+        {
+            printf("\t%08x %08x %4d %4d %7d %4d %6s  %c   %c\n",
+                   fpo[i].ulOffStart, fpo[i].cbProcSize, fpo[i].cdwLocals, fpo[i].cdwParams,
+                   fpo[i].cbProlog, fpo[i].cbRegs, frame_type[fpo[i].cbFrame],
+                   fpo[i].fHasSEH ? 'Y' : 'N', fpo[i].fUseBP ? 'Y' : 'N');
+        }
+    }
+    free(fpo);
+}
+
+static void pdb_dump_fpo_ext(struct pdb_reader* reader, unsigned stream_idx)
+{
+    PDB_FPO_DATA*       fpoext;
+    unsigned            i, size, strsize;
+    char*               strbase;
+
+    if (stream_idx == (WORD)-1) return;
+    strbase = read_string_table(reader);
+    if (!strbase) return;
+
+    strsize = *(const DWORD*)(strbase + 8);
+    fpoext = reader->read_file(reader, stream_idx);
+    size = pdb_get_file_size(reader, stream_idx);
+    if (fpoext && (size % sizeof(*fpoext)) == 0)
+    {
+        size /= sizeof(*fpoext);
+        printf("FPO data (extended):\n"
+               "\t   Start   Length   Locals   Params MaxStack Prolog #SavedRegs    Flags Command\n");
+        for (i = 0; i < size; i++)
+        {
+            printf("\t%08x %08x %8x %8x %8x %6x   %8x %08x %s\n",
+                   fpoext[i].start, fpoext[i].func_size, fpoext[i].locals_size, fpoext[i].params_size,
+                   fpoext[i].maxstack_size, fpoext[i].prolog_size, fpoext[i].savedregs_size, fpoext[i].flags,
+                   fpoext[i].str_offset < strsize ? strbase + 12 + fpoext[i].str_offset : "<out of bounds>");
+        }
+    }
+    free(fpoext);
+    free(strbase);
+}
+
+static void pdb_dump_segments(struct pdb_reader* reader, unsigned stream_idx)
+{
+    const char* segs;
+    DWORD       size;
+    const char* ptr;
+
+    if (stream_idx == (WORD)-1) return;
+    segs = reader->read_file(reader, stream_idx);
+
+    if (segs)
+    {
+        size = pdb_get_file_size(reader, stream_idx);
+        for (ptr = segs; ptr < segs + size; )
+        {
+            printf("Segment %s\n", ptr);
+            ptr += (strlen(ptr) + 1 + 3) & ~3;
+            printf("\tdword[0]: %08x\n", *(DWORD*)ptr); ptr += 4;
+            printf("\tdword[1]: %08x\n", *(DWORD*)ptr); ptr += 4;
+            printf("\tdword[2]: %08x\n", *(DWORD*)ptr); ptr += 4;
+            printf("\tdword[3]: %08x\n", *(DWORD*)ptr); ptr += 4;
+            printf("\tdword[4]: %08x\n", *(DWORD*)ptr); ptr += 4;
+            printf("\tdword[5]: %08x\n", *(DWORD*)ptr); ptr += 4;
+            printf("\tdword[6]: %08x\n", *(DWORD*)ptr); ptr += 4;
+            printf("\tdword[7]: %08x\n", *(DWORD*)ptr); ptr += 4;
+        }
+        free((char*)segs);
+    } else printf("nosdfsdffd\n");
+}
+
 static const char       pdb2[] = "Microsoft C/C++ program database 2.00";
 
 static void pdb_jg_dump(void)
 {
     struct pdb_reader   reader;
-    struct PDB_JG_ROOT* root = NULL;
 
     /*
      * Read in TOC and well-known files
@@ -531,23 +721,58 @@ static void pdb_jg_dump(void)
            reader.u.jg.header->free_list,
            reader.u.jg.header->total_alloc);
 
-    root = reader.read_file(&reader, 1);
-    
-    if (root)
+    reader.u.jg.root = reader.read_file(&reader, 1);
+    if (reader.u.jg.root)
     {
+        DWORD*          pdw;
+        DWORD*          ok_bits;
+        DWORD           numok, count;
+        unsigned        i;
+        PDB_STREAM_INDEXES sidx;
+
         printf("Root:\n"
                "\tVersion:       %u\n"
                "\tTimeDateStamp: %08x\n"
                "\tAge:           %08x\n"
-               "\tnames:         %.*s\n",
-               root->Version,
-               root->TimeDateStamp,
-               root->Age,
-               (unsigned)root->cbNames,
-               root->names);
+               "\tnames:         %d\n",
+               reader.u.jg.root->Version,
+               reader.u.jg.root->TimeDateStamp,
+               reader.u.jg.root->Age,
+               (unsigned)reader.u.jg.root->cbNames);
+
+        pdw = (DWORD*)(&reader.u.jg.root->names[0] + reader.u.jg.root->cbNames);
+        numok = *pdw++;
+        count = *pdw++;
+        printf("\tStreams directory:\n"
+               "\t\tok:        %08x\n"
+               "\t\tcount:     %08x\n"
+               "\t\ttable:\n",
+               numok, count);
+
+        /* bitfield: first dword is len (in dword), then data */
+        ok_bits = pdw;
+        pdw += *ok_bits++ + 1;
+        if (*pdw++ != 0)
+        {
+            printf("unexpected value\n");
+            return;
+        }
+
+        for (i = 0; i < count; i++)
+        {
+            if (ok_bits[i / 32] & (1 << (i % 32)))
+            {
+                DWORD string_idx, stream_idx;
+                string_idx = *pdw++;
+                stream_idx = *pdw++;
+                printf("\t\t\t%2d) %-20s => %x\n", i, &reader.u.jg.root->names[string_idx], stream_idx);
+                numok--;
+            }
+        }
+        if (numok) printf(">>> unmatched present field with found\n");
 
         /* Check for unknown versions */
-        switch (root->Version)
+        switch (reader.u.jg.root->Version)
         {
         case 19950623:      /* VC 4.0 */
         case 19950814:
@@ -555,37 +780,15 @@ static void pdb_jg_dump(void)
         case 19970604:      /* VC 6.0 */
             break;
         default:
-            printf("-Unknown root block version %d\n", root->Version);
+            printf("-Unknown root block version %d\n", reader.u.jg.root->Version);
         }
-        free(root);
+        pdb_dump_types(&reader);
+        pdb_dump_symbols(&reader, &sidx);
+        pdb_dump_fpo(&reader, sidx.FPO);
+        pdb_dump_segments(&reader, sidx.segments);
     }
     else printf("-Unable to get root\n");
 
-    pdb_dump_types(&reader);
-#if 0
-    /* segments info, index is unknown */
-    {
-        const void*     segs = pdb_read_file(pdb, toc, 8); /* FIXME which index ??? */
-        const void*     ptr = segs;
-
-        if (segs) while (ptr < segs + toc->file[8].size)
-        {
-            printf("Segment %s\n", (const char*)ptr);
-            ptr += (strlen(ptr) + 1 + 3) & ~3;
-            printf("\tdword[0]: %08lx\n", *(DWORD*)ptr); ptr += 4;
-            printf("\tdword[1]: %08lx\n", *(DWORD*)ptr); ptr += 4;
-            printf("\tdword[2]: %08lx\n", *(DWORD*)ptr); ptr += 4;
-            printf("\tdword[3]: %08lx\n", *(DWORD*)ptr); ptr += 4;
-            printf("\tdword[4]: %08lx\n", *(DWORD*)ptr); ptr += 4;
-            printf("\tdword[5]: %08lx\n", *(DWORD*)ptr); ptr += 4;
-            printf("\tdword[6]: %08lx\n", *(DWORD*)ptr); ptr += 4;
-            printf("\tdword[7]: %08lx\n", *(DWORD*)ptr); ptr += 4;
-        }
-        free(segs);
-    }
-#endif
-
-    pdb_dump_symbols(&reader);
     pdb_exit(&reader);
 }
 
@@ -642,7 +845,6 @@ static const char       pdb7[] = "Microsoft C/C++ MSF 7.00";
 static void pdb_ds_dump(void)
 {
     struct pdb_reader   reader;
-    struct PDB_DS_ROOT* root;
 
     pdb_ds_init(&reader);
     printf("Header (DS)\n"
@@ -662,15 +864,25 @@ static void pdb_ds_dump(void)
            reader.u.ds.header->toc_page);
 
     /* files:
-     * 0: JG says old toc pages, I'd say free pages (tbc, low prio)
-     * 1: root structure
-     * 2: types
-     * 3: modules
+     *  0: JG says old toc pages, I'd say free pages (tbc, low prio)
+     *  1: root structure
+     *  2: types
+     *  3: modules
+     * other known streams:
+     * - string table: it's index is in the stream table from ROOT object under "/names"
+     * those streams get their indexes out of the PDB_STREAM_INDEXES object
+     * - FPO data
+     * - segments
+     * - extended FPO data
      */
-    root = reader.read_file(&reader, 1);
-    if (root)
+    reader.u.ds.root = reader.read_file(&reader, 1);
+    if (reader.u.ds.root)
     {
-        const char*     ptr;
+        DWORD*          pdw;
+        DWORD*          ok_bits;
+        DWORD           numok, count;
+        unsigned        i;
+        PDB_STREAM_INDEXES sidx;
 
         printf("Root:\n"
                "\tVersion:              %u\n"
@@ -678,20 +890,49 @@ static void pdb_ds_dump(void)
                "\tAge:                  %08x\n"
                "\tguid                  %s\n"
                "\tcbNames:              %08x\n",
-               root->Version,
-               root->TimeDateStamp,
-               root->Age,
-               get_guid_str(&root->guid),
-               root->cbNames);
-        for (ptr = &root->names[0]; ptr < &root->names[0] + root->cbNames; ptr += strlen(ptr) + 1)
-            printf("\tString:               %s\n", ptr);
-        /* follows an unknown list of DWORDs */
-        free(root);
+               reader.u.ds.root->Version,
+               reader.u.ds.root->TimeDateStamp,
+               reader.u.ds.root->Age,
+               get_guid_str(&reader.u.ds.root->guid),
+               reader.u.ds.root->cbNames);
+        pdw = (DWORD*)(&reader.u.ds.root->names[0] + reader.u.ds.root->cbNames);
+        numok = *pdw++;
+        count = *pdw++;
+        printf("\tStreams directory:\n"
+               "\t\tok:        %08x\n"
+               "\t\tcount:     %08x\n"
+               "\t\ttable:\n",
+               numok, count);
+
+        /* bitfield: first dword is len (in dword), then data */
+        ok_bits = pdw;
+        pdw += *ok_bits++ + 1;
+        if (*pdw++ != 0)
+        {
+            printf("unexpected value\n");
+            return;
+        }
+
+        for (i = 0; i < count; i++)
+        {
+            if (ok_bits[i / 32] & (1 << (i % 32)))
+            {
+                DWORD string_idx, stream_idx;
+                string_idx = *pdw++;
+                stream_idx = *pdw++;
+                printf("\t\t\t%2d) %-20s => %x\n", i, &reader.u.ds.root->names[string_idx], stream_idx);
+                numok--;
+            }
+        }
+        if (numok) printf(">>> unmatched present field with found\n");
+
+        pdb_dump_types(&reader);
+        pdb_dump_symbols(&reader, &sidx);
+        pdb_dump_fpo(&reader, sidx.FPO);
+        pdb_dump_fpo_ext(&reader, sidx.FPO_EXT);
+        pdb_dump_segments(&reader, sidx.segments);
     }
     else printf("-Unable to get root\n");
-
-    pdb_dump_types(&reader);
-    pdb_dump_symbols(&reader);
 
     pdb_exit(&reader);
 }

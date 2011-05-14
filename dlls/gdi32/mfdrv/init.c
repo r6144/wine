@@ -30,6 +30,8 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(metafile);
 
+static BOOL CDECL MFDRV_DeleteDC( PHYSDEV dev );
+
 static const DC_FUNCTIONS MFDRV_Funcs =
 {
     NULL,                            /* pAbortDoc */
@@ -39,7 +41,6 @@ static const DC_FUNCTIONS MFDRV_Funcs =
     MFDRV_Arc,                       /* pArc */
     NULL,                            /* pArcTo */
     MFDRV_BeginPath,                 /* pBeginPath */
-    NULL,                            /* pBitBlt */
     NULL,                            /* pChoosePixelFormat */
     MFDRV_Chord,                     /* pChord */
     MFDRV_CloseFigure,               /* pCloseFigure */
@@ -47,7 +48,7 @@ static const DC_FUNCTIONS MFDRV_Funcs =
     NULL,                            /* pCreateDC */
     NULL,                            /* pCreateDIBSection */
     NULL,                            /* pDeleteBitmap */
-    NULL,                            /* pDeleteDC */
+    MFDRV_DeleteDC,                  /* pDeleteDC */
     MFDRV_DeleteObject,              /* pDeleteObject */
     NULL,                            /* pDescribePixelFormat */
     NULL,                            /* pDeviceCapabilities */
@@ -70,7 +71,6 @@ static const DC_FUNCTIONS MFDRV_Funcs =
     NULL,                            /* pGdiComment */
     NULL,                            /* pGetBitmapBits */
     NULL,                            /* pGetCharWidth */
-    NULL,                            /* pGetDIBColorTable */
     NULL,                            /* pGetDIBits */
     MFDRV_GetDeviceCaps,             /* pGetDeviceCaps */
     NULL,                            /* pGetDeviceGammaRamp */
@@ -87,8 +87,8 @@ static const DC_FUNCTIONS MFDRV_Funcs =
     NULL,                            /* pModifyWorldTransform */
     MFDRV_MoveTo,                    /* pMoveTo */
     MFDRV_OffsetClipRgn,             /* pOffsetClipRgn */
-    MFDRV_OffsetViewportOrg,         /* pOffsetViewportOrg */
-    MFDRV_OffsetWindowOrg,           /* pOffsetWindowOrg */
+    MFDRV_OffsetViewportOrgEx,       /* pOffsetViewportOrgEx */
+    MFDRV_OffsetWindowOrgEx,         /* pOffsetWindowOrgEx */
     MFDRV_PaintRgn,                  /* pPaintRgn */
     MFDRV_PatBlt,                    /* pPatBlt */
     MFDRV_Pie,                       /* pPie */
@@ -107,8 +107,8 @@ static const DC_FUNCTIONS MFDRV_Funcs =
     MFDRV_RestoreDC,                 /* pRestoreDC */
     MFDRV_RoundRect,                 /* pRoundRect */
     MFDRV_SaveDC,                    /* pSaveDC */
-    MFDRV_ScaleViewportExt,          /* pScaleViewportExt */
-    MFDRV_ScaleWindowExt,            /* pScaleWindowExt */
+    MFDRV_ScaleViewportExtEx,        /* pScaleViewportExtEx */
+    MFDRV_ScaleWindowExtEx,          /* pScaleWindowExtEx */
     MFDRV_SelectBitmap,              /* pSelectBitmap */
     MFDRV_SelectBrush,               /* pSelectBrush */
     MFDRV_SelectClipPath,            /* pSelectClipPath */
@@ -119,13 +119,14 @@ static const DC_FUNCTIONS MFDRV_Funcs =
     NULL,                            /* pSetBitmapBits */
     MFDRV_SetBkColor,                /* pSetBkColor */
     MFDRV_SetBkMode,                 /* pSetBkMode */
-    NULL,                            /* pSetDCBrushColor*/
-    NULL,                            /* pSetDCPenColor*/
+    MFDRV_SetDCBrushColor,           /* pSetDCBrushColor*/
+    MFDRV_SetDCPenColor,             /* pSetDCPenColor*/
     NULL,                            /* pSetDIBColorTable */
     NULL,                            /* pSetDIBits */
     MFDRV_SetDIBitsToDevice,         /* pSetDIBitsToDevice */
     NULL,                            /* pSetDeviceClipping */
     NULL,                            /* pSetDeviceGammaRamp */
+    NULL,                            /* pSetLayout */
     MFDRV_SetMapMode,                /* pSetMapMode */
     MFDRV_SetMapperFlags,            /* pSetMapperFlags */
     MFDRV_SetPixel,                  /* pSetPixel */
@@ -138,10 +139,10 @@ static const DC_FUNCTIONS MFDRV_Funcs =
     MFDRV_SetTextCharacterExtra,     /* pSetTextCharacterExtra */
     MFDRV_SetTextColor,              /* pSetTextColor */
     MFDRV_SetTextJustification,      /* pSetTextJustification */
-    MFDRV_SetViewportExt,            /* pSetViewportExt */
-    MFDRV_SetViewportOrg,            /* pSetViewportOrg */
-    MFDRV_SetWindowExt,              /* pSetWindowExt */
-    MFDRV_SetWindowOrg,              /* pSetWindowOrg */
+    MFDRV_SetViewportExtEx,          /* pSetViewportExtEx */
+    MFDRV_SetViewportOrgEx,          /* pSetViewportOrgEx */
+    MFDRV_SetWindowExtEx,            /* pSetWindowExtEx */
+    MFDRV_SetWindowOrgEx,            /* pSetWindowOrgEx */
     NULL,                            /* pSetWorldTransform */
     NULL,                            /* pStartDoc */
     NULL,                            /* pStartPage */
@@ -164,7 +165,7 @@ static DC *MFDRV_AllocMetaFile(void)
     DC *dc;
     METAFILEDRV_PDEVICE *physDev;
 
-    if (!(dc = alloc_dc_ptr( &MFDRV_Funcs, OBJ_METADC ))) return NULL;
+    if (!(dc = alloc_dc_ptr( OBJ_METADC ))) return NULL;
 
     physDev = HeapAlloc(GetProcessHeap(),0,sizeof(*physDev));
     if (!physDev)
@@ -172,15 +173,14 @@ static DC *MFDRV_AllocMetaFile(void)
         free_dc_ptr( dc );
         return NULL;
     }
-    dc->physDev = (PHYSDEV)physDev;
-    physDev->hdc = dc->hSelf;
-
     if (!(physDev->mh = HeapAlloc( GetProcessHeap(), 0, sizeof(*physDev->mh) )))
     {
         HeapFree( GetProcessHeap(), 0, physDev );
         free_dc_ptr( dc );
         return NULL;
     }
+
+    push_dc_driver( dc, &physDev->dev, &MFDRV_Funcs );
 
     physDev->handles = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, HANDLE_LIST_INC * sizeof(physDev->handles[0]));
     physDev->handles_size = HANDLE_LIST_INC;
@@ -195,7 +195,7 @@ static DC *MFDRV_AllocMetaFile(void)
     physDev->mh->mtMaxRecord    = 0;
     physDev->mh->mtNoParameters = 0;
 
-    SetVirtualResolution(dc->hSelf, 0, 0, 0, 0);
+    SetVirtualResolution( physDev->dev.hdc, 0, 0, 0, 0);
 
     return dc;
 }
@@ -204,19 +204,17 @@ static DC *MFDRV_AllocMetaFile(void)
 /**********************************************************************
  *	     MFDRV_DeleteDC
  */
-static BOOL MFDRV_DeleteDC( DC *dc )
+static BOOL CDECL MFDRV_DeleteDC( PHYSDEV dev )
 {
-    METAFILEDRV_PDEVICE *physDev = (METAFILEDRV_PDEVICE *)dc->physDev;
+    METAFILEDRV_PDEVICE *physDev = (METAFILEDRV_PDEVICE *)dev;
     DWORD index;
 
     HeapFree( GetProcessHeap(), 0, physDev->mh );
     for(index = 0; index < physDev->handles_size; index++)
         if(physDev->handles[index])
-            GDI_hdc_not_using_object(physDev->handles[index], physDev->hdc);
+            GDI_hdc_not_using_object(physDev->handles[index], dev->hdc);
     HeapFree( GetProcessHeap(), 0, physDev->handles );
     HeapFree( GetProcessHeap(), 0, physDev );
-    dc->physDev = NULL;
-    free_dc_ptr( dc );
     return TRUE;
 }
 
@@ -250,12 +248,12 @@ HDC WINAPI CreateMetaFileW( LPCWSTR filename )
         physDev->mh->mtType = METAFILE_DISK;
         if ((hFile = CreateFileW(filename, GENERIC_WRITE, 0, NULL,
 				CREATE_ALWAYS, 0, 0)) == INVALID_HANDLE_VALUE) {
-            MFDRV_DeleteDC( dc );
+            free_dc_ptr( dc );
             return 0;
         }
         if (!WriteFile( hFile, physDev->mh, sizeof(*physDev->mh), NULL,
 			NULL )) {
-            MFDRV_DeleteDC( dc );
+            free_dc_ptr( dc );
             return 0;
 	}
 	physDev->hFile = hFile;
@@ -266,8 +264,8 @@ HDC WINAPI CreateMetaFileW( LPCWSTR filename )
     else  /* memory based metafile */
 	physDev->mh->mtType = METAFILE_MEMORY;
 
-    TRACE("returning %p\n", dc->hSelf);
-    ret = dc->hSelf;
+    TRACE("returning %p\n", physDev->dev.hdc);
+    ret = physDev->dev.hdc;
     release_dc_ptr( dc );
     return ret;
 }
@@ -315,7 +313,7 @@ static DC *MFDRV_CloseMetaFile( HDC hdc )
     }
     if (dc->refcount != 1)
     {
-        FIXME( "not deleting busy DC %p refcount %u\n", dc->hSelf, dc->refcount );
+        FIXME( "not deleting busy DC %p refcount %u\n", hdc, dc->refcount );
         release_dc_ptr( dc );
         return NULL;
     }
@@ -327,21 +325,21 @@ static DC *MFDRV_CloseMetaFile( HDC hdc )
 
     if (!MFDRV_MetaParam0(dc->physDev, META_EOF))
     {
-        MFDRV_DeleteDC( dc );
+        free_dc_ptr( dc );
 	return 0;
     }
 
     if (physDev->mh->mtType == METAFILE_DISK)  /* disk based metafile */
     {
         if (SetFilePointer(physDev->hFile, 0, NULL, FILE_BEGIN) != 0) {
-            MFDRV_DeleteDC( dc );
+            free_dc_ptr( dc );
             return 0;
         }
 
 	physDev->mh->mtType = METAFILE_MEMORY; /* This is what windows does */
         if (!WriteFile(physDev->hFile, physDev->mh, sizeof(*physDev->mh),
                        NULL, NULL)) {
-            MFDRV_DeleteDC( dc );
+            free_dc_ptr( dc );
             return 0;
         }
         CloseHandle(physDev->hFile);
@@ -376,7 +374,7 @@ HMETAFILE WINAPI CloseMetaFile(HDC hdc)
     hmf = MF_Create_HMETAFILE( physDev->mh );
 
     physDev->mh = NULL;  /* So it won't be deleted */
-    MFDRV_DeleteDC( dc );
+    free_dc_ptr( dc );
     return hmf;
 }
 

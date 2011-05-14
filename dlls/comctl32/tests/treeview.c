@@ -91,6 +91,10 @@ static const struct message focus_seq[] = {
     { WM_NCCALCSIZE, sent|wparam|defwinproc, TRUE },
     { WM_WINDOWPOSCHANGED, sent|defwinproc },
     { WM_SIZE, sent|defwinproc },
+    { WM_WINDOWPOSCHANGING, sent|defwinproc|optional },
+    { WM_NCCALCSIZE, sent|wparam|defwinproc|optional, TRUE },
+    { WM_WINDOWPOSCHANGED, sent|defwinproc|optional },
+    { WM_SIZE, sent|defwinproc|optional },
     { WM_PAINT, sent|defwinproc },
     { WM_NCPAINT, sent|wparam|defwinproc, 1 },
     { WM_ERASEBKGND, sent|defwinproc },
@@ -995,6 +999,7 @@ static LRESULT CALLBACK parent_wnd_proc(HWND hWnd, UINT message, WPARAM wParam, 
             }
             }
         }
+        break;
     }
 
     case WM_DESTROY:
@@ -1421,12 +1426,14 @@ static void test_htreeitem_layout(void)
 
     ins.hParent = hChild;
     ins.hInsertAfter = TVI_FIRST;
+    U(ins).item.mask = 0;
     item1 = TreeView_InsertItem(hTree, &ins);
 
     check_item(item1, hChild, 0, 0);
 
     ins.hParent = hRoot;
     ins.hInsertAfter = TVI_FIRST;
+    U(ins).item.mask = 0;
     item2 = TreeView_InsertItem(hTree, &ins);
 
     check_item(item2, hRoot, hChild, 0);

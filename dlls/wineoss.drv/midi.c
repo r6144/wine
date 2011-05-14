@@ -60,6 +60,10 @@
 #ifdef HAVE_SYS_POLL_H
 #include <sys/poll.h>
 #endif
+#ifdef HAVE_SYS_ERRNO_H
+#include <sys/errno.h>
+#endif
+#include <sys/soundcard.h>
 
 #include "windef.h"
 #include "winbase.h"
@@ -67,7 +71,6 @@
 #include "winuser.h"
 #include "winnls.h"
 #include "mmddk.h"
-#include "oss.h"
 #include "wine/unicode.h"
 #include "wine/debug.h"
 
@@ -399,14 +402,14 @@ static LRESULT OSS_MidiExit(void)
  * 			MIDI_NotifyClient			[internal]
  */
 static void MIDI_NotifyClient(UINT wDevID, WORD wMsg,
-			      DWORD dwParam1, DWORD dwParam2)
+			      DWORD_PTR dwParam1, DWORD_PTR dwParam2)
 {
     DWORD 		dwCallBack;
     UINT 		uFlags;
     HANDLE		hDev;
     DWORD 		dwInstance;
 
-    TRACE("wDevID = %04X wMsg = %d dwParm1 = %04X dwParam2 = %04X\n",
+    TRACE("wDevID = %04X wMsg = %d dwParm1 = %04lX dwParam2 = %04lX\n",
 	  wDevID, wMsg, dwParam1, dwParam2);
 
     switch (wMsg) {

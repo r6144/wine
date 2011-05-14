@@ -71,14 +71,16 @@ static HANDLE create_target_process(const char *arg)
     char **argv;
     char cmdline[MAX_PATH];
     PROCESS_INFORMATION pi;
+    BOOL ret;
     STARTUPINFO si = { 0 };
     si.cb = sizeof(si);
 
     winetest_get_mainargs( &argv );
     sprintf(cmdline, "%s %s %s", argv[0], argv[1], arg);
-    ok(CreateProcess(NULL, cmdline, NULL, NULL, FALSE, 0, NULL, NULL,
-                     &si, &pi) != 0, "error: %u\n", GetLastError());
-    ok(CloseHandle(pi.hThread) != 0, "error %u\n", GetLastError());
+    ret = CreateProcess(NULL, cmdline, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi);
+    ok(ret, "error: %u\n", GetLastError());
+    ret = CloseHandle(pi.hThread);
+    ok(ret, "error %u\n", GetLastError());
     return pi.hProcess;
 }
 
@@ -368,6 +370,7 @@ static VOID test_CreateThread_basic(void)
    DWORD i,j;
    DWORD GLE, ret;
    DWORD tid;
+   BOOL bRet;
 
    /* lstrlenA contains an exception handler so this makes sure exceptions work in the main thread */
    ok( lstrlenA( (char *)0xdeadbeef ) == 0, "lstrlenA: unexpected success\n" );
@@ -423,7 +426,8 @@ static VOID test_CreateThread_basic(void)
   }
 
   SetLastError(0xCAFEF00D);
-  ok(TlsFree(tlsIndex)!=0,"TlsFree failed: %08x\n", GetLastError());
+  bRet = TlsFree(tlsIndex);
+  ok(bRet, "TlsFree failed: %08x\n", GetLastError());
   ok(GetLastError()==0xCAFEF00D,
      "GetLastError: expected 0xCAFEF00D, got %08x\n", GetLastError());
 
@@ -861,7 +865,7 @@ static VOID test_thread_processor(void)
      }
 
      error=pSetThreadIdealProcessor(curthread,MAXIMUM_PROCESSORS);
-     ok(error==0, "SetThreadIdealProcessor returned an incorrect value\n");
+     ok(error!=-1, "SetThreadIdealProcessor failed\n");
    }
 }
 
@@ -894,6 +898,7 @@ static HANDLE event;
 static void WINAPI set_test_val( int val )
 {
     test_value += val;
+    ExitThread(0);
 }
 
 static DWORD WINAPI threadFunc6(LPVOID p)
@@ -940,7 +945,8 @@ static void test_SetThreadContext(void)
         ctx.Esp -= 2 * sizeof(int *);
         ctx.Eip = (DWORD)set_test_val;
         SetLastError(0xdeadbeef);
-        ok( SetThreadContext( thread, &ctx ), "SetThreadContext failed : (%d)\n", GetLastError() );
+        ret = SetThreadContext( thread, &ctx );
+        ok( ret, "SetThreadContext failed : (%d)\n", GetLastError() );
     }
 
     SetLastError(0xdeadbeef);
@@ -949,7 +955,23 @@ static void test_SetThreadContext(void)
                          prevcount, GetLastError() );
 
     WaitForSingleObject( thread, INFINITE );
-    ok( test_value == 20, "test_value %d instead of 20\n", test_value );
+    ok( test_value == 10, "test_value %d\n", test_value );
+
+    ctx.ContextFlags = CONTEXT_FULL;
+    SetLastError(0xdeadbeef);
+    ret = GetThreadContext( thread, &ctx );
+    ok( !ret, "GetThreadContext succeeded\n" );
+    ok( GetLastError() == ERROR_GEN_FAILURE || broken(GetLastError() == ERROR_INVALID_HANDLE), /* win2k */
+        "wrong error %u\n", GetLastError() );
+
+    SetLastError(0xdeadbeef);
+    ret = SetThreadContext( thread, &ctx );
+    ok( !ret, "SetThreadContext succeeded\n" );
+    ok( GetLastError() == ERROR_GEN_FAILURE || GetLastError() == ERROR_ACCESS_DENIED ||
+        broken(GetLastError() == ERROR_INVALID_HANDLE), /* win2k */
+        "wrong error %u\n", GetLastError() );
+
+    CloseHandle( thread );
 }
 
 #endif  /* __i386__ */

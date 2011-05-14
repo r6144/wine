@@ -220,6 +220,7 @@ static inline void pixel_set_trans(DWORD* pixel, BOOL transparent)
 static HRESULT ReadIcoDib(IStream *stream, IcoFrameDecode *result)
 {
     HRESULT hr;
+    BmpDecoder *bmp_decoder;
     IWICBitmapDecoder *decoder;
     IWICBitmapFrameDecode *framedecode;
     WICPixelFormatGUID pixelformat;
@@ -227,9 +228,10 @@ static HRESULT ReadIcoDib(IStream *stream, IcoFrameDecode *result)
     int has_alpha=FALSE; /* if TRUE, alpha data might be in the image data */
     WICRect rc;
 
-    hr = IcoDibDecoder_CreateInstance(NULL, &IID_IWICBitmapDecoder, (void**)&decoder);
+    hr = IcoDibDecoder_CreateInstance(&bmp_decoder);
     if (SUCCEEDED(hr))
     {
+        BmpDecoder_GetWICDecoder(bmp_decoder, &decoder);
         hr = IWICBitmapDecoder_Initialize(decoder, stream, WICDecodeMetadataCacheOnLoad);
 
         if (SUCCEEDED(hr))
@@ -277,6 +279,30 @@ static HRESULT ReadIcoDib(IStream *stream, IcoFrameDecode *result)
             IWICBitmapFrameDecode_Release(framedecode);
         }
 
+        if (SUCCEEDED(hr) && has_alpha)
+        {
+            /* If the alpha channel is fully transparent, we should ignore it. */
+            int nonzero_alpha = 0;
+            int i;
+
+            for (i=0; i<(result->height*result->width); i++)
+            {
+                if (result->bits[i*4+3] != 0)
+                {
+                    nonzero_alpha = 1;
+                    break;
+                }
+            }
+
+            if (!nonzero_alpha)
+            {
+                for (i=0; i<(result->height*result->width); i++)
+                    result->bits[i*4+3] = 0xff;
+
+                has_alpha = FALSE;
+            }
+        }
+
         if (SUCCEEDED(hr) && !has_alpha)
         {
             /* set alpha data based on the AND mask */
@@ -293,7 +319,7 @@ static HRESULT ReadIcoDib(IStream *stream, IcoFrameDecode *result)
             LARGE_INTEGER seek;
             int topdown;
 
-            BmpDecoder_FindIconMask(decoder, &offset, &topdown);
+            BmpDecoder_FindIconMask(bmp_decoder, &offset, &topdown);
 
             if (offset)
             {
@@ -644,6 +670,8 @@ static HRESULT WINAPI IcoDecoder_GetFrame(IWICBitmapDecoder *iface,
     *ppIBitmapFrame = (IWICBitmapFrameDecode*)result;
 
     LeaveCriticalSection(&This->lock);
+
+    IStream_Release(substream);
 
     return S_OK;
 

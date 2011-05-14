@@ -48,6 +48,8 @@ static const char usage[] =
 	"   -H file     Write headerfile to file (default is inputfile.h)\n"
 	"   -i          Inline messagetable(s)\n"
 	"   -o file     Output to file (default is inputfile.rc)\n"
+	"   -O fmt      Set output format (rc, res, pot)\n"
+	"   -P dir      Directory where to find po files\n"
 	"   -u          Inputfile is in unicode\n"
 	"   -U          Output unicode messagetable(s)\n"
 	"   -v          Show supported codepages and languages\n"
@@ -103,6 +105,8 @@ int rcinline = 0;
  */
 static int dodebug = 0;
 
+static char *po_dir;
+
 char *output_name = NULL;	/* The name given by the -o option */
 char *input_name = NULL;	/* The name given on the command-line */
 char *header_name = NULL;	/* The name given by the -H option */
@@ -116,6 +120,13 @@ time_t now;			/* The time of start of wmc */
 int mcy_debug;
 
 FILE *yyin;
+
+static enum
+{
+    FORMAT_RC,
+    FORMAT_RES,
+    FORMAT_POT
+} output_format;
 
 int getopt (int argc, char *const *argv, const char *optstring);
 static void segvhandler(int sig);
@@ -165,7 +176,7 @@ int main(int argc,char *argv[])
 			strcat(cmdline, " ");
 	}
 
-	while((optc = getopt(argc, argv, "B:cdDhH:io:p:uUvVW")) != EOF)
+	while((optc = getopt(argc, argv, "B:cdDhH:io:O:P:uUvVW")) != EOF)
 	{
 		switch(optc)
 		{
@@ -211,6 +222,19 @@ int main(int argc,char *argv[])
 		case 'o':
 			output_name = xstrdup(optarg);
 			break;
+		case 'O':
+			if (!strcmp( optarg, "rc" )) output_format = FORMAT_RC;
+			else if (!strcmp( optarg, "res" )) output_format = FORMAT_RES;
+			else if (!strcmp( optarg, "pot" )) output_format = FORMAT_POT;
+			else
+                        {
+                            fprintf(stderr, "Output format must be rc or res\n" );
+                            lose++;
+                        }
+                        break;
+		case 'P':
+			po_dir = xstrdup( optarg );
+                        break;
 		case 'u':
 			unicodein = 1;
 			break;
@@ -286,10 +310,28 @@ int main(int argc,char *argv[])
 		exit(1);
 	}
 
-	write_h_file(header_name);
-	write_rc_file(output_name);
-	if(!rcinline)
+#ifdef WORDS_BIGENDIAN
+	byte_swapped = (byteorder == WMC_BO_LITTLE);
+#else
+	byte_swapped = (byteorder == WMC_BO_BIG);
+#endif
+
+        switch (output_format)
+        {
+        case FORMAT_RC:
+            write_h_file(header_name);
+            write_rc_file(output_name);
+            if(!rcinline)
 		write_bin_files();
+            break;
+        case FORMAT_RES:
+            if (po_dir) add_translations( po_dir );
+            write_res_file( output_name );
+            break;
+        case FORMAT_POT:
+            write_pot_file( output_name );
+            break;
+        }
 	output_name = NULL;
 	header_name = NULL;
 	return 0;

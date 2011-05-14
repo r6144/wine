@@ -25,6 +25,7 @@
 #include <float.h>
 
 #define COBJMACROS
+#define CONST_VTABLE
 #define NONAMELESSUNION
 
 #include "wine/test.h"
@@ -169,17 +170,17 @@ static const unsigned char enhmetafile[] = {
 };
 
 
-struct NoStatStreamImpl
+typedef struct NoStatStreamImpl
 {
-	const IStreamVtbl	*lpVtbl;   
+	IStream			IStream_iface;
 	LONG			ref;
 
 	HGLOBAL			supportHandle;
 	ULARGE_INTEGER		streamSize;
 	ULARGE_INTEGER		currentPosition;
-};
-typedef struct NoStatStreamImpl NoStatStreamImpl;
-static NoStatStreamImpl* NoStatStreamImpl_Construct(HGLOBAL hGlobal);
+} NoStatStreamImpl;
+
+static IStream* NoStatStream_Construct(HGLOBAL hGlobal);
 
 static void
 test_pic_with_stream(LPSTREAM stream, unsigned int imgsize)
@@ -282,7 +283,7 @@ test_pic(const unsigned char *imgdata, unsigned int imgsize)
 	IStream_Release(stream);
 
 	/* again with Non Statable and Non Seekable stream */
-	stream = (LPSTREAM)NoStatStreamImpl_Construct(hglob);
+	stream = NoStatStream_Construct(hglob);
 	hglob = 0;  /* Non-statable impl always deletes on release */
 	test_pic_with_stream(stream, 0);
 
@@ -313,7 +314,7 @@ test_pic(const unsigned char *imgdata, unsigned int imgsize)
 		IStream_Release(stream);
 
 		/* again with Non Statable and Non Seekable stream */
-		stream = (LPSTREAM)NoStatStreamImpl_Construct(hglob);
+		stream = NoStatStream_Construct(hglob);
 		hglob = 0;  /* Non-statable impl always deletes on release */
 		test_pic_with_stream(stream, 0);
 
@@ -495,7 +496,7 @@ static void test_OleCreatePictureIndirect(void)
 if (0)
 {
     /* crashes on native */
-    hr = pOleCreatePictureIndirect(NULL, &IID_IPicture, TRUE, NULL);
+    pOleCreatePictureIndirect(NULL, &IID_IPicture, TRUE, NULL);
 }
 
     hr = pOleCreatePictureIndirect(NULL, &IID_IPicture, TRUE, (void**)&pict);
@@ -798,9 +799,8 @@ static void test_OleLoadPicturePath(void)
     hres = OleLoadPicturePath(emptyW, NULL, 0, 0, NULL, (void **)&pic);
     todo_wine
     ok(hres == INET_E_UNKNOWN_PROTOCOL || /* XP/Vista+ */
-       hres == E_UNEXPECTED || /* NT4/Win95 */
-       hres == E_FAIL || /* Win95 OSR2 */
-       hres == E_OUTOFMEMORY, /* Win98/Win2k/Win2k3 */
+       broken(hres == E_UNEXPECTED) || /* NT4 */
+       broken(hres == E_OUTOFMEMORY), /* Win2k/Win2k3 */
        "Expected OleLoadPicturePath to return INET_E_UNKNOWN_PROTOCOL, got 0x%08x\n", hres);
     ok(pic == NULL,
        "Expected the output interface pointer to be NULL, got %p\n", pic);
@@ -809,9 +809,8 @@ static void test_OleLoadPicturePath(void)
     hres = OleLoadPicturePath(emptyW, NULL, 0, 0, &IID_IPicture, (void **)&pic);
     todo_wine
     ok(hres == INET_E_UNKNOWN_PROTOCOL || /* XP/Vista+ */
-       hres == E_UNEXPECTED || /* NT4/Win95 */
-       hres == E_FAIL || /* Win95 OSR2 */
-       hres == E_OUTOFMEMORY, /* Win98/Win2k/Win2k3 */
+       broken(hres == E_UNEXPECTED) || /* NT4 */
+       broken(hres == E_OUTOFMEMORY), /* Win2k/Win2k3 */
        "Expected OleLoadPicturePath to return INET_E_UNKNOWN_PROTOCOL, got 0x%08x\n", hres);
     ok(pic == NULL,
        "Expected the output interface pointer to be NULL, got %p\n", pic);
@@ -829,7 +828,7 @@ static void test_OleLoadPicturePath(void)
     /* Try a normal DOS path. */
     hres = OleLoadPicturePath(temp_fileW + 8, NULL, 0, 0, &IID_IPicture, (void **)&pic);
     ok(hres == S_OK ||
-       broken(hres == E_UNEXPECTED), /* NT4/Win95 */
+       broken(hres == E_UNEXPECTED), /* NT4 */
        "Expected OleLoadPicturePath to return S_OK, got 0x%08x\n", hres);
     if (pic)
         IPicture_Release(pic);
@@ -837,7 +836,7 @@ static void test_OleLoadPicturePath(void)
     /* Try a DOS path with tacked on "file:". */
     hres = OleLoadPicturePath(temp_fileW, NULL, 0, 0, &IID_IPicture, (void **)&pic);
     ok(hres == S_OK ||
-       broken(hres == E_UNEXPECTED), /* NT4/Win95 */
+       broken(hres == E_UNEXPECTED), /* NT4 */
        "Expected OleLoadPicturePath to return S_OK, got 0x%08x\n", hres);
     if (pic)
         IPicture_Release(pic);
@@ -847,14 +846,14 @@ static void test_OleLoadPicturePath(void)
     /* Try with a nonexistent file. */
     hres = OleLoadPicturePath(temp_fileW + 8, NULL, 0, 0, &IID_IPicture, (void **)&pic);
     ok(hres == INET_E_RESOURCE_NOT_FOUND || /* XP+ */
-       hres == E_UNEXPECTED || /* NT4/Win95 */
-       hres == E_FAIL, /* Win9x/Win2k */
+       broken(hres == E_UNEXPECTED) || /* NT4 */
+       broken(hres == E_FAIL), /*Win2k */
        "Expected OleLoadPicturePath to return INET_E_RESOURCE_NOT_FOUND, got 0x%08x\n", hres);
 
     hres = OleLoadPicturePath(temp_fileW, NULL, 0, 0, &IID_IPicture, (void **)&pic);
     ok(hres == INET_E_RESOURCE_NOT_FOUND || /* XP+ */
-       hres == E_UNEXPECTED || /* NT4/Win95 */
-       hres == E_FAIL, /* Win9x/Win2k */
+       broken(hres == E_UNEXPECTED) || /* NT4 */
+       broken(hres == E_FAIL), /* Win2k */
        "Expected OleLoadPicturePath to return INET_E_RESOURCE_NOT_FOUND, got 0x%08x\n", hres);
 
     file = CreateFileA(temp_file, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
@@ -873,7 +872,7 @@ static void test_OleLoadPicturePath(void)
 
     hres = OleLoadPicturePath(temp_fileW, NULL, 0, 0, &IID_IPicture, (void **)&pic);
     ok(hres == S_OK ||
-       broken(hres == E_UNEXPECTED), /* NT4/Win95 */
+       broken(hres == E_UNEXPECTED), /* NT4 */
        "Expected OleLoadPicturePath to return S_OK, got 0x%08x\n", hres);
     if (pic)
         IPicture_Release(pic);
@@ -883,8 +882,8 @@ static void test_OleLoadPicturePath(void)
     /* Try with a nonexistent file. */
     hres = OleLoadPicturePath(temp_fileW, NULL, 0, 0, &IID_IPicture, (void **)&pic);
     ok(hres == INET_E_RESOURCE_NOT_FOUND || /* XP+ */
-       hres == E_UNEXPECTED || /* NT4/Win95 */
-       hres == E_FAIL, /* Win9x/Win2k */
+       broken(hres == E_UNEXPECTED) || /* NT4 */
+       broken(hres == E_FAIL), /* Win2k */
        "Expected OleLoadPicturePath to return INET_E_RESOURCE_NOT_FOUND, got 0x%08x\n", hres);
 }
 
@@ -1004,6 +1003,11 @@ START_TEST(olepicture)
 /* Helper functions only ... */
 
 
+static inline NoStatStreamImpl *impl_from_IStream(IStream *iface)
+{
+  return CONTAINING_RECORD(iface, NoStatStreamImpl, IStream_iface);
+}
+
 static void NoStatStreamImpl_Destroy(NoStatStreamImpl* This)
 {
   GlobalFree(This->supportHandle);
@@ -1014,7 +1018,7 @@ static void NoStatStreamImpl_Destroy(NoStatStreamImpl* This)
 static ULONG WINAPI NoStatStreamImpl_AddRef(
 		IStream* iface)
 {
-  NoStatStreamImpl* const This=(NoStatStreamImpl*)iface;
+  NoStatStreamImpl* const This = impl_from_IStream(iface);
   return InterlockedIncrement(&This->ref);
 }
 
@@ -1023,7 +1027,7 @@ static HRESULT WINAPI NoStatStreamImpl_QueryInterface(
 		  REFIID         riid,	      /* [in] */
 		  void**         ppvObject)   /* [iid_is][out] */
 {
-  NoStatStreamImpl* const This=(NoStatStreamImpl*)iface;
+  NoStatStreamImpl* const This = impl_from_IStream(iface);
   if (ppvObject==0) return E_INVALIDARG;
   *ppvObject = 0;
   if (IsEqualIID(&IID_IUnknown, riid))
@@ -1044,7 +1048,7 @@ static HRESULT WINAPI NoStatStreamImpl_QueryInterface(
 static ULONG WINAPI NoStatStreamImpl_Release(
 		IStream* iface)
 {
-  NoStatStreamImpl* const This=(NoStatStreamImpl*)iface;
+  NoStatStreamImpl* const This = impl_from_IStream(iface);
   ULONG newRef = InterlockedDecrement(&This->ref);
   if (newRef==0)
     NoStatStreamImpl_Destroy(This);
@@ -1057,7 +1061,7 @@ static HRESULT WINAPI NoStatStreamImpl_Read(
 		  ULONG          cb,        /* [in] */
 		  ULONG*         pcbRead)   /* [out] */
 {
-  NoStatStreamImpl* const This=(NoStatStreamImpl*)iface;
+  NoStatStreamImpl* const This = impl_from_IStream(iface);
   void* supportBuffer;
   ULONG bytesReadBuffer;
   ULONG bytesToReadFromBuffer;
@@ -1081,7 +1085,7 @@ static HRESULT WINAPI NoStatStreamImpl_Write(
 		  ULONG          cb,          /* [in] */
 		  ULONG*         pcbWritten)  /* [out] */
 {
-  NoStatStreamImpl* const This=(NoStatStreamImpl*)iface;
+  NoStatStreamImpl* const This = impl_from_IStream(iface);
   void*          supportBuffer;
   ULARGE_INTEGER newSize;
   ULONG          bytesWritten = 0;
@@ -1109,7 +1113,7 @@ static HRESULT WINAPI NoStatStreamImpl_Seek(
 		  DWORD           dwOrigin,         /* [in] */
 		  ULARGE_INTEGER* plibNewPosition) /* [out] */
 {
-  NoStatStreamImpl* const This=(NoStatStreamImpl*)iface;
+  NoStatStreamImpl* const This = impl_from_IStream(iface);
   ULARGE_INTEGER newPosition;
   switch (dwOrigin)
   {
@@ -1138,7 +1142,7 @@ static HRESULT WINAPI NoStatStreamImpl_SetSize(
 				     IStream*      iface,
 				     ULARGE_INTEGER  libNewSize)   /* [in] */
 {
-  NoStatStreamImpl* const This=(NoStatStreamImpl*)iface;
+  NoStatStreamImpl* const This = impl_from_IStream(iface);
   HGLOBAL supportHandle;
   if (libNewSize.u.HighPart != 0)
     return STG_E_INVALIDFUNCTION;
@@ -1251,14 +1255,14 @@ static const IStreamVtbl NoStatStreamImpl_Vtbl;
     In any case the object takes ownership of memory handle and will free it on
     object release.
  */
-static NoStatStreamImpl* NoStatStreamImpl_Construct(HGLOBAL hGlobal)
+static IStream* NoStatStream_Construct(HGLOBAL hGlobal)
 {
   NoStatStreamImpl* newStream;
 
   newStream = HeapAlloc(GetProcessHeap(), 0, sizeof(NoStatStreamImpl));
   if (newStream!=0)
   {
-    newStream->lpVtbl = &NoStatStreamImpl_Vtbl;
+    newStream->IStream_iface.lpVtbl = &NoStatStreamImpl_Vtbl;
     newStream->ref    = 1;
     newStream->supportHandle = hGlobal;
 
@@ -1270,7 +1274,7 @@ static NoStatStreamImpl* NoStatStreamImpl_Construct(HGLOBAL hGlobal)
     newStream->streamSize.u.HighPart = 0;
     newStream->streamSize.u.LowPart  = GlobalSize(newStream->supportHandle);
   }
-  return newStream;
+  return &newStream->IStream_iface;
 }
 
 

@@ -26,30 +26,6 @@
 
 LANGUAGE LANG_ITALIAN, SUBLANG_NEUTRAL
 
-STRINGTABLE
-{
-   IDS_CPL_TITLE, "Aggiungi/Rimuovi Programmi"
-   IDS_CPL_DESC, "Ti permette di installare nuovi software o di rimuovere quelli presenti dal tuo computer."
-   IDS_TAB1_TITLE, "Applicazioni"
-
-   IDS_UNINSTALL_FAILED, "Impossibile eseguire il disinstallatore, '%s'. Vuoi rimuovere la voce di disinstallazione di questo programma dal registro?"
-   IDS_NOT_SPECIFIED, "Non specificato"
-
-   IDS_COLUMN_NAME, "Nome"
-   IDS_COLUMN_PUBLISHER, "Editore"
-   IDS_COLUMN_VERSION, "Versione"
-   IDS_INSTALL_FILTER, "Programmi d'installazione\0*instal*.exe;*setup*.exe;*.msi\0Programmi (*.exe)\0*.exe\0Tutti i file (*.*)\0*.*\0\0"
-
-   IDS_REMOVE, "&Rimuovi..."
-   IDS_MODIFY_REMOVE, "&Modifica/Rimuovi..."
-}
-
-STRINGTABLE
-{
-    IDS_DOWNLOADING     "Scaricando..."
-    IDS_INSTALLING      "Installando..."
-}
-
 IDD_MAIN DIALOG 0, 0, 320, 220
 STYLE DS_MODALFRAME | DS_3DLOOK | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
 CAPTION "Installa/Disinstalla"
@@ -72,7 +48,7 @@ STYLE DS_MODALFRAME | DS_3DLOOK | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMEN
 CAPTION "Informazioni di supporto"
 FONT 8, "MS Shell Dlg"
 {
- CONTROL "OK", IDOK, "BUTTON", BS_DEFPUSHBUTTON | BS_CENTER | WS_CHILD | WS_VISIBLE | WS_TABSTOP, 103, 116, 50, 14
+ CONTROL "Ok", IDOK, "BUTTON", BS_DEFPUSHBUTTON | BS_CENTER | WS_CHILD | WS_VISIBLE | WS_TABSTOP, 103, 116, 50, 14
  CONTROL "Le seguenti informazioni possono essere usate per ottenere supporto tecnico per %s:", IDC_INFO_LABEL, "static", SS_LEFT | WS_CHILD | WS_VISIBLE, 12, 9, 228, 19
  CONTROL "Editore:", -1, "static", SS_LEFT | WS_CHILD | WS_VISIBLE, 16, 30, 60, 8
  CONTROL "Versione:", -1, "static", SS_LEFT | WS_CHILD | WS_VISIBLE, 16, 40, 60, 8
@@ -97,8 +73,8 @@ STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMEN
 CAPTION "Installer di Wine Gecko"
 FONT 8, "MS Shell Dlg"
 {
-    LTEXT "Wine non ha trovato un pacchetto Gecko che è necessario per applicazioni che incorporano HTML " \
-          "per funzionare correttamente. Wine può automaticamente scaricarlo ed installarlo per te.\n\n" \
+    LTEXT "Wine non ha trovato un pacchetto Gecko, necessario ad applicazioni che incorporano HTML " \
+          "per funzionare correttamente. Wine lo può scaricare e installare automaticamente per te.\n\n" \
           "Nota: è raccomandato usare i pacchetti delle distribuzioni. Leggi http://wiki.winehq.org/Gecko per i dettagli.",
           ID_DWL_STATUS, 10, 10, 240, 50, SS_LEFT
     CONTROL "Avanzamento", ID_DWL_PROGRESS, PROGRESS_CLASSA, WS_BORDER|PBS_SMOOTH, 10, 40, 240, 12

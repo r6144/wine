@@ -4,7 +4,7 @@
  *
  * Copyright 1998 Douglas Ridgway
  * Copyright 2003 Marcelo Duarte
- * Copyright 2005 YunSong Hwang
+ * Copyright 2005,2011 YunSong Hwang
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -23,52 +23,11 @@
 
 #include "resource.h"
 
+#pragma code_page(65001)
+
 LANGUAGE LANG_KOREAN, SUBLANG_DEFAULT
-
-/*
- *
- * Menu
- *
- */
-
-VIEW MENU
-BEGIN
-    POPUP "파일(&F)"
-    BEGIN
-	MENUITEM "열기(&O)",			IDM_OPEN
-        MENUITEM "나가기(&X)",                       IDM_EXIT
-    END
-    POPUP "회전(&P)"
-    BEGIN
-      MENUITEM "화면 가득 채우기(&S)",          IDM_SET_EXT_TO_WIN
-      MENUITEM SEPARATOR
-      MENUITEM "왼쪽(&L)",				IDM_LEFT
-      MENUITEM "오른쪽(&R)",			IDM_RIGHT
-      MENUITEM "위(&U)",				IDM_UP
-      MENUITEM "아래(&D)",				IDM_DOWN
-    END
-END
-
-
-/*
- *
- * Accelerator
- *
- */
 
 VIEW ACCELERATORS
 BEGIN
     "Q", IDM_EXIT, VIRTKEY, CONTROL
-END
-
-
-/*
- *
- * String Table
- *
- */
-
-STRINGTABLE
-BEGIN
-    IDS_DESCRIPTION         "정규 메타파일 보기"
 END

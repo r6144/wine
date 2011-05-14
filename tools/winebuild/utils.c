@@ -57,7 +57,6 @@ static const struct
     { "amd64",   CPU_x86_64 },
     { "x86_64",  CPU_x86_64 },
     { "sparc",   CPU_SPARC },
-    { "alpha",   CPU_ALPHA },
     { "powerpc", CPU_POWERPC },
     { "arm", CPU_ARM }
 };
@@ -363,6 +362,8 @@ struct strarray *get_as_command(void)
             break;
         }
     }
+
+    if (cpu_option) strarray_add_one( args, strmake("-mcpu=%s", cpu_option) );
     return args;
 }
 
@@ -664,6 +665,7 @@ int remove_stdcall_decoration( char *name )
 {
     char *p, *end = strrchr( name, '@' );
     if (!end || !end[1] || end == name) return -1;
+    if (target_cpu != CPU_x86) return -1;
     /* make sure all the rest is digits */
     for (p = end + 1; *p; p++) if (!isdigit(*p)) return -1;
     *end = 0;
@@ -843,7 +845,6 @@ unsigned int get_alignment(unsigned int align)
         if (target_platform != PLATFORM_APPLE) return align;
         /* fall through */
     case CPU_POWERPC:
-    case CPU_ALPHA:
     case CPU_ARM:
         n = 0;
         while ((1u << n) != align) n++;
@@ -864,7 +865,6 @@ unsigned int get_page_size(void)
     case CPU_POWERPC: return 4096;
     case CPU_ARM:     return 4096;
     case CPU_SPARC:   return 8192;
-    case CPU_ALPHA:   return 8192;
     }
     /* unreached */
     assert(0);
@@ -879,7 +879,6 @@ unsigned int get_ptr_size(void)
     case CPU_x86:
     case CPU_POWERPC:
     case CPU_SPARC:
-    case CPU_ALPHA:
     case CPU_ARM:
         return 4;
     case CPU_x86_64:
@@ -893,7 +892,7 @@ unsigned int get_ptr_size(void)
 /* return the total size in bytes of the arguments on the stack */
 unsigned int get_args_size( const ORDDEF *odp )
 {
-    unsigned int i, size;
+    int i, size;
 
     for (i = size = 0; i < odp->u.func.nb_args; i++)
     {

@@ -230,7 +230,10 @@ static struct desktop *create_desktop( const struct unicode_str *name, unsigned 
             desktop->msg_window = NULL;
             desktop->global_hooks = NULL;
             desktop->close_timeout = NULL;
+            desktop->foreground_input = NULL;
             desktop->users = 0;
+            memset( &desktop->cursor, 0, sizeof(desktop->cursor) );
+            memset( desktop->keystate, 0, sizeof(desktop->keystate) );
             list_add_tail( &winstation->desktops, &desktop->entry );
         }
     }
@@ -373,7 +376,7 @@ static void close_desktop_timeout( void *private )
 
     desktop->close_timeout = NULL;
     unlink_named_object( &desktop->obj );  /* make sure no other process can open it */
-    close_desktop_window( desktop );  /* and signal the owner to quit */
+    post_desktop_message( desktop, WM_CLOSE, 0, 0 );  /* and signal the owner to quit */
 }
 
 /* close the desktop of a given process */

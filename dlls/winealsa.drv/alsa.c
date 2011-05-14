@@ -31,19 +31,21 @@
 #include "winbase.h"
 #include "wingdi.h"
 #include "winuser.h"
+#include "winnls.h"
+#include "winerror.h"
 #include "mmddk.h"
-
+#include "mmreg.h"
+#include "dsound.h"
+#include "dsdriver.h"
 #include "ks.h"
-#include "guiddef.h"
-#include "ksmedia.h"
-
-#include "alsa.h"
-
-#ifdef HAVE_ALSA
-
 #include "wine/library.h"
 #include "wine/unicode.h"
 #include "wine/debug.h"
+
+#include "alsa.h"
+
+#include "initguid.h"
+#include "ksmedia.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(alsa);
 /* unless someone makes a wineserver kernel module, Unix pipes are faster than win32 events */
@@ -127,10 +129,10 @@ void ALSA_WaitRingMessage(ALSA_MSG_RING* omr, DWORD sleep)
  */
 int ALSA_AddRingMessage(ALSA_MSG_RING* omr, enum win_wm_message msg, DWORD_PTR param, BOOL wait)
 {
-    HANDLE	hEvent = INVALID_HANDLE_VALUE;
+    HANDLE	hEvent = NULL;
 
     EnterCriticalSection(&omr->msg_crst);
-    if ((omr->msg_toget == ((omr->msg_tosave + 1) % omr->ring_buffer_size)))
+    if (omr->msg_toget == ((omr->msg_tosave + 1) % omr->ring_buffer_size))
     {
 	int old_ring_buffer_size = omr->ring_buffer_size;
 	omr->ring_buffer_size += ALSA_RING_BUFFER_INCREMENT;
@@ -151,7 +153,7 @@ int ALSA_AddRingMessage(ALSA_MSG_RING* omr, enum win_wm_message msg, DWORD_PTR p
     if (wait)
     {
         hEvent = CreateEventW(NULL, FALSE, FALSE, NULL);
-        if (hEvent == INVALID_HANDLE_VALUE)
+        if (!hEvent)
         {
             ERR("can't create event !?\n");
             LeaveCriticalSection(&omr->msg_crst);
@@ -177,7 +179,7 @@ int ALSA_AddRingMessage(ALSA_MSG_RING* omr, enum win_wm_message msg, DWORD_PTR p
     {
         omr->messages[omr->msg_tosave].msg = msg;
         omr->messages[omr->msg_tosave].param = param;
-        omr->messages[omr->msg_tosave].hEvent = INVALID_HANDLE_VALUE;
+        omr->messages[omr->msg_tosave].hEvent = NULL;
         omr->msg_tosave = (omr->msg_tosave + 1) % omr->ring_buffer_size;
     }
     LeaveCriticalSection(&omr->msg_crst);
@@ -355,7 +357,7 @@ void ALSA_copyFormat(LPWAVEFORMATEX wf1, LPWAVEFORMATPCMEX wf2)
 {
     unsigned int iLength;
 
-    ZeroMemory(wf2, sizeof(wf2));
+    ZeroMemory(wf2, sizeof(*wf2));
     if (wf1->wFormatTag == WAVE_FORMAT_PCM)
         iLength = sizeof(PCMWAVEFORMAT);
     else if (wf1->wFormatTag == WAVE_FORMAT_EXTENSIBLE)
@@ -425,6 +427,8 @@ int ALSA_CheckSetVolume(snd_hctl_t *hctl, int *out_left, int *out_right,
     snd_ctl_elem_info_t *       eleminfop = NULL;
     snd_ctl_elem_value_t *      elemvaluep = NULL;
     snd_ctl_elem_id_t *         elemidp = NULL;
+    const char *names[] = {"PCM Playback Volume", "Line Playback Volume", NULL};
+    const char **name;
 
 
 #define EXIT_ON_ERROR(f,txt,exitcode) do \
@@ -451,81 +455,88 @@ int ALSA_CheckSetVolume(snd_hctl_t *hctl, int *out_left, int *out_right,
 
     /* Setup and find an element id that exactly matches the characteristic we want
     ** FIXME:  It is probably short sighted to hard code and fixate on PCM Playback Volume */
-    snd_ctl_elem_id_set_name(elemidp, "PCM Playback Volume");
-    snd_ctl_elem_id_set_interface(elemidp, SND_CTL_ELEM_IFACE_MIXER);
-    elem = snd_hctl_find_elem(hctl, elemidp);
-    if (elem)
+
+    for( name = names; *name; name++ )
     {
-        /* Read and return volume information */
-        EXIT_ON_ERROR(snd_hctl_elem_info(elem, eleminfop), "snd_hctl_elem_info", MMSYSERR_NOTSUPPORTED);
-        value_count = snd_ctl_elem_info_get_count(eleminfop);
-        if (out_min || out_max || out_step)
-        {
-	    if (!snd_ctl_elem_info_is_readable(eleminfop))
-            {
-                ERR("snd_ctl_elem_info_is_readable returned false; cannot return info\n");
-                rc = MMSYSERR_NOTSUPPORTED;
-                goto out;
-            }
+	snd_ctl_elem_id_set_name(elemidp, *name);
+	snd_ctl_elem_id_set_interface(elemidp, SND_CTL_ELEM_IFACE_MIXER);
+	elem = snd_hctl_find_elem(hctl, elemidp);
+	if (elem)
+	{
+	    /* Read and return volume information */
+	    EXIT_ON_ERROR(snd_hctl_elem_info(elem, eleminfop), "snd_hctl_elem_info", MMSYSERR_NOTSUPPORTED);
+	    value_count = snd_ctl_elem_info_get_count(eleminfop);
+	    if (out_min || out_max || out_step)
+	    {
+		if (!snd_ctl_elem_info_is_readable(eleminfop))
+		{
+		    ERR("snd_ctl_elem_info_is_readable returned false; cannot return info\n");
+		    rc = MMSYSERR_NOTSUPPORTED;
+		    goto out;
+		}
 
-            if (out_min)
-                *out_min = snd_ctl_elem_info_get_min(eleminfop);
+		if (out_min)
+		    *out_min = snd_ctl_elem_info_get_min(eleminfop);
 
-            if (out_max)
-                *out_max = snd_ctl_elem_info_get_max(eleminfop);
+		if (out_max)
+		    *out_max = snd_ctl_elem_info_get_max(eleminfop);
 
-            if (out_step)
-                *out_step = snd_ctl_elem_info_get_step(eleminfop);
-        }
+		if (out_step)
+		    *out_step = snd_ctl_elem_info_get_step(eleminfop);
+	    }
 
-        if (out_left || out_right)
-        {
-            EXIT_ON_ERROR(snd_hctl_elem_read(elem, elemvaluep), "snd_hctl_elem_read", MMSYSERR_NOTSUPPORTED);
+	    if (out_left || out_right)
+	    {
+		EXIT_ON_ERROR(snd_hctl_elem_read(elem, elemvaluep), "snd_hctl_elem_read", MMSYSERR_NOTSUPPORTED);
 
-            if (out_left)
-                *out_left = snd_ctl_elem_value_get_integer(elemvaluep, 0);
+		if (out_left)
+		    *out_left = snd_ctl_elem_value_get_integer(elemvaluep, 0);
 
-            if (out_right)
-            {
-                if (value_count == 1)
-                    *out_right = snd_ctl_elem_value_get_integer(elemvaluep, 0);
-                else if (value_count == 2)
-                    *out_right = snd_ctl_elem_value_get_integer(elemvaluep, 1);
-                else
-                {
-                    ERR("Unexpected value count %d from snd_ctl_elem_info_get_count while getting volume info\n", value_count);
-                    rc = -1;
-                    goto out;
-                }
-            }
-        }
+		if (out_right)
+		{
+		    if (value_count == 1)
+			*out_right = snd_ctl_elem_value_get_integer(elemvaluep, 0);
+		    else if (value_count == 2)
+			*out_right = snd_ctl_elem_value_get_integer(elemvaluep, 1);
+		    else
+		    {
+			ERR("Unexpected value count %d from snd_ctl_elem_info_get_count while getting volume info\n", value_count);
+			rc = -1;
+			goto out;
+		    }
+		}
+	    }
 
-        /* Set the volume */
-        if (new_left || new_right)
-        {
-            EXIT_ON_ERROR(snd_hctl_elem_read(elem, elemvaluep), "snd_hctl_elem_read", MMSYSERR_NOTSUPPORTED);
-            if (new_left)
-	        snd_ctl_elem_value_set_integer(elemvaluep, 0, *new_left);
-            if (new_right)
-            {
-                if (value_count == 1)
-	            snd_ctl_elem_value_set_integer(elemvaluep, 0, *new_right);
-                else if (value_count == 2)
-	            snd_ctl_elem_value_set_integer(elemvaluep, 1, *new_right);
-                else
-                {
-                    ERR("Unexpected value count %d from snd_ctl_elem_info_get_count while setting volume info\n", value_count);
-                    rc = -1;
-                    goto out;
-                }
-            }
+	    /* Set the volume */
+	    if (new_left || new_right)
+	    {
+		EXIT_ON_ERROR(snd_hctl_elem_read(elem, elemvaluep), "snd_hctl_elem_read", MMSYSERR_NOTSUPPORTED);
+		if (new_left)
+		    snd_ctl_elem_value_set_integer(elemvaluep, 0, *new_left);
+		if (new_right)
+		{
+		    if (value_count == 1)
+			snd_ctl_elem_value_set_integer(elemvaluep, 0, *new_right);
+		    else if (value_count == 2)
+			snd_ctl_elem_value_set_integer(elemvaluep, 1, *new_right);
+		    else
+		    {
+			ERR("Unexpected value count %d from snd_ctl_elem_info_get_count while setting volume info\n", value_count);
+			rc = -1;
+			goto out;
+		    }
+		}
 
-            EXIT_ON_ERROR(snd_hctl_elem_write(elem, elemvaluep), "snd_hctl_elem_write", MMSYSERR_NOTSUPPORTED);
-        }
+		EXIT_ON_ERROR(snd_hctl_elem_write(elem, elemvaluep), "snd_hctl_elem_write", MMSYSERR_NOTSUPPORTED);
+	    }
+
+	    break;
+	}
     }
-    else
+
+    if( !*name )
     {
-        ERR("Could not find 'PCM Playback Volume' element\n");
+        ERR("Could not find '{PCM,Line} Playback Volume' element\n");
         rc = MMSYSERR_NOTSUPPORTED;
     }
 
@@ -720,8 +731,6 @@ if (err<0) { \
 	return;
 }
 
-#endif
-
 /**************************************************************************
  * 				DriverProc (WINEALSA.@)
  */
@@ -732,7 +741,6 @@ LRESULT CALLBACK ALSA_DriverProc(DWORD_PTR dwDevID, HDRVR hDriv, UINT wMsg,
 /* EPP 	  dwDevID, hDriv, wMsg, dwParam1, dwParam2); */
 
     switch(wMsg) {
-#ifdef HAVE_ALSA
     case DRV_LOAD:
     case DRV_FREE:
     case DRV_OPEN:
@@ -745,7 +753,6 @@ LRESULT CALLBACK ALSA_DriverProc(DWORD_PTR dwDevID, HDRVR hDriv, UINT wMsg,
     case DRV_INSTALL:
     case DRV_REMOVE:
         return DRV_SUCCESS;
-#endif
     default:
 	return 0;
     }

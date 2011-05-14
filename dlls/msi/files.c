@@ -20,12 +20,12 @@
 
 
 /*
- * Actions dealing with files These are
+ * Actions dealing with files:
  *
  * InstallFiles
  * DuplicateFiles
  * MoveFiles
- * PatchFiles (TODO)
+ * PatchFiles
  * RemoveDuplicateFiles
  * RemoveFiles
  */
@@ -47,6 +47,9 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(msi);
 
+static HMODULE hmspatcha;
+static BOOL (WINAPI *ApplyPatchToFileW)(LPCWSTR, LPCWSTR, LPCWSTR, ULONG);
+
 static void msi_file_update_ui( MSIPACKAGE *package, MSIFILE *f, const WCHAR *action )
 {
     MSIRECORD *uirow;
@@ -55,9 +58,85 @@ static void msi_file_update_ui( MSIPACKAGE *package, MSIFILE *f, const WCHAR *ac
     MSI_RecordSetStringW( uirow, 1, f->FileName );
     MSI_RecordSetStringW( uirow, 9, f->Component->Directory );
     MSI_RecordSetInteger( uirow, 6, f->FileSize );
-    ui_actiondata( package, action, uirow );
+    msi_ui_actiondata( package, action, uirow );
     msiobj_release( &uirow->hdr );
-    ui_progress( package, 2, f->FileSize, 0, 0 );
+    msi_ui_progress( package, 2, f->FileSize, 0, 0 );
+}
+
+static msi_file_state calculate_install_state( MSIFILE *file )
+{
+    MSICOMPONENT *comp = file->Component;
+    VS_FIXEDFILEINFO *file_version;
+    WCHAR *font_version;
+    msi_file_state state;
+    DWORD file_size;
+
+    if (comp->ActionRequest != INSTALLSTATE_LOCAL || !comp->Enabled ||
+        (comp->assembly && comp->assembly->installed))
+    {
+        TRACE("file %s is not scheduled for install\n", debugstr_w(file->File));
+        return msifs_skipped;
+    }
+    if ((comp->assembly && !comp->assembly->application && !comp->assembly->installed) ||
+        GetFileAttributesW( file->TargetPath ) == INVALID_FILE_ATTRIBUTES)
+    {
+        TRACE("file %s is missing\n", debugstr_w(file->File));
+        return msifs_missing;
+    }
+    if (file->Version)
+    {
+        if ((file_version = msi_get_disk_file_version( file->TargetPath )))
+        {
+            TRACE("new %s old %u.%u.%u.%u\n", debugstr_w(file->Version),
+                  HIWORD(file_version->dwFileVersionMS),
+                  LOWORD(file_version->dwFileVersionMS),
+                  HIWORD(file_version->dwFileVersionLS),
+                  LOWORD(file_version->dwFileVersionLS));
+
+            if (msi_compare_file_versions( file_version, file->Version ) < 0)
+                state = msifs_overwrite;
+            else
+            {
+                TRACE("destination file version equal or greater, not overwriting\n");
+                state = msifs_present;
+            }
+            msi_free( file_version );
+            return state;
+        }
+        else if ((font_version = font_version_from_file( file->TargetPath )))
+        {
+            TRACE("new %s old %s\n", debugstr_w(file->Version), debugstr_w(font_version));
+
+            if (msi_compare_font_versions( font_version, file->Version ) < 0)
+                state = msifs_overwrite;
+            else
+            {
+                TRACE("destination file version equal or greater, not overwriting\n");
+                state = msifs_present;
+            }
+            msi_free( font_version );
+            return state;
+        }
+    }
+    if ((file_size = msi_get_disk_file_size( file->TargetPath )) != file->FileSize)
+    {
+        return msifs_overwrite;
+    }
+    if (file->hash.dwFileHashInfoSize)
+    {
+        if (msi_file_hash_matches( file ))
+        {
+            TRACE("file hashes match, not overwriting\n");
+            return msifs_hashmatch;
+        }
+        else
+        {
+            TRACE("file hashes do not match, overwriting\n");
+            return msifs_overwrite;
+        }
+    }
+    /* assume present */
+    return msifs_present;
 }
 
 static void schedule_install_files(MSIPACKAGE *package)
@@ -68,21 +147,14 @@ static void schedule_install_files(MSIPACKAGE *package)
     {
         MSICOMPONENT *comp = file->Component;
 
-        if (comp->ActionRequest != INSTALLSTATE_LOCAL || !comp->Enabled)
-        {
-            TRACE("File %s is not scheduled for install\n", debugstr_w(file->File));
-            file->state = msifs_skipped;
-            continue;
-        }
-        comp->Action = INSTALLSTATE_LOCAL;
-        ui_progress( package, 2, file->FileSize, 0, 0 );
-
-        if (file->state == msifs_overwrite &&
-            (comp->Attributes & msidbComponentAttributesNeverOverwrite))
+        file->state = calculate_install_state( file );
+        if (file->state == msifs_overwrite && (comp->Attributes & msidbComponentAttributesNeverOverwrite))
         {
             TRACE("not overwriting %s\n", debugstr_w(file->TargetPath));
             file->state = msifs_skipped;
         }
+        comp->Action = INSTALLSTATE_LOCAL;
+        msi_ui_progress( package, 2, file->FileSize, 0, 0 );
     }
 }
 
@@ -160,18 +232,17 @@ static UINT copy_install_file(MSIPACKAGE *package, MSIFILE *file, LPWSTR source)
 static UINT msi_create_directory( MSIPACKAGE *package, const WCHAR *dir )
 {
     MSIFOLDER *folder;
-    WCHAR *install_path;
+    const WCHAR *install_path;
 
-    install_path = resolve_folder( package, dir, FALSE, FALSE, TRUE, &folder );
-    if (!install_path)
-        return ERROR_FUNCTION_FAILED;
+    install_path = msi_get_target_folder( package, dir );
+    if (!install_path) return ERROR_FUNCTION_FAILED;
 
+    folder = msi_get_loaded_folder( package, dir );
     if (folder->State == 0)
     {
-        create_full_pathW( install_path );
+        msi_create_full_path( install_path );
         folder->State = 2;
     }
-    msi_free( install_path );
     return ERROR_SUCCESS;
 }
 
@@ -183,10 +254,10 @@ static BOOL installfiles_cb(MSIPACKAGE *package, LPCWSTR file, DWORD action,
 
     if (action == MSICABEXTRACT_BEGINEXTRACT)
     {
-        f = get_loaded_file(package, file);
+        f = msi_get_loaded_file(package, file);
         if (!f)
         {
-            WARN("unknown file in cabinet (%s)\n", debugstr_w(file));
+            TRACE("unknown file in cabinet (%s)\n", debugstr_w(file));
             return FALSE;
         }
 
@@ -210,6 +281,27 @@ static BOOL installfiles_cb(MSIPACKAGE *package, LPCWSTR file, DWORD action,
     return TRUE;
 }
 
+WCHAR *msi_resolve_file_source( MSIPACKAGE *package, MSIFILE *file )
+{
+    WCHAR *p, *path;
+
+    TRACE("Working to resolve source of file %s\n", debugstr_w(file->File));
+
+    if (file->IsCompressed) return NULL;
+
+    p = msi_resolve_source_folder( package, file->Component->Directory, NULL );
+    path = msi_build_directory_name( 2, p, file->ShortName );
+
+    if (file->LongName && GetFileAttributesW( path ) == INVALID_FILE_ATTRIBUTES)
+    {
+        msi_free( path );
+        path = msi_build_directory_name( 2, p, file->LongName );
+    }
+    msi_free( p );
+    TRACE("file %s source resolves to %s\n", debugstr_w(file->File), debugstr_w(path));
+    return path;
+}
+
 /*
  * ACTION_InstallFiles()
  * 
@@ -225,14 +317,28 @@ UINT ACTION_InstallFiles(MSIPACKAGE *package)
     MSIFILE *file;
 
     /* increment progress bar each time action data is sent */
-    ui_progress(package,1,1,0,0);
+    msi_ui_progress( package, 1, 1, 0, 0 );
 
     schedule_install_files(package);
-
     mi = msi_alloc_zero( sizeof(MSIMEDIAINFO) );
 
     LIST_FOR_EACH_ENTRY( file, &package->files, MSIFILE, entry )
     {
+        rc = msi_load_media_info( package, file->Sequence, mi );
+        if (rc != ERROR_SUCCESS)
+        {
+            ERR("Unable to load media info for %s (%u)\n", debugstr_w(file->File), rc);
+            return ERROR_FUNCTION_FAILED;
+        }
+        if (!file->Component->Enabled) continue;
+
+        if (file->state != msifs_hashmatch &&
+            (rc = ready_media( package, file->Sequence, file->IsCompressed, mi )))
+        {
+            ERR("Failed to ready media for %s\n", debugstr_w(file->File));
+            goto done;
+        }
+
         if (file->state != msifs_missing && !mi->is_continuous && file->state != msifs_overwrite)
             continue;
 
@@ -240,13 +346,6 @@ UINT ACTION_InstallFiles(MSIPACKAGE *package)
             (file->IsCompressed && !mi->is_extracted))
         {
             MSICABDATA data;
-
-            rc = ready_media(package, file, mi);
-            if (rc != ERROR_SUCCESS)
-            {
-                ERR("Failed to ready media for %s\n", debugstr_w(file->File));
-                goto done;
-            }
 
             data.mi = mi;
             data.package = package;
@@ -264,7 +363,7 @@ UINT ACTION_InstallFiles(MSIPACKAGE *package)
 
         if (!file->IsCompressed)
         {
-            LPWSTR source = resolve_file_source(package, file);
+            WCHAR *source = msi_resolve_file_source(package, file);
 
             TRACE("copying %s to %s\n", debugstr_w(source), debugstr_w(file->TargetPath));
 
@@ -284,19 +383,20 @@ UINT ACTION_InstallFiles(MSIPACKAGE *package)
             }
             msi_free(source);
         }
-        else if (file->state != msifs_installed)
+        else if (file->state != msifs_installed && !(file->Attributes & msidbFileAttributesPatchAdded))
         {
             ERR("compressed file wasn't installed (%s)\n", debugstr_w(file->TargetPath));
             rc = ERROR_INSTALL_FAILURE;
             goto done;
         }
     }
+    msi_init_assembly_caches( package );
     LIST_FOR_EACH_ENTRY( comp, &package->components, MSICOMPONENT, entry )
     {
         if (comp->ActionRequest == INSTALLSTATE_LOCAL && comp->Enabled &&
             comp->assembly && !comp->assembly->installed)
         {
-            rc = install_assembly( package, comp );
+            rc = msi_install_assembly( package, comp );
             if (rc != ERROR_SUCCESS)
             {
                 ERR("Failed to install assembly\n");
@@ -305,9 +405,159 @@ UINT ACTION_InstallFiles(MSIPACKAGE *package)
             }
         }
     }
+    msi_destroy_assembly_caches( package );
 
 done:
     msi_free_media_info(mi);
+    return rc;
+}
+
+static BOOL load_mspatcha(void)
+{
+    hmspatcha = LoadLibraryA("mspatcha.dll");
+    if (!hmspatcha)
+    {
+        ERR("Failed to load mspatcha.dll: %d\n", GetLastError());
+        return FALSE;
+    }
+
+    ApplyPatchToFileW = (void*)GetProcAddress(hmspatcha, "ApplyPatchToFileW");
+    if(!ApplyPatchToFileW)
+    {
+        ERR("GetProcAddress(ApplyPatchToFileW) failed: %d.\n", GetLastError());
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+static void unload_mspatch(void)
+{
+    FreeLibrary(hmspatcha);
+}
+
+static BOOL patchfiles_cb(MSIPACKAGE *package, LPCWSTR file, DWORD action,
+                          LPWSTR *path, DWORD *attrs, PVOID user)
+{
+    static MSIFILEPATCH *p = NULL;
+    static WCHAR patch_path[MAX_PATH] = {0};
+    static WCHAR temp_folder[MAX_PATH] = {0};
+
+    if (action == MSICABEXTRACT_BEGINEXTRACT)
+    {
+        if (temp_folder[0] == '\0')
+            GetTempPathW(MAX_PATH, temp_folder);
+
+        p = msi_get_loaded_filepatch(package, file);
+        if (!p)
+        {
+            TRACE("unknown file in cabinet (%s)\n", debugstr_w(file));
+            return FALSE;
+        }
+
+        msi_file_update_ui(package, p->File, szPatchFiles);
+
+        GetTempFileNameW(temp_folder, NULL, 0, patch_path);
+
+        *path = strdupW(patch_path);
+        *attrs = p->File->Attributes;
+    }
+    else if (action == MSICABEXTRACT_FILEEXTRACTED)
+    {
+        WCHAR patched_file[MAX_PATH];
+        BOOL br;
+
+        GetTempFileNameW(temp_folder, NULL, 0, patched_file);
+
+        br = ApplyPatchToFileW(patch_path, p->File->TargetPath, patched_file, 0);
+        if (br)
+        {
+            /* FIXME: baseline cache */
+
+            DeleteFileW( p->File->TargetPath );
+            MoveFileW( patched_file, p->File->TargetPath );
+
+            p->IsApplied = TRUE;
+        }
+        else
+            ERR("Failed patch %s: %d.\n", debugstr_w(p->File->TargetPath), GetLastError());
+
+        DeleteFileW(patch_path);
+        p = NULL;
+    }
+
+    return TRUE;
+}
+
+UINT ACTION_PatchFiles( MSIPACKAGE *package )
+{
+    MSIFILEPATCH *patch;
+    MSIMEDIAINFO *mi;
+    UINT rc = ERROR_SUCCESS;
+    BOOL mspatcha_loaded = FALSE;
+
+    TRACE("%p\n", package);
+
+    /* increment progress bar each time action data is sent */
+    msi_ui_progress( package, 1, 1, 0, 0 );
+
+    mi = msi_alloc_zero( sizeof(MSIMEDIAINFO) );
+
+    LIST_FOR_EACH_ENTRY( patch, &package->filepatches, MSIFILEPATCH, entry )
+    {
+        MSIFILE *file = patch->File;
+
+        rc = msi_load_media_info( package, patch->Sequence, mi );
+        if (rc != ERROR_SUCCESS)
+        {
+            ERR("Unable to load media info for %s (%u)\n", debugstr_w(file->File), rc);
+            return ERROR_FUNCTION_FAILED;
+        }
+        if (!file->Component->Enabled) continue;
+
+        if (!patch->IsApplied)
+        {
+            MSICABDATA data;
+
+            rc = ready_media( package, patch->Sequence, TRUE, mi );
+            if (rc != ERROR_SUCCESS)
+            {
+                ERR("Failed to ready media for %s\n", debugstr_w(file->File));
+                goto done;
+            }
+
+            if (!mspatcha_loaded && !load_mspatcha())
+            {
+                rc = ERROR_FUNCTION_FAILED;
+                goto done;
+            }
+            mspatcha_loaded = TRUE;
+
+            data.mi = mi;
+            data.package = package;
+            data.cb = patchfiles_cb;
+            data.user = (PVOID)(UINT_PTR)mi->disk_id;
+
+            if (!msi_cabextract(package, mi, &data))
+            {
+                ERR("Failed to extract cabinet: %s\n", debugstr_w(mi->cabinet));
+                rc = ERROR_INSTALL_FAILURE;
+                goto done;
+            }
+        }
+
+        if (!patch->IsApplied && !(patch->Attributes & msidbPatchAttributesNonVital))
+        {
+            ERR("Failed to apply patch to file: %s\n", debugstr_w(file->File));
+            rc = ERROR_INSTALL_FAILURE;
+            goto done;
+        }
+    }
+
+done:
+    msi_free_media_info(mi);
+    if (mspatcha_loaded)
+        unload_mspatch();
     return rc;
 }
 
@@ -511,6 +761,12 @@ done:
     return res;
 }
 
+void msi_reduce_to_long_filename( WCHAR *filename )
+{
+    WCHAR *p = strchrW( filename, '|' );
+    if (p) memmove( filename, p + 1, (strlenW( p + 1 ) + 1) * sizeof(WCHAR) );
+}
+
 static UINT ITERATE_MoveFiles( MSIRECORD *rec, LPVOID param )
 {
     MSIPACKAGE *package = param;
@@ -523,7 +779,7 @@ static UINT ITERATE_MoveFiles( MSIRECORD *rec, LPVOID param )
     BOOL ret, wildcards;
 
     component = MSI_RecordGetString(rec, 2);
-    comp = get_loaded_component(package, component);
+    comp = msi_get_loaded_component(package, component);
     if (!comp)
         return ERROR_SUCCESS;
 
@@ -588,8 +844,7 @@ static UINT ITERATE_MoveFiles( MSIRECORD *rec, LPVOID param )
     else
     {
         destname = strdupW(MSI_RecordGetString(rec, 4));
-        if (destname)
-            reduce_to_longfilename(destname);
+        if (destname) msi_reduce_to_long_filename(destname);
     }
 
     size = 0;
@@ -628,7 +883,7 @@ done:
     MSI_RecordSetStringW( uirow, 1, MSI_RecordGetString(rec, 1) );
     MSI_RecordSetInteger( uirow, 6, 1 ); /* FIXME */
     MSI_RecordSetStringW( uirow, 9, destdir );
-    ui_actiondata( package, szMoveFiles, uirow );
+    msi_ui_actiondata( package, szMoveFiles, uirow );
     msiobj_release( &uirow->hdr );
 
     msi_free(sourcedir);
@@ -675,7 +930,7 @@ static WCHAR *get_duplicate_filename( MSIPACKAGE *package, MSIRECORD *row, const
         MSI_RecordGetStringW( row, 4, NULL, &len );
         if (!(dst_name = msi_alloc( ++len * sizeof(WCHAR) ))) return NULL;
         MSI_RecordGetStringW( row, 4, dst_name, &len );
-        reduce_to_longfilename( dst_name );
+        msi_reduce_to_long_filename( dst_name );
     }
 
     if (MSI_RecordIsNull( row, 5 ))
@@ -689,7 +944,7 @@ static WCHAR *get_duplicate_filename( MSIPACKAGE *package, MSIRECORD *row, const
     {
         const WCHAR *dst_key = MSI_RecordGetString( row, 5 );
 
-        dst_path = resolve_folder( package, dst_key, FALSE, FALSE, TRUE, NULL );
+        dst_path = strdupW( msi_get_target_folder( package, dst_key ) );
         if (!dst_path)
         {
             /* try a property */
@@ -703,8 +958,8 @@ static WCHAR *get_duplicate_filename( MSIPACKAGE *package, MSIRECORD *row, const
         }
     }
 
-    dst = build_directory_name( 2, dst_path, dst_name );
-    create_full_pathW( dst_path );
+    dst = msi_build_directory_name( 2, dst_path, dst_name );
+    msi_create_full_path( dst_path );
 
     msi_free( dst_name );
     msi_free( dst_path );
@@ -721,7 +976,7 @@ static UINT ITERATE_DuplicateFiles(MSIRECORD *row, LPVOID param)
     MSIFILE *file;
 
     component = MSI_RecordGetString(row,2);
-    comp = get_loaded_component(package,component);
+    comp = msi_get_loaded_component(package, component);
     if (!comp)
         return ERROR_SUCCESS;
 
@@ -746,7 +1001,7 @@ static UINT ITERATE_DuplicateFiles(MSIRECORD *row, LPVOID param)
         return ERROR_FUNCTION_FAILED;
     }
 
-    file = get_loaded_file( package, file_key );
+    file = msi_get_loaded_file( package, file_key );
     if (!file)
     {
         ERR("Original file unknown %s\n", debugstr_w(file_key));
@@ -774,7 +1029,7 @@ static UINT ITERATE_DuplicateFiles(MSIRECORD *row, LPVOID param)
     MSI_RecordSetStringW( uirow, 1, MSI_RecordGetString( row, 1 ) );
     MSI_RecordSetInteger( uirow, 6, file->FileSize );
     MSI_RecordSetStringW( uirow, 9, MSI_RecordGetString( row, 5 ) );
-    ui_actiondata( package, szDuplicateFiles, uirow );
+    msi_ui_actiondata( package, szDuplicateFiles, uirow );
     msiobj_release( &uirow->hdr );
 
     msi_free(dest);
@@ -809,7 +1064,7 @@ static UINT ITERATE_RemoveDuplicateFiles( MSIRECORD *row, LPVOID param )
     MSIFILE *file;
 
     component = MSI_RecordGetString( row, 2 );
-    comp = get_loaded_component( package, component );
+    comp = msi_get_loaded_component( package, component );
     if (!comp)
         return ERROR_SUCCESS;
 
@@ -834,7 +1089,7 @@ static UINT ITERATE_RemoveDuplicateFiles( MSIRECORD *row, LPVOID param )
         return ERROR_FUNCTION_FAILED;
     }
 
-    file = get_loaded_file( package, file_key );
+    file = msi_get_loaded_file( package, file_key );
     if (!file)
     {
         ERR("Original file unknown %s\n", debugstr_w(file_key));
@@ -858,7 +1113,7 @@ static UINT ITERATE_RemoveDuplicateFiles( MSIRECORD *row, LPVOID param )
     uirow = MSI_CreateRecord( 9 );
     MSI_RecordSetStringW( uirow, 1, MSI_RecordGetString( row, 1 ) );
     MSI_RecordSetStringW( uirow, 9, MSI_RecordGetString( row, 5 ) );
-    ui_actiondata( package, szRemoveDuplicateFiles, uirow );
+    msi_ui_actiondata( package, szRemoveDuplicateFiles, uirow );
     msiobj_release( &uirow->hdr );
 
     msi_free(dest);
@@ -887,25 +1142,25 @@ static BOOL verify_comp_for_removal(MSICOMPONENT *comp, UINT install_mode)
 {
     INSTALLSTATE request = comp->ActionRequest;
 
-    if (request == INSTALLSTATE_UNKNOWN)
-        return FALSE;
+    /* special case */
+    if (request != INSTALLSTATE_SOURCE &&
+        comp->Attributes & msidbComponentAttributesSourceOnly &&
+        (install_mode == msidbRemoveFileInstallModeOnRemove ||
+         install_mode == msidbRemoveFileInstallModeOnBoth)) return TRUE;
 
-    if (install_mode == msidbRemoveFileInstallModeOnInstall &&
-        (request == INSTALLSTATE_LOCAL || request == INSTALLSTATE_SOURCE))
-        return TRUE;
-
-    if (request == INSTALLSTATE_ABSENT)
+    switch (request)
     {
-        if (!comp->ComponentId)
-            return FALSE;
-
-        if (install_mode == msidbRemoveFileInstallModeOnRemove)
-            return TRUE;
+    case INSTALLSTATE_LOCAL:
+    case INSTALLSTATE_SOURCE:
+        if (install_mode == msidbRemoveFileInstallModeOnInstall ||
+            install_mode == msidbRemoveFileInstallModeOnBoth) return TRUE;
+        break;
+    case INSTALLSTATE_ABSENT:
+        if (install_mode == msidbRemoveFileInstallModeOnRemove ||
+            install_mode == msidbRemoveFileInstallModeOnBoth) return TRUE;
+        break;
+    default: break;
     }
-
-    if (install_mode == msidbRemoveFileInstallModeOnBoth)
-        return TRUE;
-
     return FALSE;
 }
 
@@ -914,18 +1169,17 @@ static UINT ITERATE_RemoveFiles(MSIRECORD *row, LPVOID param)
     MSIPACKAGE *package = param;
     MSICOMPONENT *comp;
     MSIRECORD *uirow;
-    LPCWSTR component, filename, dirprop;
+    LPCWSTR component, dirprop;
     UINT install_mode;
-    LPWSTR dir = NULL, path = NULL;
+    LPWSTR dir = NULL, path = NULL, filename = NULL;
     DWORD size;
     UINT ret = ERROR_SUCCESS;
 
     component = MSI_RecordGetString(row, 2);
-    filename = MSI_RecordGetString(row, 3);
     dirprop = MSI_RecordGetString(row, 4);
     install_mode = MSI_RecordGetInteger(row, 5);
 
-    comp = get_loaded_component(package, component);
+    comp = msi_get_loaded_component(package, component);
     if (!comp->Enabled)
     {
         TRACE("component is disabled\n");
@@ -934,7 +1188,7 @@ static UINT ITERATE_RemoveFiles(MSIRECORD *row, LPVOID param)
 
     if (!verify_comp_for_removal(comp, install_mode))
     {
-        TRACE("Skipping removal due to missing conditions\n");
+        TRACE("Skipping removal due to install mode\n");
         comp->Action = comp->Installed;
         return ERROR_SUCCESS;
     }
@@ -949,7 +1203,12 @@ static UINT ITERATE_RemoveFiles(MSIRECORD *row, LPVOID param)
     if (!dir)
         return ERROR_OUTOFMEMORY;
 
-    size = (filename != NULL) ? lstrlenW(filename) : 0;
+    size = 0;
+    if ((filename = strdupW( MSI_RecordGetString(row, 3) )))
+    {
+        msi_reduce_to_long_filename( filename );
+        size = lstrlenW( filename );
+    }
     size += lstrlenW(dir) + 2;
     path = msi_alloc(size * sizeof(WCHAR));
     if (!path)
@@ -977,12 +1236,40 @@ done:
     uirow = MSI_CreateRecord( 9 );
     MSI_RecordSetStringW( uirow, 1, MSI_RecordGetString(row, 1) );
     MSI_RecordSetStringW( uirow, 9, dir );
-    ui_actiondata( package, szRemoveFiles, uirow );
+    msi_ui_actiondata( package, szRemoveFiles, uirow );
     msiobj_release( &uirow->hdr );
 
+    msi_free(filename);
     msi_free(path);
     msi_free(dir);
     return ret;
+}
+
+static BOOL has_persistent_dir( MSIPACKAGE *package, MSICOMPONENT *comp )
+{
+    MSIQUERY *view;
+    UINT r = ERROR_FUNCTION_FAILED;
+
+    static const WCHAR query[] = {
+        'S','E','L','E','C','T',' ','*',' ','F','R','O','M',' ',
+        '`','C','r','e','a','t','e','F','o','l','d','e','r','`',' ','W','H','E','R','E',' ',
+        '`','C','o','m','p','o','n','e','n','t','_','`',' ','=','\'','%','s','\'',' ','A','N','D',' ',
+        '`','D','i','r','e','c','t','o','r','y','_','`',' ','=','\'','%','s','\'',0};
+
+    if (!MSI_OpenQuery( package->db, &view, query, comp->Component, comp->Directory ))
+    {
+        if (!MSI_ViewExecute( view, NULL ))
+        {
+            MSIRECORD *rec;
+            if (!(r = MSI_ViewFetch( view, &rec )))
+            {
+                TRACE("directory %s is persistent\n", debugstr_w(comp->Directory));
+                msiobj_release( &rec->hdr );
+            }
+        }
+        msiobj_release( &view->hdr );
+    }
+    return (r == ERROR_SUCCESS);
 }
 
 UINT ACTION_RemoveFiles( MSIPACKAGE *package )
@@ -994,9 +1281,6 @@ UINT ACTION_RemoveFiles( MSIPACKAGE *package )
     static const WCHAR query[] = {
         'S','E','L','E','C','T',' ','*',' ','F','R','O','M',' ',
         '`','R','e','m','o','v','e','F','i','l','e','`',0};
-    static const WCHAR folder_query[] = {
-        'S','E','L','E','C','T',' ','*',' ','F','R','O','M',' ',
-        '`','C','r','e','a','t','e','F','o','l','d','e','r','`',0};
 
     r = MSI_DatabaseOpenViewW(package->db, query, &view);
     if (r == ERROR_SUCCESS)
@@ -1004,10 +1288,6 @@ UINT ACTION_RemoveFiles( MSIPACKAGE *package )
         MSI_IterateRecords(view, NULL, ITERATE_RemoveFiles, package);
         msiobj_release(&view->hdr);
     }
-
-    r = MSI_DatabaseOpenViewW(package->db, folder_query, &view);
-    if (r == ERROR_SUCCESS)
-        msiobj_release(&view->hdr);
 
     LIST_FOR_EACH_ENTRY( file, &package->files, MSIFILE, entry )
     {
@@ -1047,25 +1327,29 @@ UINT ACTION_RemoveFiles( MSIPACKAGE *package )
         }
 
         TRACE("removing %s\n", debugstr_w(file->File) );
+
+        SetFileAttributesW( file->TargetPath, FILE_ATTRIBUTE_NORMAL );
         if (!DeleteFileW( file->TargetPath ))
         {
-            WARN("failed to delete %s\n",  debugstr_w(file->TargetPath));
+            WARN("failed to delete %s (%u)\n",  debugstr_w(file->TargetPath), GetLastError());
         }
-        /* FIXME: check persistence for each directory */
-        else if (r && (dir = strdupW( file->TargetPath )))
+        else if (!has_persistent_dir( package, file->Component ))
         {
-            if ((p = strrchrW( dir, '\\' ))) *p = 0;
-            RemoveDirectoryW( dir );
-            msi_free( dir );
+            if ((dir = strdupW( file->TargetPath )))
+            {
+                if ((p = strrchrW( dir, '\\' ))) *p = 0;
+                RemoveDirectoryW( dir );
+                msi_free( dir );
+            }
         }
         file->state = msifs_missing;
 
         uirow = MSI_CreateRecord( 9 );
         MSI_RecordSetStringW( uirow, 1, file->FileName );
         MSI_RecordSetStringW( uirow, 9, file->Component->Directory );
-        ui_actiondata( package, szRemoveFiles, uirow );
+        msi_ui_actiondata( package, szRemoveFiles, uirow );
         msiobj_release( &uirow->hdr );
-        /* FIXME: call ui_progress here? */
+        /* FIXME: call msi_ui_progress here? */
     }
 
     return ERROR_SUCCESS;

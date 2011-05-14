@@ -50,6 +50,7 @@ static void test_CreateNamedPipe(int pipemode)
     DWORD readden;
     DWORD avail;
     DWORD lpmode;
+    BOOL ret;
 
     if (pipemode == PIPE_TYPE_BYTE)
         trace("test_CreateNamedPipe starting in byte mode\n");
@@ -86,12 +87,14 @@ static void test_CreateNamedPipe(int pipemode)
         /* lpSecurityAttrib */ NULL);
     ok(hnp != INVALID_HANDLE_VALUE, "CreateNamedPipe failed\n");
 
-    ok(WaitNamedPipeA(PIPENAME, 2000), "WaitNamedPipe failed (%d)\n", GetLastError());
+    ret = WaitNamedPipeA(PIPENAME, 2000);
+    ok(ret, "WaitNamedPipe failed (%d)\n", GetLastError());
 
     hFile = CreateFileA(PIPENAME, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, 0);
     ok(hFile != INVALID_HANDLE_VALUE, "CreateFile failed (%d)\n", GetLastError());
 
     ok(!WaitNamedPipeA(PIPENAME, 1000), "WaitNamedPipe succeeded\n");
+
     ok(GetLastError() == ERROR_SEM_TIMEOUT, "wrong error %u\n", GetLastError());
 
     /* don't try to do i/o if one side couldn't be opened, as it hangs */
@@ -642,6 +645,7 @@ static DWORD CALLBACK serverThreadMain4(LPVOID arg)
 {
     int i;
     HANDLE hcompletion;
+    BOOL ret;
 
     trace("serverThreadMain4\n");
     /* Set up a simple echo server */
@@ -738,8 +742,10 @@ static DWORD CALLBACK serverThreadMain4(LPVOID arg)
         ok(success, "DisconnectNamedPipe failed, err %u\n", GetLastError());
     }
 
-    ok(CloseHandle(hnp), "CloseHandle named pipe failed, err=%i\n", GetLastError());
-    ok(CloseHandle(hcompletion), "CloseHandle completion failed, err=%i\n", GetLastError());
+    ret = CloseHandle(hnp);
+    ok(ret, "CloseHandle named pipe failed, err=%i\n", GetLastError());
+    ret = CloseHandle(hcompletion);
+    ok(ret, "CloseHandle completion failed, err=%i\n", GetLastError());
 
     return 0;
 }
@@ -1443,7 +1449,7 @@ static void test_overlapped(void)
 {
     DWORD tid, num;
     HANDLE thread, pipe;
-    int ret;
+    BOOL ret;
     struct overlapped_server_args args;
 
     args.pipe_created = CreateEventA(0, 1, 0, 0);
@@ -1457,7 +1463,7 @@ static void test_overlapped(void)
     Sleep(1);
 
     ret = WriteFile(pipe, "x", 1, &num, NULL);
-    ok(ret == 1, "ret %d\n", ret);
+    ok(ret, "WriteFile failed with error %d\n", GetLastError());
 
     WaitForSingleObject(thread, INFINITE);
     CloseHandle(pipe);

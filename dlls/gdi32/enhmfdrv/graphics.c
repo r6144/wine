@@ -58,7 +58,6 @@ EMFDRV_LineTo( PHYSDEV dev, INT x, INT y )
     POINT pt;
     EMRLINETO emr;
     RECTL bounds;
-    EMFDRV_PDEVICE *physDev = (EMFDRV_PDEVICE *)dev;
 
     emr.emr.iType = EMR_LINETO;
     emr.emr.nSize = sizeof(emr);
@@ -68,7 +67,7 @@ EMFDRV_LineTo( PHYSDEV dev, INT x, INT y )
     if(!EMFDRV_WriteRecord( dev, &emr.emr ))
     	return FALSE;
 
-    GetCurrentPositionEx(physDev->hdc, &pt);
+    GetCurrentPositionEx( dev->hdc, &pt );
 
     bounds.left   = min(x, pt.x);
     bounds.top    = min(y, pt.y);
@@ -93,14 +92,13 @@ EMFDRV_ArcChordPie( PHYSDEV dev, INT left, INT top, INT right, INT bottom,
     double xinterStart, yinterStart, xinterEnd, yinterEnd;
     EMRARC emr;
     RECTL bounds;
-    EMFDRV_PDEVICE *physDev = (EMFDRV_PDEVICE *)dev;
 
     if(left == right || top == bottom) return FALSE;
 
     if(left > right) {temp = left; left = right; right = temp;}
     if(top > bottom) {temp = top; top = bottom; bottom = temp;}
 
-    if(GetGraphicsMode(physDev->hdc) == GM_COMPATIBLE) {
+    if(GetGraphicsMode(dev->hdc) == GM_COMPATIBLE) {
         right--;
 	bottom--;
     }
@@ -227,7 +225,6 @@ EMFDRV_Ellipse( PHYSDEV dev, INT left, INT top, INT right, INT bottom )
 {
     EMRELLIPSE emr;
     INT temp;
-    EMFDRV_PDEVICE *physDev = (EMFDRV_PDEVICE *)dev;
 
     TRACE("%d,%d - %d,%d\n", left, top, right, bottom);
 
@@ -236,7 +233,7 @@ EMFDRV_Ellipse( PHYSDEV dev, INT left, INT top, INT right, INT bottom )
     if(left > right) {temp = left; left = right; right = temp;}
     if(top > bottom) {temp = top; top = bottom; bottom = temp;}
 
-    if(GetGraphicsMode(physDev->hdc) == GM_COMPATIBLE) {
+    if(GetGraphicsMode( dev->hdc ) == GM_COMPATIBLE) {
         right--;
 	bottom--;
     }
@@ -260,7 +257,6 @@ EMFDRV_Rectangle(PHYSDEV dev, INT left, INT top, INT right, INT bottom)
 {
     EMRRECTANGLE emr;
     INT temp;
-    EMFDRV_PDEVICE *physDev = (EMFDRV_PDEVICE *)dev;
 
     TRACE("%d,%d - %d,%d\n", left, top, right, bottom);
 
@@ -269,7 +265,7 @@ EMFDRV_Rectangle(PHYSDEV dev, INT left, INT top, INT right, INT bottom)
     if(left > right) {temp = left; left = right; right = temp;}
     if(top > bottom) {temp = top; top = bottom; bottom = temp;}
 
-    if(GetGraphicsMode(physDev->hdc) == GM_COMPATIBLE) {
+    if(GetGraphicsMode( dev->hdc ) == GM_COMPATIBLE) {
         right--;
 	bottom--;
     }
@@ -294,14 +290,13 @@ EMFDRV_RoundRect( PHYSDEV dev, INT left, INT top, INT right,
 {
     EMRROUNDRECT emr;
     INT temp;
-    EMFDRV_PDEVICE *physDev = (EMFDRV_PDEVICE *)dev;
 
     if(left == right || top == bottom) return FALSE;
 
     if(left > right) {temp = left; left = right; right = temp;}
     if(top > bottom) {temp = top; top = bottom; bottom = temp;}
 
-    if(GetGraphicsMode(physDev->hdc) == GM_COMPATIBLE) {
+    if(GetGraphicsMode( dev->hdc ) == GM_COMPATIBLE) {
         right--;
 	bottom--;
     }
@@ -678,43 +673,6 @@ EMFDRV_InvertRgn( PHYSDEV dev, HRGN hrgn )
 }
 
 /**********************************************************************
- *          EMFDRV_SetBkColor
- */
-COLORREF CDECL
-EMFDRV_SetBkColor( PHYSDEV dev, COLORREF color )
-{
-    EMRSETBKCOLOR emr;
-    EMFDRV_PDEVICE *physDev = (EMFDRV_PDEVICE *)dev;
-
-    if (physDev->restoring) return color;  /* don't output records during RestoreDC */
-
-    emr.emr.iType = EMR_SETBKCOLOR;
-    emr.emr.nSize = sizeof(emr);
-    emr.crColor = color;
-
-    return EMFDRV_WriteRecord( dev, &emr.emr ) ? color : CLR_INVALID;
-}
-
-
-/**********************************************************************
- *          EMFDRV_SetTextColor
- */
-COLORREF CDECL
-EMFDRV_SetTextColor( PHYSDEV dev, COLORREF color )
-{
-    EMRSETTEXTCOLOR emr;
-    EMFDRV_PDEVICE *physDev = (EMFDRV_PDEVICE *)dev;
-
-    if (physDev->restoring) return color;  /* don't output records during RestoreDC */
-
-    emr.emr.iType = EMR_SETTEXTCOLOR;
-    emr.emr.nSize = sizeof(emr);
-    emr.crColor = color;
-
-    return EMFDRV_WriteRecord( dev, &emr.emr ) ? color : CLR_INVALID;
-}
-
-/**********************************************************************
  *          EMFDRV_ExtTextOut
  */
 BOOL CDECL EMFDRV_ExtTextOut( PHYSDEV dev, INT x, INT y, UINT flags,
@@ -724,10 +682,11 @@ BOOL CDECL EMFDRV_ExtTextOut( PHYSDEV dev, INT x, INT y, UINT flags,
     EMREXTTEXTOUTW *pemr;
     DWORD nSize;
     BOOL ret;
-    EMFDRV_PDEVICE *physDev = (EMFDRV_PDEVICE*) dev;
     int textHeight = 0;
     int textWidth = 0;
-    const UINT textAlign = GetTextAlign(physDev->hdc);
+    const UINT textAlign = GetTextAlign( dev->hdc );
+    const INT graphicsMode = GetGraphicsMode( dev->hdc );
+    FLOAT exScale, eyScale;
 
     nSize = sizeof(*pemr) + ((count+1) & ~1) * sizeof(WCHAR) + count * sizeof(INT);
 
@@ -735,12 +694,32 @@ BOOL CDECL EMFDRV_ExtTextOut( PHYSDEV dev, INT x, INT y, UINT flags,
            wine_dbgstr_rect(lprect), count, nSize);
     pemr = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, nSize);
 
+    if (graphicsMode == GM_COMPATIBLE)
+    {
+        const INT horzSize = GetDeviceCaps( dev->hdc, HORZSIZE );
+        const INT horzRes  = GetDeviceCaps( dev->hdc, HORZRES );
+        const INT vertSize = GetDeviceCaps( dev->hdc, VERTSIZE );
+        const INT vertRes  = GetDeviceCaps( dev->hdc, VERTRES );
+        SIZE wndext, vportext;
+
+        GetViewportExtEx( dev->hdc, &vportext );
+        GetWindowExtEx( dev->hdc, &wndext );
+        exScale = 100.0 * ((FLOAT)horzSize  / (FLOAT)horzRes) /
+                          ((FLOAT)wndext.cx / (FLOAT)vportext.cx);
+        eyScale = 100.0 * ((FLOAT)vertSize  / (FLOAT)vertRes) /
+                          ((FLOAT)wndext.cy / (FLOAT)vportext.cy);
+    }
+    else
+    {
+        exScale = 0.0;
+        eyScale = 0.0;
+    }
+
     pemr->emr.iType = EMR_EXTTEXTOUTW;
     pemr->emr.nSize = nSize;
-
-    pemr->iGraphicsMode = GetGraphicsMode(physDev->hdc);
-    pemr->exScale = pemr->eyScale = 1.0; /* FIXME */
-
+    pemr->iGraphicsMode = graphicsMode;
+    pemr->exScale = exScale;
+    pemr->eyScale = eyScale;
     pemr->emrtext.ptlReference.x = x;
     pemr->emrtext.ptlReference.y = y;
     pemr->emrtext.nChars = count;
@@ -765,7 +744,7 @@ BOOL CDECL EMFDRV_ExtTextOut( PHYSDEV dev, INT x, INT y, UINT flags,
         for (i = 0; i < count; i++) {
             textWidth += lpDx[i];
         }
-        if (GetTextExtentPoint32W(physDev->hdc, str, count, &strSize))
+        if (GetTextExtentPoint32W( dev->hdc, str, count, &strSize ))
             textHeight = strSize.cy;
     }
     else {
@@ -773,7 +752,7 @@ BOOL CDECL EMFDRV_ExtTextOut( PHYSDEV dev, INT x, INT y, UINT flags,
         INT *dx = (INT *)((char*)pemr + pemr->emrtext.offDx);
         SIZE charSize;
         for (i = 0; i < count; i++) {
-            if (GetTextExtentPoint32W(physDev->hdc, str + i, 1, &charSize)) {
+            if (GetTextExtentPoint32W( dev->hdc, str + i, 1, &charSize )) {
                 dx[i] = charSize.cx;
                 textWidth += charSize.cx;
                 textHeight = max(textHeight, charSize.cy);
@@ -808,7 +787,7 @@ BOOL CDECL EMFDRV_ExtTextOut( PHYSDEV dev, INT x, INT y, UINT flags,
     switch (textAlign & (TA_TOP | TA_BOTTOM | TA_BASELINE)) {
     case TA_BASELINE: {
         TEXTMETRICW tm;
-        if (!GetTextMetricsW(physDev->hdc, &tm))
+        if (!GetTextMetricsW( dev->hdc, &tm ))
             tm.tmDescent = 0;
         /* Play safe here... it's better to have a bounding box */
         /* that is too big than too small. */
@@ -832,21 +811,4 @@ no_bounds:
     ret = EMFDRV_WriteRecord( dev, &pemr->emr );
     HeapFree( GetProcessHeap(), 0, pemr );
     return ret;
-}
-
-/**********************************************************************
- *          EMFDRV_SetArcDirection
- */
-INT CDECL EMFDRV_SetArcDirection(PHYSDEV dev, INT arcDirection)
-{
-    EMRSETARCDIRECTION emr;
-
-    emr.emr.iType = EMR_SETARCDIRECTION;
-    emr.emr.nSize = sizeof(emr);
-    emr.iArcDirection = arcDirection;
-
-    EMFDRV_WriteRecord(dev, &emr.emr);
-
-    /* We don't know the old arc direction and we don't care... */ 
-    return 0;
 }

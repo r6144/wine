@@ -778,7 +778,7 @@ static void macho_finish_stabs(struct module* module, struct hash_table* ht_symt
 
             sym = symt_find_nearest(module, ste->addr);
             if (sym)
-                symt_get_info(module, &sym->symt, TI_GET_ADDRESS, &addr);
+                symt_get_address(&sym->symt, &addr);
             if (sym && ste->addr == addr)
             {
                 ULONG64 size = 0;
@@ -818,8 +818,13 @@ static void macho_finish_stabs(struct module* module, struct hash_table* ht_symt
             }
             else
             {
+                struct location loc;
+
+                loc.kind = loc_absolute;
+                loc.reg = 0;
+                loc.offset = ste->addr;
                 symt_new_global_variable(module, ste->compiland, ste->ht_elt.name,
-                    !ste->is_global, ste->addr, 0, NULL);
+                                         !ste->is_global, loc, 0, NULL);
             }
 
             ste->used = 1;
@@ -1274,25 +1279,7 @@ BOOL    macho_synchronize_module_list(struct process* pcs)
  */
 static BOOL macho_search_loader(struct process* pcs, struct macho_info* macho_info)
 {
-    BOOL                ret;
-    const char*         ptr;
-
-    TRACE("(%p/%p, %p)\n", pcs, pcs->handle, macho_info);
-
-    /* All binaries are loaded with WINELOADER (if run from tree) or by the
-     * main executable
-     */
-    if ((ptr = getenv("WINELOADER")))
-    {
-        WCHAR   tmp[MAX_PATH];
-        MultiByteToWideChar(CP_UNIXCP, 0, ptr, -1, tmp, sizeof(tmp) / sizeof(WCHAR));
-        ret = macho_search_and_load_file(pcs, tmp, 0, macho_info);
-    }
-    else
-    {
-        ret = macho_search_and_load_file(pcs, S_WineW, 0, macho_info);
-    }
-    return ret;
+    return macho_search_and_load_file(pcs, get_wine_loader_name(), 0, macho_info);
 }
 
 /******************************************************************

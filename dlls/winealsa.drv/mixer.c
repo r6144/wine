@@ -45,14 +45,15 @@
 #include "winuser.h"
 #include "winnls.h"
 #include "mmddk.h"
+#include "mmreg.h"
+#include "dsound.h"
+#include "dsdriver.h"
 #include "mmsystem.h"
 #include "alsa.h"
 #include "wine/unicode.h"
 #include "wine/debug.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(mixer);
-
-#ifdef HAVE_ALSA
 
 #define	WINE_MIXER_MANUF_ID      0xAA
 #define	WINE_MIXER_PRODUCT_ID    0x55
@@ -431,11 +432,11 @@ static void ALSA_MixerInit(void)
     info = HeapAlloc( GetProcessHeap(), 0, snd_ctl_card_info_sizeof());
     for (x = 0; x < MAX_MIXERS; ++x)
     {
-        int card, err, capcontrols, total_elems = 0;
+        int card, err, capcontrols = 0, total_elems = 0;
         char cardind[6], cardname[10];
 
         snd_ctl_t *ctl;
-        snd_mixer_elem_t *elem, *mastelem = NULL, *headelem = NULL, *captelem = NULL, *pcmelem = NULL, *micelem = NULL;
+        snd_mixer_elem_t *elem, *mastelem = NULL, *headelem = NULL, *captelem = NULL, *pcmelem = NULL, *lineelem = NULL, *micelem = NULL;
 
         memset(info, 0, snd_ctl_card_info_sizeof());
         memset(&mixdev[mixnum], 0, sizeof(*mixdev));
@@ -520,6 +521,8 @@ static void ALSA_MixerInit(void)
                         headelem = elem;
                     else if (!strcasecmp(snd_mixer_selem_get_name(elem), "PCM") && !pcmelem)
                         pcmelem = elem;
+                    else if (!strcasecmp(snd_mixer_selem_get_name(elem), "Line") && !lineelem)
+                        lineelem = elem;
                     ++(mixdev[mixnum].chans);
                 }
             }
@@ -546,6 +549,12 @@ static void ALSA_MixerInit(void)
         {
             /* Use 'PCM' as master device */
             mastelem = pcmelem;
+            capcontrols -= !!snd_mixer_selem_has_capture_switch(mastelem);
+        }
+        else if (lineelem && !mastelem)
+        {
+            /* Use 'Line' as master device */
+            mastelem = lineelem;
             capcontrols -= !!snd_mixer_selem_has_capture_switch(mastelem);
         }
         else if (!mastelem && !captelem && !micelem)
@@ -1549,15 +1558,12 @@ static DWORD MIX_GetLineControls(UINT wDevID, LPMIXERLINECONTROLSW mlc, DWORD_PT
     return MMSYSERR_NOERROR;
 }
 
-#endif /*HAVE_ALSA*/
-
 /**************************************************************************
  *                        mxdMessage (WINEALSA.3)
  */
 DWORD WINAPI ALSA_mxdMessage(UINT wDevID, UINT wMsg, DWORD_PTR dwUser,
                              DWORD_PTR dwParam1, DWORD_PTR dwParam2)
 {
-#ifdef HAVE_ALSA
     DWORD ret;
     TRACE("(%04X, %s, %08lX, %08lX, %08lX);\n", wDevID, getMessage(wMsg),
           dwUser, dwParam1, dwParam2);
@@ -1603,9 +1609,4 @@ DWORD WINAPI ALSA_mxdMessage(UINT wDevID, UINT wMsg, DWORD_PTR dwUser,
 
     TRACE("Returning %08X\n", ret);
     return ret;
-#else /*HAVE_ALSA*/
-    TRACE("(%04X, %04X, %08lX, %08lX, %08lX);\n", wDevID, wMsg, dwUser, dwParam1, dwParam2);
-
-    return MMSYSERR_NOTENABLED;
-#endif /*HAVE_ALSA*/
 }

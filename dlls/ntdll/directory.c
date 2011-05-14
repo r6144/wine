@@ -41,6 +41,12 @@
 #ifdef HAVE_SYS_STAT_H
 # include <sys/stat.h>
 #endif
+#ifdef HAVE_SYS_SYSCALL_H
+# include <sys/syscall.h>
+#endif
+#ifdef HAVE_SYS_ATTR_H
+#include <sys/attr.h>
+#endif
 #ifdef HAVE_SYS_IOCTL_H
 #include <sys/ioctl.h>
 #endif
@@ -55,6 +61,9 @@
 #endif
 #ifdef HAVE_SYS_MOUNT_H
 #include <sys/mount.h>
+#endif
+#ifdef HAVE_SYS_STATFS_H
+#include <sys/statfs.h>
 #endif
 #include <time.h>
 #ifdef HAVE_UNISTD_H
@@ -99,8 +108,7 @@ typedef struct
 # define O_DIRECTORY 0200000 /* must be directory */
 #endif
 
-#ifdef __i386__
-
+#ifdef SYS_getdents64
 typedef struct
 {
     ULONG64        d_ino;
@@ -112,11 +120,10 @@ typedef struct
 
 static inline int getdents64( int fd, char *de, unsigned int size )
 {
-    return syscall( 220 /* NR_getdents64 */, fd, de, size );
+    return syscall( SYS_getdents64, fd, de, size );
 }
 #define USE_GETDENTS
-
-#endif  /* i386 */
+#endif
 
 #endif  /* linux */
 
@@ -770,6 +777,243 @@ static char *get_device_mount_point( dev_t dev )
     if (!warned++) FIXME( "unmounting devices not supported on this platform\n" );
 #endif
     return ret;
+}
+
+
+#if defined(HAVE_GETATTRLIST) && defined(ATTR_VOL_CAPABILITIES) && \
+    defined(VOL_CAPABILITIES_FORMAT) && defined(VOL_CAP_FMT_CASE_SENSITIVE)
+
+struct get_fsid
+{
+    ULONG size;
+    dev_t dev;
+    fsid_t fsid;
+};
+
+struct fs_cache
+{
+    dev_t dev;
+    fsid_t fsid;
+    BOOLEAN case_sensitive;
+} fs_cache[64];
+
+struct vol_caps
+{
+    ULONG size;
+    vol_capabilities_attr_t caps;
+};
+
+/***********************************************************************
+ *           look_up_fs_cache
+ *
+ * Checks if the specified file system is in the cache.
+ */
+static struct fs_cache *look_up_fs_cache( dev_t dev )
+{
+    int i;
+    for (i = 0; i < sizeof(fs_cache)/sizeof(fs_cache[0]); i++)
+        if (fs_cache[i].dev == dev)
+            return fs_cache+i;
+    return NULL;
+}
+
+/***********************************************************************
+ *           add_fs_cache
+ *
+ * Adds the specified file system to the cache.
+ */
+static void add_fs_cache( dev_t dev, fsid_t fsid, BOOLEAN case_sensitive )
+{
+    int i;
+    struct fs_cache *entry = look_up_fs_cache( dev );
+    static int once = 0;
+    if (entry)
+    {
+        /* Update the cache */
+        entry->fsid = fsid;
+        entry->case_sensitive = case_sensitive;
+        return;
+    }
+
+    /* Add a new entry */
+    for (i = 0; i < sizeof(fs_cache)/sizeof(fs_cache[0]); i++)
+        if (fs_cache[i].dev == 0)
+        {
+            /* This entry is empty, use it */
+            fs_cache[i].dev = dev;
+            fs_cache[i].fsid = fsid;
+            fs_cache[i].case_sensitive = case_sensitive;
+            return;
+        }
+
+    /* Cache is out of space, warn */
+    if (!once++)
+        WARN( "FS cache is out of space, expect performance problems\n" );
+}
+
+/***********************************************************************
+ *           get_dir_case_sensitivity_attr
+ *
+ * Checks if the volume containing the specified directory is case
+ * sensitive or not. Uses getattrlist(2).
+ */
+static int get_dir_case_sensitivity_attr( const char *dir )
+{
+    char *mntpoint = NULL;
+    struct attrlist attr;
+    struct vol_caps caps;
+    struct get_fsid get_fsid;
+    struct fs_cache *entry;
+
+    /* First get the FS ID of the volume */
+    attr.bitmapcount = ATTR_BIT_MAP_COUNT;
+    attr.reserved = 0;
+    attr.commonattr = ATTR_CMN_DEVID|ATTR_CMN_FSID;
+    attr.volattr = attr.dirattr = attr.fileattr = attr.forkattr = 0;
+    get_fsid.size = 0;
+    if (getattrlist( dir, &attr, &get_fsid, sizeof(get_fsid), 0 ) != 0 ||
+        get_fsid.size != sizeof(get_fsid))
+        return -1;
+    /* Try to look it up in the cache */
+    entry = look_up_fs_cache( get_fsid.dev );
+    if (entry && !memcmp( &entry->fsid, &get_fsid.fsid, sizeof(fsid_t) ))
+        /* Cache lookup succeeded */
+        return entry->case_sensitive;
+    /* Cache is stale at this point, we have to update it */
+
+    mntpoint = get_device_mount_point( get_fsid.dev );
+    /* Now look up the case-sensitivity */
+    attr.commonattr = 0;
+    attr.volattr = ATTR_VOL_INFO|ATTR_VOL_CAPABILITIES;
+    if (getattrlist( mntpoint, &attr, &caps, sizeof(caps), 0 ) < 0)
+    {
+        RtlFreeHeap( GetProcessHeap(), 0, mntpoint );
+        add_fs_cache( get_fsid.dev, get_fsid.fsid, TRUE );
+        return TRUE;
+    }
+    RtlFreeHeap( GetProcessHeap(), 0, mntpoint );
+    if (caps.size == sizeof(caps) &&
+        (caps.caps.valid[VOL_CAPABILITIES_FORMAT] &
+         (VOL_CAP_FMT_CASE_SENSITIVE | VOL_CAP_FMT_CASE_PRESERVING)) ==
+        (VOL_CAP_FMT_CASE_SENSITIVE | VOL_CAP_FMT_CASE_PRESERVING))
+    {
+        BOOLEAN ret;
+
+        if ((caps.caps.capabilities[VOL_CAPABILITIES_FORMAT] &
+            VOL_CAP_FMT_CASE_SENSITIVE) != VOL_CAP_FMT_CASE_SENSITIVE)
+            ret = FALSE;
+        else
+            ret = TRUE;
+        /* Update the cache */
+        add_fs_cache( get_fsid.dev, get_fsid.fsid, ret );
+        return ret;
+    }
+    return FALSE;
+}
+#endif
+
+/***********************************************************************
+ *           get_dir_case_sensitivity_stat
+ *
+ * Checks if the volume containing the specified directory is case
+ * sensitive or not. Uses statfs(2) or statvfs(2).
+ */
+static BOOLEAN get_dir_case_sensitivity_stat( const char *dir )
+{
+#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__FreeBSD_kernel__)
+    struct statfs stfs;
+
+    if (statfs( dir, &stfs ) == -1) return FALSE;
+    /* Assume these file systems are always case insensitive on Mac OS.
+     * For FreeBSD, only assume CIOPFS is case insensitive (AFAIK, Mac OS
+     * is the only UNIX that supports case-insensitive lookup).
+     */
+    if (!strcmp( stfs.f_fstypename, "fusefs" ) &&
+        !strncmp( stfs.f_mntfromname, "ciopfs", 5 ))
+        return FALSE;
+#ifdef __APPLE__
+    if (!strcmp( stfs.f_fstypename, "msdos" ) ||
+        !strcmp( stfs.f_fstypename, "cd9660" ) ||
+        !strcmp( stfs.f_fstypename, "udf" ) ||
+        !strcmp( stfs.f_fstypename, "ntfs" ) ||
+        !strcmp( stfs.f_fstypename, "smbfs" ))
+        return FALSE;
+#ifdef _DARWIN_FEATURE_64_BIT_INODE
+     if (!strcmp( stfs.f_fstypename, "hfs" ) && (stfs.f_fssubtype == 0 ||
+                                                 stfs.f_fssubtype == 1 ||
+                                                 stfs.f_fssubtype == 128))
+        return FALSE;
+#else
+     /* The field says "reserved", but a quick look at the kernel source
+      * tells us that this "reserved" field is really the same as the
+      * "fssubtype" field from the inode64 structure (see munge_statfs()
+      * in <xnu-source>/bsd/vfs/vfs_syscalls.c).
+      */
+     if (!strcmp( stfs.f_fstypename, "hfs" ) && (stfs.f_reserved1 == 0 ||
+                                                 stfs.f_reserved1 == 1 ||
+                                                 stfs.f_reserved1 == 128))
+        return FALSE;
+#endif
+#endif
+    return TRUE;
+
+#elif defined(__NetBSD__)
+    struct statvfs stfs;
+
+    if (statvfs( dir, &stfs ) == -1) return FALSE;
+    /* Only assume CIOPFS is case insensitive. */
+    if (strcmp( stfs.f_fstypename, "fusefs" ) ||
+        strncmp( stfs.f_mntfromname, "ciopfs", 5 ))
+        return TRUE;
+    return FALSE;
+
+#elif defined(__linux__)
+    struct statfs stfs;
+    struct stat st;
+    char *cifile;
+
+    /* Only assume CIOPFS is case insensitive. */
+    if (statfs( dir, &stfs ) == -1) return FALSE;
+    if (stfs.f_type != 0x65735546 /* FUSE_SUPER_MAGIC */)
+        return TRUE;
+    /* Normally, we'd have to parse the mtab to find out exactly what
+     * kind of FUSE FS this is. But, someone on wine-devel suggested
+     * a shortcut. We'll stat a special file in the directory. If it's
+     * there, we'll assume it's a CIOPFS, else not.
+     * This will break if somebody puts a file named ".ciopfs" in a non-
+     * CIOPFS directory.
+     */
+    cifile = RtlAllocateHeap( GetProcessHeap(), 0, strlen( dir )+sizeof("/.ciopfs") );
+    if (!cifile) return TRUE;
+    strcpy( cifile, dir );
+    strcat( cifile, "/.ciopfs" );
+    if (stat( cifile, &st ) == 0)
+    {
+        RtlFreeHeap( GetProcessHeap(), 0, cifile );
+        return FALSE;
+    }
+    RtlFreeHeap( GetProcessHeap(), 0, cifile );
+    return TRUE;
+#else
+    return TRUE;
+#endif
+}
+
+
+/***********************************************************************
+ *           get_dir_case_sensitivity
+ *
+ * Checks if the volume containing the specified directory is case
+ * sensitive or not. Uses statfs(2) or statvfs(2).
+ */
+static BOOLEAN get_dir_case_sensitivity( const char *dir )
+{
+#if defined(HAVE_GETATTRLIST) && defined(ATTR_VOL_CAPABILITIES) && \
+    defined(VOL_CAPABILITIES_FORMAT) && defined(VOL_CAP_FMT_CASE_SENSITIVE)
+    int case_sensitive = get_dir_case_sensitivity_attr( dir );
+    if (case_sensitive != -1) return case_sensitive;
+#endif
+    return get_dir_case_sensitivity_stat( dir );
 }
 
 
@@ -1836,6 +2080,8 @@ static NTSTATUS find_file_in_dir( char *unix_name, int pos, const WCHAR *name, i
     str.MaximumLength = str.Length;
     is_name_8_dot_3 = RtlIsNameLegalDOS8Dot3( &str, NULL, &spaces ) && !spaces;
 
+    if (!is_name_8_dot_3 && !get_dir_case_sensitivity( unix_name )) goto not_found;
+
     /* now look for it through the directory */
 
 #ifdef VFAT_IOCTL_READDIR_BOTH
@@ -1929,7 +2175,6 @@ static NTSTATUS find_file_in_dir( char *unix_name, int pos, const WCHAR *name, i
         }
     }
     closedir( dir );
-    goto not_found;  /* avoid warning */
 
 not_found:
     unix_name[pos - 1] = 0;
@@ -2901,49 +3146,72 @@ static void WINAPI read_changes_user_apc( void *arg, IO_STATUS_BLOCK *io, ULONG 
 static NTSTATUS read_changes_apc( void *user, PIO_STATUS_BLOCK iosb, NTSTATUS status, void **apc )
 {
     struct read_changes_info *info = user;
-    char path[PATH_MAX];
-    NTSTATUS ret = STATUS_SUCCESS;
-    int len, action, i;
+    char data[PATH_MAX];
+    NTSTATUS ret;
+    int size;
 
     SERVER_START_REQ( read_change )
     {
         req->handle = wine_server_obj_handle( info->FileHandle );
-        wine_server_set_reply( req, path, PATH_MAX );
+        wine_server_set_reply( req, data, PATH_MAX );
         ret = wine_server_call( req );
-        action = reply->action;
-        len = wine_server_reply_size( reply );
+        size = wine_server_reply_size( reply );
     }
     SERVER_END_REQ;
 
-    if (ret == STATUS_SUCCESS && info->Buffer && 
-        (info->BufferSize > (sizeof (FILE_NOTIFY_INFORMATION) + len*sizeof(WCHAR))))
+    if (ret == STATUS_SUCCESS && info->Buffer)
     {
-        PFILE_NOTIFY_INFORMATION pfni;
+        PFILE_NOTIFY_INFORMATION pfni = info->Buffer;
+        int i, left = info->BufferSize;
+        DWORD *last_entry_offset = NULL;
+        struct filesystem_event *event = (struct filesystem_event*)data;
 
-        pfni = info->Buffer;
+        while (size && left >= sizeof(*pfni))
+        {
+            /* convert to an NT style path */
+            for (i=0; i<event->len; i++)
+                if (event->name[i] == '/')
+                    event->name[i] = '\\';
 
-        /* convert to an NT style path */
-        for (i=0; i<len; i++)
-            if (path[i] == '/')
-                path[i] = '\\';
+            pfni->Action = event->action;
+            pfni->FileNameLength = ntdll_umbstowcs( 0, event->name, event->len, pfni->FileName,
+                    (left - offsetof(FILE_NOTIFY_INFORMATION, FileName)) / sizeof(WCHAR));
+            last_entry_offset = &pfni->NextEntryOffset;
 
-        len = ntdll_umbstowcs( 0, path, len, pfni->FileName,
-                               info->BufferSize - sizeof (*pfni) );
+            if(pfni->FileNameLength == -1 || pfni->FileNameLength == -2)
+                break;
 
-        pfni->NextEntryOffset = 0;
-        pfni->Action = action;
-        pfni->FileNameLength = len * sizeof (WCHAR);
-        pfni->FileName[len] = 0;
-        len = sizeof (*pfni) - sizeof (DWORD) + pfni->FileNameLength;
+            i = offsetof(FILE_NOTIFY_INFORMATION, FileName[pfni->FileNameLength]);
+            pfni->FileNameLength *= sizeof(WCHAR);
+            pfni->NextEntryOffset = i;
+            pfni = (FILE_NOTIFY_INFORMATION*)((char*)pfni + i);
+            left -= i;
+
+            i = (offsetof(struct filesystem_event, name[event->len])
+                    + sizeof(int)-1) / sizeof(int) * sizeof(int);
+            event = (struct filesystem_event*)((char*)event + i);
+            size -= i;
+        }
+
+        if (size)
+        {
+            ret = STATUS_NOTIFY_ENUM_DIR;
+            size = 0;
+        }
+        else
+        {
+            *last_entry_offset = 0;
+            size = info->BufferSize - left;
+        }
     }
     else
     {
         ret = STATUS_NOTIFY_ENUM_DIR;
-        len = 0;
+        size = 0;
     }
 
     iosb->u.Status = ret;
-    iosb->Information = len;
+    iosb->Information = size;
     *apc = read_changes_user_apc;
     return ret;
 }

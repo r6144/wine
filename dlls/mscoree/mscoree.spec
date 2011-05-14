@@ -28,8 +28,8 @@
 @ stub CorIsLatestSvc
 @ stub CorMarkThreadInThreadPool
 @ stub CorTickleSvc
-@ stub CreateConfigStream
-@ stub CreateDebuggingInterfaceFromVersion
+@ stdcall CreateConfigStream(wstr ptr)
+@ stdcall CreateDebuggingInterfaceFromVersion(long wstr ptr)
 @ stdcall -private DllCanUnloadNow()
 @ stdcall -private DllGetClassObject(ptr ptr ptr)
 @ stdcall -private DllRegisterServer()
@@ -43,7 +43,7 @@
 @ stdcall GetCORSystemDirectory(ptr long ptr)
 @ stdcall GetCORVersion(ptr long ptr)
 @ stub GetCompileInfo
-@ stub GetFileVersion
+@ stdcall GetFileVersion(wstr ptr long ptr)
 @ stub GetHashFromAssemblyFile
 @ stub GetHashFromAssemblyFileW
 @ stub GetHashFromBlob
@@ -57,9 +57,9 @@
 @ stub GetPermissionRequests
 @ stub GetPrivateContextsPerfCounters
 @ stub GetProcessExecutableHeap
-@ stub GetRealProcAddress
+@ stdcall GetRealProcAddress(str ptr)
 @ stdcall GetRequestedRuntimeInfo(wstr wstr wstr long long ptr long ptr ptr long ptr)
-@ stub GetRequestedRuntimeVersion
+@ stdcall GetRequestedRuntimeVersion(wstr ptr long ptr)
 @ stub GetRequestedRuntimeVersionForCLSID
 @ stub GetStartupFlags
 @ stub GetTargetForVTableEntry

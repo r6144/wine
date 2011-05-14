@@ -49,34 +49,35 @@ static HRESULT WINAPI HTMLTextAreaElement_QueryInterface(IHTMLTextAreaElement *i
 {
     HTMLTextAreaElement *This = impl_from_IHTMLTextAreaElement(iface);
 
-    return IHTMLDOMNode_QueryInterface(HTMLDOMNODE(&This->element.node), riid, ppv);
+    return IHTMLDOMNode_QueryInterface(&This->element.node.IHTMLDOMNode_iface, riid, ppv);
 }
 
 static ULONG WINAPI HTMLTextAreaElement_AddRef(IHTMLTextAreaElement *iface)
 {
     HTMLTextAreaElement *This = impl_from_IHTMLTextAreaElement(iface);
 
-    return IHTMLDOMNode_AddRef(HTMLDOMNODE(&This->element.node));
+    return IHTMLDOMNode_AddRef(&This->element.node.IHTMLDOMNode_iface);
 }
 
 static ULONG WINAPI HTMLTextAreaElement_Release(IHTMLTextAreaElement *iface)
 {
     HTMLTextAreaElement *This = impl_from_IHTMLTextAreaElement(iface);
 
-    return IHTMLDOMNode_Release(HTMLDOMNODE(&This->element.node));
+    return IHTMLDOMNode_Release(&This->element.node.IHTMLDOMNode_iface);
 }
 
 static HRESULT WINAPI HTMLTextAreaElement_GetTypeInfoCount(IHTMLTextAreaElement *iface, UINT *pctinfo)
 {
     HTMLTextAreaElement *This = impl_from_IHTMLTextAreaElement(iface);
-    return IDispatchEx_GetTypeInfoCount(DISPATCHEX(&This->element.node.dispex), pctinfo);
+    return IDispatchEx_GetTypeInfoCount(&This->element.node.dispex.IDispatchEx_iface, pctinfo);
 }
 
 static HRESULT WINAPI HTMLTextAreaElement_GetTypeInfo(IHTMLTextAreaElement *iface, UINT iTInfo,
                                               LCID lcid, ITypeInfo **ppTInfo)
 {
     HTMLTextAreaElement *This = impl_from_IHTMLTextAreaElement(iface);
-    return IDispatchEx_GetTypeInfo(DISPATCHEX(&This->element.node.dispex), iTInfo, lcid, ppTInfo);
+    return IDispatchEx_GetTypeInfo(&This->element.node.dispex.IDispatchEx_iface, iTInfo, lcid,
+            ppTInfo);
 }
 
 static HRESULT WINAPI HTMLTextAreaElement_GetIDsOfNames(IHTMLTextAreaElement *iface, REFIID riid,
@@ -84,7 +85,8 @@ static HRESULT WINAPI HTMLTextAreaElement_GetIDsOfNames(IHTMLTextAreaElement *if
                                                 LCID lcid, DISPID *rgDispId)
 {
     HTMLTextAreaElement *This = impl_from_IHTMLTextAreaElement(iface);
-    return IDispatchEx_GetIDsOfNames(DISPATCHEX(&This->element.node.dispex), riid, rgszNames, cNames, lcid, rgDispId);
+    return IDispatchEx_GetIDsOfNames(&This->element.node.dispex.IDispatchEx_iface, riid, rgszNames,
+            cNames, lcid, rgDispId);
 }
 
 static HRESULT WINAPI HTMLTextAreaElement_Invoke(IHTMLTextAreaElement *iface, DISPID dispIdMember,
@@ -92,8 +94,8 @@ static HRESULT WINAPI HTMLTextAreaElement_Invoke(IHTMLTextAreaElement *iface, DI
                             VARIANT *pVarResult, EXCEPINFO *pExcepInfo, UINT *puArgErr)
 {
     HTMLTextAreaElement *This = impl_from_IHTMLTextAreaElement(iface);
-    return IDispatchEx_Invoke(DISPATCHEX(&This->element.node.dispex), dispIdMember, riid, lcid, wFlags, pDispParams,
-            pVarResult, pExcepInfo, puArgErr);
+    return IDispatchEx_Invoke(&This->element.node.dispex.IDispatchEx_iface, dispIdMember, riid,
+            lcid, wFlags, pDispParams, pVarResult, pExcepInfo, puArgErr);
 }
 
 static HRESULT WINAPI HTMLTextAreaElement_get_type(IHTMLTextAreaElement *iface, BSTR *p)
@@ -390,11 +392,14 @@ static const IHTMLTextAreaElementVtbl HTMLTextAreaElementVtbl = {
     HTMLTextAreaElement_createTextRange
 };
 
-#define HTMLTXTAREA_NODE_THIS(iface) DEFINE_THIS2(HTMLTextAreaElement, element.node, iface)
+static inline HTMLTextAreaElement *impl_from_HTMLDOMNode(HTMLDOMNode *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLTextAreaElement, element.node);
+}
 
 static HRESULT HTMLTextAreaElement_QI(HTMLDOMNode *iface, REFIID riid, void **ppv)
 {
-    HTMLTextAreaElement *This = HTMLTXTAREA_NODE_THIS(iface);
+    HTMLTextAreaElement *This = impl_from_HTMLDOMNode(iface);
 
     *ppv = NULL;
 
@@ -419,7 +424,7 @@ static HRESULT HTMLTextAreaElement_QI(HTMLDOMNode *iface, REFIID riid, void **pp
 
 static void HTMLTextAreaElement_destructor(HTMLDOMNode *iface)
 {
-    HTMLTextAreaElement *This = HTMLTXTAREA_NODE_THIS(iface);
+    HTMLTextAreaElement *This = impl_from_HTMLDOMNode(iface);
 
     nsIDOMHTMLTextAreaElement_Release(This->nstextarea);
 
@@ -428,17 +433,15 @@ static void HTMLTextAreaElement_destructor(HTMLDOMNode *iface)
 
 static HRESULT HTMLTextAreaElementImpl_put_disabled(HTMLDOMNode *iface, VARIANT_BOOL v)
 {
-    HTMLTextAreaElement *This = HTMLTXTAREA_NODE_THIS(iface);
+    HTMLTextAreaElement *This = impl_from_HTMLDOMNode(iface);
     return IHTMLTextAreaElement_put_disabled(&This->IHTMLTextAreaElement_iface, v);
 }
 
 static HRESULT HTMLTextAreaElementImpl_get_disabled(HTMLDOMNode *iface, VARIANT_BOOL *p)
 {
-    HTMLTextAreaElement *This = HTMLTXTAREA_NODE_THIS(iface);
+    HTMLTextAreaElement *This = impl_from_HTMLDOMNode(iface);
     return IHTMLTextAreaElement_get_disabled(&This->IHTMLTextAreaElement_iface, p);
 }
-
-#undef HTMLTXTAREA_NODE_THIS
 
 static const NodeImplVtbl HTMLTextAreaElementImplVtbl = {
     HTMLTextAreaElement_QI,

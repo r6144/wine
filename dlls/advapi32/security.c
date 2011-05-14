@@ -446,64 +446,20 @@ BOOL ADVAPI_IsLocalComputer(LPCWSTR ServerName)
 
 /************************************************************
  *                ADVAPI_GetComputerSid
- *
- * Reads the computer SID from the registry.
  */
 BOOL ADVAPI_GetComputerSid(PSID sid)
 {
-    HKEY key;
-    LONG ret;
-    BOOL retval = FALSE;
-    static const WCHAR Account[] = { 'S','E','C','U','R','I','T','Y','\\','S','A','M','\\','D','o','m','a','i','n','s','\\','A','c','c','o','u','n','t',0 };
-    static const WCHAR V[] = { 'V',0 };
-
-    if ((ret = RegOpenKeyExW(HKEY_LOCAL_MACHINE, Account, 0,
-        KEY_READ, &key)) == ERROR_SUCCESS)
+    static const struct /* same fields as struct SID */
     {
-        DWORD size = 0;
-        ret = RegQueryValueExW(key, V, NULL, NULL, NULL, &size);
-        if (ret == ERROR_MORE_DATA || ret == ERROR_SUCCESS)
-        {
-            BYTE * data = HeapAlloc(GetProcessHeap(), 0, size);
-            if (data)
-            {
-                if ((ret = RegQueryValueExW(key, V, NULL, NULL,
-                     data, &size)) == ERROR_SUCCESS)
-                {
-                    /* the SID is in the last 24 bytes of the binary data */
-                    CopyMemory(sid, &data[size-24], 24);
-                    retval = TRUE;
-                }
-                HeapFree(GetProcessHeap(), 0, data);
-            }
-        }
-        RegCloseKey(key);
-    }
+        BYTE Revision;
+        BYTE SubAuthorityCount;
+        SID_IDENTIFIER_AUTHORITY IdentifierAuthority;
+        DWORD SubAuthority[4];
+    } computer_sid =
+    { SID_REVISION, 4, { SECURITY_NT_AUTHORITY }, { SECURITY_NT_NON_UNIQUE, 0, 0, 0 } };
 
-    if(retval == TRUE) return retval;
-
-    /* create a new random SID */
-    if (RegCreateKeyExW(HKEY_LOCAL_MACHINE, Account,
-        0, NULL, 0, KEY_ALL_ACCESS, NULL, &key, NULL) == ERROR_SUCCESS)
-    {
-        PSID new_sid;
-        SID_IDENTIFIER_AUTHORITY identifierAuthority = {SECURITY_NT_AUTHORITY};
-        DWORD id[3];
-
-        if (RtlGenRandom(id, sizeof(id)))
-        {
-            if (AllocateAndInitializeSid(&identifierAuthority, 4, SECURITY_NT_NON_UNIQUE, id[0], id[1], id[2], 0, 0, 0, 0, &new_sid))
-            {
-                if (RegSetValueExW(key, V, 0, REG_BINARY, new_sid, GetLengthSid(new_sid)) == ERROR_SUCCESS)
-                    retval = CopySid(GetLengthSid(new_sid), sid, new_sid);
-
-                FreeSid(new_sid);
-            }
-        }
-        RegCloseKey(key);
-    }
-
-    return retval;
+    memcpy( sid, &computer_sid, sizeof(computer_sid) );
+    return TRUE;
 }
 
 /*	##############################
@@ -3515,16 +3471,170 @@ BOOL WINAPI SetAclInformation( PACL pAcl, LPVOID pAclInformation,
     return TRUE;
 }
 
+static DWORD trustee_name_A_to_W(TRUSTEE_FORM form, char *trustee_nameA, WCHAR **ptrustee_nameW)
+{
+    DWORD len;
+
+    switch (form)
+    {
+    case TRUSTEE_IS_NAME:
+    {
+        WCHAR *wstr = NULL;
+
+        if (trustee_nameA)
+        {
+            len = MultiByteToWideChar( CP_ACP, 0, trustee_nameA, -1, NULL, 0 );
+            if (!(wstr = HeapAlloc( GetProcessHeap(), 0, len * sizeof(WCHAR) )))
+                return ERROR_NOT_ENOUGH_MEMORY;
+
+            MultiByteToWideChar( CP_ACP, 0, trustee_nameA, -1, wstr, len );
+        }
+
+        *ptrustee_nameW = wstr;
+        return ERROR_SUCCESS;
+    }
+    case TRUSTEE_IS_OBJECTS_AND_NAME:
+    {
+        OBJECTS_AND_NAME_A *objA = (OBJECTS_AND_NAME_A *)trustee_nameA;
+        OBJECTS_AND_NAME_W *objW = NULL;
+
+        if (objA)
+        {
+            if (!(objW = HeapAlloc( GetProcessHeap(), 0, sizeof(OBJECTS_AND_NAME_W) )))
+                return ERROR_NOT_ENOUGH_MEMORY;
+
+            objW->ObjectsPresent = objA->ObjectsPresent;
+            objW->ObjectType = objA->ObjectType;
+            objW->ObjectTypeName = NULL;
+            objW->InheritedObjectTypeName = NULL;
+            objW->ptstrName = NULL;
+
+            if (objA->ObjectTypeName)
+            {
+                len = MultiByteToWideChar( CP_ACP, 0, objA->ObjectTypeName, -1, NULL, 0 );
+                if (!(objW->ObjectTypeName = HeapAlloc( GetProcessHeap(), 0, len * sizeof(WCHAR) )))
+                    goto error;
+                MultiByteToWideChar( CP_ACP, 0, objA->ObjectTypeName, -1, objW->ObjectTypeName, len );
+            }
+
+            if (objA->InheritedObjectTypeName)
+            {
+                len = MultiByteToWideChar( CP_ACP, 0, objA->InheritedObjectTypeName, -1, NULL, 0 );
+                if (!(objW->InheritedObjectTypeName = HeapAlloc( GetProcessHeap(), 0, len * sizeof(WCHAR) )))
+                    goto error;
+                MultiByteToWideChar( CP_ACP, 0, objA->InheritedObjectTypeName, -1, objW->InheritedObjectTypeName, len );
+            }
+
+            if (objA->ptstrName)
+            {
+                len = MultiByteToWideChar( CP_ACP, 0, objA->ptstrName, -1, NULL, 0 );
+                if (!(objW->ptstrName = HeapAlloc( GetProcessHeap(), 0, len * sizeof(WCHAR) )))
+                    goto error;
+                MultiByteToWideChar( CP_ACP, 0, objA->ptstrName, -1, objW->ptstrName, len );
+            }
+        }
+
+        *ptrustee_nameW = (WCHAR *)objW;
+        return ERROR_SUCCESS;
+error:
+        HeapFree( GetProcessHeap(), 0, objW->InheritedObjectTypeName );
+        HeapFree( GetProcessHeap(), 0, objW->ObjectTypeName );
+        HeapFree( GetProcessHeap(), 0, objW );
+        return ERROR_NOT_ENOUGH_MEMORY;
+    }
+    /* These forms do not require conversion. */
+    case TRUSTEE_IS_SID:
+    case TRUSTEE_IS_OBJECTS_AND_SID:
+        *ptrustee_nameW = (WCHAR *)trustee_nameA;
+        return ERROR_SUCCESS;
+    default:
+        return ERROR_INVALID_PARAMETER;
+    }
+}
+
+static void free_trustee_name(TRUSTEE_FORM form, WCHAR *trustee_nameW)
+{
+    switch (form)
+    {
+    case TRUSTEE_IS_NAME:
+        HeapFree( GetProcessHeap(), 0, trustee_nameW );
+        break;
+    case TRUSTEE_IS_OBJECTS_AND_NAME:
+    {
+        OBJECTS_AND_NAME_W *objW = (OBJECTS_AND_NAME_W *)trustee_nameW;
+
+        if (objW)
+        {
+            HeapFree( GetProcessHeap(), 0, objW->ptstrName );
+            HeapFree( GetProcessHeap(), 0, objW->InheritedObjectTypeName );
+            HeapFree( GetProcessHeap(), 0, objW->ObjectTypeName );
+            HeapFree( GetProcessHeap(), 0, objW );
+        }
+
+        break;
+    }
+    /* Other forms did not require allocation, so no freeing is necessary. */
+    default:
+        break;
+    }
+}
+
 /******************************************************************************
  * SetEntriesInAclA [ADVAPI32.@]
  */
 DWORD WINAPI SetEntriesInAclA( ULONG count, PEXPLICIT_ACCESSA pEntries,
                                PACL OldAcl, PACL* NewAcl )
 {
-    FIXME("%d %p %p %p\n",count,pEntries,OldAcl,NewAcl);
+    DWORD err = ERROR_SUCCESS;
+    EXPLICIT_ACCESSW *pEntriesW;
+    int alloc_index, free_index;
+
+    TRACE("%d %p %p %p\n", count, pEntries, OldAcl, NewAcl);
+
     if (NewAcl)
-         *NewAcl = NULL;
-    return ERROR_SUCCESS;
+        *NewAcl = NULL;
+
+    if (!count && !OldAcl)
+        return ERROR_SUCCESS;
+
+    pEntriesW = HeapAlloc( GetProcessHeap(), 0, count * sizeof(EXPLICIT_ACCESSW) );
+    if (!pEntriesW)
+        return ERROR_NOT_ENOUGH_MEMORY;
+
+    for (alloc_index = 0; alloc_index < count; ++alloc_index)
+    {
+        pEntriesW[alloc_index].grfAccessPermissions = pEntries[alloc_index].grfAccessPermissions;
+        pEntriesW[alloc_index].grfAccessMode = pEntries[alloc_index].grfAccessMode;
+        pEntriesW[alloc_index].grfInheritance = pEntries[alloc_index].grfInheritance;
+        pEntriesW[alloc_index].Trustee.pMultipleTrustee = NULL; /* currently not supported */
+        pEntriesW[alloc_index].Trustee.MultipleTrusteeOperation = pEntries[alloc_index].Trustee.MultipleTrusteeOperation;
+        pEntriesW[alloc_index].Trustee.TrusteeForm = pEntries[alloc_index].Trustee.TrusteeForm;
+        pEntriesW[alloc_index].Trustee.TrusteeType = pEntries[alloc_index].Trustee.TrusteeType;
+
+        err = trustee_name_A_to_W( pEntries[alloc_index].Trustee.TrusteeForm,
+                                   pEntries[alloc_index].Trustee.ptstrName,
+                                   &pEntriesW[alloc_index].Trustee.ptstrName );
+        if (err != ERROR_SUCCESS)
+        {
+            if (err == ERROR_INVALID_PARAMETER)
+                WARN("bad trustee form %d for trustee %d\n",
+                     pEntries[alloc_index].Trustee.TrusteeForm, alloc_index);
+
+            goto cleanup;
+        }
+    }
+
+    err = SetEntriesInAclW( count, pEntriesW, OldAcl, NewAcl );
+
+cleanup:
+    /* Free any previously allocated trustee name buffers, taking into account
+     * a possible out-of-memory condition while building the EXPLICIT_ACCESSW
+     * list. */
+    for (free_index = 0; free_index < alloc_index; ++free_index)
+        free_trustee_name( pEntriesW[free_index].Trustee.TrusteeForm, pEntriesW[free_index].Trustee.ptstrName );
+
+    HeapFree( GetProcessHeap(), 0, pEntriesW );
+    return err;
 }
 
 /******************************************************************************
@@ -3541,7 +3651,8 @@ DWORD WINAPI SetEntriesInAclW( ULONG count, PEXPLICIT_ACCESSW pEntries,
 
     TRACE("%d %p %p %p\n", count, pEntries, OldAcl, NewAcl);
 
-    *NewAcl = NULL;
+    if (NewAcl)
+        *NewAcl = NULL;
 
     if (!count && !OldAcl)
         return ERROR_SUCCESS;
@@ -5506,5 +5617,15 @@ BOOL WINAPI SaferGetPolicyInformation(DWORD scope, SAFER_POLICY_INFO_CLASS class
                                       PVOID buffer, PDWORD required, LPVOID lpReserved)
 {
     FIXME("(%u %u %u %p %p %p) stub\n", scope, class, size, buffer, required, lpReserved);
+    return FALSE;
+}
+
+/******************************************************************************
+ * SaferSetLevelInformation   [ADVAPI32.@]
+ */
+BOOL WINAPI SaferSetLevelInformation(SAFER_LEVEL_HANDLE handle, SAFER_OBJECT_INFO_CLASS infotype,
+                                     LPVOID buffer, DWORD size)
+{
+    FIXME("(%p %u %p %u) stub\n", handle, infotype, buffer, size);
     return FALSE;
 }

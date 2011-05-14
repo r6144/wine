@@ -25,12 +25,12 @@ WINE_DEFAULT_DEBUG_CHANNEL(enhmetafile);
 
 INT CDECL EMFDRV_SaveDC( PHYSDEV dev )
 {
-    EMFDRV_PDEVICE* physDev = (EMFDRV_PDEVICE*)dev;
-    INT ret = save_dc_state( physDev->hdc );
-    EMRSAVEDC emr;
+    PHYSDEV next = GET_NEXT_PHYSDEV( dev, pSaveDC );
+    INT ret = next->funcs->pSaveDC( next );
 
     if (ret)
     {
+        EMRSAVEDC emr;
         emr.emr.iType = EMR_SAVEDC;
         emr.emr.nSize = sizeof(emr);
         EMFDRV_WriteRecord( dev, &emr.emr );
@@ -40,8 +40,9 @@ INT CDECL EMFDRV_SaveDC( PHYSDEV dev )
 
 BOOL CDECL EMFDRV_RestoreDC( PHYSDEV dev, INT level )
 {
+    PHYSDEV next = GET_NEXT_PHYSDEV( dev, pRestoreDC );
     EMFDRV_PDEVICE* physDev = (EMFDRV_PDEVICE*)dev;
-    DC *dc = get_dc_ptr( physDev->hdc );
+    DC *dc = get_dc_ptr( dev->hdc );
     EMRRESTOREDC emr;
     BOOL ret;
 
@@ -55,7 +56,7 @@ BOOL CDECL EMFDRV_RestoreDC( PHYSDEV dev, INT level )
     release_dc_ptr( dc );
 
     physDev->restoring++;
-    ret = restore_dc_state( physDev->hdc, level );
+    ret = next->funcs->pRestoreDC( next, level );
     physDev->restoring--;
 
     if (ret) EMFDRV_WriteRecord( dev, &emr.emr );
@@ -68,7 +69,7 @@ UINT CDECL EMFDRV_SetTextAlign( PHYSDEV dev, UINT align )
     emr.emr.iType = EMR_SETTEXTALIGN;
     emr.emr.nSize = sizeof(emr);
     emr.iMode = align;
-    return EMFDRV_WriteRecord( dev, &emr.emr );
+    return EMFDRV_WriteRecord( dev, &emr.emr ) ? align : GDI_ERROR;
 }
 
 BOOL CDECL EMFDRV_SetTextJustification(PHYSDEV dev, INT nBreakExtra, INT nBreakCount)
@@ -87,7 +88,34 @@ INT CDECL EMFDRV_SetBkMode( PHYSDEV dev, INT mode )
     emr.emr.iType = EMR_SETBKMODE;
     emr.emr.nSize = sizeof(emr);
     emr.iMode = mode;
-    return EMFDRV_WriteRecord( dev, &emr.emr );
+    return EMFDRV_WriteRecord( dev, &emr.emr ) ? mode : 0;
+}
+
+COLORREF CDECL EMFDRV_SetBkColor( PHYSDEV dev, COLORREF color )
+{
+    EMRSETBKCOLOR emr;
+    EMFDRV_PDEVICE *physDev = (EMFDRV_PDEVICE *)dev;
+
+    if (physDev->restoring) return color;  /* don't output records during RestoreDC */
+
+    emr.emr.iType = EMR_SETBKCOLOR;
+    emr.emr.nSize = sizeof(emr);
+    emr.crColor = color;
+    return EMFDRV_WriteRecord( dev, &emr.emr ) ? color : CLR_INVALID;
+}
+
+
+COLORREF CDECL EMFDRV_SetTextColor( PHYSDEV dev, COLORREF color )
+{
+    EMRSETTEXTCOLOR emr;
+    EMFDRV_PDEVICE *physDev = (EMFDRV_PDEVICE *)dev;
+
+    if (physDev->restoring) return color;  /* don't output records during RestoreDC */
+
+    emr.emr.iType = EMR_SETTEXTCOLOR;
+    emr.emr.nSize = sizeof(emr);
+    emr.crColor = color;
+    return EMFDRV_WriteRecord( dev, &emr.emr ) ? color : CLR_INVALID;
 }
 
 INT CDECL EMFDRV_SetROP2( PHYSDEV dev, INT rop )
@@ -96,7 +124,7 @@ INT CDECL EMFDRV_SetROP2( PHYSDEV dev, INT rop )
     emr.emr.iType = EMR_SETROP2;
     emr.emr.nSize = sizeof(emr);
     emr.iMode = rop;
-    return EMFDRV_WriteRecord( dev, &emr.emr );
+    return EMFDRV_WriteRecord( dev, &emr.emr ) ? rop : 0;
 }
 
 INT CDECL EMFDRV_SetPolyFillMode( PHYSDEV dev, INT mode )
@@ -105,7 +133,7 @@ INT CDECL EMFDRV_SetPolyFillMode( PHYSDEV dev, INT mode )
     emr.emr.iType = EMR_SETPOLYFILLMODE;
     emr.emr.nSize = sizeof(emr);
     emr.iMode = mode;
-    return EMFDRV_WriteRecord( dev, &emr.emr );
+    return EMFDRV_WriteRecord( dev, &emr.emr ) ? mode : 0;
 }
 
 INT CDECL EMFDRV_SetStretchBltMode( PHYSDEV dev, INT mode )
@@ -114,7 +142,17 @@ INT CDECL EMFDRV_SetStretchBltMode( PHYSDEV dev, INT mode )
     emr.emr.iType = EMR_SETSTRETCHBLTMODE;
     emr.emr.nSize = sizeof(emr);
     emr.iMode = mode;
-    return EMFDRV_WriteRecord( dev, &emr.emr );
+    return EMFDRV_WriteRecord( dev, &emr.emr ) ? mode : 0;
+}
+
+INT CDECL EMFDRV_SetArcDirection(PHYSDEV dev, INT arcDirection)
+{
+    EMRSETARCDIRECTION emr;
+
+    emr.emr.iType = EMR_SETARCDIRECTION;
+    emr.emr.nSize = sizeof(emr);
+    emr.iArcDirection = arcDirection;
+    return EMFDRV_WriteRecord(dev, &emr.emr) ? arcDirection : 0;
 }
 
 INT CDECL EMFDRV_ExcludeClipRect( PHYSDEV dev, INT left, INT top, INT right, INT bottom )
@@ -178,6 +216,177 @@ INT CDECL EMFDRV_ExtSelectClipRgn( PHYSDEV dev, HRGN hrgn, INT mode )
     return ret ? SIMPLEREGION : ERROR;
 }
 
+INT CDECL EMFDRV_SetMapMode( PHYSDEV dev, INT mode )
+{
+    PHYSDEV next = GET_NEXT_PHYSDEV( dev, pSetMapMode );
+    EMRSETMAPMODE emr;
+    emr.emr.iType = EMR_SETMAPMODE;
+    emr.emr.nSize = sizeof(emr);
+    emr.iMode = mode;
+
+    if (!EMFDRV_WriteRecord( dev, &emr.emr )) return 0;
+    return next->funcs->pSetMapMode( next, mode );
+}
+
+BOOL CDECL EMFDRV_SetViewportExtEx( PHYSDEV dev, INT cx, INT cy, SIZE *size )
+{
+    PHYSDEV next = GET_NEXT_PHYSDEV( dev, pSetViewportExtEx );
+    EMRSETVIEWPORTEXTEX emr;
+
+    emr.emr.iType = EMR_SETVIEWPORTEXTEX;
+    emr.emr.nSize = sizeof(emr);
+    emr.szlExtent.cx = cx;
+    emr.szlExtent.cy = cy;
+
+    if (!EMFDRV_WriteRecord( dev, &emr.emr )) return FALSE;
+    return next->funcs->pSetViewportExtEx( next, cx, cy, size );
+}
+
+BOOL CDECL EMFDRV_SetWindowExtEx( PHYSDEV dev, INT cx, INT cy, SIZE *size )
+{
+    PHYSDEV next = GET_NEXT_PHYSDEV( dev, pSetWindowExtEx );
+    EMRSETWINDOWEXTEX emr;
+
+    emr.emr.iType = EMR_SETWINDOWEXTEX;
+    emr.emr.nSize = sizeof(emr);
+    emr.szlExtent.cx = cx;
+    emr.szlExtent.cy = cy;
+
+    if (!EMFDRV_WriteRecord( dev, &emr.emr )) return 0;
+    return next->funcs->pSetWindowExtEx( next, cx, cy, size );
+}
+
+BOOL CDECL EMFDRV_SetViewportOrgEx( PHYSDEV dev, INT x, INT y, POINT *pt )
+{
+    PHYSDEV next = GET_NEXT_PHYSDEV( dev, pSetViewportOrgEx );
+    EMRSETVIEWPORTORGEX emr;
+
+    emr.emr.iType = EMR_SETVIEWPORTORGEX;
+    emr.emr.nSize = sizeof(emr);
+    emr.ptlOrigin.x = x;
+    emr.ptlOrigin.y = y;
+
+    if (!EMFDRV_WriteRecord( dev, &emr.emr )) return 0;
+    return next->funcs->pSetViewportOrgEx( next, x, y, pt );
+}
+
+BOOL CDECL EMFDRV_SetWindowOrgEx( PHYSDEV dev, INT x, INT y, POINT *pt )
+{
+    PHYSDEV next = GET_NEXT_PHYSDEV( dev, pSetWindowOrgEx );
+    EMRSETWINDOWORGEX emr;
+
+    emr.emr.iType = EMR_SETWINDOWORGEX;
+    emr.emr.nSize = sizeof(emr);
+    emr.ptlOrigin.x = x;
+    emr.ptlOrigin.y = y;
+
+    if (!EMFDRV_WriteRecord( dev, &emr.emr )) return 0;
+    return next->funcs->pSetWindowOrgEx( next, x, y, pt );
+}
+
+BOOL CDECL EMFDRV_ScaleViewportExtEx( PHYSDEV dev, INT xNum, INT xDenom, INT yNum, INT yDenom, SIZE *size )
+{
+    PHYSDEV next = GET_NEXT_PHYSDEV( dev, pScaleViewportExtEx );
+    EMRSCALEVIEWPORTEXTEX emr;
+
+    emr.emr.iType = EMR_SCALEVIEWPORTEXTEX;
+    emr.emr.nSize = sizeof(emr);
+    emr.xNum      = xNum;
+    emr.xDenom    = xDenom;
+    emr.yNum      = yNum;
+    emr.yDenom    = yDenom;
+
+    if (!EMFDRV_WriteRecord( dev, &emr.emr )) return 0;
+    return next->funcs->pScaleViewportExtEx( next, xNum, xDenom, yNum, yDenom, size );
+}
+
+BOOL CDECL EMFDRV_ScaleWindowExtEx( PHYSDEV dev, INT xNum, INT xDenom, INT yNum, INT yDenom, SIZE *size )
+{
+    PHYSDEV next = GET_NEXT_PHYSDEV( dev, pScaleWindowExtEx );
+    EMRSCALEWINDOWEXTEX emr;
+
+    emr.emr.iType = EMR_SCALEWINDOWEXTEX;
+    emr.emr.nSize = sizeof(emr);
+    emr.xNum      = xNum;
+    emr.xDenom    = xDenom;
+    emr.yNum      = yNum;
+    emr.yDenom    = yDenom;
+
+    if (!EMFDRV_WriteRecord( dev, &emr.emr )) return 0;
+    return next->funcs->pScaleWindowExtEx( next, xNum, xDenom, yNum, yDenom, size );
+}
+
+DWORD CDECL EMFDRV_SetLayout( PHYSDEV dev, DWORD layout )
+{
+    EMRSETLAYOUT emr;
+
+    emr.emr.iType = EMR_SETLAYOUT;
+    emr.emr.nSize = sizeof(emr);
+    emr.iMode = layout;
+    return EMFDRV_WriteRecord( dev, &emr.emr ) ? layout : GDI_ERROR;
+}
+
+BOOL CDECL EMFDRV_SetWorldTransform( PHYSDEV dev, const XFORM *xform)
+{
+    PHYSDEV next = GET_NEXT_PHYSDEV( dev, pSetWorldTransform );
+    EMRSETWORLDTRANSFORM emr;
+
+    emr.emr.iType = EMR_SETWORLDTRANSFORM;
+    emr.emr.nSize = sizeof(emr);
+    emr.xform = *xform;
+
+    if (!EMFDRV_WriteRecord( dev, &emr.emr )) return FALSE;
+    return next->funcs->pSetWorldTransform( next, xform );
+}
+
+BOOL CDECL EMFDRV_ModifyWorldTransform( PHYSDEV dev, const XFORM *xform, DWORD mode)
+{
+    PHYSDEV next = GET_NEXT_PHYSDEV( dev, pModifyWorldTransform );
+    EMRMODIFYWORLDTRANSFORM emr;
+
+    emr.emr.iType = EMR_MODIFYWORLDTRANSFORM;
+    emr.emr.nSize = sizeof(emr);
+    emr.xform = *xform;
+    emr.iMode = mode;
+
+    if (!EMFDRV_WriteRecord( dev, &emr.emr )) return FALSE;
+    return next->funcs->pModifyWorldTransform( next, xform, mode );
+}
+
+BOOL CDECL EMFDRV_OffsetViewportOrgEx( PHYSDEV dev, INT x, INT y, POINT *pt )
+{
+    PHYSDEV next = GET_NEXT_PHYSDEV( dev, pOffsetViewportOrgEx );
+    EMRSETVIEWPORTORGEX emr;
+    POINT prev;
+
+    GetViewportOrgEx( dev->hdc, &prev );
+
+    emr.emr.iType = EMR_SETVIEWPORTORGEX;
+    emr.emr.nSize = sizeof(emr);
+    emr.ptlOrigin.x = prev.x + x;
+    emr.ptlOrigin.y = prev.y + y;
+
+    if (!EMFDRV_WriteRecord( dev, &emr.emr )) return 0;
+    return next->funcs->pOffsetViewportOrgEx( next, x, y, pt );
+}
+
+BOOL CDECL EMFDRV_OffsetWindowOrgEx( PHYSDEV dev, INT x, INT y, POINT *pt )
+{
+    PHYSDEV next = GET_NEXT_PHYSDEV( dev, pOffsetWindowOrgEx );
+    EMRSETWINDOWORGEX emr;
+    POINT prev;
+
+    GetWindowOrgEx( dev->hdc, &prev );
+
+    emr.emr.iType = EMR_SETWINDOWORGEX;
+    emr.emr.nSize = sizeof(emr);
+    emr.ptlOrigin.x = prev.x + x;
+    emr.ptlOrigin.y = prev.y + y;
+
+    if (!EMFDRV_WriteRecord( dev, &emr.emr )) return 0;
+    return next->funcs->pOffsetWindowOrgEx( next, x, y, pt );
+}
+
 DWORD CDECL EMFDRV_SetMapperFlags( PHYSDEV dev, DWORD flags )
 {
     EMRSETMAPPERFLAGS emr;
@@ -186,7 +395,7 @@ DWORD CDECL EMFDRV_SetMapperFlags( PHYSDEV dev, DWORD flags )
     emr.emr.nSize = sizeof(emr);
     emr.dwFlags   = flags;
 
-    return EMFDRV_WriteRecord( dev, &emr.emr );
+    return EMFDRV_WriteRecord( dev, &emr.emr ) ? flags : GDI_ERROR;
 }
 
 BOOL CDECL EMFDRV_AbortPath( PHYSDEV dev )
