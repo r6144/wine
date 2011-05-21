@@ -207,6 +207,7 @@ UINT DIBDRV_RealizeDefaultPalette( DIBDRVPHYSDEV *physDev )
 
     if(physDev->hasDIB)
     {
+	TRACE("hasDIB:%d, physBitmap:%p\n", (int) physDev->hasDIB, physDev->physBitmap);
         /* DIB section selected in, use DIB Engine */
         ONCE(FIXME("STUB\n"));
         /* HACK - we can't get the dib color table during SelectBitmap since it hasn't

@@ -167,7 +167,9 @@ BOOL DIBDRV_CreateDC( HDC hdc, DIBDRVPHYSDEV **pdev, LPCWSTR driver, LPCWSTR dev
     
     /* initializes the physical bitmap */
     physDev->physBitmap = NULL;
-    
+#if 0 /* For debugging winedib incompatibilities */
+    DebugBreak();
+#endif
     /* clears pen and brush */
     physDev->rop2 = R2_COPYPEN;
     

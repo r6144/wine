@@ -192,9 +192,15 @@ typedef struct _DASHPATTERN
 
 } DASHPATTERN;
 
+struct gdi_physdev
+{
+    void *reserved[3];
+};
+
 /* DIB driver physical device */
 typedef struct _DIBDRVPHYSDEV
 {
+    struct gdi_physdev dev;
     /* X11 driver physical device */
     PHYSDEV X11PhysDev;
     
