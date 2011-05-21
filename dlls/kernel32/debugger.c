@@ -417,7 +417,10 @@ BOOL WINAPI DebugBreakProcess(HANDLE hProc)
  */
 BOOL WINAPI IsDebuggerPresent(void)
 {
+    return FALSE;
+#if 0
     return NtCurrentTeb()->Peb->BeingDebugged;
+#endif
 }
 
 /***********************************************************************
