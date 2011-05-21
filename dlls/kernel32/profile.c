@@ -1142,6 +1142,15 @@ INT WINAPI GetPrivateProfileStringW( LPCWSTR section, LPCWSTR entry,
     HeapFree(GetProcessHeap(), 0, defval_tmp);
 
     TRACE("returning %s, %d\n", debugstr_w(buffer), ret);
+#if 0
+    {
+	static const WCHAR rep_ent_name[] = {'E','n','a','b','l','e','R','e','p','l','a','y',0 };
+	if (!strcmpW(entry, rep_ent_name)) {
+	    FIXME("Found EnableReplay\n");
+	    Sleep(1);
+	}
+    }
+#endif
 
     return ret;
 }
