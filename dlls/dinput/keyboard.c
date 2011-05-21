@@ -23,6 +23,7 @@
 #include "config.h"
 #include "wine/port.h"
 
+#include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
 #include "windef.h"
@@ -123,6 +124,9 @@ static int KeyboardCallback( LPDIRECTINPUTDEVICE8A iface, WPARAM wparam, LPARAM 
 
     This->DInputKeyState[dik_code] = new_diks;
     TRACE(" setting %02X to %02X\n", dik_code, This->DInputKeyState[dik_code]);
+#if 0
+    fprintf(stderr, "dinput_keyboard: setting %02X to %02X\n", dik_code, This->DInputKeyState[dik_code]);
+#endif
 
     EnterCriticalSection(&This->base.crit);
     queue_event(iface, DIDFT_MAKEINSTANCE(dik_code) | DIDFT_PSHBUTTON,
