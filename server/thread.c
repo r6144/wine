@@ -1006,6 +1006,8 @@ static void copy_context( context_t *to, const context_t *from, unsigned int fla
     assert( to->cpu == from->cpu );
     fprintf(stderr, "SERVER: copy_context: from=%p, to=%p, from->flags=0x%x, flags=0x%x, from->tag=0x%x, from->ip=0x%x\n",
 	    from, to, from->flags, flags, from->fp.i386_regs.tag, from->ctl.i386_regs.eip);
+    if ((flags & ~from->flags) != 0)
+	fprintf(stderr, "WARN: incomplete context in copy_context: from->flags=0x%x, flags=0x%x\n", from->flags, flags);
     to->flags |= flags;
     if (flags & SERVER_CTX_CONTROL) to->ctl = from->ctl;
     if (flags & SERVER_CTX_INTEGER) to->integer = from->integer;
