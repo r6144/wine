@@ -1105,9 +1105,11 @@ static inline void save_context( CONTEXT *context, const SIGCONTEXT *sigcontext,
         if (!fpu) fpux_to_fpu( &context->FloatSave, fpux );
     }
     if (!fpu && !fpux) save_fpu( context );
+#if 0
     /* NOTE: We are possibly inside an asynchronous signal handler, so printing isn't always safe here */
     fprintf(stderr, "save_context: fpu=%p, fpux=%p, flags=0x%x, tag=0x%x, ip=0x%x\n",
 	    fpu, fpux, context->ContextFlags, context->FloatSave.TagWord, context->Eip);
+#endif
 }
 
 
@@ -1122,8 +1124,10 @@ static inline void restore_context( const CONTEXT *context, SIGCONTEXT *sigconte
     FLOATING_SAVE_AREA *fpu = FPU_sig(sigcontext);
     XMM_SAVE_AREA32 *fpux = FPUX_sig(sigcontext);
 
+#if 0
     fprintf(stderr, "restore_context: fpu=%p, fpux=%p, flags=0x%x, tag=0x%x, ip=0x%x\n",
 	    fpu, fpux, context->ContextFlags, context->FloatSave.TagWord, context->Eip);
+#endif
     regs->dr0 = context->Dr0;
     regs->dr1 = context->Dr1;
     regs->dr2 = context->Dr2;

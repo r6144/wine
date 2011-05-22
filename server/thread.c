@@ -1004,8 +1004,10 @@ void kill_thread( struct thread *thread, int violent_death )
 static void copy_context( context_t *to, const context_t *from, unsigned int flags )
 {
     assert( to->cpu == from->cpu );
+#if 0
     fprintf(stderr, "SERVER: copy_context: from=%p, to=%p, from->flags=0x%x, flags=0x%x, from->tag=0x%x, from->ip=0x%x\n",
 	    from, to, from->flags, flags, from->fp.i386_regs.tag, from->ctl.i386_regs.eip);
+#endif
     if ((flags & ~from->flags) != 0)
 	fprintf(stderr, "WARN: incomplete context in copy_context: from->flags=0x%x, flags=0x%x\n", from->flags, flags);
     to->flags |= flags;
@@ -1505,8 +1507,10 @@ DECL_HANDLER(get_thread_context)
 
         memset( context, 0, sizeof(context_t) );
         context->cpu = thread->process->cpu;
+#if 0
 	fprintf(stderr, "SERVER: get_thread_context: tid=0x%x, thread->context=%p, req->flags=0x%x\n",
 		thread->id, thread->context, req->flags);
+#endif
         if (thread->context) copy_context( context, thread->context, req->flags & ~flags );
         if (flags) get_thread_context( thread, context, flags );
     }
@@ -1548,7 +1552,9 @@ DECL_HANDLER(set_thread_context)
         unsigned int system_flags = get_context_system_regs(context->cpu) & context->flags;
         unsigned int client_flags = context->flags & ~system_flags;
 
+#if 0
 	fprintf(stderr, "SERVER: set_thread_context: tid=0x%x, thread->context=%p\n", thread->id, thread->context);
+#endif
         if (system_flags) set_thread_context( thread, context, system_flags );
         if (thread->context && !get_error()) copy_context( thread->context, context, client_flags );
     }
@@ -1568,9 +1574,11 @@ DECL_HANDLER(get_suspend_context)
 
     if (current->suspend_context)
     {
+#if 0
 	fprintf(stderr, "SERVER: get_suspend_context: (tid=0x%x, ctx=%p, susp_ctx=%p), flags=0x%x, tag=0x%x\n",
 		current->id, current->context, current->suspend_context,
 		current->suspend_context->flags, current->suspend_context->fp.i386_regs.tag);
+#endif
         set_reply_data_ptr( current->suspend_context, sizeof(context_t) );
         if (current->context == current->suspend_context)
         {
@@ -1603,8 +1611,10 @@ DECL_HANDLER(set_suspend_context)
         memcpy( current->suspend_context, get_req_data(), sizeof(context_t) );
         current->context = current->suspend_context;
         if (current->debug_break) break_thread( current );
+#if 0
 	fprintf(stderr, "SERVER: set_suspend_context: tid=0x%x, ctx=%p, flags=0x%x, tag=0x%x\n",
 		current->id, current->context, current->context->flags, current->context->fp.i386_regs.tag);
+#endif
     }
 }
 

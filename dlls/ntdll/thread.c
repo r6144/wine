@@ -677,8 +677,10 @@ NTSTATUS WINAPI NtSetContextThread( HANDLE handle, const CONTEXT *context )
     DWORD dummy, i;
     BOOL self = FALSE;
 
+#if 0
     fprintf(stderr, "NtSetContextThread thread=%p context=%p (0x%x, tag=0x%x, eip=0x%x)\n",
 	    handle, context, context->ContextFlags, context->FloatSave.TagWord, context->Eip);
+#endif
 #ifdef __i386__
     /* on i386 debug registers always require a server call */
     self = (handle == GetCurrentThread());
@@ -699,7 +701,9 @@ NTSTATUS WINAPI NtSetContextThread( HANDLE handle, const CONTEXT *context )
 
         context_to_server( &server_context, context );
 
+#if 0
 	fprintf(stderr, "set_thread_context (first try)\n");
+#endif
         SERVER_START_REQ( set_thread_context )
         {
             req->handle  = wine_server_obj_handle( handle );
@@ -714,7 +718,9 @@ NTSTATUS WINAPI NtSetContextThread( HANDLE handle, const CONTEXT *context )
         {
             for (i = 0; i < 100; i++)
             {
+#if 0
 		fprintf(stderr, "set_thread_context (i=%u)\n", i);
+#endif
                 SERVER_START_REQ( set_thread_context )
                 {
                     req->handle  = wine_server_obj_handle( handle );
@@ -731,7 +737,9 @@ NTSTATUS WINAPI NtSetContextThread( HANDLE handle, const CONTEXT *context )
                 }
                 else break;
             }
+#if 0
 	    fprintf(stderr, "NtResumeThread()\n");
+#endif
             NtResumeThread( handle, &dummy );
             if (ret == STATUS_PENDING) ret = STATUS_ACCESS_DENIED;
         }
@@ -788,7 +796,9 @@ NTSTATUS WINAPI NtGetContextThread( HANDLE handle, CONTEXT *context )
         unsigned int server_flags = get_server_context_flags( context->ContextFlags );
         context_t server_context;
 
+#if 0
 	fprintf(stderr, "get_thread_context (first try)\n");
+#endif
         SERVER_START_REQ( get_thread_context )
         {
             req->handle  = wine_server_obj_handle( handle );
@@ -804,7 +814,9 @@ NTSTATUS WINAPI NtGetContextThread( HANDLE handle, CONTEXT *context )
         {
             for (i = 0; i < 100; i++)
             {
+#if 0
 		fprintf(stderr, "set_thread_context (i=%u)\n", i);
+#endif
                 SERVER_START_REQ( get_thread_context )
                 {
                     req->handle  = wine_server_obj_handle( handle );
@@ -822,7 +834,9 @@ NTSTATUS WINAPI NtGetContextThread( HANDLE handle, CONTEXT *context )
                 }
                 else break;
             }
+#if 0
 	    fprintf(stderr, "NtResumeThread()\n");
+#endif
             NtResumeThread( handle, &dummy );
             if (ret == STATUS_PENDING) ret = STATUS_ACCESS_DENIED;
         }
@@ -853,8 +867,10 @@ NTSTATUS WINAPI NtGetContextThread( HANDLE handle, CONTEXT *context )
         }
 #endif
     }
+#if 0
     fprintf(stderr, "NtGetContextThread thread=%p context=%p (0x%x, tag=0x%x, eip=0x%x)\n",
 	    handle, context, context->ContextFlags, context->FloatSave.TagWord, context->Eip);
+#endif
     return STATUS_SUCCESS;
 }
 
