@@ -1004,8 +1004,8 @@ void kill_thread( struct thread *thread, int violent_death )
 static void copy_context( context_t *to, const context_t *from, unsigned int flags )
 {
     assert( to->cpu == from->cpu );
-    fprintf(stderr, "SERVER: copy_context: from=%p, to=%p, flags=0x%x, from->tag=0x%x, from->ip=0x%x\n",
-	    from, to, flags, from->fp.i386_regs.tag, from->ctl.i386_regs.eip);
+    fprintf(stderr, "SERVER: copy_context: from=%p, to=%p, from->flags=0x%x, flags=0x%x, from->tag=0x%x, from->ip=0x%x\n",
+	    from, to, from->flags, flags, from->fp.i386_regs.tag, from->ctl.i386_regs.eip);
     to->flags |= flags;
     if (flags & SERVER_CTX_CONTROL) to->ctl = from->ctl;
     if (flags & SERVER_CTX_INTEGER) to->integer = from->integer;
@@ -1503,7 +1503,8 @@ DECL_HANDLER(get_thread_context)
 
         memset( context, 0, sizeof(context_t) );
         context->cpu = thread->process->cpu;
-	fprintf(stderr, "SERVER: get_thread_context: tid=0x%x, thread->context=%p\n", thread->id, thread->context);
+	fprintf(stderr, "SERVER: get_thread_context: tid=0x%x, thread->context=%p, req->flags=0x%x\n",
+		thread->id, thread->context, req->flags);
         if (thread->context) copy_context( context, thread->context, req->flags & ~flags );
         if (flags) get_thread_context( thread, context, flags );
     }
