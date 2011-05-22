@@ -1404,7 +1404,9 @@ static int send_hook_ll_message( struct desktop *desktop, struct message *hardwa
     int id = (input->type == INPUT_MOUSE) ? WH_MOUSE_LL : WH_KEYBOARD_LL;
 
     hook_thread = get_first_global_hook( id );
+#if 0
     fprintf(stderr, "send_hook_ll_message: index=%d, hook_thread=%p\n", id - WH_MINHOOK, hook_thread);
+#endif
     if (!hook_thread) return 0;
     if (!(queue = hook_thread->queue)) return 0;
 

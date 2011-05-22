@@ -146,7 +146,9 @@ static struct hook *add_hook( struct desktop *desktop, struct thread *thread, in
     hook->table  = table;
     hook->index  = index;
     list_add_head( &table->hooks[index], &hook->chain );
+#if 0
     fprintf(stderr, "add_hook(): table=%p, index=%d, hook=%p\n", table, hook->index, hook);
+#endif
     if (thread) thread->desktop_users++;
     return hook;
 }
@@ -154,7 +156,9 @@ static struct hook *add_hook( struct desktop *desktop, struct thread *thread, in
 /* free a hook, removing it from its chain */
 static void free_hook( struct hook *hook )
 {
+#if 0
     fprintf(stderr, "free_hook(): index=%d, owner=%p\n", hook->index, hook->owner);
+#endif
     free_user_handle( hook->handle );
     free( hook->module );
     if (hook->thread)
@@ -209,8 +213,10 @@ static inline int run_hook_in_current_thread( struct hook *hook )
     if ((hook->flags & WINEVENT_SKIPOWNPROCESS) && hook->process == current->process) return 0;
     if (hook->thread && hook->thread != current) return 0;
     if ((hook->flags & WINEVENT_SKIPOWNTHREAD) && hook->thread == current) return 0;
+#if 0 /* This would make programs using DirectInput nearly undebuggable, since they will no longer receive low-level keyboard events */
     /* don't run low-level hooks in debugged processes */
     if (run_hook_in_owner_thread( hook ) && hook->owner->process->debugger) return 0;
+#endif
     return 1;
 }
 
@@ -223,7 +229,9 @@ static inline struct hook *get_first_valid_hook( struct hook_table *table, int i
 
     while (hook)
     {
+#if 0
 	fprintf(stderr, "get_first_valid_hook: hook=%p, hook->proc=%p\n", hook, (void *) hook->proc);
+#endif
         if (hook->proc && run_hook_in_current_thread( hook ))
         {
             if (event >= hook->event_min && event <= hook->event_max)
@@ -294,7 +302,9 @@ static void hook_table_destroy( struct object *obj )
 /* remove a hook, freeing it if the chain is not in use */
 static void remove_hook( struct hook *hook )
 {
+#if 0
     fprintf(stderr, "remove_hook(): index=%d, owner=%p\n", hook->index, hook->owner);
+#endif
     if (hook->table->counts[hook->index])
         hook->proc = 0; /* chain is in use, just mark it and return */
     else
@@ -378,10 +388,14 @@ struct thread *get_first_global_hook( int id )
     struct hook *hook;
     struct hook_table *global_hooks = get_global_hooks( current );
 
+#if 0
     fprintf(stderr, "get_first_global_hook(): table=%p, index=%d\n", global_hooks, id - WH_MINHOOK);
+#endif
     if (!global_hooks) return NULL;
     hook = get_first_valid_hook( global_hooks, id - WH_MINHOOK, EVENT_MIN, 0, 0, 0 );
+#if 0
     fprintf(stderr, "get_first_global_hook(): got hook=%p\n", hook);
+#endif
     if (!hook) return NULL;
     return hook->owner;
 }
@@ -468,7 +482,9 @@ DECL_HANDLER(set_hook)
         hook->module_size = module_size;
         reply->handle = hook->handle;
         reply->active_hooks = get_active_hooks();
+#if 0
 	fprintf(stderr, "add_hook: index=%d, owner=%p\n", hook->index, hook->owner);
+#endif
     }
     else free( module );
 
@@ -505,7 +521,9 @@ DECL_HANDLER(remove_hook)
             return;
         }
     }
+#if 0
     fprintf(stderr, "remove_hook: index=%d, owner=%p\n", hook->index, hook->owner);
+#endif
     remove_hook( hook );
     reply->active_hooks = get_active_hooks();
 }

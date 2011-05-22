@@ -124,7 +124,7 @@ static int KeyboardCallback( LPDIRECTINPUTDEVICE8A iface, WPARAM wparam, LPARAM 
 
     This->DInputKeyState[dik_code] = new_diks;
     TRACE(" setting %02X to %02X\n", dik_code, This->DInputKeyState[dik_code]);
-#if 1
+#if 0
     fprintf(stderr, "dinput_keyboard: setting %02X to %02X\n", dik_code, This->DInputKeyState[dik_code]);
 #endif
 
