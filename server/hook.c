@@ -146,6 +146,7 @@ static struct hook *add_hook( struct desktop *desktop, struct thread *thread, in
     hook->table  = table;
     hook->index  = index;
     list_add_head( &table->hooks[index], &hook->chain );
+    fprintf(stderr, "add_hook(): table=%p, index=%d, hook=%p\n", table, hook->index, hook);
     if (thread) thread->desktop_users++;
     return hook;
 }
@@ -153,6 +154,7 @@ static struct hook *add_hook( struct desktop *desktop, struct thread *thread, in
 /* free a hook, removing it from its chain */
 static void free_hook( struct hook *hook )
 {
+    fprintf(stderr, "free_hook(): index=%d, owner=%p\n", hook->index, hook->owner);
     free_user_handle( hook->handle );
     free( hook->module );
     if (hook->thread)
@@ -221,6 +223,7 @@ static inline struct hook *get_first_valid_hook( struct hook_table *table, int i
 
     while (hook)
     {
+	fprintf(stderr, "get_first_valid_hook: hook=%p, hook->proc=%p\n", hook, (void *) hook->proc);
         if (hook->proc && run_hook_in_current_thread( hook ))
         {
             if (event >= hook->event_min && event <= hook->event_max)
@@ -291,6 +294,7 @@ static void hook_table_destroy( struct object *obj )
 /* remove a hook, freeing it if the chain is not in use */
 static void remove_hook( struct hook *hook )
 {
+    fprintf(stderr, "remove_hook(): index=%d, owner=%p\n", hook->index, hook->owner);
     if (hook->table->counts[hook->index])
         hook->proc = 0; /* chain is in use, just mark it and return */
     else
@@ -374,8 +378,11 @@ struct thread *get_first_global_hook( int id )
     struct hook *hook;
     struct hook_table *global_hooks = get_global_hooks( current );
 
+    fprintf(stderr, "get_first_global_hook(): table=%p, index=%d\n", global_hooks, id - WH_MINHOOK);
     if (!global_hooks) return NULL;
-    if (!(hook = get_first_valid_hook( global_hooks, id - WH_MINHOOK, EVENT_MIN, 0, 0, 0 ))) return NULL;
+    hook = get_first_valid_hook( global_hooks, id - WH_MINHOOK, EVENT_MIN, 0, 0, 0 );
+    fprintf(stderr, "get_first_global_hook(): got hook=%p\n", hook);
+    if (!hook) return NULL;
     return hook->owner;
 }
 
@@ -461,6 +468,7 @@ DECL_HANDLER(set_hook)
         hook->module_size = module_size;
         reply->handle = hook->handle;
         reply->active_hooks = get_active_hooks();
+	fprintf(stderr, "add_hook: index=%d, owner=%p\n", hook->index, hook->owner);
     }
     else free( module );
 
@@ -497,6 +505,7 @@ DECL_HANDLER(remove_hook)
             return;
         }
     }
+    fprintf(stderr, "remove_hook: index=%d, owner=%p\n", hook->index, hook->owner);
     remove_hook( hook );
     reply->active_hooks = get_active_hooks();
 }

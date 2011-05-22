@@ -416,7 +416,10 @@ LRESULT HOOK_CallHooks( INT id, INT code, WPARAM wparam, LPARAM lparam, BOOL uni
     {
         TRACE( "skipping hook %s mask %x\n", hook_names[id-WH_MINHOOK], thread_info->active_hooks );
         return 0;
-    }
+    } else TRACE( "calling hook %s mask %x\n", hook_names[id-WH_MINHOOK], thread_info->active_hooks );
+#if 0
+    if (id == WH_KEYBOARD_LL) *(int *)0 = 0;
+#endif
 
     ZeroMemory( &info, sizeof(info) - sizeof(info.module) );
     info.prev_unicode = unicode;

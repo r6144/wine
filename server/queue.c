@@ -1403,7 +1403,9 @@ static int send_hook_ll_message( struct desktop *desktop, struct message *hardwa
     timeout_t timeout = 2000 * -10000;  /* FIXME: load from registry */
     int id = (input->type == INPUT_MOUSE) ? WH_MOUSE_LL : WH_KEYBOARD_LL;
 
-    if (!(hook_thread = get_first_global_hook( id ))) return 0;
+    hook_thread = get_first_global_hook( id );
+    fprintf(stderr, "send_hook_ll_message: index=%d, hook_thread=%p\n", id - WH_MINHOOK, hook_thread);
+    if (!hook_thread) return 0;
     if (!(queue = hook_thread->queue)) return 0;
 
     if (!(msg = mem_alloc( sizeof(*msg) ))) return 0;

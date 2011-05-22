@@ -785,7 +785,7 @@ static HBITMAP create_alpha_bitmap( HBITMAP color, HBITMAP mask,
         }
     }
 
-#if 1 /* NOTE: This will cause the bitmap data to be made writable after a page fault.  Since it
+#if 0 /* NOTE: This will cause the bitmap data to be made writable after a page fault.  Since it
 	 complicates debugging, we may want to disable it sometimes. */
     /* pre-multiply by alpha */
     for (i = 0, ptr = bits; i < bm.bmWidth * bm.bmHeight; i++, ptr += 4)
