@@ -1105,6 +1105,9 @@ static inline void save_context( CONTEXT *context, const SIGCONTEXT *sigcontext,
         if (!fpu) fpux_to_fpu( &context->FloatSave, fpux );
     }
     if (!fpu && !fpux) save_fpu( context );
+    /* NOTE: We are possibly inside an asynchronous signal handler, so printing isn't always safe here */
+    fprintf(stderr, "save_context: fpu=%p, fpux=%p, flags=0x%x, tag=0x%x\n",
+	    fpu, fpux, context->ContextFlags, context->FloatSave.TagWord);
 }
 
 
@@ -1119,6 +1122,8 @@ static inline void restore_context( const CONTEXT *context, SIGCONTEXT *sigconte
     FLOATING_SAVE_AREA *fpu = FPU_sig(sigcontext);
     XMM_SAVE_AREA32 *fpux = FPUX_sig(sigcontext);
 
+    fprintf(stderr, "restore_context: fpu=%p, fpux=%p, flags=0x%x, tag=0x%x\n",
+	    fpu, fpux, context->ContextFlags, context->FloatSave.TagWord);
     regs->dr0 = context->Dr0;
     regs->dr1 = context->Dr1;
     regs->dr2 = context->Dr2;
@@ -1379,6 +1384,10 @@ NTSTATUS context_to_server( context_t *to, const CONTEXT *from )
         to->flags |= SERVER_CTX_EXTENDED_REGISTERS;
         memcpy( to->ext.i386_regs, from->ExtendedRegisters, sizeof(to->ext.i386_regs) );
     }
+#if 0
+    fprintf(stderr, "context_to_server: from: flags=0x%x, tag=0x%x; to: flags=0x%x, tag=0x%x\n",
+	    from->ContextFlags, from->FloatSave.TagWord, to->flags, to->fp.i386_regs.tag);
+#endif
     return STATUS_SUCCESS;
 }
 
@@ -1449,6 +1458,10 @@ NTSTATUS context_from_server( CONTEXT *to, const context_t *from )
         to->ContextFlags |= CONTEXT_EXTENDED_REGISTERS;
         memcpy( to->ExtendedRegisters, from->ext.i386_regs, sizeof(to->ExtendedRegisters) );
     }
+#if 0 /* Doing too much from a signal handler will somehow cause random crashes */
+    fprintf(stderr, "context_from_server: from: flags=0x%x, tag=0x%x; to: flags=0x%x, tag=0x%x\n",
+	    from->flags, from->fp.i386_regs.tag, to->ContextFlags, to->FloatSave.TagWord);
+#endif
     return STATUS_SUCCESS;
 }
 

@@ -22,6 +22,7 @@
 #include "wine/port.h"
 
 #include <assert.h>
+#include <stdio.h>
 #include <stdarg.h>
 #include <sys/types.h>
 #ifdef HAVE_SYS_MMAN_H
@@ -676,6 +677,8 @@ NTSTATUS WINAPI NtSetContextThread( HANDLE handle, const CONTEXT *context )
     DWORD dummy, i;
     BOOL self = FALSE;
 
+    fprintf(stderr, "NtSetContextThread thread=%p context=%p (0x%x, tag=0x%x)\n",
+	    handle, context, context->ContextFlags, context->FloatSave.TagWord);
 #ifdef __i386__
     /* on i386 debug registers always require a server call */
     self = (handle == GetCurrentThread());
@@ -696,6 +699,7 @@ NTSTATUS WINAPI NtSetContextThread( HANDLE handle, const CONTEXT *context )
 
         context_to_server( &server_context, context );
 
+	fprintf(stderr, "set_thread_context (first try)\n");
         SERVER_START_REQ( set_thread_context )
         {
             req->handle  = wine_server_obj_handle( handle );
@@ -710,6 +714,7 @@ NTSTATUS WINAPI NtSetContextThread( HANDLE handle, const CONTEXT *context )
         {
             for (i = 0; i < 100; i++)
             {
+		fprintf(stderr, "set_thread_context (i=%u)\n", i);
                 SERVER_START_REQ( set_thread_context )
                 {
                     req->handle  = wine_server_obj_handle( handle );
@@ -726,6 +731,7 @@ NTSTATUS WINAPI NtSetContextThread( HANDLE handle, const CONTEXT *context )
                 }
                 else break;
             }
+	    fprintf(stderr, "NtResumeThread()\n");
             NtResumeThread( handle, &dummy );
             if (ret == STATUS_PENDING) ret = STATUS_ACCESS_DENIED;
         }
@@ -844,6 +850,8 @@ NTSTATUS WINAPI NtGetContextThread( HANDLE handle, CONTEXT *context )
         }
 #endif
     }
+    fprintf(stderr, "NtGetContextThread thread=%p context=%p (0x%x, tag=0x%x)\n",
+	    handle, context, context->ContextFlags, context->FloatSave.TagWord);
     return STATUS_SUCCESS;
 }
 
